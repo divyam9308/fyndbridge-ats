@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Plus, Upload, Pencil, X, Users, ChevronDown, AlertCircle, ExternalLink, FileText } from 'lucide-react'
 import '../styles/Shared.css'
 
@@ -54,21 +54,6 @@ const EMPTY_CAND = {
   cvLink:'', linkedinUrl:'', notes:'',
 }
 
-const FAKE_PARSED = {
-  name:'Vikram Anand', email:'vikram.anand@gmail.com', mobile:'+91 97001 23456',
-  designation:'Full Stack Developer', city:'Pune', state:'Maharashtra',
-  currentCompany:'TechMahindra',
-  exp:'5', salary:'1100000', expectedSalary:'1600000',
-  skills:['React','Node.js','MongoDB','AWS'], education:'B.Tech CSE, SRM University',
-  client:'', job:'', clientPhone:'', status:'Interested',
-  // CV link auto-extracted from resume metadata
-  cvLink:'https://drive.google.com/file/d/1Bx9fakeResumeLinkVikram/view',
-  linkedinUrl:'https://linkedin.com/in/vikramanand',
-  notes:'Parsed from uploaded resume.',
-  // which fields were "low confidence"
-  _lowConf: ['designation', 'salary', 'currentCompany'],
-}
-
 /* ====== Client phone lookup ====== */
 const CLIENT_PHONES = {
   'Zeta FinTech':     '+91 98765 43210',
@@ -81,6 +66,7 @@ const CLIENT_PHONES = {
 
 export default function CandidatesPage() {
   const [candidates, setCandidates] = useState(INITIAL_CANDIDATES)
+  const fileInputRef = useRef(null)
 
   // Filters
   const [filterJob, setFilterJob]       = useState('All')
@@ -98,6 +84,8 @@ export default function CandidatesPage() {
   const [importOpen, setImportOpen]   = useState(false)
   const [importTab, setImportTab]     = useState('upload')  // 'upload' | 'url'
   const [resumeUrl, setResumeUrl]     = useState('')
+  const [resumeFile, setResumeFile]   = useState(null)
+  const [importError, setImportError] = useState('')
   const [parsing, setParsing]         = useState(false)
   const [parsed, setParsed]           = useState(false)    // after parse success
   const [parsedForm, setParsedForm]   = useState(null)
@@ -176,14 +164,110 @@ export default function CandidatesPage() {
   }
   const removeParsedSkill = (s) => setParsedForm(f => ({ ...f, skills: f.skills.filter(x => x !== s) }))
 
-  // ---- Parse simulation ----
-  const handleParse = () => {
+  const fieldValue = (extracted, key, fallback = '') => extracted?.[key]?.value ?? fallback
+
+  const mapParsedResponseToForm = (payload) => {
+    const extracted = payload.extracted || {}
+    const lowConf = Object.entries(extracted)
+      .filter(([, data]) => data?.confidence === 'low' && data.value)
+      .map(([key]) => ({
+        full_name: 'name',
+        mobile_number: 'mobile',
+        current_designation: 'designation',
+        experience_years: 'exp',
+        current_salary: 'salary'
+      }[key] || key))
+
+    return {
+      ...EMPTY_CAND,
+      name: fieldValue(extracted, 'full_name'),
+      email: fieldValue(extracted, 'email'),
+      mobile: fieldValue(extracted, 'mobile_number'),
+      designation: fieldValue(extracted, 'current_designation'),
+      city: fieldValue(extracted, 'city'),
+      state: fieldValue(extracted, 'state'),
+      exp: fieldValue(extracted, 'experience_years'),
+      salary: fieldValue(extracted, 'current_salary'),
+      skills: fieldValue(extracted, 'skills', []) || [],
+      education: fieldValue(extracted, 'education'),
+      notes: 'Parsed from imported resume.',
+      _lowConf: lowConf
+    }
+  }
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    handleResumeFile(file)
+  }
+
+  const handleResumeFile = (file) => {
+    setImportError('')
+
+    if (!file) {
+      setResumeFile(null)
+      return
+    }
+
+    if (file.type !== 'application/pdf') {
+      setResumeFile(null)
+      setImportError('Only PDF files are accepted.')
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setResumeFile(null)
+      setImportError('PDF file must be 10 MB or smaller.')
+      return
+    }
+
+    setResumeFile(file)
+  }
+
+  // ---- Resume parsing ----
+  const handleParse = async () => {
+    setImportError('')
+
+    if (importTab === 'upload' && !resumeFile) {
+      setImportError('Choose a PDF resume first.')
+      return
+    }
+
+    if (importTab === 'url' && !resumeUrl.trim()) {
+      setImportError('Paste a resume PDF URL first.')
+      return
+    }
+
     setParsing(true)
-    setTimeout(() => {
-      setParsing(false)
-      setParsedForm({ ...FAKE_PARSED })
+    try {
+      let body
+      let headers
+
+      if (importTab === 'upload') {
+        body = new FormData()
+        body.append('resume', resumeFile)
+      } else {
+        headers = { 'Content-Type': 'application/json' }
+        body = JSON.stringify({ resume_url: resumeUrl.trim() })
+      }
+
+      const response = await fetch('/api/candidates/parse-resume', {
+        method: 'POST',
+        headers,
+        body
+      })
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload.detail || payload.error || 'Resume parsing failed.')
+      }
+
+      setParsedForm(mapParsedResponseToForm(payload))
       setParsed(true)
-    }, 1500)
+    } catch (err) {
+      setImportError(err.message)
+    } finally {
+      setParsing(false)
+    }
   }
 
   const handleSaveParsed = () => {
@@ -197,8 +281,9 @@ export default function CandidatesPage() {
   }
 
   const closeImport = () => {
-    setImportOpen(false); setImportTab('upload'); setResumeUrl('')
+    setImportOpen(false); setImportTab('upload'); setResumeUrl(''); setResumeFile(null); setImportError('')
     setParsing(false); setParsed(false); setParsedForm(null); setParsedSkillInput('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   // ---- Parsed form change ----
@@ -555,27 +640,50 @@ export default function CandidatesPage() {
                   <div className="import-tabs">
                     <button
                       className={`import-tab${importTab === 'upload' ? ' active' : ''}`}
-                      onClick={() => setImportTab('upload')}>Upload PDF</button>
+                      onClick={() => { setImportTab('upload'); setImportError('') }}>Upload PDF</button>
                     <button
                       className={`import-tab${importTab === 'url' ? ' active' : ''}`}
-                      onClick={() => setImportTab('url')}>Paste URL</button>
+                      onClick={() => { setImportTab('url'); setImportError('') }}>Paste URL</button>
                   </div>
 
                   {importTab === 'upload' ? (
                     <div className="drop-zone" role="button" tabIndex={0}
-                      onClick={() => {}} onKeyDown={() => {}}>
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => {
+                        e.preventDefault()
+                        handleResumeFile(e.dataTransfer.files?.[0])
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
+                      }}>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="application/pdf"
+                        onChange={handleFileSelect}
+                        style={{ display:'none' }}
+                      />
                       <div className="drop-zone-icon">
                         <Upload size={24} color="var(--gold)" strokeWidth={1.8} />
                       </div>
-                      <div className="drop-zone-title">Drop your PDF here or click to browse</div>
+                      <div className="drop-zone-title">
+                        {resumeFile ? resumeFile.name : 'Drop your PDF here or click to browse'}
+                      </div>
                       <div className="drop-zone-subtitle">Max file size: 10 MB · PDF only</div>
                     </div>
                   ) : (
                     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                       <label className="form-label">Resume URL</label>
                       <input className="form-control" value={resumeUrl}
-                        onChange={e => setResumeUrl(e.target.value)}
+                        onChange={e => { setResumeUrl(e.target.value); setImportError('') }}
                         placeholder="https://drive.google.com/..." id="resume-url-input" />
+                    </div>
+                  )}
+
+                  {importError && (
+                    <div className="form-error" style={{ display:'block', marginTop:12 }} role="alert">
+                      {importError}
                     </div>
                   )}
 
