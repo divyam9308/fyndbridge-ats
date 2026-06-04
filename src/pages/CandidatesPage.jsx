@@ -142,14 +142,6 @@ export default function CandidatesPage() {
   }
 
   const handleSkillInputChange = (value) => {
-    if (/\s{2,}/.test(value)) {
-      const parts = value.split(/\s{2,}/)
-      const completed = parts.slice(0, -1)
-      setForm(f => ({ ...f, skills: appendSkills(f.skills, completed) }))
-      setSkillInput(parts.at(-1) || '')
-      return
-    }
-
     setSkillInput(value)
   }
 
@@ -189,14 +181,6 @@ export default function CandidatesPage() {
   }
 
   const handleParsedSkillInputChange = (value) => {
-    if (/\s{2,}/.test(value)) {
-      const parts = value.split(/\s{2,}/)
-      const completed = parts.slice(0, -1)
-      setParsedForm(f => ({ ...f, skills: appendSkills(f.skills, completed) }))
-      setParsedSkillInput(parts.at(-1) || '')
-      return
-    }
-
     setParsedSkillInput(value)
   }
 
