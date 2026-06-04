@@ -1,0 +1,23 @@
+/* ===================== Dashboard Layout CSS ===================== */
+.dashboard-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.dashboard-main {
+  margin-left: var(--sidebar-width);
+  padding-top: var(--topbar-height);
+  flex: 1;
+  min-height: 100vh;
+  background: var(--gray-50);
+}
+
+.dashboard-content {
+  padding: 28px;
+  animation: fadeInContent 0.35s ease both;
+}
+
+@keyframes fadeInContent {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
