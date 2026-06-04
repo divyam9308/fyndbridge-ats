@@ -638,12 +638,17 @@ export default function CandidatesPage() {
               <button className="modal-close" onClick={() => setAddOpen(false)} aria-label="Close"><X size={16} /></button>
             </div>
             <div className="modal-body">
-              <CandidateFormBody
-                f={form} setF={setForm} errs={errors}
-                sInput={skillInput} onSkillInputChange={handleSkillInputChange}
-                onSkillKey={handleSkillKey} onAddSkill={addManualSkill} rmSkill={removeSkill}
-                onChange={handleChange}
-              />
+              {CandidateFormBody({
+                f: form,
+                setF: setForm,
+                errs: errors,
+                sInput: skillInput,
+                onSkillInputChange: handleSkillInputChange,
+                onSkillKey: handleSkillKey,
+                onAddSkill: addManualSkill,
+                rmSkill: removeSkill,
+                onChange: handleChange
+              })}
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setAddOpen(false)}>Cancel</button>
@@ -737,13 +742,18 @@ export default function CandidatesPage() {
                       <strong>Review extracted data before saving.</strong> Fields highlighted in amber were low-confidence and may need correction.
                     </span>
                   </div>
-                  <CandidateFormBody
-                    f={parsedForm} setF={setParsedForm} errs={{}}
-                    sInput={parsedSkillInput} onSkillInputChange={handleParsedSkillInputChange}
-                    onSkillKey={handleParsedSkillKey} onAddSkill={addParsedManualSkill} rmSkill={removeParsedSkill}
-                    lowConf={parsedForm._lowConf || []}
-                    onChange={handleParsedChange}
-                  />
+                  {CandidateFormBody({
+                    f: parsedForm,
+                    setF: setParsedForm,
+                    errs: {},
+                    sInput: parsedSkillInput,
+                    onSkillInputChange: handleParsedSkillInputChange,
+                    onSkillKey: handleParsedSkillKey,
+                    onAddSkill: addParsedManualSkill,
+                    rmSkill: removeParsedSkill,
+                    lowConf: parsedForm._lowConf || [],
+                    onChange: handleParsedChange
+                  })}
                 </>
               )}
             </div>
