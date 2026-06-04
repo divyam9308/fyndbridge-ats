@@ -413,32 +413,70 @@ function extractSalary(text) {
   return null
 }
 
+function splitSentences(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+}
+
+function limitWords(text, maxWords) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean)
+  return words.length > maxWords ? `${words.slice(0, maxWords).join(' ')}...` : words.join(' ')
+}
+
+// Heuristic: compose a brief recruiter-facing summary from the strongest parsed sections.
+function extractSummary(text) {
+  const designation = extractCurrentDesignation(text)
+  const currentCompany = extractCurrentCompany(text)
+  const experience = extractExperience(text)
+  const skills = extractSkills(text).slice(0, 6)
+  const education = extractEducation(text)
+  const expertiseMatch = String(text || '').match(/Expertise\s+in\s+(.{20,500}?)(?:={5,}|Professional Experience:)/is)
+  const expertiseSentence = expertiseMatch ? splitSentences(expertiseMatch[1])[0] : null
+  const educationFirstLine = education ? education.split('\n').find(Boolean) : null
+
+  const parts = []
+  if (designation || currentCompany) {
+    const roleAndCompany = `${designation || 'Candidate'}${currentCompany ? ` at ${currentCompany}` : ''}`.replace(/\.+$/, '')
+    parts.push(`${roleAndCompany}.`)
+  }
+  if (experience) {
+    parts.push(`Around ${experience} years of professional experience.`)
+  }
+  if (expertiseSentence) {
+    parts.push(expertiseSentence.replace(/\s+/g, ' ').trim())
+  } else if (skills.length) {
+    parts.push(`Key areas include ${skills.join(', ')}.`)
+  }
+  if (educationFirstLine) {
+    parts.push(`Education includes ${educationFirstLine.replace(/\.$/, '')}.`)
+  }
+
+  return parts.length ? limitWords(parts.join(' '), 80) : null
+}
+
 function extractFields(text) {
   const nameCandidates = extractName(text)
   const email = extractEmail(text)
   const phone = extractPhone(text)
-  const city = extractCity(text)
-  const state = extractState(text)
   const designation = extractCurrentDesignation(text)
   const currentCompany = extractCurrentCompany(text)
-  const experience = extractExperience(text)
   const skills = extractSkills(text)
   const education = extractEducation(text)
-  const salary = extractSalary(text)
+  const summary = extractSummary(text)
 
   return {
     full_name: withConfidence(nameCandidates[0] || null, 'low'),
     full_name_candidates: nameCandidates,
     email: withConfidence(email, email ? 'high' : 'low'),
     mobile_number: withConfidence(phone, phone ? 'high' : 'low'),
-    city: withConfidence(city, city ? 'high' : 'low'),
-    state: withConfidence(state, state ? 'high' : 'low'),
     current_designation: withConfidence(designation, designation ? 'high' : 'low'),
     current_company: withConfidence(currentCompany, currentCompany ? 'high' : 'low'),
-    experience_years: withConfidence(experience, experience !== null ? 'high' : 'low'),
     skills: withConfidence(skills.length ? skills : null, skills.length ? 'high' : 'low'),
     education: withConfidence(education, 'low'),
-    current_salary: withConfidence(salary, 'low')
+    summary: withConfidence(summary, summary ? 'low' : 'low')
   }
 }
 
@@ -454,5 +492,6 @@ module.exports = {
   extractCity,
   extractState,
   extractSalary,
+  extractSummary,
   extractFields
 }

@@ -174,8 +174,8 @@ export default function CandidatesPage() {
         full_name: 'name',
         mobile_number: 'mobile',
         current_designation: 'designation',
-        experience_years: 'exp',
-        current_salary: 'salary'
+        current_company: 'currentCompany',
+        summary: 'notes'
       }[key] || key))
 
     return {
@@ -185,13 +185,9 @@ export default function CandidatesPage() {
       mobile: fieldValue(extracted, 'mobile_number'),
       designation: fieldValue(extracted, 'current_designation'),
       currentCompany: fieldValue(extracted, 'current_company'),
-      city: fieldValue(extracted, 'city'),
-      state: fieldValue(extracted, 'state'),
-      exp: fieldValue(extracted, 'experience_years'),
-      salary: fieldValue(extracted, 'current_salary'),
       skills: fieldValue(extracted, 'skills', []) || [],
       education: fieldValue(extracted, 'education'),
-      notes: 'Parsed from imported resume.',
+      notes: fieldValue(extracted, 'summary'),
       _lowConf: lowConf
     }
   }
@@ -448,9 +444,9 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group full">
-          <label className="form-label">Notes</label>
+          <label className="form-label">CV Summary / Notes</label>
           <textarea name="notes" value={f.notes} onChange={handleLocalChange}
-            className="form-control" rows={2} placeholder="Recruiter notes..." />
+            className="form-control" rows={3} placeholder="Brief CV summary or recruiter notes..." />
         </div>
       </div>
     )
