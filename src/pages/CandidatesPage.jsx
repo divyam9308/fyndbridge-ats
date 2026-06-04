@@ -122,10 +122,35 @@ export default function CandidatesPage() {
     if (errors[name]) setErrors(err => ({ ...err, [name]: '' }))
   }
 
-  const addManualSkill = () => {
-    const s = skillInput.trim().replace(/,$/, '')
-    if (s && !form.skills.includes(s)) setForm(f => ({ ...f, skills: [...f.skills, s] }))
+  const cleanSkill = (value) => value.replace(/,$/, '').replace(/\s+/g, ' ').trim()
+
+  const appendSkills = (skills, values) => {
+    const next = [...skills]
+    values
+      .map(cleanSkill)
+      .filter(Boolean)
+      .forEach((skill) => {
+        if (!next.some((existing) => existing.toLowerCase() === skill.toLowerCase())) next.push(skill)
+      })
+    return next
+  }
+
+  const addManualSkill = (value = skillInput) => {
+    const s = cleanSkill(value)
+    if (s) setForm(f => ({ ...f, skills: appendSkills(f.skills, [s]) }))
     setSkillInput('')
+  }
+
+  const handleSkillInputChange = (value) => {
+    if (/\s{2,}/.test(value)) {
+      const parts = value.split(/\s{2,}/)
+      const completed = parts.slice(0, -1)
+      setForm(f => ({ ...f, skills: appendSkills(f.skills, completed) }))
+      setSkillInput(parts.at(-1) || '')
+      return
+    }
+
+    setSkillInput(value)
   }
 
   const handleSkillKey = (e) => {
@@ -157,10 +182,22 @@ export default function CandidatesPage() {
   }
 
   // ---- Parsed skill input ----
-  const addParsedManualSkill = () => {
-    const s = parsedSkillInput.trim().replace(/,$/, '')
-    if (s && !parsedForm.skills.includes(s)) setParsedForm(f => ({ ...f, skills: [...f.skills, s] }))
+  const addParsedManualSkill = (value = parsedSkillInput) => {
+    const s = cleanSkill(value)
+    if (s) setParsedForm(f => ({ ...f, skills: appendSkills(f.skills, [s]) }))
     setParsedSkillInput('')
+  }
+
+  const handleParsedSkillInputChange = (value) => {
+    if (/\s{2,}/.test(value)) {
+      const parts = value.split(/\s{2,}/)
+      const completed = parts.slice(0, -1)
+      setParsedForm(f => ({ ...f, skills: appendSkills(f.skills, completed) }))
+      setParsedSkillInput(parts.at(-1) || '')
+      return
+    }
+
+    setParsedSkillInput(value)
   }
 
   const handleParsedSkillKey = (e) => {
@@ -303,7 +340,7 @@ export default function CandidatesPage() {
   const clientJobs = (clientName) => JOBS.filter(j => j.client === clientName)
 
   // ---- Candidate Form body (shared between Add + Review) ----
-  const CandidateFormBody = ({ f, setF, errs, sInput, setSInput, onSkillKey, onAddSkill, rmSkill, lowConf = [], onChange }) => {
+  const CandidateFormBody = ({ f, setF, errs, sInput, onSkillInputChange, onSkillKey, onAddSkill, rmSkill, lowConf = [], onChange }) => {
     const low = (field) => lowConf.includes(field) ? ' low-confidence' : ''
     const handleLocalChange = onChange || ((e) => {
       const { name, value } = e.target
@@ -398,9 +435,9 @@ export default function CandidatesPage() {
               </span>
             ))}
             <input className="tag-input-field" value={sInput}
-              onChange={e => setSInput(e.target.value)} onKeyDown={onSkillKey}
+              onChange={e => onSkillInputChange(e.target.value)} onKeyDown={onSkillKey}
               aria-label="Add skill" />
-            <button className="tag-add-btn" type="button" onClick={onAddSkill} disabled={!sInput.trim()}>
+            <button className="tag-add-btn" type="button" onClick={() => onAddSkill()} disabled={!sInput.trim()}>
               <Plus size={12} strokeWidth={2.4} /> Add
             </button>
           </div>
@@ -619,7 +656,7 @@ export default function CandidatesPage() {
             <div className="modal-body">
               <CandidateFormBody
                 f={form} setF={setForm} errs={errors}
-                sInput={skillInput} setSInput={setSkillInput}
+                sInput={skillInput} onSkillInputChange={handleSkillInputChange}
                 onSkillKey={handleSkillKey} onAddSkill={addManualSkill} rmSkill={removeSkill}
                 onChange={handleChange}
               />
@@ -718,7 +755,7 @@ export default function CandidatesPage() {
                   </div>
                   <CandidateFormBody
                     f={parsedForm} setF={setParsedForm} errs={{}}
-                    sInput={parsedSkillInput} setSInput={setParsedSkillInput}
+                    sInput={parsedSkillInput} onSkillInputChange={handleParsedSkillInputChange}
                     onSkillKey={handleParsedSkillKey} onAddSkill={addParsedManualSkill} rmSkill={removeParsedSkill}
                     lowConf={parsedForm._lowConf || []}
                     onChange={handleParsedChange}
