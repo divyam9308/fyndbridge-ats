@@ -426,35 +426,42 @@ function limitWords(text, maxWords) {
   return words.length > maxWords ? `${words.slice(0, maxWords).join(' ')}...` : words.join(' ')
 }
 
-// Heuristic: compose a brief recruiter-facing summary from the strongest parsed sections.
-function extractSummary(text) {
+function cleanDisplayText(text) {
+  return String(text || '').replace(/\s+/g, ' ').replace(/[.。\s]+$/, '').trim()
+}
+
+// Heuristic: compose a recruiter-facing cover letter from the strongest parsed sections.
+function extractCoverLetter(text) {
+  const nameCandidates = extractName(text)
+  const name = cleanDisplayText(nameCandidates[0]) || 'the candidate'
   const designation = extractCurrentDesignation(text)
-  const currentCompany = extractCurrentCompany(text)
+  const currentCompany = cleanDisplayText(extractCurrentCompany(text))
   const experience = extractExperience(text)
-  const skills = extractSkills(text).slice(0, 6)
+  const skills = extractSkills(text).slice(0, 8)
   const education = extractEducation(text)
   const expertiseMatch = String(text || '').match(/Expertise\s+in\s+(.{20,500}?)(?:={5,}|Professional Experience:)/is)
   const expertiseSentence = expertiseMatch ? splitSentences(expertiseMatch[1])[0] : null
   const educationFirstLine = education ? education.split('\n').find(Boolean) : null
 
-  const parts = []
-  if (designation || currentCompany) {
-    const roleAndCompany = `${designation || 'Candidate'}${currentCompany ? ` at ${currentCompany}` : ''}`.replace(/\.+$/, '')
-    parts.push(`${roleAndCompany}.`)
-  }
-  if (experience) {
-    parts.push(`Around ${experience} years of professional experience.`)
-  }
-  if (expertiseSentence) {
-    parts.push(expertiseSentence.replace(/\s+/g, ' ').trim())
-  } else if (skills.length) {
-    parts.push(`Key areas include ${skills.join(', ')}.`)
-  }
-  if (educationFirstLine) {
-    parts.push(`Education includes ${educationFirstLine.replace(/\.$/, '')}.`)
-  }
+  const roleAndCompany = cleanDisplayText(`${designation || 'professional'}${currentCompany ? ` at ${currentCompany}` : ''}`)
+  const skillText = skills.length ? skills.join(', ') : 'the responsibilities outlined in the resume'
+  const expertiseText = expertiseSentence
+    ? expertiseSentence.replace(/\s+/g, ' ').replace(/\.$/, '').trim()
+    : `a background across ${skillText}`
+  const educationText = educationFirstLine
+    ? `The academic profile includes ${educationFirstLine.replace(/\.$/, '')}.`
+    : 'The academic background and professional record show a consistent commitment to the field.'
+  const experienceText = experience ? `The resume reflects around ${experience} years of professional experience.` : ''
 
-  return parts.length ? limitWords(parts.join(' '), 80) : null
+  const coverLetter = [
+    'Dear Hiring Team,',
+    `I am pleased to share the profile of ${name} for your consideration. ${name} is a ${roleAndCompany}. ${experienceText}`,
+    `The CV highlights ${expertiseText}. Key strengths include ${skillText}, with experience that appears relevant for roles requiring ownership, communication, and structured delivery.`,
+    `${educationText} Based on the resume, ${name} brings a combination of domain knowledge, leadership exposure, and practical execution across complex professional environments.`,
+    `I believe this profile is worth reviewing for suitable opportunities, and I would be happy to share further details or coordinate the next steps.`
+  ].filter(Boolean).join('\n\n')
+
+  return limitWords(coverLetter, 200)
 }
 
 function extractFields(text) {
@@ -465,7 +472,7 @@ function extractFields(text) {
   const currentCompany = extractCurrentCompany(text)
   const skills = extractSkills(text)
   const education = extractEducation(text)
-  const summary = extractSummary(text)
+  const coverLetter = extractCoverLetter(text)
 
   return {
     full_name: withConfidence(nameCandidates[0] || null, 'low'),
@@ -476,7 +483,7 @@ function extractFields(text) {
     current_company: withConfidence(currentCompany, currentCompany ? 'high' : 'low'),
     skills: withConfidence(skills.length ? skills : null, skills.length ? 'high' : 'low'),
     education: withConfidence(education, 'low'),
-    summary: withConfidence(summary, summary ? 'low' : 'low')
+    cover_letter: withConfidence(coverLetter, coverLetter ? 'low' : 'low')
   }
 }
 
@@ -492,6 +499,6 @@ module.exports = {
   extractCity,
   extractState,
   extractSalary,
-  extractSummary,
+  extractCoverLetter,
   extractFields
 }

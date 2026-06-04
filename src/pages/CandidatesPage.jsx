@@ -122,12 +122,16 @@ export default function CandidatesPage() {
     if (errors[name]) setErrors(err => ({ ...err, [name]: '' }))
   }
 
+  const addManualSkill = () => {
+    const s = skillInput.trim().replace(/,$/, '')
+    if (s && !form.skills.includes(s)) setForm(f => ({ ...f, skills: [...f.skills, s] }))
+    setSkillInput('')
+  }
+
   const handleSkillKey = (e) => {
     if ((e.key === 'Enter' || e.key === ',') && skillInput.trim()) {
       e.preventDefault()
-      const s = skillInput.trim().replace(/,$/, '')
-      if (s && !form.skills.includes(s)) setForm(f => ({ ...f, skills: [...f.skills, s] }))
-      setSkillInput('')
+      addManualSkill()
     }
   }
   const removeSkill = (s) => setForm(f => ({ ...f, skills: f.skills.filter(x => x !== s) }))
@@ -153,13 +157,16 @@ export default function CandidatesPage() {
   }
 
   // ---- Parsed skill input ----
+  const addParsedManualSkill = () => {
+    const s = parsedSkillInput.trim().replace(/,$/, '')
+    if (s && !parsedForm.skills.includes(s)) setParsedForm(f => ({ ...f, skills: [...f.skills, s] }))
+    setParsedSkillInput('')
+  }
+
   const handleParsedSkillKey = (e) => {
     if ((e.key === 'Enter' || e.key === ',') && parsedSkillInput.trim()) {
       e.preventDefault()
-      const s = parsedSkillInput.trim().replace(/,$/, '')
-      if (s && !parsedForm.skills.includes(s))
-        setParsedForm(f => ({ ...f, skills: [...f.skills, s] }))
-      setParsedSkillInput('')
+      addParsedManualSkill()
     }
   }
   const removeParsedSkill = (s) => setParsedForm(f => ({ ...f, skills: f.skills.filter(x => x !== s) }))
@@ -175,7 +182,7 @@ export default function CandidatesPage() {
         mobile_number: 'mobile',
         current_designation: 'designation',
         current_company: 'currentCompany',
-        summary: 'notes'
+        cover_letter: 'notes'
       }[key] || key))
 
     return {
@@ -187,7 +194,7 @@ export default function CandidatesPage() {
       currentCompany: fieldValue(extracted, 'current_company'),
       skills: fieldValue(extracted, 'skills', []) || [],
       education: fieldValue(extracted, 'education'),
-      notes: fieldValue(extracted, 'summary'),
+      notes: fieldValue(extracted, 'cover_letter'),
       _lowConf: lowConf
     }
   }
@@ -296,7 +303,7 @@ export default function CandidatesPage() {
   const clientJobs = (clientName) => JOBS.filter(j => j.client === clientName)
 
   // ---- Candidate Form body (shared between Add + Review) ----
-  const CandidateFormBody = ({ f, setF, errs, sInput, setSInput, onSkillKey, rmSkill, lowConf = [], onChange }) => {
+  const CandidateFormBody = ({ f, setF, errs, sInput, setSInput, onSkillKey, onAddSkill, rmSkill, lowConf = [], onChange }) => {
     const low = (field) => lowConf.includes(field) ? ' low-confidence' : ''
     const handleLocalChange = onChange || ((e) => {
       const { name, value } = e.target
@@ -309,7 +316,7 @@ export default function CandidatesPage() {
           <label className="form-label">Full Name <span className="req">*</span></label>
           <input name="name" value={f.name} onChange={handleLocalChange}
             className={`form-control${errs?.name ? ' is-error' : ''}${low('name')}`}
-            placeholder="e.g. Arjun Rao" />
+            />
           {errs?.name && <span className="form-error">{errs.name}</span>}
         </div>
 
@@ -317,7 +324,7 @@ export default function CandidatesPage() {
           <label className="form-label">Email <span className="req">*</span></label>
           <input name="email" type="email" value={f.email} onChange={handleLocalChange}
             className={`form-control${errs?.email ? ' is-error' : ''}${low('email')}`}
-            placeholder="candidate@email.com" />
+            />
           {errs?.email && <span className="form-error">{errs.email}</span>}
         </div>
 
@@ -325,7 +332,7 @@ export default function CandidatesPage() {
           <label className="form-label">Mobile Number <span className="req">*</span></label>
           <input name="mobile" value={f.mobile} onChange={handleLocalChange}
             className={`form-control${errs?.mobile ? ' is-error' : ''}${low('mobile')}`}
-            placeholder="+91 98765 43210" />
+            />
           {errs?.mobile && <span className="form-error">{errs.mobile}</span>}
         </div>
 
@@ -333,32 +340,32 @@ export default function CandidatesPage() {
           <label className="form-label">Current Designation</label>
           <input name="designation" value={f.designation} onChange={handleLocalChange}
             className={`form-control${low('designation')}`}
-            placeholder="e.g. Backend Developer" />
+            />
         </div>
 
         <div className="form-group">
           <label className="form-label">Current Company</label>
           <input name="currentCompany" value={f.currentCompany || ''} onChange={handleLocalChange}
             className={`form-control${low('currentCompany')}`}
-            placeholder="e.g. Infosys" />
+            />
         </div>
 
         <div className="form-group">
           <label className="form-label">City</label>
           <input name="city" value={f.city} onChange={handleLocalChange}
-            className="form-control" placeholder="e.g. Bengaluru" />
+            className="form-control" />
         </div>
 
         <div className="form-group">
           <label className="form-label">State</label>
           <input name="state" value={f.state} onChange={handleLocalChange}
-            className="form-control" placeholder="e.g. Karnataka" />
+            className="form-control" />
         </div>
 
         <div className="form-group">
           <label className="form-label">Experience (years)</label>
           <input name="exp" type="number" min="0" value={f.exp} onChange={handleLocalChange}
-            className="form-control" placeholder="e.g. 4" />
+            className="form-control" />
         </div>
 
         <div className="form-group">
@@ -372,13 +379,13 @@ export default function CandidatesPage() {
           <label className="form-label">Current Salary (₹)</label>
           <input name="salary" type="number" value={f.salary} onChange={handleLocalChange}
             className={`form-control${low('salary')}`}
-            placeholder="e.g. 900000" />
+            />
         </div>
 
         <div className="form-group">
           <label className="form-label">Expected Salary (₹)</label>
           <input name="expectedSalary" type="number" value={f.expectedSalary} onChange={handleLocalChange}
-            className="form-control" placeholder="e.g. 1400000" />
+            className="form-control" />
         </div>
 
         <div className="form-group full">
@@ -392,7 +399,10 @@ export default function CandidatesPage() {
             ))}
             <input className="tag-input-field" value={sInput}
               onChange={e => setSInput(e.target.value)} onKeyDown={onSkillKey}
-              placeholder={f.skills.length === 0 ? 'Type a skill + Enter...' : ''} />
+              aria-label="Add skill" />
+            <button className="tag-add-btn" type="button" onClick={onAddSkill} disabled={!sInput.trim()}>
+              <Plus size={12} strokeWidth={2.4} /> Add
+            </button>
           </div>
         </div>
 
@@ -400,7 +410,7 @@ export default function CandidatesPage() {
           <label className="form-label">Education</label>
           <textarea name="education" value={f.education} onChange={handleLocalChange}
             className="form-control" rows={7} style={{ minHeight: 150, lineHeight: 1.5 }}
-            placeholder="e.g. B.Tech CSE, IIT Madras" />
+            />
         </div>
 
         <div className="form-section-title">Job Assignment</div>
@@ -424,14 +434,14 @@ export default function CandidatesPage() {
         <div className="form-group">
           <label className="form-label">Client Phone</label>
           <input name="clientPhone" value={f.clientPhone} onChange={handleLocalChange}
-            className="form-control" placeholder="Auto-filled on client select" />
+            className="form-control" />
         </div>
 
         <div className="form-group">
           <label className="form-label">LinkedIn URL</label>
           <input name="linkedinUrl" value={f.linkedinUrl || ''} onChange={handleLocalChange}
             className="form-control"
-            placeholder="https://linkedin.com/in/username" />
+            />
         </div>
 
         <div className="form-group">
@@ -440,13 +450,13 @@ export default function CandidatesPage() {
           </label>
           <input name="cvLink" value={f.cvLink || ''} onChange={handleLocalChange}
             className={`form-control${low('cvLink')}`}
-            placeholder="https://drive.google.com/..." />
+            />
         </div>
 
         <div className="form-group full">
-          <label className="form-label">CV Summary / Notes</label>
+          <label className="form-label">CV Cover Letter / Notes</label>
           <textarea name="notes" value={f.notes} onChange={handleLocalChange}
-            className="form-control" rows={3} placeholder="Brief CV summary or recruiter notes..." />
+            className="form-control" rows={7} style={{ minHeight: 160, lineHeight: 1.5 }} />
         </div>
       </div>
     )
@@ -477,10 +487,10 @@ export default function CandidatesPage() {
 
         <span className="filter-label">Salary ₹</span>
         <input className="filter-input" type="number" value={filterMinSal}
-          onChange={e => setFilterMinSal(e.target.value)} placeholder="Min" id="filter-sal-min" />
+          onChange={e => setFilterMinSal(e.target.value)} id="filter-sal-min" />
         <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>–</span>
         <input className="filter-input" type="number" value={filterMaxSal}
-          onChange={e => setFilterMaxSal(e.target.value)} placeholder="Max" id="filter-sal-max" />
+          onChange={e => setFilterMaxSal(e.target.value)} id="filter-sal-max" />
 
         <div className="filter-divider" />
 
@@ -610,7 +620,7 @@ export default function CandidatesPage() {
               <CandidateFormBody
                 f={form} setF={setForm} errs={errors}
                 sInput={skillInput} setSInput={setSkillInput}
-                onSkillKey={handleSkillKey} rmSkill={removeSkill}
+                onSkillKey={handleSkillKey} onAddSkill={addManualSkill} rmSkill={removeSkill}
                 onChange={handleChange}
               />
             </div>
@@ -675,7 +685,7 @@ export default function CandidatesPage() {
                       <label className="form-label">Resume URL</label>
                       <input className="form-control" value={resumeUrl}
                         onChange={e => { setResumeUrl(e.target.value); setImportError('') }}
-                        placeholder="https://drive.google.com/..." id="resume-url-input" />
+                        id="resume-url-input" />
                     </div>
                   )}
 
@@ -709,7 +719,7 @@ export default function CandidatesPage() {
                   <CandidateFormBody
                     f={parsedForm} setF={setParsedForm} errs={{}}
                     sInput={parsedSkillInput} setSInput={setParsedSkillInput}
-                    onSkillKey={handleParsedSkillKey} rmSkill={removeParsedSkill}
+                    onSkillKey={handleParsedSkillKey} onAddSkill={addParsedManualSkill} rmSkill={removeParsedSkill}
                     lowConf={parsedForm._lowConf || []}
                     onChange={handleParsedChange}
                   />

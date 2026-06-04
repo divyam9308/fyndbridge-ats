@@ -463,9 +463,34 @@ textarea.form-control {
   font-size: 13px;
   font-family: var(--font-body);
   flex: 1;
-  min-width: 80px;
+  min-width: 120px;
   background: transparent;
   color: var(--navy-darkest);
+}
+.tag-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  background: var(--gray-50);
+  color: var(--gray-700);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.tag-add-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--navy-darkest);
+}
+.tag-add-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* ===== Empty State ===== */
