@@ -16,24 +16,34 @@ const VALID_STATUSES = [
   'Rejected by Client'
 ]
 
-const WRITABLE_FIELDS = [
+const CANDIDATE_FIELDS = [
   'full_name',
   'email',
   'mobile_number',
   'city',
   'state',
+  'location',
   'current_designation',
+  'current_company',
+  'current_organisation',
   'experience_years',
-  'current_salary',
-  'expected_salary',
+  'notice_period',
+  'open_to_relocate',
   'skills',
   'education',
-  'client_id',
-  'job_id',
+  'cv_link',
+  'linkedin_url',
+  'resume_url',
+  'source'
+]
+
+const ASSOCIATION_FIELDS = [
+  'client_name',
+  'job_title',
   'status',
-  'notes',
-  'source',
-  'resume_url'
+  'current_salary',
+  'expected_salary',
+  'notes'
 ]
 
 function logAndSendInternal(res, routeName, err) {
@@ -43,6 +53,14 @@ function logAndSendInternal(res, routeName, err) {
 
 function normalizeNullable(value) {
   return value === '' ? null : value
+}
+
+function normalizeMatchValue(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function normalizeMobile(value) {
+  return String(value || '').replace(/[^\d+]/g, '').trim()
 }
 
 function isValidEmail(email) {
@@ -66,28 +84,43 @@ function validateCandidatePayload(body, { partial = false } = {}) {
     }
   }
 
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'mobile_number')) {
+    const mobile = normalizeMobile(body.mobile_number)
+    if (!mobile) {
+      errors.mobile_number = 'mobile_number is required'
+    } else if (!isValidMobile(mobile)) {
+      errors.mobile_number = 'mobile_number must be a valid Indian mobile number'
+    }
+  }
+
   if (body.email !== undefined && body.email !== null && body.email !== '' && !isValidEmail(body.email)) {
     errors.email = 'email must be a valid email address'
   }
 
-  if (
-    body.mobile_number !== undefined &&
-    body.mobile_number !== null &&
-    body.mobile_number !== '' &&
-    !isValidMobile(body.mobile_number)
-  ) {
-    errors.mobile_number = 'mobile_number must be a valid Indian mobile number'
-  }
-
-  if (body.experience_years !== undefined && body.experience_years !== null) {
+  if (body.experience_years !== undefined && body.experience_years !== null && body.experience_years !== '') {
     const value = Number(body.experience_years)
     if (!Number.isFinite(value) || value < 0) {
       errors.experience_years = 'experience_years must be greater than or equal to 0'
     }
   }
 
+  if (body.notice_period !== undefined && body.notice_period !== null && body.notice_period !== '') {
+    const value = Number(body.notice_period)
+    if (!Number.isInteger(value) || value < 0) {
+      errors.notice_period = 'notice_period must be a whole number greater than or equal to 0'
+    }
+  }
+
+  if (
+    body.open_to_relocate !== undefined &&
+    body.open_to_relocate !== null &&
+    typeof body.open_to_relocate !== 'boolean'
+  ) {
+    errors.open_to_relocate = 'open_to_relocate must be true or false'
+  }
+
   for (const field of ['current_salary', 'expected_salary']) {
-    if (body[field] !== undefined && body[field] !== null) {
+    if (body[field] !== undefined && body[field] !== null && body[field] !== '') {
       const value = Number(body[field])
       if (!isPositiveInteger(value)) {
         errors[field] = `${field} must be a positive integer with at most 9 digits`
@@ -95,7 +128,7 @@ function validateCandidatePayload(body, { partial = false } = {}) {
     }
   }
 
-  if (body.status !== undefined && !VALID_STATUSES.includes(body.status)) {
+  if (body.status !== undefined && body.status !== null && body.status !== '' && !VALID_STATUSES.includes(body.status)) {
     errors.status = `status must be one of: ${VALID_STATUSES.join(', ')}`
   }
 
@@ -108,20 +141,24 @@ function validateCandidatePayload(body, { partial = false } = {}) {
   return errors
 }
 
-function buildCandidatePayload(body) {
+function pickPayload(body, fields) {
   const payload = {}
 
-  for (const field of WRITABLE_FIELDS) {
+  for (const field of fields) {
     if (Object.prototype.hasOwnProperty.call(body, field)) {
       payload[field] = normalizeNullable(body[field])
     }
   }
 
   if (payload.full_name) {
-    payload.full_name = payload.full_name.trim()
+    payload.full_name = normalizeMatchValue(payload.full_name)
   }
 
-  for (const field of ['experience_years', 'current_salary', 'expected_salary']) {
+  if (payload.mobile_number) {
+    payload.mobile_number = normalizeMobile(payload.mobile_number)
+  }
+
+  for (const field of ['experience_years', 'notice_period', 'current_salary', 'expected_salary']) {
     if (payload[field] !== undefined && payload[field] !== null) {
       payload[field] = Number(payload[field])
     }
@@ -130,25 +167,19 @@ function buildCandidatePayload(body) {
   return payload
 }
 
-async function findDuplicate({ email, mobile_number }) {
-  const clauses = []
+async function findCandidateByNameAndMobile(fullName, mobileNumber) {
+  const name = normalizeMatchValue(fullName)
+  const mobile = normalizeMobile(mobileNumber)
 
-  if (email) {
-    clauses.push(`email.eq.${email}`)
-  }
-
-  if (mobile_number) {
-    clauses.push(`mobile_number.eq.${mobile_number}`)
-  }
-
-  if (!clauses.length) {
+  if (!name || !mobile) {
     return null
   }
 
   const { data, error } = await supabase
     .from('candidates')
     .select('id')
-    .or(clauses.join(','))
+    .ilike('full_name', name)
+    .eq('mobile_number', mobile)
     .limit(1)
     .maybeSingle()
 
@@ -159,37 +190,61 @@ async function findDuplicate({ email, mobile_number }) {
   return data
 }
 
-function flattenCandidate(row) {
-  if (!row) {
-    return row
-  }
+function flattenAssociation(row) {
+  const candidate = row.candidates || {}
 
   return {
-    ...row,
-    client_name: row.clients?.client_name || null,
-    client_phone_number: row.clients?.phone_number || null,
-    job_title: row.jobs?.job_title || null
+    id: row.id,
+    association_id: row.id,
+    candidate_id: row.candidate_id,
+    full_name: candidate.full_name || null,
+    email: candidate.email || null,
+    mobile_number: candidate.mobile_number || null,
+    city: candidate.city || null,
+    state: candidate.state || null,
+    location: candidate.location || null,
+    current_designation: candidate.current_designation || null,
+    current_company: candidate.current_company || null,
+    current_organisation: candidate.current_organisation || candidate.current_company || null,
+    experience_years: candidate.experience_years || null,
+    notice_period: candidate.notice_period || null,
+    open_to_relocate: Boolean(candidate.open_to_relocate),
+    skills: candidate.skills || [],
+    education: candidate.education || null,
+    cv_link: candidate.cv_link || candidate.resume_url || null,
+    linkedin_url: candidate.linkedin_url || null,
+    resume_url: candidate.resume_url || null,
+    client_name: row.client_name || null,
+    job_title: row.job_title || null,
+    status: row.status || 'Interested',
+    current_salary: row.current_salary || null,
+    expected_salary: row.expected_salary || null,
+    notes: row.notes || null,
+    consultant_name: row.created_by || null,
+    created_at: row.created_at,
+    updated_at: row.updated_at
   }
 }
 
 async function listCandidates(req, res) {
   try {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
-    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 200)
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 200, 1), 500)
     const from = (page - 1) * limit
     const to = from + limit - 1
 
     let query = supabase
-      .from('candidates')
-      .select('*, clients(client_name), jobs(job_title)', { count: 'exact' })
+      .from('candidate_associations')
+      .select('*, candidates(*)', { count: 'exact' })
+      .order('candidate_id', { ascending: true })
       .order('created_at', { ascending: false })
 
-    if (req.query.job_id) {
-      query = query.eq('job_id', req.query.job_id)
+    if (req.query.job_title) {
+      query = query.eq('job_title', req.query.job_title)
     }
 
-    if (req.query.client_id) {
-      query = query.eq('client_id', req.query.client_id)
+    if (req.query.client_name) {
+      query = query.eq('client_name', req.query.client_name)
     }
 
     if (req.query.status) {
@@ -210,13 +265,6 @@ async function listCandidates(req, res) {
       query = query.lte('current_salary', Number(req.query.salary_max))
     }
 
-    if (req.query.search) {
-      const search = String(req.query.search).replace(/[%*,]/g, '').trim()
-      if (search) {
-        query = query.or(`full_name.ilike.*${search}*,email.ilike.*${search}*,mobile_number.ilike.*${search}*`)
-      }
-    }
-
     const { data, error, count } = await query.range(from, to)
 
     if (error) {
@@ -224,7 +272,7 @@ async function listCandidates(req, res) {
     }
 
     return res.json({
-      data: (data || []).map(flattenCandidate),
+      data: (data || []).map(flattenAssociation),
       total: count || 0,
       page,
       limit
@@ -237,8 +285,8 @@ async function listCandidates(req, res) {
 async function getCandidate(req, res) {
   try {
     const { data, error } = await supabase
-      .from('candidates')
-      .select('*, clients(client_name, phone_number), jobs(job_title)')
+      .from('candidate_associations')
+      .select('*, candidates(*)')
       .eq('id', req.params.id)
       .maybeSingle()
 
@@ -247,10 +295,10 @@ async function getCandidate(req, res) {
     }
 
     if (!data) {
-      return res.status(404).json({ error: 'Candidate not found' })
+      return res.status(404).json({ error: 'Candidate association not found' })
     }
 
-    return res.json(flattenCandidate(data))
+    return res.json(flattenAssociation(data))
   } catch (err) {
     return logAndSendInternal(res, 'getCandidate', err)
   }
@@ -261,7 +309,7 @@ async function createCandidate(req, res) {
     const body = {
       ...req.body,
       status: req.body.status || 'Interested',
-      source: 'manual'
+      source: req.body.source || 'manual'
     }
     const errors = validateCandidatePayload(body)
 
@@ -269,38 +317,53 @@ async function createCandidate(req, res) {
       return res.status(400).json({ errors })
     }
 
-    const payload = buildCandidatePayload(body)
+    const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
+    const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
 
-    if (req.query.force !== 'true') {
-      const duplicate = await findDuplicate({
-        email: payload.email,
-        mobile_number: payload.mobile_number
-      })
+    let candidate = await findCandidateByNameAndMobile(candidatePayload.full_name, candidatePayload.mobile_number)
 
-      if (duplicate) {
-        return res.status(409).json({
-          warning: 'duplicate',
-          message: 'A candidate with this email/mobile already exists',
-          existing_id: duplicate.id
-        })
+    if (!candidate) {
+      const insertPayload = {
+        ...candidatePayload
       }
+
+      if (req.user?.id) {
+        insertPayload.created_by = req.user.id
+      }
+
+      const { data, error } = await supabase
+        .from('candidates')
+        .insert(insertPayload)
+        .select('id')
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      candidate = data
     }
 
-    const { data, error } = await supabase
-      .from('candidates')
-      .insert({
-        ...payload,
-        source: 'manual',
-        created_by: req.user.id
-      })
-      .select()
+    const assocInsert = {
+      ...associationPayload,
+      candidate_id: candidate.id
+    }
+
+    if (req.user?.id) {
+      assocInsert.created_by = req.user.id
+    }
+
+    const { data: association, error: associationError } = await supabase
+      .from('candidate_associations')
+      .insert(assocInsert)
+      .select('*, candidates(*)')
       .single()
 
-    if (error) {
-      throw error
+    if (associationError) {
+      throw associationError
     }
 
-    return res.status(201).json(data)
+    return res.status(201).json(flattenAssociation(association))
   } catch (err) {
     return logAndSendInternal(res, 'createCandidate', err)
   }
@@ -314,12 +377,14 @@ async function updateCandidate(req, res) {
       return res.status(400).json({ errors })
     }
 
-    const payload = buildCandidatePayload(req.body)
+    const associationId = req.body.association_id || req.params.id
+    const candidatePayload = pickPayload(req.body, CANDIDATE_FIELDS)
+    const associationPayload = pickPayload(req.body, ASSOCIATION_FIELDS)
 
     const { data: existing, error: lookupError } = await supabase
-      .from('candidates')
-      .select('id')
-      .eq('id', req.params.id)
+      .from('candidate_associations')
+      .select('id, candidate_id')
+      .eq('id', associationId)
       .maybeSingle()
 
     if (lookupError) {
@@ -327,25 +392,60 @@ async function updateCandidate(req, res) {
     }
 
     if (!existing) {
-      return res.status(404).json({ error: 'Candidate not found' })
+      return res.status(404).json({ error: 'Candidate association not found' })
+    }
+
+    if (Object.keys(candidatePayload).length) {
+      const updatePayload = {
+        ...candidatePayload,
+        updated_at: new Date().toISOString()
+      }
+
+      if (req.user?.id) {
+        updatePayload.updated_by = req.user.id
+      }
+
+      const { error } = await supabase
+        .from('candidates')
+        .update(updatePayload)
+        .eq('id', existing.candidate_id)
+
+      if (error) {
+        throw error
+      }
+    }
+
+    if (Object.keys(associationPayload).length) {
+      const assocUpdate = {
+        ...associationPayload,
+        updated_at: new Date().toISOString()
+      }
+
+      if (req.user?.id) {
+        assocUpdate.updated_by = req.user.id
+      }
+
+      const { error } = await supabase
+        .from('candidate_associations')
+        .update(assocUpdate)
+        .eq('id', associationId)
+
+      if (error) {
+        throw error
+      }
     }
 
     const { data, error } = await supabase
-      .from('candidates')
-      .update({
-        ...payload,
-        updated_by: req.user.id,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', req.params.id)
-      .select()
+      .from('candidate_associations')
+      .select('*, candidates(*)')
+      .eq('id', associationId)
       .single()
 
     if (error) {
       throw error
     }
 
-    return res.json(data)
+    return res.json(flattenAssociation(data))
   } catch (err) {
     return logAndSendInternal(res, 'updateCandidate', err)
   }
@@ -361,14 +461,18 @@ async function updateCandidateStatus(req, res) {
       })
     }
 
-    const updatedAt = new Date().toISOString()
+    const updatePayload = {
+      status: req.body.status,
+      updated_at: new Date().toISOString()
+    }
+
+    if (req.user?.id) {
+      updatePayload.updated_by = req.user.id
+    }
+
     const { data, error } = await supabase
-      .from('candidates')
-      .update({
-        status: req.body.status,
-        updated_by: req.user.id,
-        updated_at: updatedAt
-      })
+      .from('candidate_associations')
+      .update(updatePayload)
       .eq('id', req.params.id)
       .select('id, status, updated_at')
       .maybeSingle()
@@ -378,7 +482,7 @@ async function updateCandidateStatus(req, res) {
     }
 
     if (!data) {
-      return res.status(404).json({ error: 'Candidate not found' })
+      return res.status(404).json({ error: 'Candidate association not found' })
     }
 
     return res.json(data)
@@ -402,7 +506,7 @@ function storagePathFromResumeUrl(resumeUrl) {
 
     const objectPath = decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length))
     return objectPath.replace(/^sign\/|^public\//, '')
-  } catch (err) {
+  } catch {
     return resumeUrl
   }
 }
@@ -427,8 +531,8 @@ async function deleteResumeFromStorage(resumeUrl) {
 async function deleteCandidate(req, res) {
   try {
     const { data: existing, error: lookupError } = await supabase
-      .from('candidates')
-      .select('id, resume_url')
+      .from('candidate_associations')
+      .select('id, candidate_id, candidates(resume_url)')
       .eq('id', req.params.id)
       .maybeSingle()
 
@@ -437,18 +541,30 @@ async function deleteCandidate(req, res) {
     }
 
     if (!existing) {
-      return res.status(404).json({ error: 'Candidate not found' })
+      return res.status(404).json({ error: 'Candidate association not found' })
     }
 
-    const { error } = await supabase.from('candidates').delete().eq('id', req.params.id)
+    const { error } = await supabase.from('candidate_associations').delete().eq('id', req.params.id)
 
     if (error) {
       throw error
     }
 
-    await deleteResumeFromStorage(existing.resume_url)
+    const { count, error: countError } = await supabase
+      .from('candidate_associations')
+      .select('id', { count: 'exact', head: true })
+      .eq('candidate_id', existing.candidate_id)
 
-    return res.json({ message: 'Candidate deleted' })
+    if (countError) {
+      throw countError
+    }
+
+    if (!count) {
+      await supabase.from('candidates').delete().eq('id', existing.candidate_id)
+      await deleteResumeFromStorage(existing.candidates?.resume_url)
+    }
+
+    return res.json({ message: 'Candidate association deleted' })
   } catch (err) {
     return logAndSendInternal(res, 'deleteCandidate', err)
   }
@@ -458,7 +574,7 @@ function isValidUrl(value) {
   try {
     const parsed = new URL(value)
     return parsed.protocol === 'http:' || parsed.protocol === 'https:'
-  } catch (err) {
+  } catch {
     return false
   }
 }

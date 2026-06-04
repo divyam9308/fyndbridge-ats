@@ -146,6 +146,9 @@
   box-shadow: var(--shadow-card);
   overflow: hidden;
 }
+.table-wrapper {
+  overflow-x: auto;
+}
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -178,6 +181,90 @@
 .data-table tbody tr:hover { background: var(--gray-50); }
 .data-table tbody tr:hover .row-actions { opacity: 1; }
 
+.candidates-master-table {
+  min-width: 2500px;
+}
+
+.candidates-master-table th,
+.candidates-master-table td {
+  background: inherit;
+}
+
+.candidates-master-table th:nth-child(-n+6),
+.candidates-master-table td:nth-child(-n+6) {
+  position: sticky;
+  z-index: 2;
+  background: inherit;
+}
+
+.candidates-master-table th:nth-child(-n+6) {
+  z-index: 4;
+}
+
+.candidates-master-table th:nth-child(1),
+.candidates-master-table td:nth-child(1) {
+  left: 0;
+  min-width: 50px;
+}
+
+.candidates-master-table th:nth-child(2),
+.candidates-master-table td:nth-child(2) {
+  left: 50px;
+  min-width: 70px;
+}
+
+.candidates-master-table th:nth-child(3),
+.candidates-master-table td:nth-child(3) {
+  left: 120px;
+  min-width: 100px;
+}
+
+.candidates-master-table th:nth-child(4),
+.candidates-master-table td:nth-child(4) {
+  left: 220px;
+  min-width: 160px;
+}
+
+.candidates-master-table th:nth-child(5),
+.candidates-master-table td:nth-child(5) {
+  left: 380px;
+  min-width: 150px;
+}
+
+.candidates-master-table th:nth-child(6),
+.candidates-master-table td:nth-child(6) {
+  left: 530px;
+  min-width: 190px;
+  box-shadow: 2px 0 6px rgba(0,0,0,0.08);
+}
+
+.cell-ellipsis {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-link {
+  color: #0A66C2;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.cv-table-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--info);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 3px 8px;
+  background: rgba(23,162,184,0.08);
+  border-radius: 6px;
+}
+
 /* Row actions */
 .row-actions {
   display: flex;
@@ -208,6 +295,67 @@
   background: var(--danger);
   color: var(--white);
   border-color: var(--danger);
+}
+
+.candidate-mobile-group-row td {
+  background: rgba(245,166,35,0.04);
+  border-bottom: 1px dashed #E9ECEF;
+}
+
+.candidate-mobile-group-row td:first-child {
+  border-left: 3px solid #F5A623;
+}
+
+.candidate-mobile-group-row.group-last td {
+  border-bottom: 2px solid #E9ECEF;
+}
+
+.candidate-repeat-label {
+  color: #ADB5BD;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.candidate-group-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.candidate-submission-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: rgba(245,166,35,0.12);
+  color: #9a6a00;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.candidate-group-toggle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray-500);
+  background: transparent;
+  transition: transform var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.candidate-group-toggle:hover {
+  background: rgba(245,166,35,0.12);
+  color: var(--navy-darkest);
+}
+
+.candidate-group-toggle:not(.collapsed) {
+  transform: rotate(180deg);
 }
 
 /* ===== Progress Bar (inline) ===== */
@@ -278,11 +426,14 @@
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   z-index: 1000;
-  padding: 24px;
+  padding: 32px 24px;
+  overflow-y: auto;
   animation: overlayIn 0.2s ease both;
 }
 @keyframes overlayIn {
@@ -294,13 +445,13 @@
   border-radius: 16px;
   width: 100%;
   max-width: 560px;
-  max-height: 90vh;
+  max-height: none;
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 64px rgba(0,0,0,0.22);
   animation: modalIn 0.25s cubic-bezier(0.22,1,0.36,1) both;
 }
-.modal-card-lg { max-width: 660px; }
+.modal-card-lg { max-width: 760px; }
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(16px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -336,8 +487,9 @@
 }
 .modal-close:hover { background: var(--gray-100); color: var(--gray-700); }
 .modal-body {
-  padding: 20px 24px;
+  padding: 18px 24px;
   overflow-y: auto;
+  max-height: calc(100vh - 190px);
   flex: 1;
 }
 .modal-footer {

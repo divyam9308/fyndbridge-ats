@@ -1,18 +1,18 @@
-import { useRef, useState } from 'react'
-import { Plus, Upload, Pencil, X, Users, ChevronDown, AlertCircle, ExternalLink, FileText } from 'lucide-react'
+﻿import { useEffect, useRef, useState } from 'react'
+import { Plus, Upload, X, Users, ChevronDown, AlertCircle, FileText } from 'lucide-react'
 import '../styles/Shared.css'
 
 /* ====== Static reference data ====== */
 const CLIENTS = ['Acme Corp', 'Nexus Tech', 'Bright Minds Ltd', 'Zeta FinTech', 'CloudBridge Labs', 'Lumino Health']
 
 const JOBS = [
-  { id: 1, title: 'Senior Backend Engineer', client: 'Zeta FinTech' },
-  { id: 2, title: 'Product Manager',         client: 'Nexus Tech' },
-  { id: 3, title: 'UX Designer',             client: 'Bright Minds Ltd' },
-  { id: 4, title: 'Sales Executive',         client: 'Acme Corp' },
-  { id: 5, title: 'Data Analyst',            client: 'CloudBridge Labs' },
-  { id: 6, title: 'DevOps Engineer',         client: 'Zeta FinTech' },
-  { id: 7, title: 'Frontend Engineer',       client: 'Nexus Tech' },
+  { id: 1, title: 'Senior Backend Engineer', client: 'Zeta FinTech',     status: 'Open' },
+  { id: 2, title: 'Product Manager',         client: 'Nexus Tech',       status: 'Open' },
+  { id: 3, title: 'UX Designer',             client: 'Bright Minds Ltd', status: 'On Hold' },
+  { id: 4, title: 'Sales Executive',         client: 'Acme Corp',        status: 'Filled' },
+  { id: 5, title: 'Data Analyst',            client: 'CloudBridge Labs', status: 'Open' },
+  { id: 6, title: 'DevOps Engineer',         client: 'Zeta FinTech',     status: 'Closed' },
+  { id: 7, title: 'Frontend Engineer',       client: 'Nexus Tech',       status: 'Open' },
 ]
 
 const ALL_STATUSES = [
@@ -31,8 +31,20 @@ const STATUS_BADGE_MAP = {
   'Rejected by Client':   'badge-rejected-client',
 }
 
-const fmt = (n) => n ? `₹${Number(n).toLocaleString('en-IN')}` : '—'
+const fmt = (n) => n ? `â‚¹${Number(n).toLocaleString('en-IN')}` : 'â€”'
 const initials = (name) => name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()
+const formatDate = (value) => {
+  if (!value) return 'â€”'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'â€”'
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`
+}
+const formatMonth = (value) => {
+  if (!value) return 'â€”'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'â€”'
+  return date.toLocaleString('en-US', { month: 'short' })
+}
 
 /* ====== Placeholder candidates ====== */
 const INITIAL_CANDIDATES = [
@@ -49,9 +61,10 @@ const INITIAL_CANDIDATES = [
 /* ====== Empty forms ====== */
 const EMPTY_CAND = {
   name:'', email:'', mobile:'', designation:'', city:'', state:'',
-  currentCompany:'', exp:'', salary:'', expectedSalary:'', skills:[], education:'',
+  location:'', currentCompany:'', currentOrganisation:'', exp:'', salary:'', expectedSalary:'', skills:[], education:'',
+  noticePeriod:'', openToRelocate:false,
   client:'', job:'', clientPhone:'', status:'Interested',
-  cvLink:'', linkedinUrl:'', notes:'',
+  cvLink:'', linkedinUrl:'', notes:'', candidateId:'', associationId:'',
 }
 
 /* ====== Client phone lookup ====== */
@@ -64,9 +77,70 @@ const CLIENT_PHONES = {
   'Lumino Health':    '+91 94567 89012',
 }
 
+const apiCandidateToUi = (row) => ({
+  id: row.association_id || row.id,
+  associationId: row.association_id || row.id,
+  candidateId: row.candidate_id,
+  name: row.full_name || '',
+  email: row.email || '',
+  mobile: row.mobile_number || '',
+  city: row.city || '',
+  state: row.state || '',
+  location: row.location || '',
+  designation: row.current_designation || '',
+  currentCompany: row.current_company || '',
+  currentOrganisation: row.current_organisation || row.current_company || '',
+  exp: row.experience_years ?? '',
+  noticePeriod: row.notice_period ?? '',
+  openToRelocate: Boolean(row.open_to_relocate),
+  salary: row.current_salary ?? '',
+  expectedSalary: row.expected_salary ?? '',
+  skills: row.skills || [],
+  education: row.education || '',
+  client: row.client_name || '',
+  clientPhone: row.client_phone_number || CLIENT_PHONES[row.client_name] || '',
+  job: row.job_title || '',
+  status: row.status || 'Interested',
+  cvLink: row.cv_link || row.resume_url || '',
+  linkedinUrl: row.linkedin_url || '',
+  notes: row.notes || '',
+  consultant: row.consultant_name || '',
+  createdAt: row.created_at || '',
+})
+
+const uiCandidateToApi = (f) => ({
+  association_id: f.associationId || undefined,
+  full_name: f.name,
+  email: f.email,
+  mobile_number: f.mobile,
+  city: f.city,
+  state: f.state,
+  location: f.location,
+  current_designation: f.designation,
+  current_company: f.currentCompany,
+  current_organisation: f.currentOrganisation,
+  experience_years: f.exp,
+  notice_period: f.noticePeriod,
+  open_to_relocate: Boolean(f.openToRelocate),
+  skills: f.skills,
+  education: f.education,
+  client_name: f.client,
+  job_title: f.job,
+  status: f.status,
+  current_salary: f.salary,
+  expected_salary: f.expectedSalary,
+  cv_link: f.cvLink,
+  linkedin_url: f.linkedinUrl,
+  notes: f.notes,
+  source: f.source,
+})
+
 export default function CandidatesPage() {
   const [candidates, setCandidates] = useState(INITIAL_CANDIDATES)
   const fileInputRef = useRef(null)
+  const candidateModalBodyRef = useRef(null)
+  const [apiError, setApiError] = useState('')
+  const [saving, setSaving] = useState(false)
 
   // Filters
   const [filterJob, setFilterJob]       = useState('All')
@@ -79,6 +153,8 @@ export default function CandidatesPage() {
   const [form, setForm]         = useState(EMPTY_CAND)
   const [errors, setErrors]     = useState({})
   const [skillInput, setSkillInput] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [collapsed, setCollapsed] = useState({})
 
   // Import Resume Modal
   const [importOpen, setImportOpen]   = useState(false)
@@ -91,6 +167,61 @@ export default function CandidatesPage() {
   const [parsedForm, setParsedForm]   = useState(null)
   const [parsedSkillInput, setParsedSkillInput] = useState('')
 
+  const loadCandidates = async () => {
+    try {
+      const response = await fetch('/api/candidates')
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Unable to load candidates.')
+      }
+
+      if (Array.isArray(payload.data)) {
+        setCandidates(payload.data.map(apiCandidateToUi))
+      }
+      setApiError('')
+    } catch (err) {
+      setApiError(err.message)
+    }
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      loadCandidates()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    if (addOpen) {
+      const timer = window.setTimeout(() => {
+        if (candidateModalBodyRef.current) {
+          candidateModalBodyRef.current.scrollTop = 0
+        }
+      }, 0)
+
+      return () => window.clearTimeout(timer)
+    }
+  }, [addOpen, editing])
+
+  const saveCandidateToApi = async (candidate, { update = false } = {}) => {
+    const response = await fetch(update ? `/api/candidates/${candidate.associationId}` : '/api/candidates', {
+      method: update ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(uiCandidateToApi(candidate))
+    })
+    const payload = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      const message = payload.errors ? Object.values(payload.errors)[0] : payload.error
+      throw new Error(message || 'Unable to save candidate.')
+    }
+
+    await loadCandidates()
+    return apiCandidateToUi(payload)
+  }
+
   // ---- Filtering ----
   const filtered = candidates.filter(c => {
     if (filterJob !== 'All' && c.job !== filterJob) return false
@@ -99,6 +230,33 @@ export default function CandidatesPage() {
     if (filterStatus.length > 0 && !filterStatus.includes(c.status)) return false
     return true
   })
+
+  const mobileGroups = {}
+  filtered.forEach(c => {
+    const key = c.mobile || c.mobile_number || c.id
+    if (!mobileGroups[key]) mobileGroups[key] = []
+    mobileGroups[key].push(c)
+  })
+
+  const visibleCandidates = []
+  Object.entries(mobileGroups).forEach(([mobile, rows]) => {
+    const isGroup = rows.length >= 2
+    const visibleRows = isGroup && collapsed[mobile] ? rows.slice(0, 1) : rows
+    visibleRows.forEach((candidate, index) => {
+      visibleCandidates.push({
+        candidate,
+        mobile,
+        isGroup,
+        groupSize: rows.length,
+        groupIndex: index,
+        isLastInGroup: index === visibleRows.length - 1,
+      })
+    })
+  })
+
+  const toggleCollapsed = (mobile) => {
+    setCollapsed(prev => ({ ...prev, [mobile]: !prev[mobile] }))
+  }
 
   const clearFilters = () => {
     setFilterJob('All'); setFilterMinSal(''); setFilterMaxSal(''); setFilterStatus([])
@@ -113,11 +271,12 @@ export default function CandidatesPage() {
 
   // ---- Add Candidate form ----
   const handleChange = (e) => {
-    const { name, value } = e.target
+    const { name, value, type, checked } = e.target
+    const nextValue = type === 'checkbox' ? checked : value
     if (name === 'client') {
       setForm(f => ({ ...f, client: value, clientPhone: CLIENT_PHONES[value] || '', job: '' }))
     } else {
-      setForm(f => ({ ...f, [name]: value }))
+      setForm(f => ({ ...f, [name]: nextValue }))
     }
     if (errors[name]) setErrors(err => ({ ...err, [name]: '' }))
   }
@@ -156,21 +315,25 @@ export default function CandidatesPage() {
   const validate = (f) => {
     const e = {}
     if (!f.name.trim()) e.name = 'Full Name is required'
-    if (!f.email.trim()) e.email = 'Email is required'
     if (!f.mobile.trim()) e.mobile = 'Mobile is required'
     return e
   }
 
-  const openAddModal = () => { setForm(EMPTY_CAND); setErrors({}); setSkillInput(''); setAddOpen(true) }
+  const openAddModal = () => { setForm({ ...EMPTY_CAND, skills: [] }); setEditing(false); setErrors({}); setSkillInput(''); setAddOpen(true) }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const e = validate(form)
     if (Object.keys(e).length) { setErrors(e); return }
-    setCandidates(c => [{
-      id: Date.now(), ...form, exp: Number(form.exp) || 0,
-      salary: Number(form.salary) || 0, expectedSalary: Number(form.expectedSalary) || 0,
-    }, ...c])
-    setAddOpen(false)
+    setSaving(true)
+    try {
+      await saveCandidateToApi(form, { update: editing })
+      setAddOpen(false)
+      setEditing(false)
+    } catch (err) {
+      setErrors({ form: err.message })
+    } finally {
+      setSaving(false)
+    }
   }
 
   // ---- Parsed skill input ----
@@ -203,6 +366,8 @@ export default function CandidatesPage() {
         mobile_number: 'mobile',
         current_designation: 'designation',
         current_company: 'currentCompany',
+        current_organisation: 'currentOrganisation',
+        experience_years: 'exp',
         cover_letter: 'notes'
       }[key] || key))
 
@@ -213,6 +378,11 @@ export default function CandidatesPage() {
       mobile: fieldValue(extracted, 'mobile_number'),
       designation: fieldValue(extracted, 'current_designation'),
       currentCompany: fieldValue(extracted, 'current_company'),
+      currentOrganisation: fieldValue(extracted, 'current_organisation') || fieldValue(extracted, 'current_company'),
+      exp: fieldValue(extracted, 'experience_years'),
+      city: fieldValue(extracted, 'city'),
+      state: fieldValue(extracted, 'state'),
+      location: fieldValue(extracted, 'location'),
       skills: fieldValue(extracted, 'skills', []) || [],
       education: fieldValue(extracted, 'education'),
       notes: fieldValue(extracted, 'cover_letter'),
@@ -295,14 +465,18 @@ export default function CandidatesPage() {
     }
   }
 
-  const handleSaveParsed = () => {
+  const handleSaveParsed = async () => {
     const e = validate(parsedForm)
-    if (Object.keys(e).length) return
-    setCandidates(c => [{
-      id: Date.now(), ...parsedForm, exp: Number(parsedForm.exp) || 0,
-      salary: Number(parsedForm.salary) || 0, expectedSalary: Number(parsedForm.expectedSalary) || 0,
-    }, ...c])
-    closeImport()
+    if (Object.keys(e).length) { setImportError(Object.values(e)[0]); return }
+    setSaving(true)
+    try {
+      await saveCandidateToApi({ ...parsedForm, source: 'resume' })
+      closeImport()
+    } catch (err) {
+      setImportError(err.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const closeImport = () => {
@@ -313,23 +487,23 @@ export default function CandidatesPage() {
 
   // ---- Parsed form change ----
   const handleParsedChange = (e) => {
-    const { name, value } = e.target
+    const { name, value, type, checked } = e.target
+    const nextValue = type === 'checkbox' ? checked : value
     if (name === 'client') {
       setParsedForm(f => ({ ...f, client: value, clientPhone: CLIENT_PHONES[value] || '', job: '' }))
     } else {
-      setParsedForm(f => ({ ...f, [name]: value }))
+      setParsedForm(f => ({ ...f, [name]: nextValue }))
     }
   }
-
-  const clientJobs = (clientName) => JOBS.filter(j => j.client === clientName)
 
   // ---- Candidate Form body (shared between Add + Review) ----
   const CandidateFormBody = ({ f, setF, errs, sInput, onSkillInputChange, onSkillKey, onAddSkill, rmSkill, lowConf = [], onChange }) => {
     const low = (field) => lowConf.includes(field) ? ' low-confidence' : ''
     const handleLocalChange = onChange || ((e) => {
-      const { name, value } = e.target
+      const { name, value, type, checked } = e.target
+      const nextValue = type === 'checkbox' ? checked : value
       if (name === 'client') setF(prev => ({ ...prev, client: value, clientPhone: CLIENT_PHONES[value] || '', job: '' }))
-      else setF(prev => ({ ...prev, [name]: value }))
+      else setF(prev => ({ ...prev, [name]: nextValue }))
     })
     return (
       <div className="form-grid-2">
@@ -372,6 +546,12 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
+          <label className="form-label">Current Organisation</label>
+          <input name="currentOrganisation" value={f.currentOrganisation || ''} onChange={handleLocalChange}
+            className="form-control" />
+        </div>
+
+        <div className="form-group">
           <label className="form-label">City</label>
           <input name="city" value={f.city} onChange={handleLocalChange}
             className="form-control" />
@@ -384,8 +564,20 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
+          <label className="form-label">Location</label>
+          <input name="location" value={f.location || ''} onChange={handleLocalChange}
+            className="form-control" />
+        </div>
+
+        <div className="form-group">
           <label className="form-label">Experience (years)</label>
           <input name="exp" type="number" min="0" value={f.exp} onChange={handleLocalChange}
+            className="form-control" />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Notice Period (days)</label>
+          <input name="noticePeriod" type="number" min="0" value={f.noticePeriod || ''} onChange={handleLocalChange}
             className="form-control" />
         </div>
 
@@ -397,17 +589,22 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Current Salary (₹)</label>
+          <label className="form-label">Current Salary (â‚¹)</label>
           <input name="salary" type="number" value={f.salary} onChange={handleLocalChange}
             className={`form-control${low('salary')}`}
             />
         </div>
 
         <div className="form-group">
-          <label className="form-label">Expected Salary (₹)</label>
+          <label className="form-label">Expected Salary (â‚¹)</label>
           <input name="expectedSalary" type="number" value={f.expectedSalary} onChange={handleLocalChange}
             className="form-control" />
         </div>
+
+        <label className="filter-toggle" style={{ alignSelf:'end', height:38 }}>
+          <input name="openToRelocate" type="checkbox" checked={Boolean(f.openToRelocate)} onChange={handleLocalChange} />
+          Open to Relocate
+        </label>
 
         <div className="form-group full">
           <label className="form-label">Skills</label>
@@ -430,7 +627,7 @@ export default function CandidatesPage() {
         <div className="form-group full">
           <label className="form-label">Education</label>
           <textarea name="education" value={f.education} onChange={handleLocalChange}
-            className="form-control" rows={7} style={{ minHeight: 150, lineHeight: 1.5 }}
+            className="form-control" rows={4} style={{ minHeight: 96, lineHeight: 1.5 }}
             />
         </div>
 
@@ -446,9 +643,9 @@ export default function CandidatesPage() {
 
         <div className="form-group">
           <label className="form-label">Job</label>
-          <select name="job" value={f.job} onChange={handleLocalChange} className="form-control" disabled={!f.client}>
+          <select name="job" value={f.job} onChange={handleLocalChange} className="form-control">
             <option value="">Select job...</option>
-            {clientJobs(f.client).map(j => <option key={j.id}>{j.title}</option>)}
+            {JOBS.map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
           </select>
         </div>
 
@@ -477,7 +674,7 @@ export default function CandidatesPage() {
         <div className="form-group full">
           <label className="form-label">CV Cover Letter / Notes</label>
           <textarea name="notes" value={f.notes} onChange={handleLocalChange}
-            className="form-control" rows={7} style={{ minHeight: 160, lineHeight: 1.5 }} />
+            className="form-control" rows={3} style={{ minHeight: 84, lineHeight: 1.5 }} />
         </div>
       </div>
     )
@@ -494,6 +691,11 @@ export default function CandidatesPage() {
           <Plus size={15} strokeWidth={2.5} /> Add Candidate
         </button>
       </div>
+      {apiError && (
+        <div className="form-error" style={{ display:'block', marginBottom:12 }}>
+          {apiError}
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="filter-bar">
@@ -506,10 +708,10 @@ export default function CandidatesPage() {
 
         <div className="filter-divider" />
 
-        <span className="filter-label">Salary ₹</span>
+        <span className="filter-label">Salary â‚¹</span>
         <input className="filter-input" type="number" value={filterMinSal}
           onChange={e => setFilterMinSal(e.target.value)} id="filter-sal-min" />
-        <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>–</span>
+        <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>â€“</span>
         <input className="filter-input" type="number" value={filterMaxSal}
           onChange={e => setFilterMaxSal(e.target.value)} id="filter-sal-max" />
 
@@ -535,97 +737,113 @@ export default function CandidatesPage() {
             <div className="empty-state-desc">Try adjusting your filters or add a new candidate.</div>
           </div>
         ) : (
-          <table className="data-table" aria-label="Candidates">
+          <div className="table-wrapper">
+          <table className="data-table candidates-master-table" aria-label="Candidates">
             <thead>
               <tr>
-                <th>Candidate</th>
-                <th>Current Company</th>
+                <th>S.No</th>
+                <th>Date</th>
+                <th>Consultant</th>
+                <th>Client Name</th>
+                <th>Role (Job)</th>
+                <th>Candidate Name</th>
+                <th>Organisation</th>
                 <th>Designation</th>
                 <th>Mobile</th>
-                <th>Exp</th>
-                <th>Current Salary</th>
-                <th>Client</th>
-                <th>Job</th>
-                <th>Status</th>
-                <th>CV</th>
+                <th>Email ID</th>
+                <th>Experience</th>
+                <th>Current CTC</th>
+                <th>Current Location</th>
+                <th>Notice Period</th>
+                <th>Expected CTC</th>
+                <th>Open to Relocate</th>
+                <th>Comments</th>
                 <th>LinkedIn</th>
-                <th>Actions</th>
+                <th>Status</th>
+                <th>CV Link</th>
+                <th>Month</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(c => (
-                <tr key={c.id}>
+              {visibleCandidates.map(({ candidate: c, mobile, isGroup, groupSize, groupIndex, isLastInGroup }, index) => {
+                const rowClass = isGroup
+                  ? `candidate-mobile-group-row${groupIndex === 0 ? ' group-first' : ' group-child'}${isLastInGroup ? ' group-last' : ''}`
+                  : ''
+                return (
+                <tr key={c.associationId || c.id} className={rowClass}>
+                  <td>{index + 1}</td>
+                  <td>{formatDate(c.createdAt)}</td>
+                  <td>{c.consultant || 'â€”'}</td>
+                  <td>{c.client || 'â€”'}</td>
+                  <td className="cell-ellipsis">{c.job || 'â€”'}</td>
                   <td>
-                    <div className="name-cell">
-                      <div className="name-avatar">{initials(c.name)}</div>
-                      <div>
-                        <div className="name-text">{c.name}</div>
-                        <div className="sub-text">{c.city}</div>
+                    {isGroup && groupIndex > 0 ? (
+                      <div className="candidate-repeat-label">â†³ also submitted in</div>
+                    ) : (
+                      <div className="name-cell">
+                        <div className="name-avatar">{initials(c.name)}</div>
+                        <div>
+                          <div className="name-text candidate-group-name">
+                            <span>{c.name}</span>
+                            {isGroup && (
+                              <>
+                                <span className="candidate-submission-chip">{groupSize} submissions</span>
+                                <button
+                                  className={`candidate-group-toggle${collapsed[mobile] ? ' collapsed' : ''}`}
+                                  type="button"
+                                  aria-label={collapsed[mobile] ? 'Expand candidate submissions' : 'Collapse candidate submissions'}
+                                  onClick={() => toggleCollapsed(mobile)}
+                                >
+                                  <ChevronDown size={12} strokeWidth={2.4} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                          <div className="sub-text">{c.location || [c.city, c.state].filter(Boolean).join(', ')}</div>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </td>
                   <td>
                     <span style={{ fontWeight:500, color:'var(--navy-darkest)' }}>
-                      {c.currentCompany || '—'}
+                      {c.currentOrganisation || c.currentCompany || '—'}
                     </span>
                   </td>
                   <td>{c.designation || '—'}</td>
-                  <td style={{ fontFamily:'monospace', fontSize:12 }}>{c.mobile}</td>
-                  <td>{c.exp ? `${c.exp} yr${c.exp !== 1 ? 's' : ''}` : '—'}</td>
+                  <td style={{ fontFamily:'monospace', fontSize:12 }}>{c.mobile || '—'}</td>
+                  <td>{c.email || '—'}</td>
+                  <td>{c.exp ? `${c.exp} yrs` : '—'}</td>
                   <td style={{ fontWeight:600 }}>{fmt(c.salary)}</td>
-                  <td>{c.client || '—'}</td>
-                  <td style={{ maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                    {c.job || '—'}
+                  <td>{c.city || c.location || '—'}</td>
+                  <td>{c.noticePeriod !== '' && c.noticePeriod !== null ? c.noticePeriod : '—'}</td>
+                  <td style={{ fontWeight:600 }}>{fmt(c.expectedSalary)}</td>
+                  <td>{c.openToRelocate ? 'Yes' : 'No'}</td>
+                  <td className="cell-ellipsis">{c.notes || '—'}</td>
+                  <td>
+                    {c.linkedinUrl ? (
+                      <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link">LinkedIn</a>
+                    ) : (
+                      <span style={{ color:'var(--gray-400)', fontSize:12 }}>—</span>
+                    )}
                   </td>
                   <td>
                     <span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span>
                   </td>
                   <td>
                     {c.cvLink ? (
-                      <a href={c.cvLink} target="_blank" rel="noopener noreferrer"
-                        style={{ display:'inline-flex', alignItems:'center', gap:4,
-                          color:'var(--info)', fontSize:12, fontWeight:600,
-                          textDecoration:'none', padding:'3px 8px',
-                          background:'rgba(23,162,184,0.08)', borderRadius:6,
-                          transition:'background 0.15s',
-                        }}
-                        title="Open CV">
+                      <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV">
                         <FileText size={12} strokeWidth={2} /> CV
                       </a>
                     ) : (
                       <span style={{ color:'var(--gray-400)', fontSize:12 }}>—</span>
                     )}
                   </td>
-                  <td>
-                    {c.linkedinUrl ? (
-                      <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer"
-                        style={{ display:'inline-flex', alignItems:'center', gap:4,
-                          color:'#0A66C2', fontSize:12, fontWeight:600,
-                          textDecoration:'none', padding:'3px 8px',
-                          background:'rgba(10,102,194,0.08)', borderRadius:6,
-                          transition:'background 0.15s',
-                        }}
-                        title="Open LinkedIn">
-                        <ExternalLink size={12} strokeWidth={2} /> in
-                      </a>
-                    ) : (
-                      <span style={{ color:'var(--gray-400)', fontSize:12 }}>—</span>
-                    )}
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <button className="row-action-btn" title="Edit" id={`edit-cand-${c.id}`}>
-                        <Pencil size={13} strokeWidth={2} />
-                      </button>
-                      <button className="row-action-btn" title="Change Status" id={`status-cand-${c.id}`}>
-                        <ChevronDown size={13} strokeWidth={2} />
-                      </button>
-                    </div>
-                  </td>
+                  <td>{formatMonth(c.createdAt)}</td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -634,10 +852,11 @@ export default function CandidatesPage() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setAddOpen(false)}>
           <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label="Add Candidate">
             <div className="modal-header">
-              <span className="modal-title">Add New Candidate</span>
+              <span className="modal-title">{editing ? 'Edit Candidate' : 'Add New Candidate'}</span>
               <button className="modal-close" onClick={() => setAddOpen(false)} aria-label="Close"><X size={16} /></button>
             </div>
-            <div className="modal-body">
+            <div className="modal-body" ref={candidateModalBodyRef}>
+              {errors.form && <div className="form-error" style={{ display:'block', marginBottom:12 }}>{errors.form}</div>}
               {CandidateFormBody({
                 f: form,
                 setF: setForm,
@@ -652,7 +871,9 @@ export default function CandidatesPage() {
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setAddOpen(false)}>Cancel</button>
-              <button className="btn-primary" onClick={handleSave} id="save-candidate-btn">Save Candidate</button>
+              <button className="btn-primary" onClick={handleSave} id="save-candidate-btn" disabled={saving}>
+                {saving ? 'Saving...' : 'Save Candidate'}
+              </button>
             </div>
           </div>
         </div>
@@ -704,7 +925,7 @@ export default function CandidatesPage() {
                       <div className="drop-zone-title">
                         {resumeFile ? resumeFile.name : 'Drop your PDF here or click to browse'}
                       </div>
-                      <div className="drop-zone-subtitle">Max file size: 10 MB · PDF only</div>
+                      <div className="drop-zone-subtitle">Max file size: 10 MB Â· PDF only</div>
                     </div>
                   ) : (
                     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
@@ -761,8 +982,8 @@ export default function CandidatesPage() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={closeImport}>Cancel</button>
               {parsed && (
-                <button className="btn-primary" onClick={handleSaveParsed} id="save-parsed-candidate-btn">
-                  Save Candidate
+                <button className="btn-primary" onClick={handleSaveParsed} id="save-parsed-candidate-btn" disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Candidate'}
                 </button>
               )}
             </div>
@@ -820,3 +1041,4 @@ function StatusMultiSelect({ selected, onToggle, options }) {
     </div>
   )
 }
+

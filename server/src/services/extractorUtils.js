@@ -48,7 +48,7 @@ function withConfidence(value, confidence) {
 // Strong pattern: email addresses have a stable, distinctive syntax.
 function extractEmail(text) {
   const normalized = String(text || '').replace(/\s*@\s*/g, '@').replace(/@\s+/g, '@')
-  const match = normalized.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/)
+  const match = normalized.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)
   return match ? match[0] : null
 }
 
@@ -470,6 +470,9 @@ function extractFields(text) {
   const phone = extractPhone(text)
   const designation = extractCurrentDesignation(text)
   const currentCompany = extractCurrentCompany(text)
+  const experience = extractExperience(text)
+  const city = extractCity(text)
+  const state = extractState(text)
   const skills = extractSkills(text)
   const education = extractEducation(text)
   const coverLetter = extractCoverLetter(text)
@@ -481,6 +484,11 @@ function extractFields(text) {
     mobile_number: withConfidence(phone, phone ? 'high' : 'low'),
     current_designation: withConfidence(designation, designation ? 'high' : 'low'),
     current_company: withConfidence(currentCompany, currentCompany ? 'high' : 'low'),
+    current_organisation: withConfidence(currentCompany, currentCompany ? 'high' : 'low'),
+    experience_years: withConfidence(experience, experience ? 'high' : 'low'),
+    city: withConfidence(city, city ? 'high' : 'low'),
+    state: withConfidence(state, state ? 'high' : 'low'),
+    location: withConfidence([city, state].filter(Boolean).join(', ') || null, city || state ? 'high' : 'low'),
     skills: withConfidence(skills.length ? skills : null, skills.length ? 'high' : 'low'),
     education: withConfidence(education, 'low'),
     cover_letter: withConfidence(coverLetter, coverLetter ? 'low' : 'low')
