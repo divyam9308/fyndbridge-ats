@@ -184,6 +184,7 @@ export default function CandidatesPage() {
       email: fieldValue(extracted, 'email'),
       mobile: fieldValue(extracted, 'mobile_number'),
       designation: fieldValue(extracted, 'current_designation'),
+      currentCompany: fieldValue(extracted, 'current_company'),
       city: fieldValue(extracted, 'city'),
       state: fieldValue(extracted, 'state'),
       exp: fieldValue(extracted, 'experience_years'),
@@ -402,7 +403,8 @@ export default function CandidatesPage() {
         <div className="form-group full">
           <label className="form-label">Education</label>
           <textarea name="education" value={f.education} onChange={handleLocalChange}
-            className="form-control" rows={2} placeholder="e.g. B.Tech CSE, IIT Madras" />
+            className="form-control" rows={7} style={{ minHeight: 150, lineHeight: 1.5 }}
+            placeholder="e.g. B.Tech CSE, IIT Madras" />
         </div>
 
         <div className="form-section-title">Job Assignment</div>
