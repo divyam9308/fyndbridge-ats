@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Plus, Upload, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
 import '../styles/Shared.css'
 
@@ -208,7 +208,7 @@ export default function CandidatesPage() {
   const [parsedForm, setParsedForm]   = useState(null)
   const [parsedSkillInput, setParsedSkillInput] = useState('')
 
-  const loadCandidates = async (nextPage = page) => {
+  const loadCandidates = useCallback(async (nextPage = page) => {
     setLoadingCandidates(true)
     try {
       const params = new URLSearchParams({
@@ -240,7 +240,7 @@ export default function CandidatesPage() {
     } finally {
       setLoadingCandidates(false)
     }
-  }
+  }, [aiFilters, filterJob, filterMaxSal, filterMinSal, filterStatus, page, pageSize])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -248,7 +248,7 @@ export default function CandidatesPage() {
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [page, filterJob, filterMinSal, filterMaxSal, filterStatus, aiFilters])
+  }, [loadCandidates, page])
 
   useEffect(() => {
     if (addOpen) {
