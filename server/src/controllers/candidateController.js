@@ -4,6 +4,7 @@ const axios = require('axios')
 const { v4: uuidv4 } = require('uuid')
 const supabase = require('../services/supabaseAdmin')
 const { parseResume } = require('../services/resumeParser')
+const { callOpenRouterJson } = require('../services/openRouterService')
 
 const VALID_STATUSES = [
   'Interested',
@@ -40,11 +41,67 @@ const CANDIDATE_FIELDS = [
 const ASSOCIATION_FIELDS = [
   'client_name',
   'job_title',
+  'consultant_name',
   'status',
   'current_salary',
   'expected_salary',
   'notes'
 ]
+
+const AI_FILTER_FIELDS = [
+  'name',
+  'city',
+  'state',
+  'currentDesignation',
+  'email',
+  'mobile',
+  'experience',
+  'salary',
+  'client',
+  'job',
+  'clientMobile',
+  'status',
+  'skills',
+  'education'
+]
+
+const AI_FILTER_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    name: { type: ['string', 'null'] },
+    city: { type: ['string', 'null'] },
+    state: { type: ['string', 'null'] },
+    currentDesignation: { type: ['string', 'null'] },
+    email: { type: ['string', 'null'] },
+    mobile: { type: ['string', 'null'] },
+    experience: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      properties: {
+        min: { type: ['number', 'null'] },
+        max: { type: ['number', 'null'] }
+      }
+    },
+    salary: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      properties: {
+        min: { type: ['number', 'null'] },
+        max: { type: ['number', 'null'] }
+      }
+    },
+    client: { type: ['string', 'null'] },
+    job: { type: ['string', 'null'] },
+    clientMobile: { type: ['string', 'null'] },
+    status: { type: ['string', 'null'] },
+    skills: {
+      type: ['array', 'null'],
+      items: { type: 'string' }
+    },
+    education: { type: ['string', 'null'] }
+  }
+}
 
 function logAndSendInternal(res, routeName, err) {
   console.error(`${routeName}:`, err.message)
@@ -63,6 +120,10 @@ function normalizeMobile(value) {
   return String(value || '').replace(/[^\d+]/g, '').trim()
 }
 
+function cleanText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
@@ -73,6 +134,256 @@ function isValidMobile(value) {
 
 function isPositiveInteger(value) {
   return Number.isInteger(value) && value > 0 && value <= 999999999
+}
+
+function normalizeAiField(value) {
+  const text = cleanText(value)
+  return text ? text : null
+}
+
+function normalizeAiRange(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const min = value.min === null || value.min === undefined || value.min === '' ? null : Number(value.min)
+  const max = value.max === null || value.max === undefined || value.max === '' ? null : Number(value.max)
+
+  if (min !== null && !Number.isFinite(min)) {
+    return null
+  }
+
+  if (max !== null && !Number.isFinite(max)) {
+    return null
+  }
+
+  return {
+    min: min === null ? null : min,
+    max: max === null ? null : max
+  }
+}
+
+function normalizeAiFilterOutput(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return null
+  }
+
+  const skills = Array.isArray(data.skills)
+    ? [...new Set(data.skills.map((skill) => cleanText(skill)).filter(Boolean))].slice(0, 12)
+    : []
+
+  return {
+    name: normalizeAiField(data.name),
+    city: normalizeAiField(data.city),
+    state: normalizeAiField(data.state),
+    currentDesignation: normalizeAiField(data.currentDesignation),
+    email: normalizeAiField(data.email),
+    mobile: normalizeAiField(data.mobile),
+    experience: normalizeAiRange(data.experience),
+    salary: normalizeAiRange(data.salary),
+    client: normalizeAiField(data.client),
+    job: normalizeAiField(data.job),
+    clientMobile: normalizeAiField(data.clientMobile),
+    status: normalizeAiField(data.status),
+    skills,
+    education: normalizeAiField(data.education)
+  }
+}
+
+function safeFilterPrompt(prompt, allowedFields) {
+  const fieldList = allowedFields.join(', ')
+  return [
+    'Convert the recruiting search request into safe JSON filters only.',
+    `Allowed fields: ${fieldList}.`,
+    'Use only the allowed fields. Do not include SQL, code, or explanations.',
+    'Use experience and salary as objects with optional min and max numeric values.',
+    'Use skills as an array of strings.',
+    'For role searches, put the role phrase in currentDesignation or job. Keep broad phrases broad: software engineer can include backend, frontend, full stack, devops, database, data, and developer roles.',
+    'Correct obvious spelling mistakes in the request before producing filters.',
+    'Set unused fields to null or an empty array.',
+    `Request: ${cleanText(prompt).slice(0, 1000)}`
+  ].join('\n\n')
+}
+
+function localAiFilterFallback(prompt) {
+  const normalized = normalizeSearchText(prompt)
+  const filters = normalizeAiFilterOutput({})
+  const roleIntent = /\b(role|designation|job|profile|position|engineer|developer|manager|analyst)\b/.test(normalized)
+
+  if (/\b(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b/.test(normalized)) {
+    const value = Number(normalized.match(/\b(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b/)[1])
+    filters.experience = /less than|below|under|max|maximum/.test(normalized)
+      ? { min: null, max: value }
+      : { min: value, max: null }
+  }
+
+  if (/\b(back ?end|bakend|backend)\b/.test(normalized)) {
+    filters.currentDesignation = 'backend engineer'
+  } else if (/\b(front ?end|fronend|frntend|react|angular|vue)\b/.test(normalized)) {
+    filters.currentDesignation = 'frontend engineer'
+  } else if (/\b(software|sftware|softwar)\b/.test(normalized)) {
+    filters.currentDesignation = 'software engineer'
+  } else if (/\b(database|data ?base|dba|postgres|mysql|mongodb)\b/.test(normalized)) {
+    filters.currentDesignation = 'database engineer'
+  } else if (/\b(data analyst|data engineer|analytics)\b/.test(normalized) || (roleIntent && /\bdata\b/.test(normalized))) {
+    filters.currentDesignation = 'data'
+  } else if (/\b(devops|dev ops|kubernetes|docker|cloud)\b/.test(normalized)) {
+    filters.currentDesignation = 'devops engineer'
+  } else if (/\b(product manager|product owner|pm)\b/.test(normalized) || (roleIntent && /\bproduct\b/.test(normalized))) {
+    filters.currentDesignation = 'product'
+  }
+
+  const city = [
+    'bengaluru',
+    'bangalore',
+    'mumbai',
+    'delhi',
+    'hyderabad',
+    'chennai',
+    'pune',
+    'kolkata',
+    'kochi'
+  ].find((item) => normalized.includes(item))
+
+  if (city) {
+    filters.city = city === 'bangalore' ? 'Bengaluru' : city
+  }
+
+  const status = VALID_STATUSES.find((item) => normalized.includes(item.toLowerCase()))
+  if (status) {
+    filters.status = status
+  }
+
+  return filters
+}
+
+function includesText(source, needle) {
+  const haystack = cleanText(source).toLowerCase()
+  const query = cleanText(needle).toLowerCase()
+  if (!query) {
+    return true
+  }
+
+  return haystack.includes(query)
+}
+
+const ROLE_KEYWORD_GROUPS = {
+  software: [
+    'software engineer',
+    'software developer',
+    'backend engineer',
+    'backend developer',
+    'frontend engineer',
+    'frontend developer',
+    'full stack',
+    'devops',
+    'database',
+    'data engineer',
+    'programmer',
+    'react',
+    'node',
+    'java',
+    'sql'
+  ],
+  backend: ['backend', 'back end', 'server', 'api', 'node', 'node.js', 'express', 'django'],
+  frontend: ['frontend', 'front end', 'react', 'angular', 'vue', 'ui developer', 'web developer', 'javascript'],
+  database: ['database', 'sql', 'postgres', 'mysql', 'mongodb', 'dba', 'data engineer'],
+  data: ['data analyst', 'data engineer', 'analytics', 'python', 'sql', 'statistics'],
+  devops: ['devops', 'cloud', 'aws', 'azure', 'kubernetes', 'docker', 'ci/cd'],
+  product: ['product manager', 'product owner', 'pm']
+}
+
+const GENERIC_ROLE_WORDS = new Set(['engineer', 'developer', 'manager', 'lead', 'senior', 'junior', 'software'])
+
+function normalizeSearchText(value) {
+  return cleanText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9+#./\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function searchTermsForQuery(query) {
+  const normalized = normalizeSearchText(query)
+  if (!normalized) {
+    return []
+  }
+
+  const terms = new Set([normalized])
+  Object.entries(ROLE_KEYWORD_GROUPS).forEach(([key, values]) => {
+    const groupHit = key === 'software'
+      ? /\b(software|sftware|softwar|programmer|developers?)\b/.test(normalized)
+      : normalized.includes(key) || values.some((value) => normalized.includes(normalizeSearchText(value)))
+    if (groupHit) {
+      values.forEach((value) => terms.add(normalizeSearchText(value)))
+    }
+  })
+
+  normalized
+    .split(/\s+/)
+    .filter((word) => word.length >= 4 && !GENERIC_ROLE_WORDS.has(word))
+    .forEach((word) => terms.add(word))
+
+  return [...terms].filter(Boolean)
+}
+
+function roleTermMatches(haystack, term) {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const boundaryPattern = escaped.replace(/\s+/g, '\\s+')
+  return new RegExp(`(^|[^a-z0-9])${boundaryPattern}([^a-z0-9]|$)`, 'i').test(haystack)
+}
+
+function matchesRoleText(candidate, query) {
+  const haystack = normalizeSearchText([
+    candidate.current_designation,
+    candidate.job_title,
+    Array.isArray(candidate.skills) ? candidate.skills.join(' ') : ''
+  ].filter(Boolean).join(' '))
+  const terms = searchTermsForQuery(query)
+
+  if (!terms.length) {
+    return true
+  }
+
+  return terms.some((term) => roleTermMatches(haystack, term))
+}
+
+function matchesAiFilters(candidate, filters) {
+  if (!filters) {
+    return true
+  }
+
+  if (filters.name && !includesText(candidate.full_name, filters.name)) return false
+  if (filters.city && !includesText(candidate.city, filters.city)) return false
+  if (filters.state && !includesText(candidate.state, filters.state)) return false
+  if (filters.currentDesignation && !matchesRoleText(candidate, filters.currentDesignation)) return false
+  if (filters.email && !includesText(candidate.email, filters.email)) return false
+  if (filters.mobile && !includesText(candidate.mobile_number, filters.mobile)) return false
+  if (filters.client && !includesText(candidate.client_name, filters.client)) return false
+  if (filters.job && !matchesRoleText(candidate, filters.job)) return false
+  if (filters.clientMobile && !includesText(candidate.client_phone_number, filters.clientMobile)) return false
+  if (filters.status && !includesText(candidate.status, filters.status)) return false
+  if (filters.education && !includesText(candidate.education, filters.education)) return false
+
+  if (filters.skills.length) {
+    const candidateSkills = Array.isArray(candidate.skills) ? candidate.skills.map((skill) => cleanText(skill).toLowerCase()) : []
+    const matches = filters.skills.every((skill) => candidateSkills.some((candidateSkill) => candidateSkill.includes(cleanText(skill).toLowerCase())))
+    if (!matches) return false
+  }
+
+  if (filters.experience) {
+    const exp = candidate.experience_years === null || candidate.experience_years === undefined ? null : Number(candidate.experience_years)
+    if (filters.experience.min !== null && (exp === null || exp < filters.experience.min)) return false
+    if (filters.experience.max !== null && (exp === null || exp > filters.experience.max)) return false
+  }
+
+  if (filters.salary) {
+    const salary = candidate.current_salary === null || candidate.current_salary === undefined ? null : Number(candidate.current_salary)
+    if (filters.salary.min !== null && (salary === null || salary < filters.salary.min)) return false
+    if (filters.salary.max !== null && (salary === null || salary > filters.salary.max)) return false
+  }
+
+  return true
 }
 
 function validateCandidatePayload(body, { partial = false } = {}) {
@@ -216,14 +527,58 @@ function flattenAssociation(row) {
     resume_url: candidate.resume_url || null,
     client_name: row.client_name || null,
     job_title: row.job_title || null,
+    consultant_name: row.consultant_name || null,
     status: row.status || 'Interested',
     current_salary: row.current_salary || null,
     expected_salary: row.expected_salary || null,
     notes: row.notes || null,
-    consultant_name: row.created_by || null,
     created_at: row.created_at,
     updated_at: row.updated_at
   }
+}
+
+function isMissingAssociationConsultantColumn(error) {
+  return error?.code === 'PGRST204' && /consultant_name.*candidate_associations/i.test(error.message || '')
+}
+
+function withoutConsultantName(payload) {
+  const next = { ...payload }
+  delete next.consultant_name
+  return next
+}
+
+async function insertAssociation(payload) {
+  let result = await supabase
+    .from('candidate_associations')
+    .insert(payload)
+    .select('*, candidates(*)')
+    .single()
+
+  if (isMissingAssociationConsultantColumn(result.error)) {
+    result = await supabase
+      .from('candidate_associations')
+      .insert(withoutConsultantName(payload))
+      .select('*, candidates(*)')
+      .single()
+  }
+
+  return result
+}
+
+async function updateAssociation(associationId, payload) {
+  let result = await supabase
+    .from('candidate_associations')
+    .update(payload)
+    .eq('id', associationId)
+
+  if (isMissingAssociationConsultantColumn(result.error)) {
+    result = await supabase
+      .from('candidate_associations')
+      .update(withoutConsultantName(payload))
+      .eq('id', associationId)
+  }
+
+  return result
 }
 
 async function listCandidates(req, res) {
@@ -353,11 +708,7 @@ async function createCandidate(req, res) {
       assocInsert.created_by = req.user.id
     }
 
-    const { data: association, error: associationError } = await supabase
-      .from('candidate_associations')
-      .insert(assocInsert)
-      .select('*, candidates(*)')
-      .single()
+    const { data: association, error: associationError } = await insertAssociation(assocInsert)
 
     if (associationError) {
       throw associationError
@@ -425,10 +776,7 @@ async function updateCandidate(req, res) {
         assocUpdate.updated_by = req.user.id
       }
 
-      const { error } = await supabase
-        .from('candidate_associations')
-        .update(assocUpdate)
-        .eq('id', associationId)
+      const { error } = await updateAssociation(associationId, assocUpdate)
 
       if (error) {
         throw error
@@ -488,6 +836,58 @@ async function updateCandidateStatus(req, res) {
     return res.json(data)
   } catch (err) {
     return logAndSendInternal(res, 'updateCandidateStatus', err)
+  }
+}
+
+async function buildAiCandidateFilters(req, res) {
+  try {
+    const prompt = cleanText(req.body.prompt)
+    if (!prompt) {
+      return res.status(400).json({ error: 'prompt is required' })
+    }
+
+    const requestedFields = Array.isArray(req.body.allowedFields) ? req.body.allowedFields : AI_FILTER_FIELDS
+    const allowedFields = AI_FILTER_FIELDS.filter((field) => requestedFields.includes(field))
+
+    let parsed
+    let usedFallback = false
+
+    try {
+      parsed = await callOpenRouterJson({
+        prompt: safeFilterPrompt(prompt, allowedFields.length ? allowedFields : AI_FILTER_FIELDS),
+        schema: AI_FILTER_SCHEMA,
+        temperature: 0,
+        schemaName: 'candidate_filters'
+      })
+    } catch (err) {
+      console.warn('buildAiCandidateFilters AI fallback:', err.message)
+      parsed = localAiFilterFallback(prompt)
+      usedFallback = true
+    }
+
+    const filters = normalizeAiFilterOutput(parsed)
+    if (!filters) {
+      return res.status(400).json({ error: 'AI filter output was invalid' })
+    }
+
+    const { data, error } = await supabase
+      .from('candidate_associations')
+      .select('*, candidates(*)')
+
+    if (error) {
+      throw error
+    }
+
+    const rows = (data || []).map(flattenAssociation)
+    const matchedCount = rows.filter((row) => matchesAiFilters(row, filters)).length
+
+    return res.json({ filters, matchedCount, fallback: usedFallback })
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message })
+    }
+
+    return logAndSendInternal(res, 'buildAiCandidateFilters', err)
   }
 }
 
@@ -648,6 +1048,7 @@ module.exports = {
   createCandidate,
   updateCandidate,
   updateCandidateStatus,
+  buildAiCandidateFilters,
   deleteCandidate,
   parseResumeRoute
 }

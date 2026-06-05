@@ -1,7 +1,8 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut
 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 import './Sidebar.css'
 
 const navItems = [
@@ -12,9 +13,11 @@ const navItems = [
 ]
 
 export default function Sidebar() {
-  const navigate = useNavigate()
+  const { user, signOut } = useAuth()
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Recruiter'
+  const initials = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 
-  const handleLogout = () => navigate('/login')
+  const handleLogout = () => signOut()
 
   return (
     <aside className="sidebar" role="navigation" aria-label="Main navigation">
@@ -61,9 +64,9 @@ export default function Sidebar() {
       {/* Bottom user + logout */}
       <div className="sidebar-bottom">
         <div className="sidebar-user">
-          <div className="sidebar-avatar">SM</div>
+          <div className="sidebar-avatar">{initials || 'HR'}</div>
           <div className="sidebar-user-info">
-            <div className="sidebar-user-name">Sarah Mehta</div>
+            <div className="sidebar-user-name">{displayName}</div>
             <div className="sidebar-user-role">HR Recruiter</div>
           </div>
         </div>

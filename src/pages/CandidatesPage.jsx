@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react'
-import { Plus, Upload, X, Users, ChevronDown, AlertCircle, FileText } from 'lucide-react'
+import { Plus, Upload, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
 import '../styles/Shared.css'
 
 /* ====== Static reference data ====== */
@@ -31,19 +31,171 @@ const STATUS_BADGE_MAP = {
   'Rejected by Client':   'badge-rejected-client',
 }
 
-const fmt = (n) => n ? `â‚¹${Number(n).toLocaleString('en-IN')}` : 'â€”'
+const fmt = (n) => n ? `Rs. ${Number(n).toLocaleString('en-IN')}` : '-'
 const initials = (name) => name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()
 const formatDate = (value) => {
-  if (!value) return 'â€”'
+  if (!value) return '-'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'â€”'
+  if (Number.isNaN(date.getTime())) return '-'
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`
 }
 const formatMonth = (value) => {
-  if (!value) return 'â€”'
+  if (!value) return '-'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'â€”'
+  if (Number.isNaN(date.getTime())) return '-'
   return date.toLocaleString('en-US', { month: 'short' })
+}
+const getCurrentUser = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    return JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
+  } catch {
+    return {}
+  }
+}
+
+const getConsultantNameFromUser = (user) => {
+  const email = String(user?.email || user?.id || '').trim()
+  const prefix = email.includes('@') ? email.split('@')[0] : ''
+
+  if (/@fyndbridge\.in$/i.test(email) && prefix) {
+    return prefix
+  }
+
+  return prefix || user?.name || 'hr'
+}
+
+const AI_FILTER_FIELDS = [
+  'name',
+  'city',
+  'state',
+  'currentDesignation',
+  'email',
+  'mobile',
+  'experience',
+  'salary',
+  'client',
+  'job',
+  'clientMobile',
+  'status',
+  'skills',
+  'education'
+]
+
+const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
+
+const ROLE_KEYWORD_GROUPS = {
+  software: [
+    'software engineer',
+    'software developer',
+    'backend engineer',
+    'backend developer',
+    'frontend engineer',
+    'frontend developer',
+    'full stack',
+    'devops',
+    'database',
+    'data engineer',
+    'programmer',
+    'react',
+    'node',
+    'java',
+    'sql'
+  ],
+  backend: ['backend', 'back end', 'server', 'api', 'node', 'node.js', 'express', 'django'],
+  frontend: ['frontend', 'front end', 'react', 'angular', 'vue', 'ui developer', 'web developer', 'javascript'],
+  database: ['database', 'sql', 'postgres', 'mysql', 'mongodb', 'dba', 'data engineer'],
+  data: ['data analyst', 'data engineer', 'analytics', 'python', 'sql', 'statistics'],
+  devops: ['devops', 'cloud', 'aws', 'azure', 'kubernetes', 'docker', 'ci/cd'],
+  product: ['product manager', 'product owner', 'pm']
+}
+
+const GENERIC_ROLE_WORDS = new Set(['engineer', 'developer', 'manager', 'lead', 'senior', 'junior', 'software'])
+
+const normalizeSearchText = (value) => normalizeText(value)
+  .replace(/[^a-z0-9+#./\s-]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+
+const searchTermsForQuery = (query) => {
+  const normalized = normalizeSearchText(query)
+  if (!normalized) return []
+
+  const terms = new Set([normalized])
+  Object.entries(ROLE_KEYWORD_GROUPS).forEach(([key, values]) => {
+    const groupHit = key === 'software'
+      ? /\b(software|sftware|softwar|programmer|developers?)\b/.test(normalized)
+      : normalized.includes(key) || values.some(value => normalized.includes(normalizeSearchText(value)))
+    if (groupHit) values.forEach(value => terms.add(normalizeSearchText(value)))
+  })
+
+  normalized
+    .split(/\s+/)
+    .filter(word => word.length >= 4 && !GENERIC_ROLE_WORDS.has(word))
+    .forEach(word => terms.add(word))
+
+  return [...terms].filter(Boolean)
+}
+
+const roleTermMatches = (haystack, term) => {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const boundaryPattern = escaped.replace(/\s+/g, '\\s+')
+  return new RegExp(`(^|[^a-z0-9])${boundaryPattern}([^a-z0-9]|$)`, 'i').test(haystack)
+}
+
+const matchesRoleText = (candidate, query) => {
+  const haystack = normalizeSearchText([
+    candidate.designation,
+    candidate.job,
+    Array.isArray(candidate.skills) ? candidate.skills.join(' ') : ''
+  ].filter(Boolean).join(' '))
+  const terms = searchTermsForQuery(query)
+
+  if (!terms.length) return true
+  return terms.some(term => roleTermMatches(haystack, term))
+}
+
+const matchesAiFilters = (candidate, filters) => {
+  if (!filters) return true
+
+  const includes = (source, needle) => {
+    const haystack = normalizeText(source)
+    const query = normalizeText(needle)
+    if (!query) return true
+    return haystack.includes(query)
+  }
+
+  if (filters.name && !includes(candidate.name, filters.name)) return false
+  if (filters.city && !includes(candidate.city, filters.city)) return false
+  if (filters.state && !includes(candidate.state, filters.state)) return false
+  if (filters.currentDesignation && !matchesRoleText(candidate, filters.currentDesignation)) return false
+  if (filters.email && !includes(candidate.email, filters.email)) return false
+  if (filters.mobile && !includes(candidate.mobile, filters.mobile)) return false
+  if (filters.client && !includes(candidate.client, filters.client)) return false
+  if (filters.job && !matchesRoleText(candidate, filters.job)) return false
+  if (filters.clientMobile && !includes(candidate.clientPhone, filters.clientMobile)) return false
+  if (filters.status && !includes(candidate.status, filters.status)) return false
+  if (filters.education && !includes(candidate.education, filters.education)) return false
+
+  if (Array.isArray(filters.skills) && filters.skills.length > 0) {
+    const skillHaystack = Array.isArray(candidate.skills) ? candidate.skills.map(normalizeText) : []
+    const skillMatches = filters.skills.every(skill => skillHaystack.some(item => item.includes(normalizeText(skill))))
+    if (!skillMatches) return false
+  }
+
+  if (filters.experience) {
+    const exp = candidate.exp === '' || candidate.exp === null || candidate.exp === undefined ? null : Number(candidate.exp)
+    if (filters.experience.min !== null && (exp === null || exp < Number(filters.experience.min))) return false
+    if (filters.experience.max !== null && (exp === null || exp > Number(filters.experience.max))) return false
+  }
+
+  if (filters.salary) {
+    const salary = candidate.salary === '' || candidate.salary === null || candidate.salary === undefined ? null : Number(candidate.salary)
+    if (filters.salary.min !== null && (salary === null || salary < Number(filters.salary.min))) return false
+    if (filters.salary.max !== null && (salary === null || salary > Number(filters.salary.max))) return false
+  }
+
+  return true
 }
 
 /* ====== Placeholder candidates ====== */
@@ -64,7 +216,7 @@ const EMPTY_CAND = {
   location:'', currentCompany:'', currentOrganisation:'', exp:'', salary:'', expectedSalary:'', skills:[], education:'',
   noticePeriod:'', openToRelocate:false,
   client:'', job:'', clientPhone:'', status:'Interested',
-  cvLink:'', linkedinUrl:'', notes:'', candidateId:'', associationId:'',
+  cvLink:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', associationId:'',
 }
 
 /* ====== Client phone lookup ====== */
@@ -105,10 +257,11 @@ const apiCandidateToUi = (row) => ({
   linkedinUrl: row.linkedin_url || '',
   notes: row.notes || '',
   consultant: row.consultant_name || '',
+  consultantName: row.consultant_name || '',
   createdAt: row.created_at || '',
 })
 
-const uiCandidateToApi = (f) => ({
+const uiCandidateToApi = (f, consultantName = '') => ({
   association_id: f.associationId || undefined,
   full_name: f.name,
   email: f.email,
@@ -117,7 +270,7 @@ const uiCandidateToApi = (f) => ({
   state: f.state,
   location: f.location,
   current_designation: f.designation,
-  current_company: f.currentCompany,
+  current_company: f.currentOrganisation,
   current_organisation: f.currentOrganisation,
   experience_years: f.exp,
   notice_period: f.noticePeriod,
@@ -132,6 +285,7 @@ const uiCandidateToApi = (f) => ({
   cv_link: f.cvLink,
   linkedin_url: f.linkedinUrl,
   notes: f.notes,
+  consultant_name: f.consultantName || consultantName || '',
   source: f.source,
 })
 
@@ -141,12 +295,18 @@ export default function CandidatesPage() {
   const candidateModalBodyRef = useRef(null)
   const [apiError, setApiError] = useState('')
   const [saving, setSaving] = useState(false)
+  const activeConsultantName = getConsultantNameFromUser(getCurrentUser())
 
   // Filters
   const [filterJob, setFilterJob]       = useState('All')
   const [filterMinSal, setFilterMinSal] = useState('')
   const [filterMaxSal, setFilterMaxSal] = useState('')
   const [filterStatus, setFilterStatus] = useState([])
+  const [aiFilterText, setAiFilterText] = useState('')
+  const [aiFilters, setAiFilters] = useState(null)
+  const [aiFilterLoading, setAiFilterLoading] = useState(false)
+  const [aiFilterError, setAiFilterError] = useState('')
+  const [aiFilterCount, setAiFilterCount] = useState(null)
 
   // Add Candidate Modal
   const [addOpen, setAddOpen]   = useState(false)
@@ -209,7 +369,7 @@ export default function CandidatesPage() {
     const response = await fetch(update ? `/api/candidates/${candidate.associationId}` : '/api/candidates', {
       method: update ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(uiCandidateToApi(candidate))
+      body: JSON.stringify(uiCandidateToApi(candidate, activeConsultantName))
     })
     const payload = await response.json().catch(() => ({}))
 
@@ -228,6 +388,7 @@ export default function CandidatesPage() {
     if (filterMinSal && c.salary < Number(filterMinSal)) return false
     if (filterMaxSal && c.salary > Number(filterMaxSal)) return false
     if (filterStatus.length > 0 && !filterStatus.includes(c.status)) return false
+    if (aiFilters && !matchesAiFilters(c, aiFilters)) return false
     return true
   })
 
@@ -260,6 +421,17 @@ export default function CandidatesPage() {
 
   const clearFilters = () => {
     setFilterJob('All'); setFilterMinSal(''); setFilterMaxSal(''); setFilterStatus([])
+    setAiFilterText('')
+    setAiFilters(null)
+    setAiFilterError('')
+    setAiFilterCount(null)
+  }
+
+  const clearAiFilter = () => {
+    setAiFilterText('')
+    setAiFilters(null)
+    setAiFilterError('')
+    setAiFilterCount(null)
   }
 
   // ---- Status multi-select toggle ----
@@ -319,7 +491,43 @@ export default function CandidatesPage() {
     return e
   }
 
-  const openAddModal = () => { setForm({ ...EMPTY_CAND, skills: [] }); setEditing(false); setErrors({}); setSkillInput(''); setAddOpen(true) }
+  const openAddModal = () => { setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName }); setEditing(false); setErrors({}); setSkillInput(''); setAddOpen(true) }
+
+  const applyAiFilter = async (event) => {
+    event?.preventDefault?.()
+    const prompt = aiFilterText.trim()
+    if (!prompt) {
+      clearAiFilter()
+      return
+    }
+
+    setAiFilterLoading(true)
+    setAiFilterError('')
+    try {
+      const response = await fetch('/api/candidates/ai-filter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          allowedFields: AI_FILTER_FIELDS
+        })
+      })
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'AI filter failed.')
+      }
+
+      setAiFilters(payload.filters || null)
+      setAiFilterCount(Number.isFinite(payload.matchedCount) ? payload.matchedCount : null)
+    } catch (err) {
+      setAiFilterError(err.message)
+      setAiFilters(null)
+      setAiFilterCount(null)
+    } finally {
+      setAiFilterLoading(false)
+    }
+  }
 
   const handleSave = async () => {
     const e = validate(form)
@@ -359,13 +567,13 @@ export default function CandidatesPage() {
 
   const mapParsedResponseToForm = (payload) => {
     const extracted = payload.extracted || {}
+    const ai = payload.ai_extracted || null
     const lowConf = Object.entries(extracted)
       .filter(([, data]) => data?.confidence === 'low' && data.value)
       .map(([key]) => ({
         full_name: 'name',
         mobile_number: 'mobile',
         current_designation: 'designation',
-        current_company: 'currentCompany',
         current_organisation: 'currentOrganisation',
         experience_years: 'exp',
         cover_letter: 'notes'
@@ -373,19 +581,22 @@ export default function CandidatesPage() {
 
     return {
       ...EMPTY_CAND,
-      name: fieldValue(extracted, 'full_name'),
-      email: fieldValue(extracted, 'email'),
-      mobile: fieldValue(extracted, 'mobile_number'),
-      designation: fieldValue(extracted, 'current_designation'),
-      currentCompany: fieldValue(extracted, 'current_company'),
-      currentOrganisation: fieldValue(extracted, 'current_organisation') || fieldValue(extracted, 'current_company'),
-      exp: fieldValue(extracted, 'experience_years'),
-      city: fieldValue(extracted, 'city'),
-      state: fieldValue(extracted, 'state'),
-      location: fieldValue(extracted, 'location'),
-      skills: fieldValue(extracted, 'skills', []) || [],
-      education: fieldValue(extracted, 'education'),
-      notes: fieldValue(extracted, 'cover_letter'),
+      consultantName: activeConsultantName,
+      name: ai?.name || fieldValue(extracted, 'full_name'),
+      email: ai?.email || fieldValue(extracted, 'email'),
+      mobile: ai?.mobile || fieldValue(extracted, 'mobile_number'),
+      designation: ai?.currentDesignation || fieldValue(extracted, 'current_designation'),
+      currentCompany: ai?.currentOrganisation || fieldValue(extracted, 'current_organisation') || fieldValue(extracted, 'current_company'),
+      currentOrganisation: ai?.currentOrganisation || fieldValue(extracted, 'current_organisation') || fieldValue(extracted, 'current_company'),
+      exp: ai?.experience ?? fieldValue(extracted, 'experience_years'),
+      city: ai?.city || fieldValue(extracted, 'city'),
+      state: ai?.state || fieldValue(extracted, 'state'),
+      location: ai?.location || [ai?.city || fieldValue(extracted, 'city'), ai?.state || fieldValue(extracted, 'state')].filter(Boolean).join(', ') || fieldValue(extracted, 'location'),
+      skills: ai?.skills?.length ? ai.skills : (fieldValue(extracted, 'skills', []) || []),
+      education: ai?.education || fieldValue(extracted, 'education'),
+      salary: ai?.salary ?? fieldValue(extracted, 'salary'),
+      linkedinUrl: ai?.linkedin || '',
+      notes: ai?.summary || fieldValue(extracted, 'cover_letter'),
       _lowConf: lowConf
     }
   }
@@ -532,6 +743,12 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
+          <label className="form-label">Consultant</label>
+          <input name="consultantName" value={f.consultantName || ''} onChange={handleLocalChange}
+            className="form-control" />
+        </div>
+
+        <div className="form-group">
           <label className="form-label">Current Designation</label>
           <input name="designation" value={f.designation} onChange={handleLocalChange}
             className={`form-control${low('designation')}`}
@@ -539,32 +756,13 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Current Company</label>
-          <input name="currentCompany" value={f.currentCompany || ''} onChange={handleLocalChange}
-            className={`form-control${low('currentCompany')}`}
-            />
-        </div>
-
-        <div className="form-group">
           <label className="form-label">Current Organisation</label>
           <input name="currentOrganisation" value={f.currentOrganisation || ''} onChange={handleLocalChange}
-            className="form-control" />
+            className={`form-control${low('currentOrganisation')}`} />
         </div>
 
         <div className="form-group">
-          <label className="form-label">City</label>
-          <input name="city" value={f.city} onChange={handleLocalChange}
-            className="form-control" />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">State</label>
-          <input name="state" value={f.state} onChange={handleLocalChange}
-            className="form-control" />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Location</label>
+          <label className="form-label">Current Location</label>
           <input name="location" value={f.location || ''} onChange={handleLocalChange}
             className="form-control" />
         </div>
@@ -589,14 +787,14 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Current Salary (â‚¹)</label>
+          <label className="form-label">Current Salary (Rs.)</label>
           <input name="salary" type="number" value={f.salary} onChange={handleLocalChange}
             className={`form-control${low('salary')}`}
             />
         </div>
 
         <div className="form-group">
-          <label className="form-label">Expected Salary (â‚¹)</label>
+          <label className="form-label">Expected Salary (Rs.)</label>
           <input name="expectedSalary" type="number" value={f.expectedSalary} onChange={handleLocalChange}
             className="form-control" />
         </div>
@@ -672,7 +870,7 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group full">
-          <label className="form-label">CV Cover Letter / Notes</label>
+          <label className="form-label">Comments</label>
           <textarea name="notes" value={f.notes} onChange={handleLocalChange}
             className="form-control" rows={3} style={{ minHeight: 84, lineHeight: 1.5 }} />
         </div>
@@ -708,10 +906,10 @@ export default function CandidatesPage() {
 
         <div className="filter-divider" />
 
-        <span className="filter-label">Salary â‚¹</span>
+        <span className="filter-label">Salary Rs.</span>
         <input className="filter-input" type="number" value={filterMinSal}
           onChange={e => setFilterMinSal(e.target.value)} id="filter-sal-min" />
-        <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>â€“</span>
+        <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>-</span>
         <input className="filter-input" type="number" value={filterMaxSal}
           onChange={e => setFilterMaxSal(e.target.value)} id="filter-sal-max" />
 
@@ -725,8 +923,35 @@ export default function CandidatesPage() {
           />
         </div>
 
+        <form onSubmit={applyAiFilter} style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:340 }}>
+          <span className="filter-label">AI Filter</span>
+          <input
+            className="filter-input"
+            style={{ width:'100%', minWidth:240, flex:1 }}
+            value={aiFilterText}
+            onChange={e => { setAiFilterText(e.target.value); setAiFilterError('') }}
+            id="filter-ai-candidates"
+          />
+          <button className="btn-secondary" type="submit" disabled={aiFilterLoading} style={{ height:34, padding:'0 12px' }}>
+            {aiFilterLoading ? <Loader2 size={14} className="spin" /> : <Search size={14} />}
+            Apply
+          </button>
+        </form>
+
         <button className="filter-clear" onClick={clearFilters}>Clear Filters</button>
       </div>
+
+      {aiFilterError && (
+        <div className="form-error" style={{ display:'block', marginBottom:12 }}>
+          {aiFilterError}
+        </div>
+      )}
+
+      {aiFilters && (
+        <div style={{ marginBottom:12, fontSize:12.5, color:'var(--gray-500)' }}>
+          AI filter active{aiFilterCount !== null ? ` · ${aiFilterCount} match${aiFilterCount === 1 ? '' : 'es'}` : ''}
+        </div>
+      )}
 
       {/* Table */}
       <div className="table-card">
@@ -773,36 +998,32 @@ export default function CandidatesPage() {
                 <tr key={c.associationId || c.id} className={rowClass}>
                   <td>{index + 1}</td>
                   <td>{formatDate(c.createdAt)}</td>
-                  <td>{c.consultant || 'â€”'}</td>
-                  <td>{c.client || 'â€”'}</td>
-                  <td className="cell-ellipsis">{c.job || 'â€”'}</td>
+                  <td>{c.consultant || '-'}</td>
+                  <td>{c.client || '-'}</td>
+                  <td className="cell-ellipsis">{c.job || '-'}</td>
                   <td>
-                    {isGroup && groupIndex > 0 ? (
-                      <div className="candidate-repeat-label">â†³ also submitted in</div>
-                    ) : (
-                      <div className="name-cell">
-                        <div className="name-avatar">{initials(c.name)}</div>
-                        <div>
-                          <div className="name-text candidate-group-name">
-                            <span>{c.name}</span>
-                            {isGroup && (
-                              <>
-                                <span className="candidate-submission-chip">{groupSize} submissions</span>
-                                <button
-                                  className={`candidate-group-toggle${collapsed[mobile] ? ' collapsed' : ''}`}
-                                  type="button"
-                                  aria-label={collapsed[mobile] ? 'Expand candidate submissions' : 'Collapse candidate submissions'}
-                                  onClick={() => toggleCollapsed(mobile)}
-                                >
-                                  <ChevronDown size={12} strokeWidth={2.4} />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                          <div className="sub-text">{c.location || [c.city, c.state].filter(Boolean).join(', ')}</div>
+                    <div className="name-cell">
+                      <div className="name-avatar">{initials(c.name)}</div>
+                      <div>
+                        <div className="name-text candidate-group-name">
+                          <span>{c.name}</span>
+                          {isGroup && groupIndex === 0 && (
+                            <>
+                              <span className="candidate-submission-chip">{groupSize} submissions</span>
+                              <button
+                                className={`candidate-group-toggle${collapsed[mobile] ? ' collapsed' : ''}`}
+                                type="button"
+                                aria-label={collapsed[mobile] ? 'Expand candidate submissions' : 'Collapse candidate submissions'}
+                                onClick={() => toggleCollapsed(mobile)}
+                              >
+                                <ChevronDown size={12} strokeWidth={2.4} />
+                              </button>
+                            </>
+                          )}
                         </div>
+                        <div className="sub-text">{c.location || [c.city, c.state].filter(Boolean).join(', ')}</div>
                       </div>
-                    )}
+                    </div>
                   </td>
                   <td>
                     <span style={{ fontWeight:500, color:'var(--navy-darkest)' }}>
@@ -814,7 +1035,7 @@ export default function CandidatesPage() {
                   <td>{c.email || '—'}</td>
                   <td>{c.exp ? `${c.exp} yrs` : '—'}</td>
                   <td style={{ fontWeight:600 }}>{fmt(c.salary)}</td>
-                  <td>{c.city || c.location || '—'}</td>
+                  <td>{c.location || c.city || '—'}</td>
                   <td>{c.noticePeriod !== '' && c.noticePeriod !== null ? c.noticePeriod : '—'}</td>
                   <td style={{ fontWeight:600 }}>{fmt(c.expectedSalary)}</td>
                   <td>{c.openToRelocate ? 'Yes' : 'No'}</td>
@@ -823,7 +1044,7 @@ export default function CandidatesPage() {
                     {c.linkedinUrl ? (
                       <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link">LinkedIn</a>
                     ) : (
-                      <span style={{ color:'var(--gray-400)', fontSize:12 }}>—</span>
+                       <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
                     )}
                   </td>
                   <td>
@@ -835,7 +1056,7 @@ export default function CandidatesPage() {
                         <FileText size={12} strokeWidth={2} /> CV
                       </a>
                     ) : (
-                      <span style={{ color:'var(--gray-400)', fontSize:12 }}>—</span>
+                       <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
                     )}
                   </td>
                   <td>{formatMonth(c.createdAt)}</td>
@@ -925,7 +1146,7 @@ export default function CandidatesPage() {
                       <div className="drop-zone-title">
                         {resumeFile ? resumeFile.name : 'Drop your PDF here or click to browse'}
                       </div>
-                      <div className="drop-zone-subtitle">Max file size: 10 MB Â· PDF only</div>
+                      <div className="drop-zone-subtitle">Max file size: 10 MB - PDF only</div>
                     </div>
                   ) : (
                     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>

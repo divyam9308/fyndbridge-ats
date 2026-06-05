@@ -2,6 +2,178 @@ const fs = require('fs/promises')
 const pdfParse = require('pdf-parse')
 const { createWorker } = require('tesseract.js')
 const { extractFields } = require('./extractorUtils')
+const { callOpenRouterJson, OPENROUTER_MODEL } = require('./openRouterService')
+
+const RESUME_AI_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    name: { type: ['string', 'null'] },
+    email: { type: ['string', 'null'] },
+    mobile: { type: ['string', 'null'] },
+    city: { type: ['string', 'null'] },
+    state: { type: ['string', 'null'] },
+    location: { type: ['string', 'null'] },
+    currentDesignation: { type: ['string', 'null'] },
+    currentOrganisation: { type: ['string', 'null'] },
+    experience: { type: ['number', 'null'] },
+    education: { type: ['string', 'null'] },
+    educationEntries: {
+      type: ['array', 'null'],
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          institution: { type: ['string', 'null'] },
+          degree: { type: ['string', 'null'] },
+          years: { type: ['string', 'null'] }
+        }
+      }
+    },
+    skills: {
+      type: ['array', 'null'],
+      items: { type: 'string' }
+    },
+    salary: { type: ['number', 'null'] },
+    linkedin: { type: ['string', 'null'] },
+    summary: { type: ['string', 'null'] }
+  }
+}
+
+function cleanText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function normalizeEmail(value) {
+  const email = cleanText(value)
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null
+}
+
+function normalizeMobile(value) {
+  const input = cleanText(value)
+  if (!input) {
+    return null
+  }
+
+  const digits = input.replace(/[^\d+]/g, '')
+  if (!digits) {
+    return null
+  }
+
+  if (digits.startsWith('91') && digits.length === 12) {
+    return digits.slice(-10)
+  }
+
+  return digits.startsWith('+') ? digits : digits
+}
+
+function normalizeSalary(value) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const num = Number(value)
+  return Number.isFinite(num) && num >= 0 ? Math.round(num) : null
+}
+
+function isAcademicEducationEntry(entry) {
+  const value = cleanText([
+    entry?.institution,
+    entry?.degree,
+    entry?.years
+  ].filter(Boolean).join(' ')).toLowerCase()
+
+  if (!value) {
+    return false
+  }
+
+  if (/\b(certificate|certification|certified|program(?:me)?|workshop|bootcamp|training|course|seminar|webinar)\b/i.test(value)) {
+    return false
+  }
+
+  return /\b(bachelor|master|mba|b\.?tech|m\.?tech|b\.?e|m\.?e|b\.?sc|m\.?sc|b\.?com|m\.?com|b\.?a|m\.?a|llb|llm|diploma|ph\.?d|doctorate|degree|college|university|school|institute|polytechnic)\b/i.test(value)
+}
+
+function formatEducationEntries(entries) {
+  if (!Array.isArray(entries)) {
+    return null
+  }
+
+  const lines = entries
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        return null
+      }
+
+      if (!isAcademicEducationEntry(entry)) {
+        return null
+      }
+
+      const institution = cleanText(entry.institution)
+      const degree = cleanText(entry.degree)
+      const years = cleanText(entry.years)
+
+      return [institution, degree, years].filter(Boolean).join(' - ')
+    })
+    .filter(Boolean)
+
+  return lines.length ? lines.join('\n') : null
+}
+
+function normalizeResumeAiOutput(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return null
+  }
+
+  const skills = Array.isArray(data.skills)
+    ? [...new Set(
+        data.skills
+          .map((skill) => cleanText(skill))
+          .filter(Boolean)
+      )].slice(0, 20)
+    : []
+
+  return {
+    name: cleanText(data.name) || null,
+    email: normalizeEmail(data.email),
+    mobile: normalizeMobile(data.mobile),
+    city: cleanText(data.city) || null,
+    state: cleanText(data.state) || null,
+    location: cleanText(data.location) || null,
+    currentDesignation: cleanText(data.currentDesignation) || null,
+    currentOrganisation: cleanText(data.currentOrganisation) || null,
+    experience: Number.isFinite(Number(data.experience)) ? Number(data.experience) : null,
+    education: formatEducationEntries(data.educationEntries) || cleanText(data.education) || null,
+    skills,
+    salary: normalizeSalary(data.salary),
+    linkedin: cleanText(data.linkedin) || null,
+    summary: cleanText(data.summary) || null
+  }
+}
+
+async function parseResumeWithAi(rawText) {
+  const prompt = [
+    'Extract the following resume fields from the text below and return JSON only.',
+    'Do not invent values. Use null for missing fields.',
+    'Fields: name, email, mobile, city, state, location, currentDesignation, currentOrganisation, experience, education, educationEntries, skills, salary, linkedin, summary.',
+    'Mobile should be the best available phone number. Experience should be a number of years.',
+    'location should be the current location as one display string. currentOrganisation should be the latest/current company or organisation.',
+    'educationEntries should list only formal academic education separately with institution, degree/diploma, and years/date range when available.',
+    'Do not include certifications, certificate programs, workshops, short courses, seminars, bootcamps, training programs, or professional development programs in educationEntries or education.',
+    'education should be a concise newline-separated summary in this format: Institution - Degree/Program - Years.',
+    'Resume text:',
+    rawText.slice(0, 12000)
+  ].join('\n\n')
+
+  const parsed = await callOpenRouterJson({
+    prompt,
+    schema: RESUME_AI_SCHEMA,
+    temperature: 0.1,
+    schemaName: 'resume_fields'
+  })
+
+  return normalizeResumeAiOutput(parsed)
+}
 
 async function extractTextWithOcr(fileBuffer) {
   const worker = await createWorker('eng')
@@ -25,8 +197,21 @@ async function parseResume(filePath) {
     rawText = await extractTextWithOcr(fileBuffer)
   }
 
+  const extracted = extractFields(rawText)
+  let aiExtracted = null
+  try {
+    aiExtracted = await parseResumeWithAi(rawText)
+    if (aiExtracted) {
+      aiExtracted.location = aiExtracted.location || extracted.location?.value || null
+      aiExtracted.currentOrganisation = aiExtracted.currentOrganisation || extracted.current_organisation?.value || null
+    }
+  } catch (err) {
+    console.warn(`parseResume AI fallback (${OPENROUTER_MODEL}):`, err.message)
+  }
+
   return {
-    extracted: extractFields(rawText),
+    extracted,
+    ai_extracted: aiExtracted,
     raw_text: rawText
   }
 }

@@ -298,7 +298,7 @@
 }
 
 .candidate-mobile-group-row td {
-  background: rgba(245,166,35,0.04);
+  background: var(--white);
   border-bottom: 1px dashed #E9ECEF;
 }
 
@@ -308,13 +308,6 @@
 
 .candidate-mobile-group-row.group-last td {
   border-bottom: 2px solid #E9ECEF;
-}
-
-.candidate-repeat-label {
-  color: #ADB5BD;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
 }
 
 .candidate-group-name {
@@ -424,7 +417,7 @@
 /* ===== Modal ===== */
 .modal-overlay {
   position: fixed;
-  inset: 0;
+  inset: var(--topbar-height) 0 0 0;
   background: rgba(0,0,0,0.45);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
@@ -432,7 +425,7 @@
   align-items: flex-start;
   justify-content: center;
   z-index: 1000;
-  padding: 32px 24px;
+  padding: 24px;
   overflow-y: auto;
   animation: overlayIn 0.2s ease both;
 }
@@ -784,4 +777,12 @@ textarea.form-control {
   border-top-color: var(--navy-darkest);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
+}
+
+.spin {
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }

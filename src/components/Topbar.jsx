@@ -1,4 +1,5 @@
 import { useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import './Topbar.css'
 
 const pageTitles = {
@@ -11,7 +12,10 @@ const pageTitles = {
 
 export default function Topbar() {
   const { pathname } = useLocation()
+  const { user } = useAuth()
   const page = pageTitles[pathname] || { title: 'Dashboard', crumb: 'Home / Dashboard' }
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Recruiter'
+  const initials = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 
   const today = new Date().toLocaleDateString('en-IN', {
     weekday: 'short', day: 'numeric', month: 'long', year: 'numeric'
@@ -26,10 +30,10 @@ export default function Topbar() {
 
       <div className="topbar-right">
         <span className="topbar-date">{today}</span>
-        <div className="topbar-user" aria-label="Logged in as Sarah Mehta">
-          <div className="topbar-avatar">SM</div>
+        <div className="topbar-user" aria-label={`Logged in as ${displayName}`}>
+          <div className="topbar-avatar">{initials || 'HR'}</div>
           <div>
-            <div className="topbar-user-name">Sarah Mehta</div>
+            <div className="topbar-user-name">{displayName}</div>
             <div className="topbar-user-role">HR Recruiter</div>
           </div>
         </div>

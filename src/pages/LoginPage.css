@@ -229,6 +229,25 @@
   cursor: not-allowed;
 }
 
+.google-login-btn {
+  background: var(--white);
+  color: var(--navy-darkest);
+  border: 1.5px solid var(--gray-200);
+  gap: 10px;
+}
+
+.google-login-btn:hover:not(:disabled) {
+  background: var(--gray-50);
+  border-color: var(--gray-300);
+  box-shadow: 0 6px 20px rgba(11,22,40,0.1);
+}
+
+.google-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
 /* Spinner */
 .btn-spinner {
   width: 20px;

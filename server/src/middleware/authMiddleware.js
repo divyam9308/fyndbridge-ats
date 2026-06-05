@@ -1,30 +1,31 @@
-const supabase = require('../services/supabaseAdmin')
+const supabase = require('../services/supabaseAnon')
 
-async function authMiddleware(req, res, next) {
-  const authHeader = req.headers.authorization || ''
-  const match = authHeader.match(/^Bearer\s+(.+)$/i)
-
-  if (!match) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
-
+async function attachUser(req, res, next) {
   try {
-    const { data, error } = await supabase.auth.getUser(match[1])
+    const header = req.headers.authorization || ''
+    const match = header.match(/^Bearer\s+(.+)$/i)
 
-    if (error || !data.user) {
+    if (!match) {
+      return next()
+    }
+
+    const token = match[1]
+    const { data, error } = await supabase.auth.getUser(token)
+
+    if (error || !data?.user) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
     req.user = {
       id: data.user.id,
-      email: data.user.email
+      email: data.user.email,
+      name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || data.user.email
     }
 
     return next()
   } catch (err) {
-    console.error('authMiddleware:', err.message)
-    return res.status(401).json({ error: 'Unauthorized' })
+    return next(err)
   }
 }
 
-module.exports = authMiddleware
+module.exports = attachUser
