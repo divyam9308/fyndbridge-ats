@@ -1,24 +1,17 @@
 import { useState } from 'react'
 import { Plus, Pencil, Eye, X, Briefcase } from 'lucide-react'
 import '../styles/Shared.css'
+import { DEMO_CLIENTS, DEMO_JOBS } from '../data/demoDirectoryData'
 
-const CLIENTS = ['Acme Corp', 'Nexus Tech', 'Bright Minds Ltd', 'Zeta FinTech', 'CloudBridge Labs']
-
-const INITIAL_JOBS = [
-  { id: 1, title: 'Senior Backend Engineer', client: 'Zeta FinTech',     city: 'Bengaluru', status: 'Open',    rejectedByClient: 2, successCount: 1, completion: 68,  experience: '4–6 years', skills: ['Node.js','PostgreSQL','AWS'], salaryMin: 1200000, salaryMax: 2000000, jd: '', notes: '' },
-  { id: 2, title: 'Product Manager',         client: 'Nexus Tech',       city: 'Mumbai',    status: 'Open',    rejectedByClient: 0, successCount: 0, completion: 30,  experience: '5–8 years', skills: ['Product Strategy','Roadmapping'], salaryMin: 1500000, salaryMax: 2500000, jd: '', notes: '' },
-  { id: 3, title: 'UX Designer',             client: 'Bright Minds Ltd', city: 'Pune',      status: 'On Hold', rejectedByClient: 1, successCount: 0, completion: 45,  experience: '3–5 years', skills: ['Figma','User Research'], salaryMin: 800000, salaryMax: 1400000, jd: '', notes: '' },
-  { id: 4, title: 'Sales Executive',         client: 'Acme Corp',        city: 'Delhi',     status: 'Filled',  rejectedByClient: 3, successCount: 2, completion: 100, experience: '2–4 years', skills: ['B2B Sales','CRM'], salaryMin: 600000, salaryMax: 1000000, jd: '', notes: '' },
-  { id: 5, title: 'Data Analyst',            client: 'CloudBridge Labs', city: 'Hyderabad', status: 'Open',    rejectedByClient: 0, successCount: 0, completion: 20,  experience: '2–3 years', skills: ['Python','SQL','Tableau'], salaryMin: 700000, salaryMax: 1200000, jd: '', notes: '' },
-  { id: 6, title: 'DevOps Engineer',         client: 'Zeta FinTech',     city: 'Bengaluru', status: 'Closed',  rejectedByClient: 1, successCount: 1, completion: 100, experience: '3–5 years', skills: ['Kubernetes','Docker','CI/CD'], salaryMin: 1000000, salaryMax: 1800000, jd: '', notes: '' },
-  { id: 7, title: 'Frontend Engineer',       client: 'Nexus Tech',       city: 'Chennai',   status: 'Open',    rejectedByClient: 0, successCount: 0, completion: 55,  experience: '2–4 years', skills: ['React','TypeScript'], salaryMin: 900000, salaryMax: 1500000, jd: '', notes: '' },
-]
+const CLIENTS = DEMO_CLIENTS.map((client) => client.name)
+const INITIAL_JOBS = DEMO_JOBS
 
 const STATUS_BADGE = {
-  Open:     'badge-open',
-  'On Hold':'badge-on-hold',
-  Closed:   'badge-closed',
-  Filled:   'badge-filled',
+  Open: 'badge-open',
+  Active: 'badge-open',
+  'On Hold': 'badge-on-hold',
+  Closed: 'badge-closed',
+  Filled: 'badge-filled',
 }
 
 const PROGRESS_COLOR = (pct) => pct === 100 ? 'var(--success)' : pct >= 60 ? 'var(--gold)' : 'var(--info)'
@@ -38,67 +31,86 @@ export default function JobsPage() {
   const [errors, setErrors] = useState({})
   const [skillInput, setSkillInput] = useState('')
 
-  // ---- Filter ----
-  const filtered = jobs.filter(j => {
-    if (filterStatus !== 'All' && j.status !== filterStatus) return false
-    if (showRejected && j.rejectedByClient === 0) return false
+  const filtered = jobs.filter((job) => {
+    if (filterStatus !== 'All' && job.status !== filterStatus) return false
+    if (showRejected && job.rejectedByClient === 0) return false
     return true
   })
 
-  // ---- Form ----
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setForm(f => ({ ...f, [name]: value }))
-    if (errors[name]) setErrors(err => ({ ...err, [name]: '' }))
+  const handleChange = (event) => {
+    const { name, value } = event.target
+    setForm((current) => ({ ...current, [name]: value }))
+    if (errors[name]) setErrors((current) => ({ ...current, [name]: '' }))
   }
 
-  const handleSkillKey = (e) => {
-    if ((e.key === 'Enter' || e.key === ',') && skillInput.trim()) {
-      e.preventDefault()
-      const s = skillInput.trim().replace(/,$/, '')
-      if (s && !form.skills.includes(s)) setForm(f => ({ ...f, skills: [...f.skills, s] }))
+  const handleSkillKey = (event) => {
+    if ((event.key === 'Enter' || event.key === ',') && skillInput.trim()) {
+      event.preventDefault()
+      const value = skillInput.trim().replace(/,$/, '')
+      if (value && !form.skills.includes(value)) {
+        setForm((current) => ({ ...current, skills: [...current.skills, value] }))
+      }
       setSkillInput('')
     }
   }
-  const removeSkill = (s) => setForm(f => ({ ...f, skills: f.skills.filter(x => x !== s) }))
+
+  const removeSkill = (skill) => setForm((current) => ({ ...current, skills: current.skills.filter((item) => item !== skill) }))
 
   const validate = () => {
-    const e = {}
-    if (!form.title.trim()) e.title = 'Job Title is required'
-    if (!form.client) e.client = 'Client is required'
-    return e
+    const next = {}
+    if (!form.title.trim()) next.title = 'Job Title is required'
+    if (!form.client) next.client = 'Client is required'
+    return next
   }
 
-  const openModal = () => { setForm(EMPTY_FORM); setErrors({}); setSkillInput(''); setIsOpen(true) }
+  const openModal = () => {
+    setForm(EMPTY_FORM)
+    setErrors({})
+    setSkillInput('')
+    setIsOpen(true)
+  }
 
   const handleSave = () => {
-    const e = validate()
-    if (Object.keys(e).length) { setErrors(e); return }
-    setJobs(j => [{
-      id: Date.now(), title: form.title, client: form.client,
-      city: form.city, status: form.status, rejectedByClient: 0, successCount: 0,
-      completion: Number(form.completion) || 0, experience: form.experience,
-      skills: form.skills, salaryMin: form.salaryMin, salaryMax: form.salaryMax,
-      jd: form.jd, notes: form.notes,
-    }, ...j])
+    const nextErrors = validate()
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors)
+      return
+    }
+
+    setJobs((current) => [{
+      id: Date.now(),
+      title: form.title,
+      client: form.client,
+      city: form.city,
+      state: form.state,
+      status: form.status,
+      rejectedByClient: 0,
+      successCount: 0,
+      completion: Number(form.completion) || 0,
+      experience: form.experience,
+      skills: form.skills,
+      salaryMin: form.salaryMin,
+      salaryMax: form.salaryMax,
+      openPositions: 1,
+      jd: form.jd,
+      notes: form.notes,
+    }, ...current])
     setIsOpen(false)
   }
 
   return (
     <div>
-      {/* Header */}
       <div className="page-header">
         <button className="btn-primary" onClick={openModal} id="btn-add-job">
           <Plus size={15} strokeWidth={2.5} /> Add Job
         </button>
       </div>
 
-      {/* Filter Bar */}
       <div className="filter-bar">
         <span className="filter-label">Status</span>
         <select className="filter-select" value={filterStatus}
           onChange={e => setFilterStatus(e.target.value)} id="filter-job-status">
-          {['All','Open','On Hold','Closed','Filled'].map(s => <option key={s}>{s}</option>)}
+          {['All', 'Open', 'Active', 'On Hold', 'Closed', 'Filled'].map((status) => <option key={status}>{status}</option>)}
         </select>
 
         <div className="filter-divider" />
@@ -115,7 +127,6 @@ export default function JobsPage() {
         </button>
       </div>
 
-      {/* Table */}
       <div className="table-card">
         {filtered.length === 0 ? (
           <div className="empty-state">
@@ -138,14 +149,14 @@ export default function JobsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(job => (
+              {filtered.map((job) => (
                 <tr key={job.id}>
                   <td>
                     <div className="name-text">{job.title}</div>
                     {job.experience && <div className="sub-text">{job.experience}</div>}
                   </td>
                   <td>{job.client}</td>
-                  <td>{job.city || '—'}</td>
+                  <td>{job.city || '-'}</td>
                   <td><span className={`badge ${STATUS_BADGE[job.status] || ''}`}>{job.status}</span></td>
                   <td>
                     <span style={{ fontWeight: 700, color: job.rejectedByClient > 0 ? 'var(--danger)' : 'var(--gray-400)' }}>
@@ -179,7 +190,6 @@ export default function JobsPage() {
         )}
       </div>
 
-      {/* ===== Add Job Modal ===== */}
       {isOpen && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setIsOpen(false)}>
           <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label="Add Job">
@@ -189,7 +199,6 @@ export default function JobsPage() {
             </div>
             <div className="modal-body">
               <div className="form-grid-2">
-
                 <div className="form-group full">
                   <label className="form-label">Job Title / Position <span className="req">*</span></label>
                   <input name="title" value={form.title} onChange={handleChange}
@@ -203,7 +212,7 @@ export default function JobsPage() {
                   <select name="client" value={form.client} onChange={handleChange}
                     className={`form-control${errors.client ? ' is-error' : ''}`}>
                     <option value="">Select client...</option>
-                    {CLIENTS.map(c => <option key={c}>{c}</option>)}
+                    {CLIENTS.map((client) => <option key={client}>{client}</option>)}
                   </select>
                   {errors.client && <span className="form-error">{errors.client}</span>}
                 </div>
@@ -211,13 +220,13 @@ export default function JobsPage() {
                 <div className="form-group">
                   <label className="form-label">Experience Required</label>
                   <input name="experience" value={form.experience} onChange={handleChange}
-                    className="form-control" placeholder="e.g. 3–5 years" />
+                    className="form-control" placeholder="e.g. 3-5 years" />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">City</label>
                   <input name="city" value={form.city} onChange={handleChange}
-                    className="form-control" placeholder="e.g. Bengaluru" />
+                    className="form-control" placeholder="e.g. Bangalore" />
                 </div>
 
                 <div className="form-group">
@@ -227,13 +236,13 @@ export default function JobsPage() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Min Salary (₹)</label>
+                  <label className="form-label">Min Salary (Rs.)</label>
                   <input name="salaryMin" type="number" value={form.salaryMin} onChange={handleChange}
                     className="form-control" placeholder="1200000" />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Max Salary (₹)</label>
+                  <label className="form-label">Max Salary (Rs.)</label>
                   <input name="salaryMax" type="number" value={form.salaryMax} onChange={handleChange}
                     className="form-control" placeholder="2000000" />
                 </div>
@@ -241,23 +250,23 @@ export default function JobsPage() {
                 <div className="form-group">
                   <label className="form-label">Job Status</label>
                   <select name="status" value={form.status} onChange={handleChange} className="form-control">
-                    {['Open','On Hold','Closed','Filled'].map(s => <option key={s}>{s}</option>)}
+                    {['Open', 'Active', 'On Hold', 'Closed', 'Filled'].map((status) => <option key={status}>{status}</option>)}
                   </select>
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Completion %</label>
                   <input name="completion" type="number" min="0" max="100" value={form.completion}
-                    onChange={handleChange} className="form-control" placeholder="0–100" />
+                    onChange={handleChange} className="form-control" placeholder="0-100" />
                 </div>
 
                 <div className="form-group full">
                   <label className="form-label">Required Skills</label>
                   <div className="tag-input-wrap" onClick={e => e.currentTarget.querySelector('input').focus()}>
-                    {form.skills.map(s => (
-                      <span className="tag-chip" key={s}>
-                        {s}
-                        <button className="tag-chip-remove" onClick={() => removeSkill(s)} type="button"><X size={10} /></button>
+                    {form.skills.map((skill) => (
+                      <span className="tag-chip" key={skill}>
+                        {skill}
+                        <button className="tag-chip-remove" onClick={() => removeSkill(skill)} type="button"><X size={10} /></button>
                       </span>
                     ))}
                     <input className="tag-input-field" value={skillInput}
@@ -278,7 +287,6 @@ export default function JobsPage() {
                   <textarea name="notes" value={form.notes} onChange={handleChange}
                     className="form-control" rows={2} placeholder="Internal notes for this job..." />
                 </div>
-
               </div>
             </div>
             <div className="modal-footer">
@@ -291,3 +299,4 @@ export default function JobsPage() {
     </div>
   )
 }
+

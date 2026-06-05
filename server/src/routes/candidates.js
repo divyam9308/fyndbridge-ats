@@ -9,6 +9,7 @@ router.post('/ai-filter', controller.buildAiCandidateFilters)
 
 router.get('/', controller.listCandidates)
 router.post('/', controller.createCandidate)
+router.get('/by-candidate/:candidateId/associations', controller.listCandidateAssociations)
 router.get('/:id', controller.getCandidate)
 router.patch('/:id/status', controller.updateCandidateStatus)
 router.patch('/:id', controller.updateCandidate)

@@ -7,21 +7,20 @@
   height: var(--topbar-height);
   background: var(--white);
   border-bottom: 1px solid var(--gray-200);
+  border-radius: 0 0 16px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 28px;
   z-index: 90;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  box-shadow: 0 2px 12px rgba(0,18,100,0.06);
 }
-
-.topbar-left {}
 
 .topbar-title {
   font-family: var(--font-display);
   font-size: 20px;
-  font-weight: 400;
-  color: var(--navy-darkest);
+  font-weight: 700;
+  color: var(--navy);
   letter-spacing: -0.2px;
 }
 
@@ -52,18 +51,19 @@
   border-radius: 40px;
   border: 1px solid var(--gray-200);
   cursor: default;
-  transition: border-color var(--transition-fast);
+  transition: var(--transition-spring);
 }
 
 .topbar-user:hover {
   border-color: var(--gray-400);
+  transform: translateY(-1px);
 }
 
 .topbar-avatar {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--navy-dark);
+  background: var(--navy);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -71,6 +71,7 @@
   font-weight: 700;
   color: var(--gold);
   letter-spacing: 0.02em;
+  box-shadow: 0 2px 6px rgba(0,18,100,0.2);
 }
 
 .topbar-user-name {

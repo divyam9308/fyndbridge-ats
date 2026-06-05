@@ -1,22 +1,14 @@
 import { useState } from 'react'
 import { Plus, Pencil, Eye, X, Building2 } from 'lucide-react'
 import '../styles/Shared.css'
-
-const INITIAL_CLIENTS = [
-  { id: 1, name: 'Zeta FinTech',     contact: 'Rohan Mehta',    phone: '+91 98765 43210', email: 'rohan@zetafintech.com',    city: 'Bengaluru', state: 'Karnataka', activeJobs: 2, notes: '' },
-  { id: 2, name: 'Nexus Tech',       contact: 'Priya Sharma',   phone: '+91 98234 56789', email: 'priya@nexustech.in',       city: 'Mumbai',    state: 'Maharashtra', activeJobs: 2, notes: '' },
-  { id: 3, name: 'Bright Minds Ltd', contact: 'Arjun Kulkarni', phone: '+91 99012 34567', email: 'arjun@brightminds.co.in', city: 'Pune',      state: 'Maharashtra', activeJobs: 1, notes: '' },
-  { id: 4, name: 'Acme Corp',        contact: 'Sunita Verma',   phone: '+91 97654 32109', email: 'sunita@acmecorp.com',      city: 'Delhi',     state: 'Delhi', activeJobs: 1, notes: '' },
-  { id: 5, name: 'CloudBridge Labs', contact: 'Aditya Rao',     phone: '+91 91234 56780', email: 'aditya@cloudbridgelabs.io',city: 'Hyderabad', state: 'Telangana', activeJobs: 1, notes: '' },
-  { id: 6, name: 'Lumino Health',    contact: 'Kavita Nair',    phone: '+91 94567 89012', email: 'kavita@luminohealth.com',  city: 'Chennai',   state: 'Tamil Nadu', activeJobs: 0, notes: '' },
-]
+import { DEMO_CLIENTS } from '../data/demoDirectoryData'
 
 const EMPTY_FORM = {
   name: '', contact: '', phone: '', email: '', city: '', state: '', notes: '',
 }
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState(INITIAL_CLIENTS)
+  const [clients, setClients] = useState(DEMO_CLIENTS)
   const [isOpen, setIsOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})

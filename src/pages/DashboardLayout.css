@@ -9,15 +9,21 @@
   padding-top: var(--topbar-height);
   flex: 1;
   min-height: 100vh;
-  background: var(--gray-50);
+  background: var(--off-white);
 }
 
 .dashboard-content {
   padding: 28px;
-  animation: fadeInContent 0.35s ease both;
+  animation: fadeUp 0.2s ease forwards;
 }
 
-@keyframes fadeInContent {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

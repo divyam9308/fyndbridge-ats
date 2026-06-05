@@ -6,11 +6,30 @@ import './LoginPage.css'
 
 function GoogleIcon() {
   return (
-    <svg className="google-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06L5.84 9.9C6.71 7.31 9.14 5.38 12 5.38z" />
+    <svg className="google-icon" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#4285F4" d="M44.5 20H24v8.5h11.7C34.2 33.6 29.6 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 6 1.1 8.2 3l6-6C34.5 5.1 29.5 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21c10.9 0 20.3-7.9 20.3-21 0-1.4-.1-2.7-.3-4z" />
+      <path fill="#34A853" d="M6.3 14.7l7 5.1C15 16.1 19.1 13 24 13c3.1 0 6 1.1 8.2 3l6-6C34.5 5.1 29.5 3 24 3c-7.6 0-14.2 4.3-17.7 10.7z" />
+      <path fill="#FBBC05" d="M24 45c5.5 0 10.5-1.9 14.4-5l-6.6-5.4C29.6 36.3 26.9 37 24 37c-5.6 0-10.2-3.4-11.7-8.3l-6.9 5.3C9.7 40.5 16.4 45 24 45z" />
+      <path fill="#EA4335" d="M44.5 20H24v8.5h11.7c-.8 2.3-2.3 4.3-4.3 5.8l6.6 5.4C42.1 36.3 45 30.6 45 24c0-1.4-.1-2.7-.5-4z" />
+    </svg>
+  )
+}
+
+function BrandIcon() {
+  return (
+    <svg width="50" height="50" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+      <path d="M8 10 Q8 8 10 8 L52 8 Q54 8 54 10 L54 18 Q54 20 52 20 L20 20 L20 80 L52 80 Q54 80 54 82 L54 90 Q54 92 52 92 L10 92 Q8 92 8 90 Z" fill="#DAB111" />
+      <path d="M92 10 Q92 8 90 8 L48 8 Q46 8 46 10 L46 18 Q46 20 48 20 L80 20 L80 80 L48 80 Q46 80 46 82 L46 90 Q46 92 48 92 L90 92 Q92 92 92 90 Z" fill="#DAB111" />
+    </svg>
+  )
+}
+
+function AlertIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
     </svg>
   )
 }
@@ -24,6 +43,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (searchParams.get('error') === 'domain') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('Only @fyndbridge.in accounts are allowed.')
     }
   }, [searchParams])
@@ -43,6 +63,7 @@ export default function LoginPage() {
     }
 
     setLoading(true)
+
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -62,36 +83,68 @@ export default function LoginPage() {
 
   return (
     <div className="login-root">
-      <div className="login-card-wrapper">
-        <div className="login-logo" role="banner">
-          <span className="logo-fynd">Fynd</span>
-          <span className="logo-bridge">bridge</span>
-        </div>
-        <p className="login-tagline">Your recruitment command centre</p>
+      <section className="login-panel login-panel-left" aria-label="Product introduction">
+        <div className="login-panel-circle login-panel-circle-left-lg" aria-hidden="true" />
+        <div className="login-panel-circle login-panel-circle-left-sm" aria-hidden="true" />
 
-        <div className="login-card">
-          <h1 className="login-heading">Welcome back</h1>
-          <p className="login-subheading">Sign in with your Fyndbridge Google account</p>
+        <div className="login-brand" role="banner">
+          <BrandIcon />
+          <div>
+            <p className="login-brand-name">FYNDBRIDGE</p>
+            <p className="login-brand-tagline">BRIDGING TALENT &amp; SUCCESS</p>
+          </div>
+        </div>
+
+        <div className="login-left-content">
+          <p className="login-eyebrow">ATS Platform</p>
+
+          <h1 className="login-hero-title">
+            &ldquo;Hiring Is Not A Transaction.
+            <br />
+            It&apos;s A Transformation.&rdquo;
+          </h1>
+
+          <div className="login-divider" aria-hidden="true" />
+
+          <p className="login-hero-copy">
+            Your internal command centre for executive search and talent placement.
+          </p>
+        </div>
+
+        <div className="login-quote-wrap">
+          <p className="login-quote">
+            &ldquo;The right person doesn&apos;t just fill a role — they unlock potential.&rdquo;
+          </p>
+        </div>
+      </section>
+
+      <section className="login-panel login-panel-right" aria-label="Sign in">
+        <div className="login-panel-circle login-panel-circle-right-lg" aria-hidden="true" />
+        <div className="login-panel-circle login-panel-circle-right-sm" aria-hidden="true" />
+
+        <div className="login-auth-shell">
+          <div className="login-auth-copy">
+            <h2 className="login-heading">Welcome back</h2>
+            <p className="login-subheading">Sign in to continue to your workspace</p>
+          </div>
 
           <div className="login-form">
             {error && (
               <div className="login-error" role="alert">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
+                <AlertIcon />
                 {error}
               </div>
             )}
 
             <button
               type="button"
+              id="login-google"
               className={`login-btn google-login-btn${loading ? ' loading' : ''}`}
               disabled={loading}
-              id="login-google"
               onClick={handleGoogleLogin}
             >
               {loading ? (
-                <span className="btn-spinner" />
+                <span className="btn-spinner" aria-label="Signing in…" />
               ) : (
                 <>
                   <GoogleIcon />
@@ -99,9 +152,13 @@ export default function LoginPage() {
                 </>
               )}
             </button>
+
+            <p className="login-permission-note">Only @fyndbridge.in accounts are permitted</p>
           </div>
         </div>
-      </div>
+
+        <p className="login-footer-note">© 2025 FyndBridge. Internal use only.</p>
+      </section>
     </div>
   )
 }

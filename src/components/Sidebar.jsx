@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import FyndbridgeLogo from './FyndbridgeLogo'
 import './Sidebar.css'
 
 const navItems = [
@@ -23,11 +24,7 @@ export default function Sidebar() {
     <aside className="sidebar" role="navigation" aria-label="Main navigation">
       {/* Logo */}
       <div className="sidebar-logo">
-        <div className="sidebar-logo-text">
-          <span className="logo-fynd">Fynd</span>
-          <span className="logo-bridge">bridge</span>
-        </div>
-        <div className="sidebar-logo-sub">ATS Platform</div>
+        <FyndbridgeLogo size="md" theme="light" showTagline={true} />
       </div>
 
       {/* Nav links */}

@@ -52,6 +52,30 @@ create index if not exists candidate_associations_job_title_idx
 create index if not exists candidate_associations_client_name_idx
   on public.candidate_associations(client_name);
 
+create index if not exists candidate_associations_consultant_name_idx
+  on public.candidate_associations(consultant_name);
+
+create index if not exists candidates_full_name_idx
+  on public.candidates(full_name);
+
+create index if not exists candidates_mobile_number_idx
+  on public.candidates(mobile_number);
+
+create index if not exists candidates_city_idx
+  on public.candidates(city);
+
+create index if not exists candidates_state_idx
+  on public.candidates(state);
+
+create index if not exists candidates_experience_years_idx
+  on public.candidates(experience_years);
+
+create index if not exists candidate_associations_status_idx
+  on public.candidate_associations(status);
+
+create index if not exists candidate_associations_current_salary_idx
+  on public.candidate_associations(current_salary);
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text unique not null,

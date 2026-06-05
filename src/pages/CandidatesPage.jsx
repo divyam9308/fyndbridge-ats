@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, Upload, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
 import '../styles/Shared.css'
 
@@ -74,140 +74,13 @@ const AI_FILTER_FIELDS = [
   'mobile',
   'experience',
   'salary',
+  'consultant',
   'client',
   'job',
   'clientMobile',
   'status',
   'skills',
   'education'
-]
-
-const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
-
-const ROLE_KEYWORD_GROUPS = {
-  software: [
-    'software engineer',
-    'software developer',
-    'backend engineer',
-    'backend developer',
-    'frontend engineer',
-    'frontend developer',
-    'full stack',
-    'devops',
-    'database',
-    'data engineer',
-    'programmer',
-    'react',
-    'node',
-    'java',
-    'sql'
-  ],
-  backend: ['backend', 'back end', 'server', 'api', 'node', 'node.js', 'express', 'django'],
-  frontend: ['frontend', 'front end', 'react', 'angular', 'vue', 'ui developer', 'web developer', 'javascript'],
-  database: ['database', 'sql', 'postgres', 'mysql', 'mongodb', 'dba', 'data engineer'],
-  data: ['data analyst', 'data engineer', 'analytics', 'python', 'sql', 'statistics'],
-  devops: ['devops', 'cloud', 'aws', 'azure', 'kubernetes', 'docker', 'ci/cd'],
-  product: ['product manager', 'product owner', 'pm']
-}
-
-const GENERIC_ROLE_WORDS = new Set(['engineer', 'developer', 'manager', 'lead', 'senior', 'junior', 'software'])
-
-const normalizeSearchText = (value) => normalizeText(value)
-  .replace(/[^a-z0-9+#./\s-]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim()
-
-const searchTermsForQuery = (query) => {
-  const normalized = normalizeSearchText(query)
-  if (!normalized) return []
-
-  const terms = new Set([normalized])
-  Object.entries(ROLE_KEYWORD_GROUPS).forEach(([key, values]) => {
-    const groupHit = key === 'software'
-      ? /\b(software|sftware|softwar|programmer|developers?)\b/.test(normalized)
-      : normalized.includes(key) || values.some(value => normalized.includes(normalizeSearchText(value)))
-    if (groupHit) values.forEach(value => terms.add(normalizeSearchText(value)))
-  })
-
-  normalized
-    .split(/\s+/)
-    .filter(word => word.length >= 4 && !GENERIC_ROLE_WORDS.has(word))
-    .forEach(word => terms.add(word))
-
-  return [...terms].filter(Boolean)
-}
-
-const roleTermMatches = (haystack, term) => {
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const boundaryPattern = escaped.replace(/\s+/g, '\\s+')
-  return new RegExp(`(^|[^a-z0-9])${boundaryPattern}([^a-z0-9]|$)`, 'i').test(haystack)
-}
-
-const matchesRoleText = (candidate, query) => {
-  const haystack = normalizeSearchText([
-    candidate.designation,
-    candidate.job,
-    Array.isArray(candidate.skills) ? candidate.skills.join(' ') : ''
-  ].filter(Boolean).join(' '))
-  const terms = searchTermsForQuery(query)
-
-  if (!terms.length) return true
-  return terms.some(term => roleTermMatches(haystack, term))
-}
-
-const matchesAiFilters = (candidate, filters) => {
-  if (!filters) return true
-
-  const includes = (source, needle) => {
-    const haystack = normalizeText(source)
-    const query = normalizeText(needle)
-    if (!query) return true
-    return haystack.includes(query)
-  }
-
-  if (filters.name && !includes(candidate.name, filters.name)) return false
-  if (filters.city && !includes(candidate.city, filters.city)) return false
-  if (filters.state && !includes(candidate.state, filters.state)) return false
-  if (filters.currentDesignation && !matchesRoleText(candidate, filters.currentDesignation)) return false
-  if (filters.email && !includes(candidate.email, filters.email)) return false
-  if (filters.mobile && !includes(candidate.mobile, filters.mobile)) return false
-  if (filters.client && !includes(candidate.client, filters.client)) return false
-  if (filters.job && !matchesRoleText(candidate, filters.job)) return false
-  if (filters.clientMobile && !includes(candidate.clientPhone, filters.clientMobile)) return false
-  if (filters.status && !includes(candidate.status, filters.status)) return false
-  if (filters.education && !includes(candidate.education, filters.education)) return false
-
-  if (Array.isArray(filters.skills) && filters.skills.length > 0) {
-    const skillHaystack = Array.isArray(candidate.skills) ? candidate.skills.map(normalizeText) : []
-    const skillMatches = filters.skills.every(skill => skillHaystack.some(item => item.includes(normalizeText(skill))))
-    if (!skillMatches) return false
-  }
-
-  if (filters.experience) {
-    const exp = candidate.exp === '' || candidate.exp === null || candidate.exp === undefined ? null : Number(candidate.exp)
-    if (filters.experience.min !== null && (exp === null || exp < Number(filters.experience.min))) return false
-    if (filters.experience.max !== null && (exp === null || exp > Number(filters.experience.max))) return false
-  }
-
-  if (filters.salary) {
-    const salary = candidate.salary === '' || candidate.salary === null || candidate.salary === undefined ? null : Number(candidate.salary)
-    if (filters.salary.min !== null && (salary === null || salary < Number(filters.salary.min))) return false
-    if (filters.salary.max !== null && (salary === null || salary > Number(filters.salary.max))) return false
-  }
-
-  return true
-}
-
-/* ====== Placeholder candidates ====== */
-const INITIAL_CANDIDATES = [
-  { id:1, name:'Arjun Rao',        city:'Bengaluru', currentCompany:'Infosys',           designation:'Backend Developer',    email:'arjun.rao@email.com',    mobile:'+91 98765 11111', exp:4,  salary:900000,  expectedSalary:1400000, client:'Zeta FinTech',     job:'Senior Backend Engineer', status:'Interview',         skills:['Node.js','AWS'],          education:'B.Tech, NIT Trichy',    cvLink:'https://drive.google.com/file/d/arjun-cv',     linkedinUrl:'https://linkedin.com/in/arjunrao',       notes:'' },
-  { id:2, name:'Priya Kapoor',     city:'Mumbai',    currentCompany:'Razorpay',          designation:'Product Designer',     email:'priya.k@email.com',      mobile:'+91 99012 22222', exp:3,  salary:750000,  expectedSalary:1100000, client:'Bright Minds Ltd', job:'UX Designer',             status:'Offered',           skills:['Figma','UX Research'],    education:'B.Des, IDC IIT Bombay', cvLink:'https://drive.google.com/file/d/priya-cv',     linkedinUrl:'https://linkedin.com/in/priyadesigns',   notes:'' },
-  { id:3, name:'Mohammed Salim',   city:'Hyderabad', currentCompany:'Mu Sigma',          designation:'Data Analyst',         email:'m.salim@email.com',      mobile:'+91 91234 33333', exp:2,  salary:600000,  expectedSalary:900000,  client:'CloudBridge Labs', job:'Data Analyst',            status:'Client Submission', skills:['Python','SQL'],           education:'M.Sc Statistics, OU',  cvLink:'https://drive.google.com/file/d/salim-cv',     linkedinUrl:'',                                       notes:'' },
-  { id:4, name:'Tanvi Shah',       city:'Pune',      currentCompany:'Persistent Systems', designation:'DevOps Lead',         email:'tanvi.s@email.com',      mobile:'+91 97654 44444', exp:5,  salary:1200000, expectedSalary:1800000, client:'Zeta FinTech',     job:'DevOps Engineer',         status:'Hired',             skills:['Kubernetes','Docker'],    education:'B.Tech, COEP',         cvLink:'https://drive.google.com/file/d/tanvi-cv',     linkedinUrl:'https://linkedin.com/in/tanvishah',      notes:'' },
-  { id:5, name:'Ritika Nair',      city:'Chennai',   currentCompany:'Zoho',              designation:'QA Engineer',          email:'ritika.n@email.com',     mobile:'+91 94567 55555', exp:3,  salary:700000,  expectedSalary:1000000, client:'Nexus Tech',       job:'Frontend Engineer',       status:'Interview',         skills:['Selenium','JIRA'],        education:'B.E CSE, Anna Univ',   cvLink:'',                                             linkedinUrl:'https://linkedin.com/in/ritikanair',     notes:'' },
-  { id:6, name:'Karan Mehra',      city:'Delhi',     currentCompany:'HDFC Bank',         designation:'Sales Manager',        email:'karan.m@email.com',      mobile:'+91 98001 66666', exp:6,  salary:1000000, expectedSalary:1500000, client:'Acme Corp',        job:'Sales Executive',         status:'Interested',        skills:['B2B','CRM','Salesforce'], education:'MBA, FMS Delhi',       cvLink:'https://drive.google.com/file/d/karan-cv',     linkedinUrl:'https://linkedin.com/in/karanmehra',     notes:'' },
-  { id:7, name:'Deepa Krishnan',   city:'Bengaluru', currentCompany:'Flipkart',          designation:'Product Manager',      email:'deepa.k@email.com',      mobile:'+91 99888 77777', exp:7,  salary:1400000, expectedSalary:2200000, client:'Nexus Tech',       job:'Product Manager',         status:'Rejected by Client', skills:['Agile','Jira'],          education:'MBA, IIM Kozhikode',   cvLink:'https://drive.google.com/file/d/deepa-cv',     linkedinUrl:'https://linkedin.com/in/deepakrishnan', notes:'' },
-  { id:8, name:'Suresh Pillai',    city:'Kochi',     currentCompany:'UST Global',        designation:'React Developer',      email:'suresh.p@email.com',     mobile:'+91 95555 88888', exp:2,  salary:550000,  expectedSalary:850000,  client:'Nexus Tech',       job:'Frontend Engineer',       status:'Not Interested',    skills:['React','CSS'],           education:'B.Tech, CUSAT',        cvLink:'',                                             linkedinUrl:'',                                       notes:'' },
 ]
 
 /* ====== Empty forms ====== */
@@ -290,11 +163,15 @@ const uiCandidateToApi = (f, consultantName = '') => ({
 })
 
 export default function CandidatesPage() {
-  const [candidates, setCandidates] = useState(INITIAL_CANDIDATES)
+  const [candidates, setCandidates] = useState([])
   const fileInputRef = useRef(null)
   const candidateModalBodyRef = useRef(null)
   const [apiError, setApiError] = useState('')
+  const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalCandidates, setTotalCandidates] = useState(0)
+  const pageSize = 50
   const activeConsultantName = getConsultantNameFromUser(getCurrentUser())
 
   // Filters
@@ -315,6 +192,10 @@ export default function CandidatesPage() {
   const [skillInput, setSkillInput] = useState('')
   const [editing, setEditing] = useState(false)
   const [collapsed, setCollapsed] = useState({})
+  const [selectedCandidate, setSelectedCandidate] = useState(null)
+  const [candidateAssociations, setCandidateAssociations] = useState([])
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
 
   // Import Resume Modal
   const [importOpen, setImportOpen]   = useState(false)
@@ -327,31 +208,47 @@ export default function CandidatesPage() {
   const [parsedForm, setParsedForm]   = useState(null)
   const [parsedSkillInput, setParsedSkillInput] = useState('')
 
-  const loadCandidates = async () => {
+  const loadCandidates = async (nextPage = page) => {
+    setLoadingCandidates(true)
     try {
-      const response = await fetch('/api/candidates')
+      const params = new URLSearchParams({
+        page: String(nextPage),
+        limit: String(pageSize)
+      })
+
+      if (filterJob !== 'All') params.set('job_title', filterJob)
+      if (filterMinSal) params.set('salary_min', filterMinSal)
+      if (filterMaxSal) params.set('salary_max', filterMaxSal)
+      if (filterStatus.length) params.set('status', filterStatus.join(','))
+      if (aiFilters) params.set('ai_filters', JSON.stringify(aiFilters))
+
+      const response = await fetch(`/api/candidates?${params.toString()}`)
       const payload = await response.json().catch(() => ({}))
 
       if (!response.ok) {
         throw new Error(payload.error || 'Unable to load candidates.')
       }
 
-      if (Array.isArray(payload.data)) {
-        setCandidates(payload.data.map(apiCandidateToUi))
-      }
+      setCandidates(Array.isArray(payload.data) ? payload.data.map(apiCandidateToUi) : [])
+      setTotalCandidates(Number(payload.total) || 0)
+      setPage(Number(payload.page) || nextPage)
       setApiError('')
     } catch (err) {
       setApiError(err.message)
+      setCandidates([])
+      setTotalCandidates(0)
+    } finally {
+      setLoadingCandidates(false)
     }
   }
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      loadCandidates()
+      loadCandidates(page)
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [page, filterJob, filterMinSal, filterMaxSal, filterStatus, aiFilters])
 
   useEffect(() => {
     if (addOpen) {
@@ -382,15 +279,7 @@ export default function CandidatesPage() {
     return apiCandidateToUi(payload)
   }
 
-  // ---- Filtering ----
-  const filtered = candidates.filter(c => {
-    if (filterJob !== 'All' && c.job !== filterJob) return false
-    if (filterMinSal && c.salary < Number(filterMinSal)) return false
-    if (filterMaxSal && c.salary > Number(filterMaxSal)) return false
-    if (filterStatus.length > 0 && !filterStatus.includes(c.status)) return false
-    if (aiFilters && !matchesAiFilters(c, aiFilters)) return false
-    return true
-  })
+  const filtered = candidates
 
   const mobileGroups = {}
   filtered.forEach(c => {
@@ -425,6 +314,7 @@ export default function CandidatesPage() {
     setAiFilters(null)
     setAiFilterError('')
     setAiFilterCount(null)
+    setPage(1)
   }
 
   const clearAiFilter = () => {
@@ -432,10 +322,12 @@ export default function CandidatesPage() {
     setAiFilters(null)
     setAiFilterError('')
     setAiFilterCount(null)
+    setPage(1)
   }
 
   // ---- Status multi-select toggle ----
   const toggleStatus = (s) => {
+    setPage(1)
     setFilterStatus(prev =>
       prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
     )
@@ -493,6 +385,51 @@ export default function CandidatesPage() {
 
   const openAddModal = () => { setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName }); setEditing(false); setErrors({}); setSkillInput(''); setAddOpen(true) }
 
+  const candidateToForm = (candidate) => ({
+    ...EMPTY_CAND,
+    ...candidate,
+    consultantName: candidate.consultantName || candidate.consultant || activeConsultantName,
+    associationId: candidate.associationId,
+    candidateId: candidate.candidateId,
+    currentOrganisation: candidate.currentOrganisation || candidate.currentCompany || '',
+    skills: Array.isArray(candidate.skills) ? candidate.skills : []
+  })
+
+  const openEditCandidate = (candidate) => {
+    setForm(candidateToForm(candidate))
+    setEditing(true)
+    setErrors({})
+    setSkillInput('')
+    setSelectedCandidate(null)
+    setAddOpen(true)
+  }
+
+  const openCandidateDetail = async (candidate) => {
+    setSelectedCandidate(candidate)
+    setCandidateAssociations([])
+    setDetailError('')
+
+    if (!candidate.candidateId) {
+      return
+    }
+
+    setDetailLoading(true)
+    try {
+      const response = await fetch(`/api/candidates/by-candidate/${candidate.candidateId}/associations`)
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Unable to load candidate details.')
+      }
+
+      setCandidateAssociations(Array.isArray(payload.data) ? payload.data.map(apiCandidateToUi) : [])
+    } catch (err) {
+      setDetailError(err.message)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
   const applyAiFilter = async (event) => {
     event?.preventDefault?.()
     const prompt = aiFilterText.trim()
@@ -520,6 +457,7 @@ export default function CandidatesPage() {
 
       setAiFilters(payload.filters || null)
       setAiFilterCount(Number.isFinite(payload.matchedCount) ? payload.matchedCount : null)
+      setPage(1)
     } catch (err) {
       setAiFilterError(err.message)
       setAiFilters(null)
@@ -899,7 +837,7 @@ export default function CandidatesPage() {
       <div className="filter-bar">
         <span className="filter-label">Job</span>
         <select className="filter-select" value={filterJob}
-          onChange={e => setFilterJob(e.target.value)} id="filter-candidate-job">
+          onChange={e => { setFilterJob(e.target.value); setPage(1) }} id="filter-candidate-job">
           <option value="All">All Jobs</option>
           {JOBS.map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
         </select>
@@ -908,10 +846,10 @@ export default function CandidatesPage() {
 
         <span className="filter-label">Salary Rs.</span>
         <input className="filter-input" type="number" value={filterMinSal}
-          onChange={e => setFilterMinSal(e.target.value)} id="filter-sal-min" />
+          onChange={e => { setFilterMinSal(e.target.value); setPage(1) }} id="filter-sal-min" />
         <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>-</span>
         <input className="filter-input" type="number" value={filterMaxSal}
-          onChange={e => setFilterMaxSal(e.target.value)} id="filter-sal-max" />
+          onChange={e => { setFilterMaxSal(e.target.value); setPage(1) }} id="filter-sal-max" />
 
         <div className="filter-divider" />
 
@@ -923,11 +861,11 @@ export default function CandidatesPage() {
           />
         </div>
 
-        <form onSubmit={applyAiFilter} style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:340 }}>
+        <form onSubmit={applyAiFilter} style={{ display:'flex', alignItems:'center', gap:8, flex:'0 0 auto', minWidth:0 }}>
           <span className="filter-label">AI Filter</span>
           <input
             className="filter-input"
-            style={{ width:'100%', minWidth:240, flex:1 }}
+            style={{ width:220, minWidth:180, flex:'0 0 220px' }}
             value={aiFilterText}
             onChange={e => { setAiFilterText(e.target.value); setAiFilterError('') }}
             id="filter-ai-candidates"
@@ -936,9 +874,8 @@ export default function CandidatesPage() {
             {aiFilterLoading ? <Loader2 size={14} className="spin" /> : <Search size={14} />}
             Apply
           </button>
+          <button className="filter-clear" type="button" onClick={clearFilters}>Clear Filters</button>
         </form>
-
-        <button className="filter-clear" onClick={clearFilters}>Clear Filters</button>
       </div>
 
       {aiFilterError && (
@@ -955,7 +892,12 @@ export default function CandidatesPage() {
 
       {/* Table */}
       <div className="table-card">
-        {filtered.length === 0 ? (
+        {loadingCandidates ? (
+          <div className="empty-state">
+            <div className="empty-state-icon"><Loader2 size={28} color="var(--gold)" className="spin" /></div>
+            <div className="empty-state-title">Loading candidates</div>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon"><Users size={28} color="var(--gold)" strokeWidth={1.5} /></div>
             <div className="empty-state-title">No candidates match your filters</div>
@@ -963,110 +905,190 @@ export default function CandidatesPage() {
           </div>
         ) : (
           <div className="table-wrapper">
-          <table className="data-table candidates-master-table" aria-label="Candidates">
-            <thead>
-              <tr>
-                <th>S.No</th>
-                <th>Date</th>
-                <th>Consultant</th>
-                <th>Client Name</th>
-                <th>Role (Job)</th>
-                <th>Candidate Name</th>
-                <th>Organisation</th>
-                <th>Designation</th>
-                <th>Mobile</th>
-                <th>Email ID</th>
-                <th>Experience</th>
-                <th>Current CTC</th>
-                <th>Current Location</th>
-                <th>Notice Period</th>
-                <th>Expected CTC</th>
-                <th>Open to Relocate</th>
-                <th>Comments</th>
-                <th>LinkedIn</th>
-                <th>Status</th>
-                <th>CV Link</th>
-                <th>Month</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleCandidates.map(({ candidate: c, mobile, isGroup, groupSize, groupIndex, isLastInGroup }, index) => {
-                const rowClass = isGroup
-                  ? `candidate-mobile-group-row${groupIndex === 0 ? ' group-first' : ' group-child'}${isLastInGroup ? ' group-last' : ''}`
-                  : ''
-                return (
-                <tr key={c.associationId || c.id} className={rowClass}>
-                  <td>{index + 1}</td>
-                  <td>{formatDate(c.createdAt)}</td>
-                  <td>{c.consultant || '-'}</td>
-                  <td>{c.client || '-'}</td>
-                  <td className="cell-ellipsis">{c.job || '-'}</td>
-                  <td>
-                    <div className="name-cell">
-                      <div className="name-avatar">{initials(c.name)}</div>
-                      <div>
-                        <div className="name-text candidate-group-name">
-                          <span>{c.name}</span>
-                          {isGroup && groupIndex === 0 && (
-                            <>
-                              <span className="candidate-submission-chip">{groupSize} submissions</span>
-                              <button
-                                className={`candidate-group-toggle${collapsed[mobile] ? ' collapsed' : ''}`}
-                                type="button"
-                                aria-label={collapsed[mobile] ? 'Expand candidate submissions' : 'Collapse candidate submissions'}
-                                onClick={() => toggleCollapsed(mobile)}
-                              >
-                                <ChevronDown size={12} strokeWidth={2.4} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                        <div className="sub-text">{c.location || [c.city, c.state].filter(Boolean).join(', ')}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span style={{ fontWeight:500, color:'var(--navy-darkest)' }}>
-                      {c.currentOrganisation || c.currentCompany || '—'}
-                    </span>
-                  </td>
-                  <td>{c.designation || '—'}</td>
-                  <td style={{ fontFamily:'monospace', fontSize:12 }}>{c.mobile || '—'}</td>
-                  <td>{c.email || '—'}</td>
-                  <td>{c.exp ? `${c.exp} yrs` : '—'}</td>
-                  <td style={{ fontWeight:600 }}>{fmt(c.salary)}</td>
-                  <td>{c.location || c.city || '—'}</td>
-                  <td>{c.noticePeriod !== '' && c.noticePeriod !== null ? c.noticePeriod : '—'}</td>
-                  <td style={{ fontWeight:600 }}>{fmt(c.expectedSalary)}</td>
-                  <td>{c.openToRelocate ? 'Yes' : 'No'}</td>
-                  <td className="cell-ellipsis">{c.notes || '—'}</td>
-                  <td>
-                    {c.linkedinUrl ? (
-                      <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link">LinkedIn</a>
-                    ) : (
-                       <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
-                    )}
-                  </td>
-                  <td>
-                    <span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span>
-                  </td>
-                  <td>
-                    {c.cvLink ? (
-                      <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV">
-                        <FileText size={12} strokeWidth={2} /> CV
-                      </a>
-                    ) : (
-                       <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
-                    )}
-                  </td>
-                  <td>{formatMonth(c.createdAt)}</td>
+            <table className="data-table candidates-master-table" aria-label="Candidates">
+              <thead>
+                <tr>
+                  <th>S.No</th>
+                  <th>Date</th>
+                  <th>Consultant</th>
+                  <th>Client Name</th>
+                  <th>Role (Job)</th>
+                  <th>Candidate Name</th>
+                  <th>Organisation</th>
+                  <th>Designation</th>
+                  <th>Mobile</th>
+                  <th>Email ID</th>
+                  <th>Experience</th>
+                  <th>Current CTC</th>
+                  <th>Current Location</th>
+                  <th>Notice Period</th>
+                  <th>Expected CTC</th>
+                  <th>Open to Relocate</th>
+                  <th>Comments</th>
+                  <th>LinkedIn</th>
+                  <th>Status</th>
+                  <th>CV Link</th>
+                  <th>Month</th>
+                  <th>Action</th>
                 </tr>
-              )})}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visibleCandidates.map(({ candidate: c, mobile, isGroup, groupSize, groupIndex, isLastInGroup }, index) => {
+                  const rowClass = isGroup
+                    ? `candidate-mobile-group-row${groupIndex === 0 ? ' group-first' : ' group-child'}${isLastInGroup ? ' group-last' : ''}`
+                    : ''
+                  return (
+                    <tr key={c.associationId || c.id} className={rowClass} onClick={() => openCandidateDetail(c)} style={{ cursor:'pointer' }}>
+                      <td>{(page - 1) * pageSize + index + 1}</td>
+                      <td>{formatDate(c.createdAt)}</td>
+                      <td>{c.consultant || '-'}</td>
+                      <td>{c.client || '-'}</td>
+                      <td className="cell-ellipsis">{c.job || '-'}</td>
+                      <td>
+                        <div className="name-cell">
+                          <div className="name-avatar">{initials(c.name)}</div>
+                          <div>
+                            <div className="name-text candidate-group-name">
+                              <span>{c.name}</span>
+                              {isGroup && groupIndex === 0 && (
+                                <>
+                                  <span className="candidate-submission-chip">{groupSize} submissions</span>
+                                  <button
+                                    className={`candidate-group-toggle${collapsed[mobile] ? ' collapsed' : ''}`}
+                                    type="button"
+                                    aria-label={collapsed[mobile] ? 'Expand candidate submissions' : 'Collapse candidate submissions'}
+                                    onClick={(event) => { event.stopPropagation(); toggleCollapsed(mobile) }}
+                                  >
+                                    <ChevronDown size={12} strokeWidth={2.4} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                            <div className="sub-text">{c.location || [c.city, c.state].filter(Boolean).join(', ')}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td><span style={{ fontWeight:500, color:'var(--navy-darkest)' }}>{c.currentOrganisation || c.currentCompany || '-'}</span></td>
+                      <td>{c.designation || '-'}</td>
+                      <td style={{ fontFamily:'monospace', fontSize:12 }}>{c.mobile || '-'}</td>
+                      <td>{c.email || '-'}</td>
+                      <td>{c.exp ? `${c.exp} yrs` : '-'}</td>
+                      <td style={{ fontWeight:600 }}>{fmt(c.salary)}</td>
+                      <td>{c.location || c.city || '-'}</td>
+                      <td>{c.noticePeriod !== '' && c.noticePeriod !== null ? c.noticePeriod : '-'}</td>
+                      <td style={{ fontWeight:600 }}>{fmt(c.expectedSalary)}</td>
+                      <td>{c.openToRelocate ? 'Yes' : 'No'}</td>
+                      <td className="cell-ellipsis">{c.notes || '-'}</td>
+                      <td>
+                        {c.linkedinUrl ? (
+                          <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link" onClick={event => event.stopPropagation()}>LinkedIn</a>
+                        ) : (
+                          <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
+                        )}
+                      </td>
+                      <td><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span></td>
+                      <td>
+                        {c.cvLink ? (
+                          <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={event => event.stopPropagation()}>
+                            <FileText size={12} strokeWidth={2} /> CV
+                          </a>
+                        ) : (
+                          <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
+                        )}
+                      </td>
+                      <td>{formatMonth(c.createdAt)}</td>
+                      <td>
+                        <button className="btn-secondary" style={{ height:30, padding:'0 10px' }} onClick={(event) => { event.stopPropagation(); openCandidateDetail(c) }}>
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+
+      <div className="pagination-bar">
+        <button className="btn-secondary" disabled={page <= 1 || loadingCandidates} onClick={() => setPage(p => Math.max(1, p - 1))}>Previous</button>
+        <span>Page {page} of {Math.max(1, Math.ceil(totalCandidates / pageSize))}</span>
+        <span>{totalCandidates.toLocaleString('en-IN')} total</span>
+        <button className="btn-secondary" disabled={page >= Math.max(1, Math.ceil(totalCandidates / pageSize)) || loadingCandidates} onClick={() => setPage(p => p + 1)}>Next</button>
+      </div>
+
+      {selectedCandidate && (
+        <div className="candidate-drawer-overlay" onClick={e => e.target === e.currentTarget && setSelectedCandidate(null)}>
+          <aside className="candidate-drawer" aria-label="Candidate details">
+            <div className="candidate-drawer-header">
+              <div>
+                <div className="candidate-drawer-title">{selectedCandidate.name}</div>
+                <div className="sub-text">{selectedCandidate.designation || 'Candidate'} ? {selectedCandidate.location || selectedCandidate.city || '-'}</div>
+              </div>
+              <button className="modal-close" onClick={() => setSelectedCandidate(null)} aria-label="Close"><X size={16} /></button>
+            </div>
+
+            <div className="candidate-drawer-actions">
+              <button className="btn-primary" onClick={() => openEditCandidate(selectedCandidate)}>Edit</button>
+              {selectedCandidate.cvLink && (
+                <a className="btn-secondary" href={selectedCandidate.cvLink} target="_blank" rel="noopener noreferrer"><FileText size={14} /> CV</a>
+              )}
+              {selectedCandidate.linkedinUrl && (
+                <a className="btn-secondary" href={selectedCandidate.linkedinUrl} target="_blank" rel="noopener noreferrer">LinkedIn</a>
+              )}
+            </div>
+
+            {detailError && <div className="form-error" style={{ display:'block', marginBottom:12 }}>{detailError}</div>}
+            {detailLoading && <div className="sub-text" style={{ marginBottom:12 }}>Loading associations...</div>}
+
+            <div className="candidate-detail-grid">
+              {[
+                ['Date', formatDate(selectedCandidate.createdAt)],
+                ['Consultant', selectedCandidate.consultant || '-'],
+                ['Client', selectedCandidate.client || '-'],
+                ['Role', selectedCandidate.job || '-'],
+                ['Organisation', selectedCandidate.currentOrganisation || selectedCandidate.currentCompany || '-'],
+                ['Designation', selectedCandidate.designation || '-'],
+                ['Mobile', selectedCandidate.mobile || '-'],
+                ['Email', selectedCandidate.email || '-'],
+                ['Experience', selectedCandidate.exp ? `${selectedCandidate.exp} yrs` : '-'],
+                ['Current CTC', fmt(selectedCandidate.salary)],
+                ['Expected CTC', fmt(selectedCandidate.expectedSalary)],
+                ['Current Location', selectedCandidate.location || selectedCandidate.city || '-'],
+                ['Notice Period', selectedCandidate.noticePeriod !== '' && selectedCandidate.noticePeriod !== null ? selectedCandidate.noticePeriod : '-'],
+                ['Open to Relocate', selectedCandidate.openToRelocate ? 'Yes' : 'No'],
+                ['Status', selectedCandidate.status || '-'],
+                ['Month', formatMonth(selectedCandidate.createdAt)],
+                ['Education', selectedCandidate.education || '-'],
+                ['Skills', Array.isArray(selectedCandidate.skills) && selectedCandidate.skills.length ? selectedCandidate.skills.join(', ') : '-'],
+              ].map(([label, value]) => (
+                <div className="candidate-detail-item" key={label}>
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
+
+            <div className="candidate-detail-section">
+              <div className="candidate-detail-section-title">Comments / Notes</div>
+              <p>{selectedCandidate.notes || '-'}</p>
+            </div>
+
+            <div className="candidate-detail-section">
+              <div className="candidate-detail-section-title">Client / Job Associations</div>
+              {(candidateAssociations.length ? candidateAssociations : [selectedCandidate]).map(item => (
+                <div className="candidate-association-card" key={item.associationId || item.id}>
+                  <div><strong>{item.client || '-'}</strong></div>
+                  <div>{item.job || '-'}</div>
+                  <div><span className={`badge ${STATUS_BADGE_MAP[item.status] || ''}`}>{item.status}</span></div>
+                  <div className="sub-text">Consultant: {item.consultant || '-'} ? Expected: {fmt(item.expectedSalary)}</div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* ===== Add Candidate Modal ===== */}
       {addOpen && (
@@ -1233,11 +1255,7 @@ function StatusMultiSelect({ selected, onToggle, options }) {
           style={{ transform: open ? 'rotate(180deg)' : 'none', transition:'transform 0.15s' }} />
       </button>
       {open && (
-        <div style={{
-          position:'absolute', top:'calc(100% + 6px)', left:0, minWidth:200, zIndex:200,
-          background:'var(--white)', border:'1px solid var(--gray-200)', borderRadius:9,
-          boxShadow:'0 6px 20px rgba(0,0,0,0.1)', padding:'6px 0',
-        }}>
+        <div className="filter-dropdown">
           {options.map(s => (
             <label key={s} style={{
               display:'flex', alignItems:'center', gap:10, padding:'7px 14px',
@@ -1262,4 +1280,3 @@ function StatusMultiSelect({ selected, onToggle, options }) {
     </div>
   )
 }
-

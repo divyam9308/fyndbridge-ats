@@ -13,23 +13,9 @@ const RESUME_AI_SCHEMA = {
     mobile: { type: ['string', 'null'] },
     city: { type: ['string', 'null'] },
     state: { type: ['string', 'null'] },
-    location: { type: ['string', 'null'] },
     currentDesignation: { type: ['string', 'null'] },
-    currentOrganisation: { type: ['string', 'null'] },
     experience: { type: ['number', 'null'] },
     education: { type: ['string', 'null'] },
-    educationEntries: {
-      type: ['array', 'null'],
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          institution: { type: ['string', 'null'] },
-          degree: { type: ['string', 'null'] },
-          years: { type: ['string', 'null'] }
-        }
-      }
-    },
     skills: {
       type: ['array', 'null'],
       items: { type: 'string' }
@@ -139,11 +125,11 @@ function normalizeResumeAiOutput(data) {
     mobile: normalizeMobile(data.mobile),
     city: cleanText(data.city) || null,
     state: cleanText(data.state) || null,
-    location: cleanText(data.location) || null,
+    location: null,
     currentDesignation: cleanText(data.currentDesignation) || null,
-    currentOrganisation: cleanText(data.currentOrganisation) || null,
+    currentOrganisation: null,
     experience: Number.isFinite(Number(data.experience)) ? Number(data.experience) : null,
-    education: formatEducationEntries(data.educationEntries) || cleanText(data.education) || null,
+    education: cleanText(data.education) || null,
     skills,
     salary: normalizeSalary(data.salary),
     linkedin: cleanText(data.linkedin) || null,
@@ -153,16 +139,13 @@ function normalizeResumeAiOutput(data) {
 
 async function parseResumeWithAi(rawText) {
   const prompt = [
-    'Extract the following resume fields from the text below and return JSON only.',
+    'Extract the following resume fields from the cleaned resume text below and return JSON only.',
     'Do not invent values. Use null for missing fields.',
-    'Fields: name, email, mobile, city, state, location, currentDesignation, currentOrganisation, experience, education, educationEntries, skills, salary, linkedin, summary.',
-    'Mobile should be the best available phone number. Experience should be a number of years.',
-    'location should be the current location as one display string. currentOrganisation should be the latest/current company or organisation.',
-    'educationEntries should list only formal academic education separately with institution, degree/diploma, and years/date range when available.',
-    'Do not include certifications, certificate programs, workshops, short courses, seminars, bootcamps, training programs, or professional development programs in educationEntries or education.',
-    'education should be a concise newline-separated summary in this format: Institution - Degree/Program - Years.',
+    'Fields: name, email, mobile, city, state, currentDesignation, experience, education, skills, salary, linkedin, summary.',
+    'Mobile extraction is mandatory if a phone/mobile/contact number is present. Experience should be a number of years.',
+    'Do not include certifications, certificate programs, workshops, short courses, seminars, bootcamps, training programs, or professional development programs in education.',
     'Resume text:',
-    rawText.slice(0, 12000)
+    cleanText(rawText).slice(0, 12000)
   ].join('\n\n')
 
   const parsed = await callOpenRouterJson({
@@ -204,6 +187,15 @@ async function parseResume(filePath) {
     if (aiExtracted) {
       aiExtracted.location = aiExtracted.location || extracted.location?.value || null
       aiExtracted.currentOrganisation = aiExtracted.currentOrganisation || extracted.current_organisation?.value || null
+      aiExtracted.name = aiExtracted.name || extracted.full_name?.value || null
+      aiExtracted.email = aiExtracted.email || extracted.email?.value || null
+      aiExtracted.mobile = aiExtracted.mobile || extracted.mobile_number?.value || null
+      aiExtracted.city = aiExtracted.city || extracted.city?.value || null
+      aiExtracted.state = aiExtracted.state || extracted.state?.value || null
+      aiExtracted.currentDesignation = aiExtracted.currentDesignation || extracted.current_designation?.value || null
+      aiExtracted.experience = aiExtracted.experience ?? extracted.experience_years?.value ?? null
+      aiExtracted.education = aiExtracted.education || extracted.education?.value || null
+      aiExtracted.skills = aiExtracted.skills.length ? aiExtracted.skills : extracted.skills?.value || []
     }
   } catch (err) {
     console.warn(`parseResume AI fallback (${OPENROUTER_MODEL}):`, err.message)
