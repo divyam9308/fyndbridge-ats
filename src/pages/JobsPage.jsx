@@ -56,7 +56,8 @@ export default function JobsPage() {
   }
 
   useEffect(() => {
-    fetchData()
+    const timer = window.setTimeout(fetchData, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const filtered = jobs.filter((job) => {

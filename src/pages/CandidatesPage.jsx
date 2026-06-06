@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Plus, Upload, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
 import '../styles/Shared.css'
+import { supabase } from '../services/supabaseClient'
 
 /* ====== Static reference data ====== */
-const CLIENTS = []
-
-const JOBS = []
-
 const ALL_STATUSES = [
   'Interested', 'Not Interested', 'Interview', 'Client Submission',
   'Offered', 'Hired', 'Rejected by Recruiter', 'Rejected by Client',
@@ -74,6 +71,33 @@ const AI_FILTER_FIELDS = [
   'skills',
   'education'
 ]
+
+const CANDIDATE_TABLE_COLUMNS = [
+  { key: 'sno', label: 'S.No' },
+  { key: 'date', label: 'Date' },
+  { key: 'consultant', label: 'Consultant' },
+  { key: 'client', label: 'Client Name' },
+  { key: 'job', label: 'Role (Job)' },
+  { key: 'name', label: 'Candidate Name' },
+  { key: 'organisation', label: 'Organisation' },
+  { key: 'designation', label: 'Designation' },
+  { key: 'mobile', label: 'Mobile' },
+  { key: 'email', label: 'Email ID' },
+  { key: 'experience', label: 'Experience' },
+  { key: 'salary', label: 'Current CTC' },
+  { key: 'location', label: 'Current Location' },
+  { key: 'notice', label: 'Notice Period' },
+  { key: 'expectedSalary', label: 'Expected CTC' },
+  { key: 'relocate', label: 'Open to Relocate' },
+  { key: 'comments', label: 'Comments' },
+  { key: 'linkedin', label: 'LinkedIn' },
+  { key: 'status', label: 'Status' },
+  { key: 'cv', label: 'CV Link' },
+  { key: 'month', label: 'Month' },
+  { key: 'action', label: 'Action' },
+]
+
+const DEFAULT_CANDIDATE_COLUMN_KEYS = CANDIDATE_TABLE_COLUMNS.map(column => column.key)
 
 /* ====== Empty forms ====== */
 const EMPTY_CAND = {
@@ -182,6 +206,11 @@ export default function CandidatesPage() {
   const [aiFilterLoading, setAiFilterLoading] = useState(false)
   const [aiFilterError, setAiFilterError] = useState('')
   const [aiFilterCount, setAiFilterCount] = useState(null)
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const [visibleColumns, setVisibleColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
+  const [pendingColumns, setPendingColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
+  const [savedColumns, setSavedColumns] = useState(null)
+  const columnsDropdownRef = useRef(null)
 
   const [dbClients, setDbClients] = useState([])
   const [dbJobs, setDbJobs] = useState([])
@@ -190,6 +219,43 @@ export default function CandidatesPage() {
     fetch('/api/clients').then(res => res.json()).then(data => setDbClients(data.data || []))
     fetch('/api/jobs').then(res => res.json()).then(data => setDbJobs(data.data || []))
   }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      try {
+        const session = supabase ? (await supabase.auth.getSession()).data.session : null
+        const userId = session?.user?.id || getCurrentUser()?.id || getCurrentUser()?.email || 'anonymous'
+        const response = await fetch(`/api/user-preferences/candidate_columns?user_id=${encodeURIComponent(userId)}`)
+        const payload = await response.json().catch(() => ({}))
+        const value = Array.isArray(payload.data?.value) ? payload.data.value.filter(key => DEFAULT_CANDIDATE_COLUMN_KEYS.includes(key)) : null
+
+        if (value?.length) {
+          setVisibleColumns(value)
+          setPendingColumns(value)
+          setSavedColumns(value)
+        }
+      } catch {
+        setVisibleColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)
+        setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)
+      }
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!columnsOpen) return
+
+    const handleClickOutside = (event) => {
+      if (!columnsDropdownRef.current?.contains(event.target)) {
+        setPendingColumns(visibleColumns)
+        setColumnsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [columnsOpen, visibleColumns])
 
   // Add Candidate Modal
   const [addOpen, setAddOpen]   = useState(false)
@@ -317,6 +383,44 @@ export default function CandidatesPage() {
     setAiFilterError('')
     setAiFilterCount(null)
     setPage(1)
+  }
+
+  const togglePendingColumn = (key) => {
+    setPendingColumns(prev =>
+      prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key]
+    )
+  }
+
+  const proceedColumns = () => {
+    setVisibleColumns(pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS)
+    setColumnsOpen(false)
+  }
+
+  const saveColumnPreference = async () => {
+    try {
+      const session = supabase ? (await supabase.auth.getSession()).data.session : null
+      const currentUser = getCurrentUser()
+      const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
+      const value = pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS
+      const response = await fetch('/api/user-preferences/candidate_columns', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, value })
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
+      }
+
+      setSavedColumns(value)
+    } catch (err) {
+      setApiError(err.message)
+    }
+  }
+
+  const resetColumnsToSaved = () => {
+    setPendingColumns(savedColumns?.length ? savedColumns : DEFAULT_CANDIDATE_COLUMN_KEYS)
   }
 
   // ---- Status multi-select toggle ----
@@ -805,6 +909,109 @@ export default function CandidatesPage() {
     )
   }
 
+  const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
+  const renderCandidateCell = ({ key }, c, groupMeta, index) => {
+    const { mobile, isGroup, groupSize, groupIndex } = groupMeta
+
+    switch (key) {
+      case 'sno':
+        return <td key={key}>{(page - 1) * pageSize + index + 1}</td>
+      case 'date':
+        return <td key={key}>{formatDate(c.createdAt)}</td>
+      case 'consultant':
+        return <td key={key}>{c.consultant || '-'}</td>
+      case 'client':
+        return <td key={key}>{c.client || '-'}</td>
+      case 'job':
+        return <td key={key} className="cell-ellipsis">{c.job || '-'}</td>
+      case 'name':
+        return (
+          <td key={key}>
+            <div className="name-cell">
+              <div className="name-avatar">{initials(c.name)}</div>
+              <div>
+                <div className="name-text candidate-group-name">
+                  <span>{c.name}</span>
+                  {isGroup && groupIndex === 0 && (
+                    <>
+                      <span className="candidate-submission-chip">{groupSize} submissions</span>
+                      <button
+                        className={`candidate-group-toggle${collapsed[mobile] ? ' collapsed' : ''}`}
+                        type="button"
+                        aria-label={collapsed[mobile] ? 'Expand candidate submissions' : 'Collapse candidate submissions'}
+                        onClick={(event) => { event.stopPropagation(); toggleCollapsed(mobile) }}
+                      >
+                        <ChevronDown size={12} strokeWidth={2.4} />
+                      </button>
+                    </>
+                  )}
+                </div>
+                <div className="sub-text">{c.location || [c.city, c.state].filter(Boolean).join(', ')}</div>
+              </div>
+            </div>
+          </td>
+        )
+      case 'organisation':
+        return <td key={key}><span style={{ fontWeight:500, color:'var(--navy-darkest)' }}>{c.currentOrganisation || c.currentCompany || '-'}</span></td>
+      case 'designation':
+        return <td key={key}>{c.designation || '-'}</td>
+      case 'mobile':
+        return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{c.mobile || '-'}</td>
+      case 'email':
+        return <td key={key}>{c.email || '-'}</td>
+      case 'experience':
+        return <td key={key}>{c.exp ? `${c.exp} yrs` : '-'}</td>
+      case 'salary':
+        return <td key={key} style={{ fontWeight:600 }}>{fmt(c.salary)}</td>
+      case 'location':
+        return <td key={key}>{c.location || c.city || '-'}</td>
+      case 'notice':
+        return <td key={key}>{c.noticePeriod !== '' && c.noticePeriod !== null ? c.noticePeriod : '-'}</td>
+      case 'expectedSalary':
+        return <td key={key} style={{ fontWeight:600 }}>{fmt(c.expectedSalary)}</td>
+      case 'relocate':
+        return <td key={key}>{c.openToRelocate ? 'Yes' : 'No'}</td>
+      case 'comments':
+        return <td key={key} className="cell-ellipsis">{c.notes || '-'}</td>
+      case 'linkedin':
+        return (
+          <td key={key}>
+            {c.linkedinUrl ? (
+              <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link" onClick={event => event.stopPropagation()}>LinkedIn</a>
+            ) : (
+              <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
+            )}
+          </td>
+        )
+      case 'status':
+        return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span></td>
+      case 'cv':
+        return (
+          <td key={key}>
+            {c.cvLink ? (
+              <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={event => event.stopPropagation()}>
+                <FileText size={12} strokeWidth={2} /> CV
+              </a>
+            ) : (
+              <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
+            )}
+          </td>
+        )
+      case 'month':
+        return <td key={key}>{formatMonth(c.createdAt)}</td>
+      case 'action':
+        return (
+          <td key={key}>
+            <button className="btn-secondary" style={{ height:30, padding:'0 10px' }} onClick={(event) => { event.stopPropagation(); openCandidateDetail(c) }}>
+              View
+            </button>
+          </td>
+        )
+      default:
+        return null
+    }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -821,6 +1028,49 @@ export default function CandidatesPage() {
           {apiError}
         </div>
       )}
+
+      <div className="candidate-columns-toolbar">
+        <div className="candidate-columns-control" ref={columnsDropdownRef}>
+          <button
+            className="filter-select candidate-columns-btn"
+            type="button"
+            onClick={() => { setPendingColumns(visibleColumns); setColumnsOpen(open => !open) }}
+          >
+            <span>Columns</span>
+            <ChevronDown size={13} strokeWidth={2} />
+          </button>
+          <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>
+            Proceed
+          </button>
+          {columnsOpen && (
+            <div className="filter-dropdown candidate-columns-dropdown">
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)}>
+                Select All
+              </button>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>
+                Clear All
+              </button>
+              <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>
+                Save Preference
+              </button>
+              <button className="candidate-columns-action" type="button" onClick={resetColumnsToSaved}>
+                Reset to Saved Preference
+              </button>
+              <div className="candidate-columns-divider" />
+              {CANDIDATE_TABLE_COLUMNS.map(column => (
+                <label className="candidate-column-option" key={column.key}>
+                  <input
+                    type="checkbox"
+                    checked={pendingColumns.includes(column.key)}
+                    onChange={() => togglePendingColumn(column.key)}
+                  />
+                  {column.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Filter Bar */}
       <div className="filter-bar">
@@ -897,28 +1147,7 @@ export default function CandidatesPage() {
             <table className="data-table candidates-master-table" aria-label="Candidates">
               <thead>
                 <tr>
-                  <th>S.No</th>
-                  <th>Date</th>
-                  <th>Consultant</th>
-                  <th>Client Name</th>
-                  <th>Role (Job)</th>
-                  <th>Candidate Name</th>
-                  <th>Organisation</th>
-                  <th>Designation</th>
-                  <th>Mobile</th>
-                  <th>Email ID</th>
-                  <th>Experience</th>
-                  <th>Current CTC</th>
-                  <th>Current Location</th>
-                  <th>Notice Period</th>
-                  <th>Expected CTC</th>
-                  <th>Open to Relocate</th>
-                  <th>Comments</th>
-                  <th>LinkedIn</th>
-                  <th>Status</th>
-                  <th>CV Link</th>
-                  <th>Month</th>
-                  <th>Action</th>
+                  {activeColumns.map(column => <th key={column.key}>{column.label}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -928,69 +1157,7 @@ export default function CandidatesPage() {
                     : ''
                   return (
                     <tr key={c.associationId || c.id} className={rowClass} onClick={() => openCandidateDetail(c)} style={{ cursor:'pointer' }}>
-                      <td>{(page - 1) * pageSize + index + 1}</td>
-                      <td>{formatDate(c.createdAt)}</td>
-                      <td>{c.consultant || '-'}</td>
-                      <td>{c.client || '-'}</td>
-                      <td className="cell-ellipsis">{c.job || '-'}</td>
-                      <td>
-                        <div className="name-cell">
-                          <div className="name-avatar">{initials(c.name)}</div>
-                          <div>
-                            <div className="name-text candidate-group-name">
-                              <span>{c.name}</span>
-                              {isGroup && groupIndex === 0 && (
-                                <>
-                                  <span className="candidate-submission-chip">{groupSize} submissions</span>
-                                  <button
-                                    className={`candidate-group-toggle${collapsed[mobile] ? ' collapsed' : ''}`}
-                                    type="button"
-                                    aria-label={collapsed[mobile] ? 'Expand candidate submissions' : 'Collapse candidate submissions'}
-                                    onClick={(event) => { event.stopPropagation(); toggleCollapsed(mobile) }}
-                                  >
-                                    <ChevronDown size={12} strokeWidth={2.4} />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                            <div className="sub-text">{c.location || [c.city, c.state].filter(Boolean).join(', ')}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td><span style={{ fontWeight:500, color:'var(--navy-darkest)' }}>{c.currentOrganisation || c.currentCompany || '-'}</span></td>
-                      <td>{c.designation || '-'}</td>
-                      <td style={{ fontFamily:'monospace', fontSize:12 }}>{c.mobile || '-'}</td>
-                      <td>{c.email || '-'}</td>
-                      <td>{c.exp ? `${c.exp} yrs` : '-'}</td>
-                      <td style={{ fontWeight:600 }}>{fmt(c.salary)}</td>
-                      <td>{c.location || c.city || '-'}</td>
-                      <td>{c.noticePeriod !== '' && c.noticePeriod !== null ? c.noticePeriod : '-'}</td>
-                      <td style={{ fontWeight:600 }}>{fmt(c.expectedSalary)}</td>
-                      <td>{c.openToRelocate ? 'Yes' : 'No'}</td>
-                      <td className="cell-ellipsis">{c.notes || '-'}</td>
-                      <td>
-                        {c.linkedinUrl ? (
-                          <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link" onClick={event => event.stopPropagation()}>LinkedIn</a>
-                        ) : (
-                          <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
-                        )}
-                      </td>
-                      <td><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span></td>
-                      <td>
-                        {c.cvLink ? (
-                          <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={event => event.stopPropagation()}>
-                            <FileText size={12} strokeWidth={2} /> CV
-                          </a>
-                        ) : (
-                          <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
-                        )}
-                      </td>
-                      <td>{formatMonth(c.createdAt)}</td>
-                      <td>
-                        <button className="btn-secondary" style={{ height:30, padding:'0 10px' }} onClick={(event) => { event.stopPropagation(); openCandidateDetail(c) }}>
-                          View
-                        </button>
-                      </td>
+                      {activeColumns.map(column => renderCandidateCell(column, c, { mobile, isGroup, groupSize, groupIndex }, index))}
                     </tr>
                   )
                 })}
@@ -1229,9 +1396,24 @@ export default function CandidatesPage() {
 /* ===== Status Multi-Select dropdown ===== */
 function StatusMultiSelect({ selected, onToggle, options }) {
   const [open, setOpen] = useState(false)
+  const dropdownRef = useRef(null)
   const label = selected.length === 0 ? 'All Statuses' : `${selected.length} selected`
+
+  useEffect(() => {
+    if (!open) return
+
+    const handleClickOutside = (event) => {
+      if (!dropdownRef.current?.contains(event.target)) {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={dropdownRef} style={{ position: 'relative' }}>
       <button
         className="filter-select"
         style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', minWidth:140 }}

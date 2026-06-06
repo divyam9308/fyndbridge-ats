@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut
 } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import FyndbridgeLogo from './FyndbridgeLogo'
 import './Sidebar.css'
 

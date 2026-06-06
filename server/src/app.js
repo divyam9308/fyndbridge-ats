@@ -12,6 +12,7 @@ app.use('/api/candidates', require('./routes/candidates'))
 app.use('/api/clients', require('./routes/clients'))
 app.use('/api/jobs', require('./routes/jobs'))
 app.use('/api/auth', require('./routes/auth'))
+app.use('/api/user-preferences', require('./routes/userPreferences'))
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }))
 

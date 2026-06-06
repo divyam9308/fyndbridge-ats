@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom'
+import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, Users, AlertCircle, Loader2, FileText } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientJobCandidatesPage.css'
@@ -30,7 +30,6 @@ const initials = (name) => name.split(' ').map(w => w[0]).slice(0, 2).join('').t
 
 export default function ClientJobCandidatesPage() {
   const { clientId, jobId } = useParams()
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   
   const [client, setClient] = useState(null)
@@ -39,15 +38,7 @@ export default function ClientJobCandidatesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Read status query param if present
-  const initialStatusFilter = searchParams.get('status') || 'All'
-  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
-
-  useEffect(() => {
-    // Keep local filter in sync with query param
-    const currentParam = searchParams.get('status') || 'All'
-    setStatusFilter(currentParam)
-  }, [searchParams])
+  const statusFilter = searchParams.get('status') || 'All'
 
   useEffect(() => {
     let active = true
@@ -145,7 +136,6 @@ export default function ClientJobCandidatesPage() {
   })
 
   const handleStatusFilterChange = (status) => {
-    setStatusFilter(status)
     if (status === 'All') {
       searchParams.delete('status')
     } else {

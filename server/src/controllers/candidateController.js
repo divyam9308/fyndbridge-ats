@@ -310,6 +310,14 @@ function explicitAiFiltersFromPrompt(prompt) {
   }, {})
 }
 
+function normalizeSearchText(value) {
+  return cleanText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9+#./\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function explicitAiConditionsFromPrompt(prompt) {
   const text = cleanText(prompt)
   const normalized = normalizeSearchText(prompt)
@@ -473,136 +481,6 @@ function localAiFilterFallback(prompt) {
   }
 
   return filters
-}
-
-function includesText(source, needle) {
-  const haystack = cleanText(source).toLowerCase()
-  const query = cleanText(needle).toLowerCase()
-  if (!query) {
-    return true
-  }
-
-  return haystack.includes(query)
-}
-
-const ROLE_KEYWORD_GROUPS = {
-  software: [
-    'software engineer',
-    'software developer',
-    'backend engineer',
-    'backend developer',
-    'frontend engineer',
-    'frontend developer',
-    'full stack',
-    'devops',
-    'database',
-    'data engineer',
-    'programmer',
-    'react',
-    'node',
-    'java',
-    'sql'
-  ],
-  backend: ['backend', 'back end', 'server', 'api', 'node', 'node.js', 'express', 'django'],
-  frontend: ['frontend', 'front end', 'react', 'angular', 'vue', 'ui developer', 'web developer', 'javascript'],
-  database: ['database', 'sql', 'postgres', 'mysql', 'mongodb', 'dba', 'data engineer'],
-  data: ['data analyst', 'data engineer', 'analytics', 'python', 'sql', 'statistics'],
-  devops: ['devops', 'cloud', 'aws', 'azure', 'kubernetes', 'docker', 'ci/cd'],
-  product: ['product manager', 'product owner', 'pm']
-}
-
-const GENERIC_ROLE_WORDS = new Set(['engineer', 'developer', 'manager', 'lead', 'senior', 'junior', 'software'])
-
-function normalizeSearchText(value) {
-  return cleanText(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9+#./\s-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function searchTermsForQuery(query) {
-  const normalized = normalizeSearchText(query)
-  if (!normalized) {
-    return []
-  }
-
-  const terms = new Set([normalized])
-  Object.entries(ROLE_KEYWORD_GROUPS).forEach(([key, values]) => {
-    const groupHit = key === 'software'
-      ? /\b(software|sftware|softwar|programmer|developers?)\b/.test(normalized)
-      : normalized.includes(key) || values.some((value) => normalized.includes(normalizeSearchText(value)))
-    if (groupHit) {
-      values.forEach((value) => terms.add(normalizeSearchText(value)))
-    }
-  })
-
-  normalized
-    .split(/\s+/)
-    .filter((word) => word.length >= 4 && !GENERIC_ROLE_WORDS.has(word))
-    .forEach((word) => terms.add(word))
-
-  return [...terms].filter(Boolean)
-}
-
-function roleTermMatches(haystack, term) {
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const boundaryPattern = escaped.replace(/\s+/g, '\\s+')
-  return new RegExp(`(^|[^a-z0-9])${boundaryPattern}([^a-z0-9]|$)`, 'i').test(haystack)
-}
-
-function matchesRoleText(candidate, query) {
-  const haystack = normalizeSearchText([
-    candidate.current_designation,
-    candidate.job_title,
-    Array.isArray(candidate.skills) ? candidate.skills.join(' ') : ''
-  ].filter(Boolean).join(' '))
-  const terms = searchTermsForQuery(query)
-
-  if (!terms.length) {
-    return true
-  }
-
-  return terms.some((term) => roleTermMatches(haystack, term))
-}
-
-function matchesAiFilters(candidate, filters) {
-  if (!filters) {
-    return true
-  }
-
-  if (filters.name && !includesText(candidate.full_name, filters.name)) return false
-  if (filters.city && !includesText(candidate.city, filters.city)) return false
-  if (filters.state && !includesText(candidate.state, filters.state)) return false
-  if (filters.currentDesignation && !matchesRoleText(candidate, filters.currentDesignation)) return false
-  if (filters.email && !includesText(candidate.email, filters.email)) return false
-  if (filters.mobile && !includesText(candidate.mobile_number, filters.mobile)) return false
-  if (filters.consultant && !includesText(candidate.consultant_name, filters.consultant)) return false
-  if (filters.client && !includesText(candidate.client_name, filters.client)) return false
-  if (filters.job && !matchesRoleText(candidate, filters.job)) return false
-  if (filters.clientMobile && !includesText(candidate.client_phone_number, filters.clientMobile)) return false
-  if (filters.status && !includesText(candidate.status, filters.status)) return false
-  if (filters.education && !includesText(candidate.education, filters.education)) return false
-
-  if (filters.skills.length) {
-    const candidateSkills = Array.isArray(candidate.skills) ? candidate.skills.map((skill) => cleanText(skill).toLowerCase()) : []
-    const matches = filters.skills.every((skill) => candidateSkills.some((candidateSkill) => candidateSkill.includes(cleanText(skill).toLowerCase())))
-    if (!matches) return false
-  }
-
-  if (filters.experience) {
-    const exp = candidate.experience_years === null || candidate.experience_years === undefined ? null : Number(candidate.experience_years)
-    if (filters.experience.min !== null && (exp === null || exp < filters.experience.min)) return false
-    if (filters.experience.max !== null && (exp === null || exp > filters.experience.max)) return false
-  }
-
-  if (filters.salary) {
-    const salary = candidate.current_salary === null || candidate.current_salary === undefined ? null : Number(candidate.current_salary)
-    if (filters.salary.min !== null && (salary === null || salary < filters.salary.min)) return false
-    if (filters.salary.max !== null && (salary === null || salary > filters.salary.max)) return false
-  }
-
-  return true
 }
 
 function validateCandidatePayload(body, { partial = false } = {}) {

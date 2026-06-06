@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Building2, ChevronLeft, User, Phone, Mail, MapPin, Briefcase, FileText, AlertCircle, Loader2 } from 'lucide-react'
+import { useParams, Link } from 'react-router-dom'
+import { ChevronLeft, User, Phone, Mail, MapPin, Briefcase, AlertCircle, Loader2 } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientDetailPage.css'
 import { apiCandidateToUi } from '../utils/candidateUtils'
@@ -15,7 +15,6 @@ const STATUS_BADGE = {
 
 export default function ClientDetailPage() {
   const { clientId } = useParams()
-  const navigate = useNavigate()
   const [client, setClient] = useState(null)
   const [clientJobs, setClientJobs] = useState([])
   const [candidates, setCandidates] = useState([])

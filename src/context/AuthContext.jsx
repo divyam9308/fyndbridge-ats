@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { isSupabaseConfigured, supabase } from '../services/supabaseClient'
-
-const AuthContext = createContext(null)
+import { supabase } from '../services/supabaseClient'
+import { AuthContext } from './authStore'
+import { useAuth } from './useAuth'
 
 function userToSessionUser(user) {
   if (!user) return null
@@ -30,12 +30,10 @@ function syncSessionStorage(user) {
 async function upsertUserProfile(user) {
   if (!supabase || !user?.email) return
 
-  const { error } = await supabase.from('users').upsert({
+  const { error } = await supabase.from('profiles').upsert({
     id: user.id,
     email: user.email,
     full_name: user.user_metadata?.full_name || user.email.split('@')[0],
-    role: 'recruiter',
-    is_active: true,
   }, { onConflict: 'id' })
 
   if (error) {
@@ -154,14 +152,4 @@ export function RequireAuth({ children }) {
   }
 
   return children
-}
-
-export function useAuth() {
-  const value = useContext(AuthContext)
-
-  if (!value) {
-    throw new Error('useAuth must be used inside AuthProvider')
-  }
-
-  return value
 }

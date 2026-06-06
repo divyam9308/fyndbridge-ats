@@ -32,7 +32,8 @@ export default function ClientsPage() {
   }
 
   useEffect(() => {
-    fetchClients()
+    const timer = window.setTimeout(fetchClients, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const handleChange = (e) => {

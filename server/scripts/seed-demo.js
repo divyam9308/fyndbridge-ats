@@ -335,7 +335,25 @@ async function main() {
 
   // 3. Insert Candidates
   const candidates = buildCandidates(jobs)
-  const candidateRows = candidates.map(({ current_salary, expected_salary, default_job, ...candidate }) => candidate)
+  const candidateRows = candidates.map((candidate) => ({
+    full_name: candidate.full_name,
+    email: candidate.email,
+    mobile_number: candidate.mobile_number,
+    city: candidate.city,
+    state: candidate.state,
+    location: candidate.location,
+    current_designation: candidate.current_designation,
+    current_company: candidate.current_company,
+    current_organisation: candidate.current_organisation,
+    experience_years: candidate.experience_years,
+    notice_period: candidate.notice_period,
+    open_to_relocate: candidate.open_to_relocate,
+    skills: candidate.skills,
+    education: candidate.education,
+    linkedin_url: candidate.linkedin_url,
+    resume_url: candidate.resume_url,
+    source: candidate.source
+  }))
   await insertBatch('candidates', candidateRows)
 
   // Fetch candidates to build (name__phone) -> ID map

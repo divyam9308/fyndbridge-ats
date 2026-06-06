@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { isSupabaseConfigured, supabase } from '../services/supabaseClient'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import './LoginPage.css'
 
 function GoogleIcon() {

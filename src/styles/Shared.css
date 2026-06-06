@@ -95,6 +95,88 @@
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
+.candidate-columns-toolbar {
+  display: flex;
+  margin: 0 0 8px 0;
+  padding-left: 0;
+}
+.candidate-columns-control {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  width: 176px;
+}
+.candidate-columns-btn {
+  width: 90px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, #fff 0%, #f7f7fb 100%);
+  border-color: rgba(0,18,100,0.14);
+  box-shadow: 0 2px 5px rgba(0,18,100,0.08), inset 0 1px 0 rgba(255,255,255,0.9);
+  color: var(--navy-darkest);
+  font-weight: 650;
+}
+.candidate-columns-btn:hover {
+  border-color: rgba(218,177,17,0.55);
+  background: linear-gradient(180deg, #fff 0%, #fbfaf3 100%);
+  box-shadow: 0 5px 12px rgba(0,18,100,0.12), inset 0 1px 0 rgba(255,255,255,0.95);
+}
+.candidate-columns-proceed {
+  width: 80px;
+  height: 34px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 12px;
+  background: linear-gradient(180deg, #f1cc22 0%, var(--gold) 54%, #bd940d 100%);
+  border: 1px solid rgba(141,105,0,0.22);
+  box-shadow: 0 5px 12px rgba(218,177,17,0.35), inset 0 1px 0 rgba(255,255,255,0.45);
+}
+.candidate-columns-proceed:hover {
+  background: linear-gradient(180deg, #f5d541 0%, #d2aa10 58%, #a9820c 100%);
+  box-shadow: 0 7px 16px rgba(218,177,17,0.42), inset 0 1px 0 rgba(255,255,255,0.5);
+}
+.candidate-columns-dropdown {
+  width: 176px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.candidate-columns-action {
+  display: block;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  background: none;
+  color: var(--gold);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+.candidate-columns-action:hover {
+  background: rgba(245,166,35,0.07);
+}
+.candidate-columns-divider {
+  height: 1px;
+  background: var(--gray-100);
+  margin: 6px 0;
+}
+.candidate-column-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  color: var(--gray-700);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.candidate-column-option input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--gold);
+}
 .filter-select {
   height: 34px;
   padding: 0 10px;
@@ -107,6 +189,12 @@
   cursor: pointer;
   transition: all 0.15s ease;
   outline: none;
+}
+
+@media (max-width: 1100px) {
+  .candidate-columns-toolbar {
+    padding-left: 0;
+  }
 }
 .filter-select:focus {
   border-color: var(--gold);
@@ -231,20 +319,21 @@
 
 .candidate-drawer-overlay {
   position: fixed;
-  top: var(--topbar-height);
-  right: 0;
-  bottom: 0;
-  left: var(--sidebar-width);
-  z-index: 1200;
+  inset: 0;
+  z-index: 80;
   display: flex;
   justify-content: flex-end;
-  background: rgba(0,18,100,0.12);
-  backdrop-filter: blur(4px);
+  padding-top: var(--topbar-height);
+  padding-left: var(--sidebar-width);
+  box-sizing: border-box;
+  background: rgba(255,255,255,0.01);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .candidate-drawer {
   width: min(520px, 100%);
-  height: 100%;
+  height: calc(100vh - var(--topbar-height));
   background: var(--white);
   border-left: 1px solid var(--gray-200);
   box-shadow: -12px 0 32px rgba(0,18,100,0.14);
@@ -505,18 +594,16 @@
 /* ===== Modal ===== */
 .modal-overlay {
   position: fixed;
-  top: var(--topbar-height);
-  left: var(--sidebar-width);
-  right: 0;
-  bottom: 0;
-  background: rgba(255,255,255,0.02);
+  inset: 0;
+  background: rgba(255,255,255,0.01);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  z-index: 1000;
-  padding: 32px 28px 24px;
+  z-index: 80;
+  padding: calc(var(--topbar-height) + 32px) 28px 24px calc(var(--sidebar-width) + 28px);
+  box-sizing: border-box;
   overflow-y: auto;
   animation: overlayIn 0.2s ease both;
 }

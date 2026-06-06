@@ -129,7 +129,7 @@ function normalizeResumeAiOutput(data) {
     currentDesignation: cleanText(data.currentDesignation) || null,
     currentOrganisation: null,
     experience: Number.isFinite(Number(data.experience)) ? Number(data.experience) : null,
-    education: cleanText(data.education) || null,
+    education: formatEducationEntries(data.education) || cleanText(data.education) || null,
     skills,
     salary: normalizeSalary(data.salary),
     linkedin: cleanText(data.linkedin) || null,
@@ -172,9 +172,8 @@ async function extractTextWithOcr(fileBuffer) {
 async function parseResume(filePath) {
   const fileBuffer = await fs.readFile(filePath)
 
-  let rawText = ''
   const parsed = await pdfParse(fileBuffer)
-  rawText = parsed.text || ''
+  let rawText = parsed.text || ''
 
   if (rawText.trim().length < 100) {
     rawText = await extractTextWithOcr(fileBuffer)
