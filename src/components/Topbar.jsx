@@ -13,7 +13,19 @@ const pageTitles = {
 export default function Topbar() {
   const { pathname } = useLocation()
   const { user } = useAuth()
-  const page = pageTitles[pathname] || { title: 'Dashboard', crumb: 'Home / Dashboard' }
+
+  const getPageInfo = (path) => {
+    if (pageTitles[path]) return pageTitles[path]
+    if (path.startsWith('/dashboard/clients/') && path.endsWith('/candidates')) {
+      return { title: 'Client Job Candidates', crumb: 'Home / Clients / Client Details / Candidates' }
+    }
+    if (path.startsWith('/dashboard/clients/')) {
+      return { title: 'Client Details', crumb: 'Home / Clients / Client Details' }
+    }
+    return { title: 'Dashboard', crumb: 'Home / Dashboard' }
+  }
+
+  const page = getPageInfo(pathname)
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Recruiter'
   const initials = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 

@@ -1,17 +1,39 @@
-import { useState } from 'react'
-import { Plus, Pencil, Eye, X, Building2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Plus, Pencil, Eye, X, Building2, AlertCircle, Loader2 } from 'lucide-react'
 import '../styles/Shared.css'
-import { DEMO_CLIENTS } from '../data/demoDirectoryData'
 
 const EMPTY_FORM = {
   name: '', contact: '', phone: '', email: '', city: '', state: '', notes: '',
 }
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState(DEMO_CLIENTS)
+  const [clients, setClients] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [isOpen, setIsOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
+  const [saving, setSaving] = useState(false)
+
+  const fetchClients = async () => {
+    try {
+      setLoading(true)
+      const res = await fetch('/api/clients')
+      if (!res.ok) throw new Error('Failed to fetch clients from server.')
+      const data = await res.json()
+      setClients(data.data || [])
+      setError(null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchClients()
+  }, [])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -26,17 +48,39 @@ export default function ClientsPage() {
     return e
   }
 
-  const openModal = () => { setForm(EMPTY_FORM); setErrors({}); setIsOpen(true) }
+  const openModal = () => {
+    setForm(EMPTY_FORM)
+    setErrors({})
+    setIsOpen(true)
+  }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const e = validate()
-    if (Object.keys(e).length) { setErrors(e); return }
-    setClients(c => [{
-      id: Date.now(), name: form.name, contact: form.contact,
-      phone: form.phone, email: form.email, city: form.city,
-      state: form.state, activeJobs: 0, notes: form.notes,
-    }, ...c])
-    setIsOpen(false)
+    if (Object.keys(e).length) {
+      setErrors(e)
+      return
+    }
+
+    try {
+      setSaving(true)
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      })
+
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.error || 'Failed to save client.')
+      }
+
+      await fetchClients()
+      setIsOpen(false)
+    } catch (err) {
+      setErrors({ name: err.message })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -48,9 +92,20 @@ export default function ClientsPage() {
         </button>
       </div>
 
-      {/* Table */}
+      {/* Table / Loader */}
       <div className="table-card">
-        {clients.length === 0 ? (
+        {loading ? (
+          <div className="loading-state">
+            <Loader2 size={32} className="spin" color="var(--gold)" />
+            <p>Loading clients database...</p>
+          </div>
+        ) : error ? (
+          <div className="empty-state">
+            <div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div>
+            <div className="empty-state-title">Error loading data</div>
+            <div className="empty-state-desc">{error}</div>
+          </div>
+        ) : clients.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon"><Building2 size={28} color="var(--gold)" strokeWidth={1.5} /></div>
             <div className="empty-state-title">No clients yet</div>
@@ -75,10 +130,14 @@ export default function ClientsPage() {
                   <td>
                     <div className="name-cell">
                       <div className="name-avatar">
-                        {client.name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()}
+                        {client.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
                       </div>
                       <div>
-                        <div className="name-text">{client.name}</div>
+                        <div className="name-text">
+                          <Link to={`/dashboard/clients/${client.id}`} style={{ textDecoration: 'none', color: 'inherit', fontWeight: 'inherit' }}>
+                            {client.name}
+                          </Link>
+                        </div>
                         {client.state && <div className="sub-text">{client.state}</div>}
                       </div>
                     </div>
@@ -95,7 +154,9 @@ export default function ClientsPage() {
                   <td>
                     <div className="row-actions">
                       <button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`}><Pencil size={13} strokeWidth={2} /></button>
-                      <button className="row-action-btn" title="View Jobs" id={`view-jobs-${client.id}`}><Eye size={13} strokeWidth={2} /></button>
+                      <Link className="row-action-btn" to={`/dashboard/clients/${client.id}`} title="View Jobs" id={`view-jobs-${client.id}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Eye size={13} strokeWidth={2} />
+                      </Link>
                     </div>
                   </td>
                 </tr>
@@ -120,53 +181,55 @@ export default function ClientsPage() {
                   <label className="form-label">Client Name <span className="req">*</span></label>
                   <input name="name" value={form.name} onChange={handleChange}
                     className={`form-control${errors.name ? ' is-error' : ''}`}
-                    placeholder="e.g. Acme Corporation" />
+                    placeholder="e.g. Acme Corporation" disabled={saving} />
                   {errors.name && <span className="form-error">{errors.name}</span>}
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Contact Person Name</label>
                   <input name="contact" value={form.contact} onChange={handleChange}
-                    className="form-control" placeholder="e.g. Rohan Mehta" />
+                    className="form-control" placeholder="e.g. Rohan Mehta" disabled={saving} />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Phone Number <span className="req">*</span></label>
                   <input name="phone" value={form.phone} onChange={handleChange}
                     className={`form-control${errors.phone ? ' is-error' : ''}`}
-                    placeholder="+91 98765 43210" />
+                    placeholder="+91 98765 43210" disabled={saving} />
                   {errors.phone && <span className="form-error">{errors.phone}</span>}
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Email</label>
                   <input name="email" type="email" value={form.email} onChange={handleChange}
-                    className="form-control" placeholder="contact@company.com" />
+                    className="form-control" placeholder="contact@company.com" disabled={saving} />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">City</label>
                   <input name="city" value={form.city} onChange={handleChange}
-                    className="form-control" placeholder="e.g. Bengaluru" />
+                    className="form-control" placeholder="e.g. Bengaluru" disabled={saving} />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">State</label>
                   <input name="state" value={form.state} onChange={handleChange}
-                    className="form-control" placeholder="e.g. Karnataka" />
+                    className="form-control" placeholder="e.g. Karnataka" disabled={saving} />
                 </div>
 
                 <div className="form-group full">
                   <label className="form-label">Notes</label>
                   <textarea name="notes" value={form.notes} onChange={handleChange}
-                    className="form-control" rows={2} placeholder="Internal notes about this client..." />
+                    className="form-control" rows={2} placeholder="Internal notes about this client..." disabled={saving} />
                 </div>
 
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setIsOpen(false)}>Cancel</button>
-              <button className="btn-primary" onClick={handleSave} id="save-client-btn">Save Client</button>
+              <button className="btn-secondary" onClick={() => setIsOpen(false)} disabled={saving}>Cancel</button>
+              <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving}>
+                {saving ? 'Saving...' : 'Save Client'}
+              </button>
             </div>
           </div>
         </div>

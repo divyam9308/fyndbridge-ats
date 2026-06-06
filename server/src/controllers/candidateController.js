@@ -45,7 +45,9 @@ const ASSOCIATION_FIELDS = [
   'status',
   'current_salary',
   'expected_salary',
-  'notes'
+  'notes',
+  'client_id',
+  'job_id'
 ]
 
 const AI_FILTER_OPERATORS = [

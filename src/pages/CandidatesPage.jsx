@@ -3,17 +3,9 @@ import { Plus, Upload, X, Users, ChevronDown, AlertCircle, FileText, Search, Loa
 import '../styles/Shared.css'
 
 /* ====== Static reference data ====== */
-const CLIENTS = ['Acme Corp', 'Nexus Tech', 'Bright Minds Ltd', 'Zeta FinTech', 'CloudBridge Labs', 'Lumino Health']
+const CLIENTS = []
 
-const JOBS = [
-  { id: 1, title: 'Senior Backend Engineer', client: 'Zeta FinTech',     status: 'Open' },
-  { id: 2, title: 'Product Manager',         client: 'Nexus Tech',       status: 'Open' },
-  { id: 3, title: 'UX Designer',             client: 'Bright Minds Ltd', status: 'On Hold' },
-  { id: 4, title: 'Sales Executive',         client: 'Acme Corp',        status: 'Filled' },
-  { id: 5, title: 'Data Analyst',            client: 'CloudBridge Labs', status: 'Open' },
-  { id: 6, title: 'DevOps Engineer',         client: 'Zeta FinTech',     status: 'Closed' },
-  { id: 7, title: 'Frontend Engineer',       client: 'Nexus Tech',       status: 'Open' },
-]
+const JOBS = []
 
 const ALL_STATUSES = [
   'Interested', 'Not Interested', 'Interview', 'Client Submission',
@@ -134,33 +126,39 @@ const apiCandidateToUi = (row) => ({
   createdAt: row.created_at || '',
 })
 
-const uiCandidateToApi = (f, consultantName = '') => ({
-  association_id: f.associationId || undefined,
-  full_name: f.name,
-  email: f.email,
-  mobile_number: f.mobile,
-  city: f.city,
-  state: f.state,
-  location: f.location,
-  current_designation: f.designation,
-  current_company: f.currentOrganisation,
-  current_organisation: f.currentOrganisation,
-  experience_years: f.exp,
-  notice_period: f.noticePeriod,
-  open_to_relocate: Boolean(f.openToRelocate),
-  skills: f.skills,
-  education: f.education,
-  client_name: f.client,
-  job_title: f.job,
-  status: f.status,
-  current_salary: f.salary,
-  expected_salary: f.expectedSalary,
-  cv_link: f.cvLink,
-  linkedin_url: f.linkedinUrl,
-  notes: f.notes,
-  consultant_name: f.consultantName || consultantName || '',
-  source: f.source,
-})
+const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) => {
+  const matchingClient = dbClients.find(c => c.name === f.client)
+  const matchingJob = dbJobs.find(j => j.title === f.job && (matchingClient ? j.client_id === matchingClient.id : true))
+  return {
+    association_id: f.associationId || undefined,
+    full_name: f.name,
+    email: f.email,
+    mobile_number: f.mobile,
+    city: f.city,
+    state: f.state,
+    location: f.location,
+    current_designation: f.designation,
+    current_company: f.currentOrganisation,
+    current_organisation: f.currentOrganisation,
+    experience_years: f.exp,
+    notice_period: f.noticePeriod,
+    open_to_relocate: Boolean(f.openToRelocate),
+    skills: f.skills,
+    education: f.education,
+    client_name: f.client,
+    job_title: f.job,
+    client_id: matchingClient ? matchingClient.id : undefined,
+    job_id: matchingJob ? matchingJob.id : undefined,
+    status: f.status,
+    current_salary: f.salary,
+    expected_salary: f.expectedSalary,
+    cv_link: f.cvLink,
+    linkedin_url: f.linkedinUrl,
+    notes: f.notes,
+    consultant_name: f.consultantName || consultantName || '',
+    source: f.source,
+  }
+}
 
 export default function CandidatesPage() {
   const [candidates, setCandidates] = useState([])
@@ -184,6 +182,14 @@ export default function CandidatesPage() {
   const [aiFilterLoading, setAiFilterLoading] = useState(false)
   const [aiFilterError, setAiFilterError] = useState('')
   const [aiFilterCount, setAiFilterCount] = useState(null)
+
+  const [dbClients, setDbClients] = useState([])
+  const [dbJobs, setDbJobs] = useState([])
+
+  useEffect(() => {
+    fetch('/api/clients').then(res => res.json()).then(data => setDbClients(data.data || []))
+    fetch('/api/jobs').then(res => res.json()).then(data => setDbJobs(data.data || []))
+  }, [])
 
   // Add Candidate Modal
   const [addOpen, setAddOpen]   = useState(false)
@@ -250,23 +256,11 @@ export default function CandidatesPage() {
     return () => window.clearTimeout(timer)
   }, [loadCandidates, page])
 
-  useEffect(() => {
-    if (addOpen) {
-      const timer = window.setTimeout(() => {
-        if (candidateModalBodyRef.current) {
-          candidateModalBodyRef.current.scrollTop = 0
-        }
-      }, 0)
-
-      return () => window.clearTimeout(timer)
-    }
-  }, [addOpen, editing])
-
   const saveCandidateToApi = async (candidate, { update = false } = {}) => {
     const response = await fetch(update ? `/api/candidates/${candidate.associationId}` : '/api/candidates', {
       method: update ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(uiCandidateToApi(candidate, activeConsultantName))
+      body: JSON.stringify(uiCandidateToApi(candidate, activeConsultantName, dbClients, dbJobs))
     })
     const payload = await response.json().catch(() => ({}))
 
@@ -338,34 +332,11 @@ export default function CandidatesPage() {
     const { name, value, type, checked } = e.target
     const nextValue = type === 'checkbox' ? checked : value
     if (name === 'client') {
-      setForm(f => ({ ...f, client: value, clientPhone: CLIENT_PHONES[value] || '', job: '' }))
+      const matchingClient = dbClients.find(c => c.name === value)
+      setForm(f => ({ ...f, client: value, clientPhone: matchingClient ? matchingClient.phone : '', job: '' }))
     } else {
       setForm(f => ({ ...f, [name]: nextValue }))
     }
-    if (errors[name]) setErrors(err => ({ ...err, [name]: '' }))
-  }
-
-  const cleanSkill = (value) => value.replace(/,$/, '').replace(/\s+/g, ' ').trim()
-
-  const appendSkills = (skills, values) => {
-    const next = [...skills]
-    values
-      .map(cleanSkill)
-      .filter(Boolean)
-      .forEach((skill) => {
-        if (!next.some((existing) => existing.toLowerCase() === skill.toLowerCase())) next.push(skill)
-      })
-    return next
-  }
-
-  const addManualSkill = (value = skillInput) => {
-    const s = cleanSkill(value)
-    if (s) setForm(f => ({ ...f, skills: appendSkills(f.skills, [s]) }))
-    setSkillInput('')
-  }
-
-  const handleSkillInputChange = (value) => {
-    setSkillInput(value)
   }
 
   const handleSkillKey = (e) => {
@@ -375,6 +346,18 @@ export default function CandidatesPage() {
     }
   }
   const removeSkill = (s) => setForm(f => ({ ...f, skills: f.skills.filter(x => x !== s) }))
+
+  const cleanSkill = (s) => String(s).replace(/[,;]+$/, '').trim()
+  const appendSkills = (existing, newSkills) => {
+    const set = new Set((existing || []).map(x => x.toLowerCase()))
+    return [...(existing || []), ...newSkills.filter(s => s && !set.has(s.toLowerCase()))]
+  }
+  const handleSkillInputChange = (value) => setSkillInput(value)
+  const addManualSkill = (value = skillInput) => {
+    const s = cleanSkill(value)
+    if (s) setForm(f => ({ ...f, skills: appendSkills(f.skills, [s]) }))
+    setSkillInput('')
+  }
 
   const validate = (f) => {
     const e = {}
@@ -651,8 +634,12 @@ export default function CandidatesPage() {
     const handleLocalChange = onChange || ((e) => {
       const { name, value, type, checked } = e.target
       const nextValue = type === 'checkbox' ? checked : value
-      if (name === 'client') setF(prev => ({ ...prev, client: value, clientPhone: CLIENT_PHONES[value] || '', job: '' }))
-      else setF(prev => ({ ...prev, [name]: nextValue }))
+      if (name === 'client') {
+        const matchedClient = dbClients.find(c => c.name === value)
+        setF(prev => ({ ...prev, client: value, clientPhone: matchedClient?.phone || CLIENT_PHONES[value] || '', job: '' }))
+      } else {
+        setF(prev => ({ ...prev, [name]: nextValue }))
+      }
     })
     return (
       <div className="form-grid-2">
@@ -773,7 +760,7 @@ export default function CandidatesPage() {
           <label className="form-label">Client</label>
           <select name="client" value={f.client} onChange={handleLocalChange} className="form-control">
             <option value="">Select client...</option>
-            {CLIENTS.map(c => <option key={c}>{c}</option>)}
+            {dbClients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
         </div>
 
@@ -781,7 +768,9 @@ export default function CandidatesPage() {
           <label className="form-label">Job</label>
           <select name="job" value={f.job} onChange={handleLocalChange} className="form-control">
             <option value="">Select job...</option>
-            {JOBS.map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
+            {dbJobs
+              .filter(j => !f.client || dbClients.find(c => c.name === f.client)?.id === j.client_id)
+              .map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
           </select>
         </div>
 
@@ -839,7 +828,7 @@ export default function CandidatesPage() {
         <select className="filter-select" value={filterJob}
           onChange={e => { setFilterJob(e.target.value); setPage(1) }} id="filter-candidate-job">
           <option value="All">All Jobs</option>
-          {JOBS.map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
+          {dbJobs.map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
         </select>
 
         <div className="filter-divider" />

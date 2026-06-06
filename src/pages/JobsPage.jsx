@@ -1,10 +1,6 @@
-import { useState } from 'react'
-import { Plus, Pencil, Eye, X, Briefcase } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Plus, Pencil, Eye, X, Briefcase, AlertCircle, Loader2 } from 'lucide-react'
 import '../styles/Shared.css'
-import { DEMO_CLIENTS, DEMO_JOBS } from '../data/demoDirectoryData'
-
-const CLIENTS = DEMO_CLIENTS.map((client) => client.name)
-const INITIAL_JOBS = DEMO_JOBS
 
 const STATUS_BADGE = {
   Open: 'badge-open',
@@ -17,23 +13,55 @@ const STATUS_BADGE = {
 const PROGRESS_COLOR = (pct) => pct === 100 ? 'var(--success)' : pct >= 60 ? 'var(--gold)' : 'var(--info)'
 
 const EMPTY_FORM = {
-  title: '', client: '', city: '', state: '',
+  title: '', client_id: '', city: '', state: '',
   salaryMin: '', salaryMax: '', experience: '',
   jd: '', skills: [], status: 'Open', completion: 0, notes: '',
 }
 
 export default function JobsPage() {
-  const [jobs, setJobs] = useState(INITIAL_JOBS)
+  const [jobs, setJobs] = useState([])
+  const [dbClients, setDbClients] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [filterStatus, setFilterStatus] = useState('All')
   const [showRejected, setShowRejected] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
   const [skillInput, setSkillInput] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      const [jobsRes, clientsRes] = await Promise.all([
+        fetch('/api/jobs'),
+        fetch('/api/clients')
+      ])
+
+      if (!jobsRes.ok) throw new Error('Failed to fetch jobs.')
+      if (!clientsRes.ok) throw new Error('Failed to fetch clients.')
+
+      const jobsData = await jobsRes.json()
+      const clientsData = await clientsRes.json()
+
+      setJobs(jobsData.data || [])
+      setDbClients(clientsData.data || [])
+      setError(null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [])
 
   const filtered = jobs.filter((job) => {
     if (filterStatus !== 'All' && job.status !== filterStatus) return false
-    if (showRejected && job.rejectedByClient === 0) return false
+    if (showRejected && job.rejected_by_client === 0) return false
     return true
   })
 
@@ -59,7 +87,7 @@ export default function JobsPage() {
   const validate = () => {
     const next = {}
     if (!form.title.trim()) next.title = 'Job Title is required'
-    if (!form.client) next.client = 'Client is required'
+    if (!form.client_id) next.client_id = 'Client is required'
     return next
   }
 
@@ -70,32 +98,49 @@ export default function JobsPage() {
     setIsOpen(true)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const nextErrors = validate()
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors)
       return
     }
 
-    setJobs((current) => [{
-      id: Date.now(),
-      title: form.title,
-      client: form.client,
-      city: form.city,
-      state: form.state,
-      status: form.status,
-      rejectedByClient: 0,
-      successCount: 0,
-      completion: Number(form.completion) || 0,
-      experience: form.experience,
-      skills: form.skills,
-      salaryMin: form.salaryMin,
-      salaryMax: form.salaryMax,
-      openPositions: 1,
-      jd: form.jd,
-      notes: form.notes,
-    }, ...current])
-    setIsOpen(false)
+    try {
+      setSaving(true)
+      const payload = {
+        title: form.title,
+        client_id: form.client_id,
+        city: form.city,
+        state: form.state,
+        status: form.status,
+        salary_min: form.salaryMin ? Number(form.salaryMin) : null,
+        salary_max: form.salaryMax ? Number(form.salaryMax) : null,
+        experience_label: form.experience,
+        experience_min: form.experience ? parseInt(form.experience) || null : null,
+        completion: Number(form.completion) || 0,
+        skills: form.skills,
+        notes: form.notes,
+        jd: form.jd
+      }
+
+      const res = await fetch('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.error || 'Failed to save job.')
+      }
+
+      await fetchData()
+      setIsOpen(false)
+    } catch (err) {
+      setErrors({ title: err.message })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -128,7 +173,18 @@ export default function JobsPage() {
       </div>
 
       <div className="table-card">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="loading-state">
+            <Loader2 size={32} className="spin" color="var(--gold)" />
+            <p>Loading jobs database...</p>
+          </div>
+        ) : error ? (
+          <div className="empty-state">
+            <div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div>
+            <div className="empty-state-title">Error loading data</div>
+            <div className="empty-state-desc">{error}</div>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon"><Briefcase size={28} color="var(--gold)" strokeWidth={1.5} /></div>
             <div className="empty-state-title">No jobs match your filters</div>
@@ -153,19 +209,19 @@ export default function JobsPage() {
                 <tr key={job.id}>
                   <td>
                     <div className="name-text">{job.title}</div>
-                    {job.experience && <div className="sub-text">{job.experience}</div>}
+                    {job.experience_label && <div className="sub-text">{job.experience_label}</div>}
                   </td>
                   <td>{job.client}</td>
                   <td>{job.city || '-'}</td>
                   <td><span className={`badge ${STATUS_BADGE[job.status] || ''}`}>{job.status}</span></td>
                   <td>
-                    <span style={{ fontWeight: 700, color: job.rejectedByClient > 0 ? 'var(--danger)' : 'var(--gray-400)' }}>
-                      {job.rejectedByClient}
+                    <span style={{ fontWeight: 700, color: job.rejected_by_client > 0 ? 'var(--danger)' : 'var(--gray-400)' }}>
+                      {job.rejected_by_client}
                     </span>
                   </td>
                   <td>
-                    <span style={{ fontWeight: 700, color: job.successCount > 0 ? 'var(--success)' : 'var(--gray-400)' }}>
-                      {job.successCount}
+                    <span style={{ fontWeight: 700, color: job.success_count > 0 ? 'var(--success)' : 'var(--gray-400)' }}>
+                      {job.success_count}
                     </span>
                   </td>
                   <td>
@@ -203,53 +259,53 @@ export default function JobsPage() {
                   <label className="form-label">Job Title / Position <span className="req">*</span></label>
                   <input name="title" value={form.title} onChange={handleChange}
                     className={`form-control${errors.title ? ' is-error' : ''}`}
-                    placeholder="e.g. Senior Backend Engineer" />
+                    placeholder="e.g. Senior Backend Engineer" disabled={saving} />
                   {errors.title && <span className="form-error">{errors.title}</span>}
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Client <span className="req">*</span></label>
-                  <select name="client" value={form.client} onChange={handleChange}
-                    className={`form-control${errors.client ? ' is-error' : ''}`}>
+                  <select name="client_id" value={form.client_id} onChange={handleChange}
+                    className={`form-control${errors.client_id ? ' is-error' : ''}`} disabled={saving}>
                     <option value="">Select client...</option>
-                    {CLIENTS.map((client) => <option key={client}>{client}</option>)}
+                    {dbClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
                   </select>
-                  {errors.client && <span className="form-error">{errors.client}</span>}
+                  {errors.client_id && <span className="form-error">{errors.client_id}</span>}
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Experience Required</label>
                   <input name="experience" value={form.experience} onChange={handleChange}
-                    className="form-control" placeholder="e.g. 3-5 years" />
+                    className="form-control" placeholder="e.g. 3-5 years" disabled={saving} />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">City</label>
                   <input name="city" value={form.city} onChange={handleChange}
-                    className="form-control" placeholder="e.g. Bangalore" />
+                    className="form-control" placeholder="e.g. Bangalore" disabled={saving} />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">State</label>
                   <input name="state" value={form.state} onChange={handleChange}
-                    className="form-control" placeholder="e.g. Karnataka" />
+                    className="form-control" placeholder="e.g. Karnataka" disabled={saving} />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Min Salary (Rs.)</label>
                   <input name="salaryMin" type="number" value={form.salaryMin} onChange={handleChange}
-                    className="form-control" placeholder="1200000" />
+                    className="form-control" placeholder="1200000" disabled={saving} />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Max Salary (Rs.)</label>
                   <input name="salaryMax" type="number" value={form.salaryMax} onChange={handleChange}
-                    className="form-control" placeholder="2000000" />
+                    className="form-control" placeholder="2000000" disabled={saving} />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Job Status</label>
-                  <select name="status" value={form.status} onChange={handleChange} className="form-control">
+                  <select name="status" value={form.status} onChange={handleChange} className="form-control" disabled={saving}>
                     {['Open', 'Active', 'On Hold', 'Closed', 'Filled'].map((status) => <option key={status}>{status}</option>)}
                   </select>
                 </div>
@@ -257,7 +313,7 @@ export default function JobsPage() {
                 <div className="form-group">
                   <label className="form-label">Completion %</label>
                   <input name="completion" type="number" min="0" max="100" value={form.completion}
-                    onChange={handleChange} className="form-control" placeholder="0-100" />
+                    onChange={handleChange} className="form-control" placeholder="0-100" disabled={saving} />
                 </div>
 
                 <div className="form-group full">
@@ -266,12 +322,12 @@ export default function JobsPage() {
                     {form.skills.map((skill) => (
                       <span className="tag-chip" key={skill}>
                         {skill}
-                        <button className="tag-chip-remove" onClick={() => removeSkill(skill)} type="button"><X size={10} /></button>
+                        <button className="tag-chip-remove" onClick={() => removeSkill(skill)} type="button" disabled={saving}><X size={10} /></button>
                       </span>
                     ))}
                     <input className="tag-input-field" value={skillInput}
                       onChange={e => setSkillInput(e.target.value)} onKeyDown={handleSkillKey}
-                      placeholder={form.skills.length === 0 ? 'Type a skill and press Enter...' : ''} />
+                      placeholder={form.skills.length === 0 ? 'Type a skill and press Enter...' : ''} disabled={saving} />
                   </div>
                 </div>
 
@@ -279,19 +335,21 @@ export default function JobsPage() {
                   <label className="form-label">Job Description</label>
                   <textarea name="jd" value={form.jd} onChange={handleChange}
                     className="form-control" rows={4}
-                    placeholder="Describe the role, key responsibilities, and qualifications..." />
+                    placeholder="Describe the role, key responsibilities, and qualifications..." disabled={saving} />
                 </div>
 
                 <div className="form-group full">
                   <label className="form-label">Notes</label>
                   <textarea name="notes" value={form.notes} onChange={handleChange}
-                    className="form-control" rows={2} placeholder="Internal notes for this job..." />
+                    className="form-control" rows={2} placeholder="Internal notes for this job..." disabled={saving} />
                 </div>
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setIsOpen(false)}>Cancel</button>
-              <button className="btn-primary" onClick={handleSave} id="save-job-btn">Save Job</button>
+              <button className="btn-secondary" onClick={() => setIsOpen(false)} disabled={saving}>Cancel</button>
+              <button className="btn-primary" onClick={handleSave} id="save-job-btn" disabled={saving}>
+                {saving ? 'Saving...' : 'Save Job'}
+              </button>
             </div>
           </div>
         </div>
@@ -299,4 +357,3 @@ export default function JobsPage() {
     </div>
   )
 }
-

@@ -193,27 +193,40 @@ function buildAssignments(candidates, jobs) {
   const assignments = []
   let duplicateAssociations = 0
 
-  candidates.forEach((candidate, index) => {
-    if (index >= 95) {
-      return
-    }
+  // We want to make sure every job has exactly 2 candidates assigned to it.
+  // We have jobs and candidates. Let's iterate over each job.
+  jobs.forEach((job, jobIndex) => {
+    // Assign 2 candidates to this job
+    const candidateIndex1 = jobIndex % candidates.length
+    const candidateIndex2 = (jobIndex + 37) % candidates.length
 
-    const count = index % 10 === 0 ? 3 : index % 4 === 0 ? 2 : 1
-    for (let offset = 0; offset < count; offset += 1) {
-      const job = jobs[(index * 2 + offset) % jobs.length]
-      assignments.push({
-        candidateIndex: index,
-        consultant_name: CONSULTANTS[(index + offset) % CONSULTANTS.length],
-        client_name: index % 19 === 0 && offset === 0 ? null : job.client,
-        job_title: index % 23 === 0 && offset === 0 ? null : job.title,
-        status: STATUSES[(index + offset) % STATUSES.length],
-        current_salary: candidate.current_salary,
-        expected_salary: candidate.expected_salary,
-        notes: index % 7 === 0 ? '' : `${job.title} discussion in ${job.city}.`,
-      })
-    }
+    const candidate1 = candidates[candidateIndex1]
+    const candidate2 = candidates[candidateIndex2]
+
+    assignments.push({
+      candidateIndex: candidateIndex1,
+      consultant_name: CONSULTANTS[jobIndex % CONSULTANTS.length],
+      client_name: job.client,
+      job_title: job.title,
+      status: STATUSES[jobIndex % STATUSES.length],
+      current_salary: candidate1.current_salary,
+      expected_salary: candidate1.expected_salary,
+      notes: `${job.title} discussion at ${job.client}.`,
+    })
+
+    assignments.push({
+      candidateIndex: candidateIndex2,
+      consultant_name: CONSULTANTS[(jobIndex + 1) % CONSULTANTS.length],
+      client_name: job.client,
+      job_title: job.title,
+      status: STATUSES[(jobIndex + 3) % STATUSES.length],
+      current_salary: candidate2.current_salary,
+      expected_salary: candidate2.expected_salary,
+      notes: `${job.title} screening for ${job.client}.`,
+    })
   })
 
+  // Duplicate associations check (keep the test cases)
   ;[90, 91, 92, 93].forEach((candidateIndex, offset) => {
     const job = jobs[(candidateIndex * 3) % jobs.length]
     assignments.push({
@@ -244,6 +257,18 @@ async function clearExistingData() {
     .delete()
     .neq('id', '00000000-0000-0000-0000-000000000000')
   if (candidateError) throw candidateError
+
+  const { error: jobsError } = await supabase
+    .from('jobs')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000')
+  if (jobsError) throw jobsError
+
+  const { error: clientsError } = await supabase
+    .from('clients')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000')
+  if (clientsError) throw clientsError
 }
 
 async function insertBatch(table, rows, chunkSize = 200) {
@@ -260,30 +285,80 @@ async function insertBatch(table, rows, chunkSize = 200) {
 async function main() {
   assertSafeToRun()
 
-  const jobs = buildJobs()
-  const candidates = buildCandidates(jobs)
-  const { assignments, duplicateAssociations } = buildAssignments(candidates, jobs)
-
   await clearExistingData()
 
+  // 1. Insert Clients
+  const clientRows = CLIENTS.map(([name, contact, phone, email, city, state, status]) => ({
+    name,
+    contact,
+    phone,
+    email,
+    city,
+    state,
+    status
+  }))
+  await insertBatch('clients', clientRows)
+
+  // Fetch clients to build name -> ID map
+  const { data: insertedClients, error: clientsFetchError } = await supabase
+    .from('clients')
+    .select('id, name')
+  if (clientsFetchError) throw clientsFetchError
+  const clientMap = new Map(insertedClients.map((c) => [c.name, c.id]))
+
+  // 2. Insert Jobs
+  const jobs = buildJobs()
+  const jobRows = jobs.map((j) => ({
+    client_id: clientMap.get(j.client),
+    title: j.title,
+    city: j.city,
+    state: j.state,
+    status: j.status,
+    salary_min: j.salaryMin,
+    salary_max: j.salaryMax,
+    experience_label: j.experienceLabel,
+    experience_min: j.experienceMin,
+    completion: j.completion,
+    success_count: j.successCount,
+    rejected_by_client: j.rejectedByClient,
+    open_positions: j.openPositions,
+    notes: j.notes
+  }))
+  await insertBatch('jobs', jobRows)
+
+  // Fetch jobs to build (client_name__job_title) -> ID map
+  const { data: insertedJobs, error: jobsFetchError } = await supabase
+    .from('jobs')
+    .select('id, title, client_id, clients(name)')
+  if (jobsFetchError) throw jobsFetchError
+  const jobMap = new Map(insertedJobs.map((j) => [`${j.clients?.name}__${j.title}`, j.id]))
+
+  // 3. Insert Candidates
+  const candidates = buildCandidates(jobs)
   const candidateRows = candidates.map(({ current_salary, expected_salary, default_job, ...candidate }) => candidate)
   await insertBatch('candidates', candidateRows)
 
+  // Fetch candidates to build (name__phone) -> ID map
   const { data: insertedCandidates, error: fetchError } = await supabase
     .from('candidates')
     .select('id, full_name, mobile_number')
     .eq('source', 'demo-seed')
-
   if (fetchError) throw fetchError
-
   const candidateMap = new Map(insertedCandidates.map((row) => [`${row.full_name}__${row.mobile_number}`, row.id]))
+
+  // 4. Insert Assignments
+  const { assignments, duplicateAssociations } = buildAssignments(candidates, jobs)
   const associationRows = assignments.map((assignment) => {
     const candidate = candidates[assignment.candidateIndex]
+    const cId = assignment.client_name ? clientMap.get(assignment.client_name) : null
+    const jId = (assignment.client_name && assignment.job_title) ? jobMap.get(`${assignment.client_name}__${assignment.job_title}`) : null
     return {
       candidate_id: candidateMap.get(`${candidate.full_name}__${candidate.mobile_number}`),
       consultant_name: assignment.consultant_name,
       client_name: assignment.client_name,
       job_title: assignment.job_title,
+      client_id: cId,
+      job_id: jId,
       status: assignment.status,
       current_salary: assignment.current_salary,
       expected_salary: assignment.expected_salary,
@@ -294,12 +369,12 @@ async function main() {
   await insertBatch('candidate_associations', associationRows)
 
   const logLines = [
-    `Clients inserted: ${CLIENTS.length}`,
-    `Jobs inserted: ${jobs.length}`,
+    `Clients inserted: ${clientRows.length}`,
+    `Jobs inserted: ${jobRows.length}`,
     `Candidates inserted: ${candidateRows.length}`,
     `Assignments inserted: ${associationRows.length}`,
     `Duplicate candidates created: ${duplicateAssociations}`,
-    `Total records created: ${CLIENTS.length + jobs.length + candidateRows.length + associationRows.length}`
+    `Total records created: ${clientRows.length + jobRows.length + candidateRows.length + associationRows.length}`
   ]
 
   console.log(logLines.join('\n'))
