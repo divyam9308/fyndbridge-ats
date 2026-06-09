@@ -22,6 +22,8 @@ const STATUS_BADGE_MAP = {
 
 const fmt = (n) => n ? `Rs. ${Number(n).toLocaleString('en-IN')}` : '-'
 const initials = (name) => name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()
+const normalizeCandidateGroupName = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
+const normalizeCandidateGroupEmail = (value) => String(value || '').trim().toLowerCase()
 const formatDate = (value) => {
   if (!value) return '-'
   const date = new Date(value)
@@ -191,6 +193,7 @@ export default function CandidatesPage() {
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [candidateDuplicate, setCandidateDuplicate] = useState(null)
   const [page, setPage] = useState(1)
   const [totalCandidates, setTotalCandidates] = useState(0)
   const pageSize = 50
@@ -326,13 +329,22 @@ export default function CandidatesPage() {
     return () => window.clearTimeout(timer)
   }, [loadCandidates, page])
 
-  const saveCandidateToApi = async (candidate, { update = false } = {}) => {
+  const saveCandidateToApi = async (candidate, { update = false, duplicateAction = '' } = {}) => {
+    const body = uiCandidateToApi(candidate, activeConsultantName, dbClients, dbJobs)
+    if (duplicateAction) body.duplicate_action = duplicateAction
+
     const response = await fetch(update ? `/api/candidates/${candidate.associationId}` : '/api/candidates', {
       method: update ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(uiCandidateToApi(candidate, activeConsultantName, dbClients, dbJobs))
+      body: JSON.stringify(body)
     })
     const payload = await response.json().catch(() => ({}))
+
+    if (response.status === 409 && payload.duplicate) {
+      const error = new Error(payload.error || 'Duplicate candidate found.')
+      error.duplicate = payload
+      throw error
+    }
 
     if (!response.ok) {
       const message = payload.errors ? Object.values(payload.errors)[0] : payload.error
@@ -347,7 +359,9 @@ export default function CandidatesPage() {
 
   const mobileGroups = {}
   filtered.forEach(c => {
-    const key = c.mobile || c.mobile_number || c.id
+    const name = normalizeCandidateGroupName(c.name)
+    const email = normalizeCandidateGroupEmail(c.email)
+    const key = name && email ? `${name}|${email}` : c.associationId || c.id
     if (!mobileGroups[key]) mobileGroups[key] = []
     mobileGroups[key].push(c)
   })
@@ -571,6 +585,10 @@ export default function CandidatesPage() {
       setAddOpen(false)
       setEditing(false)
     } catch (err) {
+      if (err.duplicate) {
+        setCandidateDuplicate({ source: 'manual', candidate: form, existing: err.duplicate.existing })
+        return
+      }
       setErrors({ form: err.message })
     } finally {
       setSaving(false)
@@ -717,7 +735,30 @@ export default function CandidatesPage() {
       await saveCandidateToApi({ ...parsedForm, source: 'resume' })
       closeImport()
     } catch (err) {
+      if (err.duplicate) {
+        setCandidateDuplicate({ source: 'resume', candidate: { ...parsedForm, source: 'resume' }, existing: err.duplicate.existing })
+        return
+      }
       setImportError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const resolveCandidateDuplicate = async (duplicateAction) => {
+    if (!candidateDuplicate) return
+
+    setSaving(true)
+    try {
+      await saveCandidateToApi(candidateDuplicate.candidate, { duplicateAction })
+      setCandidateDuplicate(null)
+      setAddOpen(false)
+      setEditing(false)
+      closeImport()
+    } catch (err) {
+      const message = err.message || 'Unable to resolve duplicate candidate.'
+      if (candidateDuplicate.source === 'resume') setImportError(message)
+      else setErrors({ form: message })
     } finally {
       setSaving(false)
     }
@@ -1163,7 +1204,7 @@ export default function CandidatesPage() {
                     ? `candidate-mobile-group-row${groupIndex === 0 ? ' group-first' : ' group-child'}${isLastInGroup ? ' group-last' : ''}`
                     : ''
                   return (
-                    <tr key={c.associationId || c.id} className={rowClass} onClick={() => openCandidateDetail(c)} style={{ cursor:'pointer' }}>
+                    <tr key={c.associationId || c.id} className={rowClass}>
                       {activeColumns.map(column => renderCandidateCell(column, c, { mobile, isGroup, groupSize, groupIndex }, index))}
                     </tr>
                   )
@@ -1392,6 +1433,41 @@ export default function CandidatesPage() {
                   {saving ? 'Saving...' : 'Save Candidate'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {candidateDuplicate && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCandidateDuplicate(null)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Duplicate Candidate">
+            <div className="modal-header">
+              <span className="modal-title">Duplicate Candidate</span>
+              <button className="modal-close" onClick={() => setCandidateDuplicate(null)} aria-label="Close"><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="review-banner">
+                <AlertCircle size={16} />
+                A candidate with the same name and email already exists.
+              </div>
+              <div className="duplicate-compare-grid">
+                <div className="duplicate-compare-card">
+                  <div className="form-section-title">Existing Candidate</div>
+                  <div className="name-text">{candidateDuplicate.existing?.full_name || '-'}</div>
+                  <div className="sub-text">{candidateDuplicate.existing?.email || '-'}</div>
+                  <div className="sub-text">{candidateDuplicate.existing?.mobile_number || '-'}</div>
+                </div>
+                <div className="duplicate-compare-card">
+                  <div className="form-section-title">New Candidate</div>
+                  <div className="name-text">{candidateDuplicate.candidate?.name || '-'}</div>
+                  <div className="sub-text">{candidateDuplicate.candidate?.email || '-'}</div>
+                  <div className="sub-text">{candidateDuplicate.candidate?.mobile || '-'}</div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => resolveCandidateDuplicate('add_duplicate')} disabled={saving}>Add Duplicate Entry</button>
+              <button className="btn-primary" onClick={() => resolveCandidateDuplicate('update_current')} disabled={saving}>Update Current Entry</button>
             </div>
           </div>
         </div>

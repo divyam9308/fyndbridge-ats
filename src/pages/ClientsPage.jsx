@@ -15,6 +15,7 @@ export default function ClientsPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const [clientDuplicate, setClientDuplicate] = useState(null)
 
   const fetchClients = async () => {
     try {
@@ -55,6 +56,28 @@ export default function ClientsPage() {
     setIsOpen(true)
   }
 
+  const saveClient = async (duplicateAction = '') => {
+    const payload = duplicateAction ? { ...form, duplicate_action: duplicateAction } : form
+    const res = await fetch('/api/clients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const data = await res.json().catch(() => ({}))
+
+    if (res.status === 409 && data.duplicate) {
+      const error = new Error(data.error || 'Duplicate client found.')
+      error.duplicate = data
+      throw error
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to save client.')
+    }
+
+    return data
+  }
+
   const handleSave = async () => {
     const e = validate()
     if (Object.keys(e).length) {
@@ -64,17 +87,26 @@ export default function ClientsPage() {
 
     try {
       setSaving(true)
-      const res = await fetch('/api/clients', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
-      })
+      await saveClient()
 
-      if (!res.ok) {
-        const errData = await res.json()
-        throw new Error(errData.error || 'Failed to save client.')
+      await fetchClients()
+      setIsOpen(false)
+    } catch (err) {
+      if (err.duplicate) {
+        setClientDuplicate({ client: form, existing: err.duplicate.existing })
+        return
       }
+      setErrors({ name: err.message })
+    } finally {
+      setSaving(false)
+    }
+  }
 
+  const resolveClientDuplicate = async (duplicateAction) => {
+    setSaving(true)
+    try {
+      await saveClient(duplicateAction)
+      setClientDuplicate(null)
       await fetchClients()
       setIsOpen(false)
     } catch (err) {
@@ -231,6 +263,41 @@ export default function ClientsPage() {
               <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving}>
                 {saving ? 'Saving...' : 'Save Client'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {clientDuplicate && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setClientDuplicate(null)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Duplicate Client">
+            <div className="modal-header">
+              <span className="modal-title">Duplicate Client</span>
+              <button className="modal-close" onClick={() => setClientDuplicate(null)} aria-label="Close"><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="review-banner">
+                <AlertCircle size={16} />
+                A client with the same name and email already exists.
+              </div>
+              <div className="duplicate-compare-grid">
+                <div className="duplicate-compare-card">
+                  <div className="form-section-title">Existing Client</div>
+                  <div className="name-text">{clientDuplicate.existing?.name || '-'}</div>
+                  <div className="sub-text">{clientDuplicate.existing?.email || '-'}</div>
+                  <div className="sub-text">{clientDuplicate.existing?.phone || '-'}</div>
+                </div>
+                <div className="duplicate-compare-card">
+                  <div className="form-section-title">New Client</div>
+                  <div className="name-text">{clientDuplicate.client?.name || '-'}</div>
+                  <div className="sub-text">{clientDuplicate.client?.email || '-'}</div>
+                  <div className="sub-text">{clientDuplicate.client?.phone || '-'}</div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => resolveClientDuplicate('add_duplicate')} disabled={saving}>Add Duplicate Entry</button>
+              <button className="btn-primary" onClick={() => resolveClientDuplicate('update_current')} disabled={saving}>Update Current Entry</button>
             </div>
           </div>
         </div>
