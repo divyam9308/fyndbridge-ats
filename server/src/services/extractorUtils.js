@@ -484,7 +484,6 @@ function extractFields(text) {
     mobile_number: withConfidence(phone, phone ? 'high' : 'low'),
     current_designation: withConfidence(designation, designation ? 'high' : 'low'),
     current_company: withConfidence(currentCompany, currentCompany ? 'high' : 'low'),
-    current_organisation: withConfidence(currentCompany, currentCompany ? 'high' : 'low'),
     experience_years: withConfidence(experience, experience ? 'high' : 'low'),
     city: withConfidence(city, city ? 'high' : 'low'),
     state: withConfidence(state, state ? 'high' : 'low'),

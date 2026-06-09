@@ -9,6 +9,8 @@ app.use(express.json())
 app.use(attachUser)
 
 app.use('/api/candidates', require('./routes/candidates'))
+app.use('/api/resumes', require('./routes/resumes'))
+app.use('/api/cvs', require('./routes/cvs'))
 app.use('/api/clients', require('./routes/clients'))
 app.use('/api/jobs', require('./routes/jobs'))
 app.use('/api/auth', require('./routes/auth'))

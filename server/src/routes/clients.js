@@ -3,6 +3,7 @@ const controller = require('../controllers/clientController')
 
 const router = express.Router()
 
+router.get('/check-duplicate', controller.checkClientDuplicate)
 router.get('/', controller.listClients)
 router.post('/', controller.createClient)
 router.get('/:id', controller.getClient)

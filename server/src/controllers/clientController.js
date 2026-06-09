@@ -5,6 +5,35 @@ function logAndSendInternal(res, method, err) {
   return res.status(500).json({ error: 'Internal server error', detail: err.message })
 }
 
+function normalizeDuplicateText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
+async function findClientDuplicate(name, email) {
+  const normalizedName = normalizeDuplicateText(name)
+  const normalizedEmail = normalizeDuplicateText(email)
+
+  if (!normalizedName || !normalizedEmail) return null
+
+  const { data, error } = await supabase
+    .from('clients')
+    .select('*')
+    .ilike('email', normalizedEmail)
+
+  if (error) throw error
+
+  return (data || []).find((client) => normalizeDuplicateText(client.name) === normalizedName) || null
+}
+
+async function checkClientDuplicate(req, res) {
+  try {
+    const existing = await findClientDuplicate(req.query.name, req.query.email)
+    return res.json({ duplicate: Boolean(existing), existing })
+  } catch (err) {
+    return logAndSendInternal(res, 'checkClientDuplicate', err)
+  }
+}
+
 async function listClients(req, res) {
   try {
     const { data, error } = await supabase
@@ -78,6 +107,32 @@ async function createClient(req, res) {
       state: state ? state.trim() : null,
       status: status || 'Active',
       notes: notes ? notes.trim() : null
+    }
+    const duplicateAction = req.body.duplicate_action
+    const duplicate = await findClientDuplicate(payload.name, payload.email)
+
+    if (duplicate && !['update_current', 'add_duplicate'].includes(duplicateAction)) {
+      return res.status(409).json({
+        error: 'A client with the same name and email already exists.',
+        duplicate: true,
+        existing: duplicate
+      })
+    }
+
+    if (duplicate && duplicateAction === 'update_current') {
+      const { data, error } = await supabase
+        .from('clients')
+        .update({
+          ...payload,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', duplicate.id)
+        .select('*')
+        .single()
+
+      if (error) throw error
+
+      return res.json(data)
     }
 
     const { data, error } = await supabase
@@ -153,6 +208,7 @@ async function deleteClient(req, res) {
 }
 
 module.exports = {
+  checkClientDuplicate,
   listClients,
   getClient,
   createClient,

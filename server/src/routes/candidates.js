@@ -7,6 +7,7 @@ const router = express.Router()
 router.post('/parse-resume', upload.single('resume'), handleUploadErrors, controller.parseResumeRoute)
 router.post('/ai-filter', controller.buildAiCandidateFilters)
 
+router.get('/check-duplicate', controller.checkCandidateDuplicate)
 router.get('/', controller.listCandidates)
 router.post('/', controller.createCandidate)
 router.get('/by-candidate/:candidateId/associations', controller.listCandidateAssociations)

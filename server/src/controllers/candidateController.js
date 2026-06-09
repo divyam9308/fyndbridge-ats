@@ -557,6 +557,35 @@ async function findCandidateByNameAndMobile(fullName, mobileNumber) {
   return data
 }
 
+function normalizeDuplicateText(value) {
+  return cleanText(value).toLowerCase()
+}
+
+async function findCandidateDuplicate(fullName, email) {
+  const name = normalizeDuplicateText(fullName)
+  const normalizedEmail = normalizeDuplicateText(email)
+
+  if (!name || !normalizedEmail) return null
+
+  const { data, error } = await supabase
+    .from('candidates')
+    .select('*')
+    .ilike('email', normalizedEmail)
+
+  if (error) throw error
+
+  return (data || []).find((candidate) => normalizeDuplicateText(candidate.full_name) === name) || null
+}
+
+async function checkCandidateDuplicate(req, res) {
+  try {
+    const existing = await findCandidateDuplicate(req.query.name, req.query.email)
+    return res.json({ duplicate: Boolean(existing), existing })
+  } catch (err) {
+    return logAndSendInternal(res, 'checkCandidateDuplicate', err)
+  }
+}
+
 function flattenAssociation(row) {
   const candidate = row.candidates || {}
 
@@ -880,8 +909,78 @@ async function createCandidate(req, res) {
 
     const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
     const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
+    const duplicateAction = req.body.duplicate_action
+    const duplicate = await findCandidateDuplicate(candidatePayload.full_name, candidatePayload.email)
 
-    let candidate = await findCandidateByNameAndMobile(candidatePayload.full_name, candidatePayload.mobile_number)
+    if (duplicate && !['update_current', 'update_existing', 'add_duplicate'].includes(duplicateAction)) {
+      return res.status(409).json({
+        error: 'A candidate with the same name and email already exists.',
+        duplicate: true,
+        existing: duplicate
+      })
+    }
+
+    const existingToUpdate = duplicateAction === 'update_existing' && req.body.existing_id
+      ? { id: req.body.existing_id }
+      : duplicate
+
+    if (existingToUpdate && ['update_current', 'update_existing'].includes(duplicateAction)) {
+      const updatePayload = {
+        ...candidatePayload,
+        updated_at: new Date().toISOString()
+      }
+
+      if (req.user?.id) updatePayload.updated_by = req.user.id
+
+      const { error } = await supabase
+        .from('candidates')
+        .update(updatePayload)
+        .eq('id', existingToUpdate.id)
+
+      if (error) throw error
+
+      const { data: existingAssociation, error: assocLookupError } = await supabase
+        .from('candidate_associations')
+        .select('id')
+        .eq('candidate_id', existingToUpdate.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (assocLookupError) throw assocLookupError
+
+      if (existingAssociation?.id && Object.keys(associationPayload).length) {
+        const { error: assocUpdateError } = await updateAssociation(existingAssociation.id, {
+          ...associationPayload,
+          updated_at: new Date().toISOString()
+        })
+
+        if (assocUpdateError) throw assocUpdateError
+      }
+
+      const { data, error: fetchError } = await supabase
+        .from('candidate_associations')
+        .select('*, candidates(*)')
+        .eq('candidate_id', existingToUpdate.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (fetchError) throw fetchError
+      if (data) return res.status(200).json(flattenAssociation(data))
+
+      const { data: association, error: associationError } = await insertAssociation({
+        ...associationPayload,
+        candidate_id: existingToUpdate.id
+      })
+
+      if (associationError) throw associationError
+      return res.status(200).json(flattenAssociation(association))
+    }
+
+    let candidate = duplicateAction === 'add_duplicate'
+      ? null
+      : await findCandidateByNameAndMobile(candidatePayload.full_name, candidatePayload.mobile_number)
 
     if (!candidate) {
       const insertPayload = { ...candidatePayload }
@@ -1159,15 +1258,17 @@ async function downloadPdfToTmp(resumeUrl) {
   })
 
   const contentType = response.headers['content-type'] || ''
+  const buffer = Buffer.from(response.data)
+  const isPdf = contentType.toLowerCase().includes('application/pdf') || buffer.subarray(0, 4).toString() === '%PDF'
 
-  if (!contentType.toLowerCase().includes('application/pdf')) {
+  if (!isPdf) {
     const error = new Error('URL does not point to a PDF')
     error.statusCode = 400
     throw error
   }
 
   const filePath = path.join('/tmp', `${uuidv4()}.pdf`)
-  await fs.writeFile(filePath, Buffer.from(response.data))
+  await fs.writeFile(filePath, buffer)
   return filePath
 }
 
@@ -1209,6 +1310,7 @@ async function parseResumeRoute(req, res) {
 
 module.exports = {
   VALID_STATUSES,
+  checkCandidateDuplicate,
   listCandidates,
   listCandidateAssociations,
   getCandidate,
