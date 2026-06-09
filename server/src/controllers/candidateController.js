@@ -4,7 +4,7 @@ const axios = require('axios')
 const { v4: uuidv4 } = require('uuid')
 const supabase = require('../services/supabaseAdmin')
 const { parseResume } = require('../services/resumeParser')
-const { callOpenRouterJson } = require('../services/openRouterService')
+const { callAiJson } = require('../services/aiProvider')
 
 const VALID_STATUSES = [
   'Interested',
@@ -1122,7 +1122,7 @@ async function buildAiCandidateFilters(req, res) {
     let aiRawResponse = ''
 
     try {
-      const aiResult = await callOpenRouterJson({
+      const aiResult = await callAiJson({
         prompt: safeFilterPrompt(prompt, allowedFields.length ? allowedFields : AI_FILTER_FIELDS),
         schema: AI_FILTER_SCHEMA,
         temperature: 0,
@@ -1295,6 +1295,7 @@ async function parseResumeRoute(req, res) {
     const parsed = await parseResume(tmpFilePath)
     return res.json(parsed)
   } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     console.error('parseResumeRoute:', err.message)
     return res.status(500).json({ error: 'Parsing failed', detail: err.message })
   } finally {

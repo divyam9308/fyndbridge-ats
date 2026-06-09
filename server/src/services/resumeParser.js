@@ -2,7 +2,7 @@ const fs = require('fs/promises')
 const pdfParse = require('pdf-parse')
 const { createWorker } = require('tesseract.js')
 const { extractFields } = require('./extractorUtils')
-const { callOpenRouterJson, OPENROUTER_MODEL } = require('./openRouterService')
+const { callAiJson, GEMINI_MODEL } = require('./aiProvider')
 
 const RESUME_AI_SCHEMA = {
   type: 'object',
@@ -148,7 +148,7 @@ async function parseResumeWithAi(rawText) {
     cleanText(rawText).slice(0, 12000)
   ].join('\n\n')
 
-  const parsed = await callOpenRouterJson({
+  const parsed = await callAiJson({
     prompt,
     schema: RESUME_AI_SCHEMA,
     temperature: 0.1,
@@ -197,7 +197,8 @@ async function parseResume(filePath) {
       aiExtracted.skills = aiExtracted.skills.length ? aiExtracted.skills : extracted.skills?.value || []
     }
   } catch (err) {
-    console.warn(`parseResume AI fallback (${OPENROUTER_MODEL}):`, err.message)
+    if (err.code === 'AI_QUOTA_REACHED') throw err
+    console.warn(`parseResume AI fallback (${GEMINI_MODEL}):`, err.message)
   }
 
   return {

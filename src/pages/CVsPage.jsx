@@ -67,6 +67,12 @@ const normalizeRow = (row, index) => ({
   error: row.error || row.parse_error || ''
 })
 
+const notifyAiQuota = (message) => {
+  if (message === 'AI quota reached') {
+    window.dispatchEvent(new CustomEvent('ai-quota-reached', { detail: 'AI quota reached' }))
+  }
+}
+
 export default function CVsPage() {
   const fileInputRef = useRef(null)
   const [parsedRows, setParsedRows] = useState([])
@@ -546,6 +552,7 @@ export default function CVsPage() {
       applyParsedResumeToEmptyFields(payload)
       setAiParsedDraft(true)
     } catch (err) {
+      notifyAiQuota(err.message)
       setCandidateDraftError(err.message)
     } finally {
       setAiParsingDraft(false)

@@ -100,6 +100,43 @@ input, textarea, select {
   font-family: var(--font-body);
 }
 
+.global-ai-notice {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: min(420px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  padding: 12px 14px;
+  color: #7a5c00;
+  background: rgba(255,249,224,0.96);
+  border: 1px solid rgba(218,177,17,0.36);
+  border-radius: 10px;
+  box-shadow: 0 14px 36px rgba(15,23,42,0.12);
+  transform: translateX(-50%);
+  animation: globalNoticeIn 0.32s ease both;
+}
+.global-ai-notice span {
+  flex: 1;
+}
+.global-ai-notice button {
+  width: 26px;
+  height: 26px;
+  color: #7a5c00;
+  background: rgba(255,255,255,0.65);
+  border: 1px solid rgba(122,92,0,0.2);
+  border-radius: 8px;
+  font-size: 18px;
+  line-height: 1;
+}
+@keyframes globalNoticeIn {
+  from { opacity: 0; transform: translate(-50%, -8px); filter: blur(4px); }
+  to { opacity: 1; transform: translate(-50%, 0); filter: blur(0); }
+}
+
 /* ===================== Scrollbar ===================== */
 ::-webkit-scrollbar {
   width: 6px;

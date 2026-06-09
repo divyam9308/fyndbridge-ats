@@ -30,6 +30,12 @@ const formatDate = (value) => {
   if (Number.isNaN(date.getTime())) return '-'
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`
 }
+
+const notifyAiQuota = (message) => {
+  if (message === 'AI quota reached') {
+    window.dispatchEvent(new CustomEvent('ai-quota-reached', { detail: 'AI quota reached' }))
+  }
+}
 const formatMonth = (value) => {
   if (!value) return '-'
   const date = new Date(value)
@@ -567,6 +573,7 @@ export default function CandidatesPage() {
       setAiFilterCount(Number.isFinite(payload.matchedCount) ? payload.matchedCount : null)
       setPage(1)
     } catch (err) {
+      notifyAiQuota(err.message)
       setAiFilterError(err.message)
       setAiFilters(null)
       setAiAppliedPrompt('')
@@ -721,6 +728,7 @@ export default function CandidatesPage() {
       setParsedForm(mapParsedResponseToForm(payload))
       setParsed(true)
     } catch (err) {
+      notifyAiQuota(err.message)
       setImportError(err.message)
     } finally {
       setParsing(false)
