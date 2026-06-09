@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut
+  LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut, FileText
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import FyndbridgeLogo from './FyndbridgeLogo'
@@ -11,6 +11,7 @@ const navItems = [
   { to: '/dashboard/jobs',       label: 'Jobs',       Icon: Briefcase },
   { to: '/dashboard/clients',    label: 'Clients',    Icon: Building2 },
   { to: '/dashboard/candidates', label: 'Candidates', Icon: Users },
+  { to: '/dashboard/cvs',        label: 'CVs',        Icon: FileText },
 ]
 
 export default function Sidebar() {

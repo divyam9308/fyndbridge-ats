@@ -61,6 +61,13 @@
   margin-bottom: 18px;
   gap: 10px;
 }
+.cvs-page-header {
+  justify-content: space-between;
+}
+.page-subtitle {
+  font-size: 14px;
+  color: var(--gray-500);
+}
 
 /* ===== Filter Bar ===== */
 .filter-bar {
