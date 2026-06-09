@@ -75,6 +75,23 @@
   flex-wrap: wrap;
   box-shadow: var(--shadow-card);
 }
+.candidates-filter-bar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+.candidate-ai-filter-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.candidate-ai-filter-input {
+  width: 220px;
+  min-width: 180px;
+  flex: 0 0 220px;
+}
 .filter-dropdown {
   position: absolute;
   top: calc(100% + 6px);

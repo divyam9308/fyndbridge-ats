@@ -203,6 +203,7 @@ export default function CandidatesPage() {
   const [filterStatus, setFilterStatus] = useState([])
   const [aiFilterText, setAiFilterText] = useState('')
   const [aiFilters, setAiFilters] = useState(null)
+  const [aiAppliedPrompt, setAiAppliedPrompt] = useState('')
   const [aiFilterLoading, setAiFilterLoading] = useState(false)
   const [aiFilterError, setAiFilterError] = useState('')
   const [aiFilterCount, setAiFilterCount] = useState(null)
@@ -292,7 +293,10 @@ export default function CandidatesPage() {
       if (filterMinSal) params.set('salary_min', filterMinSal)
       if (filterMaxSal) params.set('salary_max', filterMaxSal)
       if (filterStatus.length) params.set('status', filterStatus.join(','))
-      if (aiFilters) params.set('ai_filters', JSON.stringify(aiFilters))
+      if (aiFilters) {
+        params.set('ai_filters', JSON.stringify(aiFilters))
+        if (aiAppliedPrompt) params.set('ai_prompt', aiAppliedPrompt)
+      }
 
       const response = await fetch(`/api/candidates?${params.toString()}`)
       const payload = await response.json().catch(() => ({}))
@@ -312,7 +316,7 @@ export default function CandidatesPage() {
     } finally {
       setLoadingCandidates(false)
     }
-  }, [aiFilters, filterJob, filterMaxSal, filterMinSal, filterStatus, page, pageSize])
+  }, [aiAppliedPrompt, aiFilters, filterJob, filterMaxSal, filterMinSal, filterStatus, page, pageSize])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -372,6 +376,7 @@ export default function CandidatesPage() {
     setFilterJob('All'); setFilterMinSal(''); setFilterMaxSal(''); setFilterStatus([])
     setAiFilterText('')
     setAiFilters(null)
+    setAiAppliedPrompt('')
     setAiFilterError('')
     setAiFilterCount(null)
     setPage(1)
@@ -380,6 +385,7 @@ export default function CandidatesPage() {
   const clearAiFilter = () => {
     setAiFilterText('')
     setAiFilters(null)
+    setAiAppliedPrompt('')
     setAiFilterError('')
     setAiFilterCount(null)
     setPage(1)
@@ -543,11 +549,13 @@ export default function CandidatesPage() {
       }
 
       setAiFilters(payload.filters || null)
+      setAiAppliedPrompt(prompt)
       setAiFilterCount(Number.isFinite(payload.matchedCount) ? payload.matchedCount : null)
       setPage(1)
     } catch (err) {
       setAiFilterError(err.message)
       setAiFilters(null)
+      setAiAppliedPrompt('')
       setAiFilterCount(null)
     } finally {
       setAiFilterLoading(false)
@@ -1073,7 +1081,7 @@ export default function CandidatesPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="filter-bar">
+      <div className="filter-bar candidates-filter-bar">
         <span className="filter-label">Job</span>
         <select className="filter-select" value={filterJob}
           onChange={e => { setFilterJob(e.target.value); setPage(1) }} id="filter-candidate-job">
@@ -1100,11 +1108,10 @@ export default function CandidatesPage() {
           />
         </div>
 
-        <form onSubmit={applyAiFilter} style={{ display:'flex', alignItems:'center', gap:8, flex:'0 0 auto', minWidth:0 }}>
+        <form onSubmit={applyAiFilter} className="candidate-ai-filter-form">
           <span className="filter-label">AI Filter</span>
           <input
-            className="filter-input"
-            style={{ width:220, minWidth:180, flex:'0 0 220px' }}
+            className="filter-input candidate-ai-filter-input"
             value={aiFilterText}
             onChange={e => { setAiFilterText(e.target.value); setAiFilterError('') }}
             id="filter-ai-candidates"

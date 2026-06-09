@@ -45,7 +45,7 @@ function extractOpenRouterText(responseData) {
   return ''
 }
 
-async function callOpenRouterJson({ prompt, schema, temperature = 0.1, schemaName = 'ats_json' }) {
+async function callOpenRouterJson({ prompt, schema, temperature = 0.1, schemaName = 'ats_json', returnRaw = false }) {
   if (!OPENROUTER_API_KEY) {
     const err = new Error('OPENROUTER_API_KEY is not configured')
     err.statusCode = 503
@@ -105,7 +105,8 @@ async function callOpenRouterJson({ prompt, schema, temperature = 0.1, schemaNam
   }
 
   try {
-    return JSON.parse(text)
+    const parsed = JSON.parse(text)
+    return returnRaw ? { parsed, rawText: text } : parsed
   } catch (err) {
     const parseError = new Error('OpenRouter returned invalid JSON')
     parseError.cause = err
