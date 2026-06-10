@@ -34,6 +34,31 @@ function displayIdNumber(value, prefix) {
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
 }
 
+const SORT_FIELDS = new Set(['client_id', 'client_name'])
+const SORT_DIRECTIONS = new Set(['asc', 'desc'])
+
+function normalizeSort(query) {
+  const field = clean(query.sortField)
+  const direction = clean(query.sortDirection).toLowerCase()
+  if (!SORT_FIELDS.has(field)) return { field: '', direction: 'asc' }
+  return { field, direction: SORT_DIRECTIONS.has(direction) ? direction : 'asc' }
+}
+
+function compareText(a, b) {
+  return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' })
+}
+
+function sortClientRows(rows, sort) {
+  if (!sort.field) return rows.sort((a, b) => displayIdNumber(a.client_display_id, 'CL') - displayIdNumber(b.client_display_id, 'CL'))
+  const direction = sort.direction === 'desc' ? -1 : 1
+  return [...rows].sort((a, b) => {
+    if (sort.field === 'client_id') {
+      return (displayIdNumber(a.client_display_id, 'CL') - displayIdNumber(b.client_display_id, 'CL')) * direction
+    }
+    return compareText(a.client_name || a.name, b.client_name || b.name) * direction
+  })
+}
+
 async function ensureClientDisplayIds() {
   const { data, error } = await supabase
     .from('clients')
@@ -62,10 +87,13 @@ function normalizeClient(row, activeJobs = 0, followUps = []) {
   const location = row.location || row.city || ''
   const region = row.region || row.state || ''
   const comments = row.comments || row.notes || ''
+  const consultant = row.consultant_name || row.consultant || ''
 
   return {
     ...row,
     client_display_id: row.client_display_id,
+    consultant_name: consultant,
+    consultant,
     name: clientName,
     client_name: clientName,
     contact: contactPerson,
@@ -116,6 +144,7 @@ function clientPayload(body) {
 
   return {
     client_group_id: body.client_group_id || null,
+    consultant_name: nullable(body.consultant_name || body.consultant),
     client_name: clientName,
     name: clientName,
     location: nullable(body.location || body.city),
@@ -181,6 +210,7 @@ async function loadFollowUps(clientIds) {
 async function listClients(req, res) {
   try {
     await ensureClientDisplayIds()
+    const sort = normalizeSort(req.query)
 
     let query = supabase.from('clients').select('*')
     if (req.query.search) {
@@ -198,7 +228,7 @@ async function listClients(req, res) {
     }
     const { data, error } = await query
     if (error) throw error
-    const sortedData = (data || []).sort((a, b) => displayIdNumber(a.client_display_id, 'CL') - displayIdNumber(b.client_display_id, 'CL'))
+    const sortedData = sortClientRows(data || [], sort)
 
     const { data: jobs, error: jobsError } = await supabase.from('jobs').select('client_id, status')
     if (jobsError) throw jobsError

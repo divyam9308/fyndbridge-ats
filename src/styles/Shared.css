@@ -27,6 +27,16 @@
   transform: translateY(0);
   box-shadow: 0 2px 8px rgba(218,177,17,0.35);
 }
+.btn-primary:disabled {
+  cursor: default;
+  opacity: 0.7;
+  transform: none;
+}
+.btn-primary:disabled:hover {
+  background: var(--gold);
+  box-shadow: 0 2px 8px rgba(218,177,17,0.35);
+  transform: none;
+}
 
 .btn-secondary {
   display: inline-flex;
@@ -641,6 +651,12 @@
 .badge-on-hold            { background: #FFF3CD; color: #856404; }
 .badge-closed             { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-200); }
 .badge-filled             { background: #28A745; color: #FFFFFF; }
+.badge-converted          { background: #D4EDDA; color: #155724; }
+.badge-not-converted      { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-200); }
+.badge-follow-up          { background: #FFF3CD; color: #856404; }
+.badge-not-hiring         { background: #F8D7DA; color: #721C24; }
+.badge-not-adding-consultants { background: #EBF5FB; color: #1A73E8; }
+.badge-didnt-pick-up      { background: #F3E8FF; color: #6F42C1; }
 
 /* ===== Active Jobs Pill ===== */
 .active-jobs-pill {

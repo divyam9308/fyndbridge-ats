@@ -1,13 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Pencil, X, Building2, AlertCircle, Loader2 } from 'lucide-react'
+import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown } from 'lucide-react'
 import '../styles/Shared.css'
+import { supabase } from '../services/supabaseClient'
 
 const STATUSES = ['Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
+const STATUS_BADGE_MAP = {
+  Converted: 'badge-converted',
+  'Not Converted': 'badge-not-converted',
+  'Follow Up Required': 'badge-follow-up',
+  'Not Hiring': 'badge-not-hiring',
+  'Not Adding Consultants': 'badge-not-adding-consultants',
+  "Didn't Pick Up": 'badge-didnt-pick-up'
+}
 const TERMS = ['%', 'Fixed Fee Model', 'Slab %', 'Any Other']
 const EMPTY_FORM = {
   client_group_id: '',
   client_display_id: '',
+  consultant_name: '',
   client_name: '',
   location: '',
   region: '',
@@ -31,11 +41,57 @@ const EMPTY_FORM = {
 const dash = (value) => value || '-'
 const convertedDash = (client, value) => client.status === 'Converted' ? dash(value) : '-'
 const termsLabel = (client) => client.terms_signed_type === 'Any Other' ? client.terms_signed_custom : client.terms_signed_type
+const CLIENT_TABLE_COLUMNS = [
+  { key: 'sno', label: 'S.No.' },
+  { key: 'clientId', label: 'Client ID' },
+  { key: 'clientName', label: 'Client Name' },
+  { key: 'consultant', label: 'Consultant' },
+  { key: 'location', label: 'Location' },
+  { key: 'region', label: 'Region' },
+  { key: 'contactPerson', label: 'Contact Person' },
+  { key: 'mobile', label: 'Mobile' },
+  { key: 'email', label: 'Email' },
+  { key: 'linkedin', label: 'LinkedIn' },
+  { key: 'sector', label: 'Sector' },
+  { key: 'connectedOnDate', label: 'Connected On Date' },
+  { key: 'comments', label: 'Comments' },
+  { key: 'followUpDate', label: 'Follow Up Date' },
+  { key: 'status', label: 'Status' },
+  { key: 'termsSigned', label: 'Terms Signed' },
+  { key: 'value', label: 'Value' },
+  { key: 'gstin', label: 'GSTIN' },
+  { key: 'pan', label: 'PAN' },
+  { key: 'addressOnInvoice', label: 'Address on Invoice' },
+  { key: 'actions', label: 'Actions' }
+]
+const DEFAULT_CLIENT_COLUMN_KEYS = CLIENT_TABLE_COLUMNS.map(column => column.key)
+const SORT_OPTIONS = [
+  { field: 'client_id', label: 'Client ID' },
+  { field: 'client_name', label: 'Alphabetical Order' }
+]
+
+const getCurrentUser = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    return JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
+  } catch {
+    return {}
+  }
+}
+
+const getNumericId = (id) => Number(String(id || '').replace(/\D/g, '')) || 0
+
+const getConsultantNameFromUser = (user) => {
+  const email = String(user?.email || user?.id || '').trim()
+  const prefix = email.includes('@') ? email.split('@')[0] : ''
+  return prefix || user?.name || 'hr'
+}
 
 function clientToForm(client) {
   return {
     client_group_id: client.client_group_id || client.id || '',
     client_display_id: client.client_display_id || '',
+    consultant_name: client.consultant_name || client.consultant || '',
     client_name: client.client_name || client.name || '',
     location: client.location || client.city || '',
     region: client.region || client.state || '',
@@ -59,7 +115,6 @@ function clientToForm(client) {
 
 export default function ClientsPage() {
   const [clients, setClients] = useState([])
-  const [searchText, setSearchText] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -70,12 +125,27 @@ export default function ClientsPage() {
   const [selectedFollowUps, setSelectedFollowUps] = useState({})
   const [followUpClient, setFollowUpClient] = useState(null)
   const [followUpForm, setFollowUpForm] = useState({ follow_up_date: '', follow_up_comments: '' })
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const [visibleColumns, setVisibleColumns] = useState(DEFAULT_CLIENT_COLUMN_KEYS)
+  const [pendingColumns, setPendingColumns] = useState(DEFAULT_CLIENT_COLUMN_KEYS)
+  const [savedColumns, setSavedColumns] = useState(null)
+  const [sortField, setSortField] = useState('')
+  const [sortDirection, setSortDirection] = useState('asc')
+  const [sortOpen, setSortOpen] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [statusOpen, setStatusOpen] = useState(false)
+  const columnsDropdownRef = useRef(null)
+  const sortDropdownRef = useRef(null)
+  const statusDropdownRef = useRef(null)
 
-  const fetchClients = useCallback(async () => {
+  const fetchClients = useCallback(async ({ showLoading = true } = {}) => {
     try {
-      setLoading(true)
+      if (showLoading) setLoading(true)
       const params = new URLSearchParams()
-      if (searchText.trim()) params.set('search', searchText.trim())
+      if (sortField) {
+        params.set('sortField', sortField)
+        params.set('sortDirection', sortDirection)
+      }
       const res = await fetch(`/api/clients${params.toString() ? `?${params.toString()}` : ''}`)
       if (!res.ok) throw new Error('Failed to fetch clients from server.')
       const data = await res.json()
@@ -84,14 +154,68 @@ export default function ClientsPage() {
     } catch (err) {
       setError(err.message)
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
-  }, [searchText])
+  }, [sortDirection, sortField])
 
   useEffect(() => {
     const timer = window.setTimeout(fetchClients, 0)
     return () => window.clearTimeout(timer)
   }, [fetchClients])
+
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      try {
+        const session = supabase ? (await supabase.auth.getSession()).data.session : null
+        const currentUser = getCurrentUser()
+        const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
+        const response = await fetch(`/api/user-preferences/client_columns?user_id=${encodeURIComponent(userId)}`)
+        const payload = await response.json().catch(() => ({}))
+        const value = Array.isArray(payload.data?.value) ? payload.data.value.filter(key => DEFAULT_CLIENT_COLUMN_KEYS.includes(key)) : null
+
+        if (value?.length) {
+          setVisibleColumns(value)
+          setPendingColumns(value)
+          setSavedColumns(value)
+        }
+      } catch {
+        setVisibleColumns(DEFAULT_CLIENT_COLUMN_KEYS)
+        setPendingColumns(DEFAULT_CLIENT_COLUMN_KEYS)
+      }
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!columnsOpen) return
+    const handleClickOutside = (event) => {
+      if (!columnsDropdownRef.current?.contains(event.target)) {
+        setPendingColumns(visibleColumns)
+        setColumnsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [columnsOpen, visibleColumns])
+
+  useEffect(() => {
+    if (!sortOpen) return
+    const handleClickOutside = (event) => {
+      if (!sortDropdownRef.current?.contains(event.target)) setSortOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [sortOpen])
+
+  useEffect(() => {
+    if (!statusOpen) return
+    const handleClickOutside = (event) => {
+      if (!statusDropdownRef.current?.contains(event.target)) setStatusOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [statusOpen])
 
   const serials = useMemo(() => {
     const map = {}
@@ -102,6 +226,28 @@ export default function ClientsPage() {
     })
     return map
   }, [clients])
+
+  const sortedClients = useMemo(() => {
+    const rows = [...clients]
+    if (sortField === 'client_id') {
+      rows.sort((a, b) => {
+        const result = getNumericId(a.client_display_id) - getNumericId(b.client_display_id)
+        return sortDirection === 'asc' ? result : -result
+      })
+    } else if (sortField === 'client_name') {
+      rows.sort((a, b) => {
+        const result = String(a.client_name || a.name || '').localeCompare(String(b.client_name || b.name || ''))
+        return sortDirection === 'asc' ? result : -result
+      })
+    }
+    return rows
+  }, [clients, sortDirection, sortField])
+
+  const filteredClients = useMemo(() => (
+    statusFilter === 'All' ? sortedClients : sortedClients.filter(client => client.status === statusFilter)
+  ), [sortedClients, statusFilter])
+
+  const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -130,7 +276,7 @@ export default function ClientsPage() {
   }
 
   const openModal = () => {
-    setForm(EMPTY_FORM)
+    setForm({ ...EMPTY_FORM, consultant_name: getConsultantNameFromUser(getCurrentUser()) })
     setErrors({})
     setEditingClient(null)
     setIsOpen(true)
@@ -166,9 +312,9 @@ export default function ClientsPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Failed to save client.')
-      await fetchClients()
       setIsOpen(false)
       setEditingClient(null)
+      await fetchClients({ showLoading: false })
     } catch (err) {
       setErrors({ client_name: err.message })
     } finally {
@@ -204,13 +350,192 @@ export default function ClientsPage() {
     }
   }
 
+  const togglePendingColumn = (key) => {
+    setPendingColumns(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key])
+  }
+
+  const proceedColumns = () => {
+    setVisibleColumns(pendingColumns.length ? pendingColumns : DEFAULT_CLIENT_COLUMN_KEYS)
+    setColumnsOpen(false)
+  }
+
+  const saveColumnPreference = async () => {
+    try {
+      const session = supabase ? (await supabase.auth.getSession()).data.session : null
+      const currentUser = getCurrentUser()
+      const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
+      const value = pendingColumns.length ? pendingColumns : DEFAULT_CLIENT_COLUMN_KEYS
+      const response = await fetch('/api/user-preferences/client_columns', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, value })
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
+      }
+      setSavedColumns(value)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const sortLabel = () => {
+    const option = SORT_OPTIONS.find(item => item.field === sortField)
+    return option ? `${option.label} ${sortDirection === 'asc' ? '↓' : '↑'}` : 'Sort By'
+  }
+
+  const selectSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(current => current === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+    setSortOpen(false)
+  }
+
+  const renderClientCell = ({ key }, client) => {
+    const followUp = selectedFollowUp(client)
+    switch (key) {
+      case 'sno':
+        return <td key={key}>{serials[client.client_group_id || client.id]}</td>
+      case 'clientId':
+        return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(client.client_display_id)}</td>
+      case 'consultant':
+        return <td key={key}>{dash(client.consultant_name || client.consultant)}</td>
+      case 'clientName':
+        return <td key={key}><Link className="name-text" to={`/dashboard/clients/${client.id}`}>{client.client_name}</Link></td>
+      case 'location':
+        return <td key={key}>{dash(client.location)}</td>
+      case 'region':
+        return <td key={key}>{dash(client.region)}</td>
+      case 'contactPerson':
+        return (
+          <td key={key}>
+            <span className="inline-action-cell">
+              {dash(client.contact_person)}
+              <button className="row-action-btn" type="button" title="Add Contact" onClick={() => openContactModal(client)}><Plus size={12} /></button>
+            </span>
+          </td>
+        )
+      case 'mobile':
+        return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(client.mobile)}</td>
+      case 'email':
+        return <td key={key} style={{ color: 'var(--info)', fontSize: 12.5 }}>{dash(client.email)}</td>
+      case 'linkedin':
+        return <td key={key}>{client.linkedin ? <a className="cv-table-link" href={client.linkedin.startsWith('http') ? client.linkedin : `https://${client.linkedin}`} target="_blank" rel="noreferrer">LinkedIn</a> : '-'}</td>
+      case 'sector':
+        return <td key={key}>{dash(client.sector)}</td>
+      case 'connectedOnDate':
+        return <td key={key}>{dash(client.connected_on_date)}</td>
+      case 'comments':
+        return <td key={key}>{dash(followUp?.follow_up_comments || client.comments)}</td>
+      case 'followUpDate':
+        return (
+          <td key={key}>
+            <span className="inline-action-cell">
+              {(client.follow_ups || []).length ? (
+                <select className="filter-select compact-select" value={followUp?.id || ''} onChange={(event) => setSelectedFollowUps((current) => ({ ...current, [client.id]: event.target.value }))}>
+                  {client.follow_ups.map((item) => <option key={item.id} value={item.id}>Follow Up {item.follow_up_number}</option>)}
+                </select>
+              ) : (
+                <span>{dash(client.follow_up_date)}</span>
+              )}
+              <span>{followUp?.follow_up_date || ''}</span>
+              <button className="row-action-btn" type="button" title="Add Follow Up" onClick={() => { setFollowUpClient(client); setFollowUpForm({ follow_up_date: '', follow_up_comments: '' }) }}><Plus size={12} /></button>
+            </span>
+          </td>
+        )
+      case 'status':
+        return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[client.status] || 'badge-not-converted'}`}>{dash(client.status)}</span></td>
+      case 'termsSigned':
+        return <td key={key}>{convertedDash(client, termsLabel(client))}</td>
+      case 'value':
+        return <td key={key}>{convertedDash(client, client.terms_value)}</td>
+      case 'gstin':
+        return <td key={key}>{convertedDash(client, client.gstin)}</td>
+      case 'pan':
+        return <td key={key}>{convertedDash(client, client.pan)}</td>
+      case 'addressOnInvoice':
+        return <td key={key}>{convertedDash(client, client.address_on_invoice)}</td>
+      case 'actions':
+        return <td key={key}><div className="row-actions"><button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)}><Pencil size={13} strokeWidth={2} /></button></div></td>
+      default:
+        return null
+    }
+  }
+
   return (
     <div>
       <div className="page-header">
-        <input className="filter-input" value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search clients" />
         <button className="btn-primary" onClick={openModal} id="btn-add-client">
           <Plus size={15} strokeWidth={2.5} /> Add Client
         </button>
+      </div>
+
+      <div className="candidate-columns-toolbar">
+        <div className="candidate-columns-control" ref={columnsDropdownRef}>
+          <button className="filter-select candidate-columns-btn" type="button" onClick={() => { setPendingColumns(visibleColumns); setColumnsOpen(open => !open) }}>
+            <span>Columns</span>
+            <ChevronDown size={13} strokeWidth={2} />
+          </button>
+          <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
+          {columnsOpen && (
+            <div className="filter-dropdown candidate-columns-dropdown">
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CLIENT_COLUMN_KEYS)}>Select All</button>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
+              <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(savedColumns?.length ? savedColumns : DEFAULT_CLIENT_COLUMN_KEYS)}>Reset to Saved Preference</button>
+              <div className="candidate-columns-divider" />
+              {CLIENT_TABLE_COLUMNS.map(column => (
+                <label className="candidate-column-option" key={column.key}>
+                  <input type="checkbox" checked={pendingColumns.includes(column.key)} onChange={() => togglePendingColumn(column.key)} />
+                  {column.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="filter-bar candidates-filter-bar">
+        <span className="filter-label">Filter</span>
+        <div className="candidate-sort-control" ref={statusDropdownRef}>
+          <button className="filter-select candidate-sort-btn" type="button" onClick={() => setStatusOpen(open => !open)}>
+            <span>{statusFilter === 'All' ? 'Status' : statusFilter}</span>
+            <ChevronDown size={13} strokeWidth={2} />
+          </button>
+          {statusOpen && (
+            <div className="filter-dropdown candidate-sort-dropdown">
+              <button className="candidate-columns-action" type="button" onClick={() => { setStatusFilter('All'); setStatusOpen(false) }}>All Statuses</button>
+              {STATUSES.map(status => (
+                <button className="candidate-columns-action" type="button" key={status} onClick={() => { setStatusFilter(status); setStatusOpen(false) }}>
+                  {status}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button className="filter-clear" type="button" onClick={() => setStatusFilter('All')}>Clear Filter</button>
+        <div className="filter-divider" />
+        <span className="filter-label">Sort By</span>
+        <div className="candidate-sort-control" ref={sortDropdownRef}>
+          <button className="filter-select candidate-sort-btn" type="button" onClick={() => setSortOpen(open => !open)}>
+            <span>{sortLabel()}</span>
+            <ChevronDown size={13} strokeWidth={2} />
+          </button>
+          {sortOpen && (
+            <div className="filter-dropdown candidate-sort-dropdown">
+              {SORT_OPTIONS.map(option => (
+                <button className="candidate-columns-action" type="button" key={option.field} onClick={() => selectSort(option.field)}>
+                  {`${option.label} ${sortField === option.field && sortDirection === 'desc' ? '↑' : '↓'}`}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button className="filter-clear" type="button" onClick={() => { setSortField(''); setSortDirection('asc') }}>Clear</button>
       </div>
 
       <div className="table-card">
@@ -232,60 +557,15 @@ export default function ClientsPage() {
           <table className="data-table" aria-label="Clients">
             <thead>
               <tr>
-                <th>S.No.</th><th>Client ID</th><th>Client Name</th><th>Location</th><th>Region</th><th>Contact Person</th><th>Mobile</th><th>Email</th><th>LinkedIn</th><th>Sector</th><th>Connected On Date</th><th>Comments</th><th>Follow Up Date</th><th>Status</th><th>Terms Signed</th><th>Value</th><th>GSTIN</th><th>PAN</th><th>Address on Invoice</th><th>Actions</th>
+                {activeColumns.map(column => <th key={column.key}>{column.label}</th>)}
               </tr>
             </thead>
             <tbody>
-              {clients.map((client) => {
-                const followUp = selectedFollowUp(client)
-                return (
-                  <tr key={client.id}>
-                    <td>{serials[client.client_group_id || client.id]}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(client.client_display_id)}</td>
-                    <td>
-                      <Link className="name-text" to={`/dashboard/clients/${client.id}`}>{client.client_name}</Link>
-                    </td>
-                    <td>{dash(client.location)}</td>
-                    <td>{dash(client.region)}</td>
-                    <td>
-                      <span className="inline-action-cell">
-                        {dash(client.contact_person)}
-                        <button className="row-action-btn" type="button" title="Add Contact" onClick={() => openContactModal(client)}><Plus size={12} /></button>
-                      </span>
-                    </td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(client.mobile)}</td>
-                    <td style={{ color: 'var(--info)', fontSize: 12.5 }}>{dash(client.email)}</td>
-                    <td>{client.linkedin ? <a className="cv-table-link" href={client.linkedin.startsWith('http') ? client.linkedin : `https://${client.linkedin}`} target="_blank" rel="noreferrer">LinkedIn</a> : '-'}</td>
-                    <td>{dash(client.sector)}</td>
-                    <td>{dash(client.connected_on_date)}</td>
-                    <td>{dash(followUp?.follow_up_comments || client.comments)}</td>
-                    <td>
-                      <span className="inline-action-cell">
-                        {(client.follow_ups || []).length ? (
-                          <select className="filter-select compact-select" value={followUp?.id || ''} onChange={(event) => setSelectedFollowUps((current) => ({ ...current, [client.id]: event.target.value }))}>
-                            {client.follow_ups.map((item) => <option key={item.id} value={item.id}>Follow Up {item.follow_up_number}</option>)}
-                          </select>
-                        ) : (
-                          <span>{dash(client.follow_up_date)}</span>
-                        )}
-                        <span>{followUp?.follow_up_date || ''}</span>
-                        <button className="row-action-btn" type="button" title="Add Follow Up" onClick={() => { setFollowUpClient(client); setFollowUpForm({ follow_up_date: '', follow_up_comments: '' }) }}><Plus size={12} /></button>
-                      </span>
-                    </td>
-                    <td>{dash(client.status)}</td>
-                    <td>{convertedDash(client, termsLabel(client))}</td>
-                    <td>{convertedDash(client, client.terms_value)}</td>
-                    <td>{convertedDash(client, client.gstin)}</td>
-                    <td>{convertedDash(client, client.pan)}</td>
-                    <td>{convertedDash(client, client.address_on_invoice)}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)}><Pencil size={13} strokeWidth={2} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
+              {filteredClients.map((client) => (
+                <tr key={client.id}>
+                  {activeColumns.map(column => renderClientCell(column, client))}
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
@@ -307,6 +587,7 @@ export default function ClientsPage() {
                   </div>
                 )}
                 {[
+                  ['consultant_name', 'Consultant', 'text'],
                   ['client_name', 'Client Name', 'text', true],
                   ['location', 'Location', 'text'],
                   ['region', 'Region', 'text'],
