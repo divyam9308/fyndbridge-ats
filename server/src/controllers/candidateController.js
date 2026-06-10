@@ -52,9 +52,6 @@ const ASSOCIATION_FIELDS = [
 
 const AI_FILTER_OPERATORS = [
   'contains',
-  'equals',
-  'notEquals',
-  'startsWith',
   'eq',
   'gte',
   'lte',
@@ -286,16 +283,9 @@ function normalizeAiFilterOutput(data) {
   const logic = cleanText(data.logic || data.filters?.logic).toUpperCase() === 'OR' ? 'OR' : 'AND'
 
   const operatorMap = {
-    equals: 'equals',
-    equal: 'equals',
+    equals: 'eq',
+    equal: 'eq',
     '=': 'eq',
-    exactly: 'equals',
-    notEquals: 'notEquals',
-    not_equal: 'notEquals',
-    notEqual: 'notEquals',
-    not: 'notEquals',
-    startsWith: 'startsWith',
-    starts_with: 'startsWith',
     greaterThan: 'gt',
     greaterthan: 'gt',
     greater_than: 'gt',
@@ -311,8 +301,7 @@ function normalizeAiFilterOutput(data) {
     blank: 'isBlank',
     notBlank: 'isNotBlank',
     notblank: 'isNotBlank',
-    contains: 'contains',
-    includes: 'contains'
+    contains: 'contains'
   }
 
   const filters = inputFilters.map((filter) => {
@@ -335,9 +324,7 @@ function normalizeAiFilterOutput(data) {
       throw new Error(`Invalid AI filter operator: ${filter.operator}`)
     }
 
-    if (field === 'candidate_id' && operator === 'eq') {
-      operator = 'equals'
-    } else if (info.type !== 'number' && operator === 'eq') {
+    if (info.type !== 'number' && operator === 'eq') {
       operator = 'contains'
     }
 
@@ -454,7 +441,6 @@ function safeFilterPrompt(prompt, allowedFields) {
     'Return exactly: {"logic":"AND","filters":[{"field":"fieldName","operator":"operator","value":"value or null"}]}. Use OR only when the user explicitly says OR; otherwise use AND.',
     'AI is the only natural-language parser. Infer field, operator, and value from the full request.',
     'Use contains by default for text fields. Text "is" and "=" usually mean contains, not exact equality.',
-    'Exception: candidate_id is a unique identifier and defaults to exact matching. For candidate_id phrases "is", "equals", "=", "exactly", and "candidate CA10", return operator equals. For "candidate id contains CA10" return contains. For "candidate id starts with CA10" return startsWith. For "candidate id not equals CA10" return notEquals.',
     'Treat mobile/phone/email as text. For "mobile is 3" return field mobile, operator contains, value "3".',
     'Numeric fields are experience, notice_period, current_ctc, expected_ctc.',
     'Use numeric operators only for numeric fields.',
@@ -465,7 +451,7 @@ function safeFilterPrompt(prompt, allowedFields) {
     'For "experience 8+" return operator gte and value 8.',
     'For "consultant is rajneesh", return operator contains and value "rajneesh".',
     'Use isBlank for blank/empty/missing/null and isNotBlank for not blank/filled.',
-    'Map candidate id/candidate ID/display id/candidate CA10 to candidate_id; mobile/phone/contact/contact number/number to mobile; consultant/recruiter/handled by/assigned by/owner to consultant; candidate/person/name to name unless followed by an ID like CA10; city/location/current location/from/located in to city or location; designation/current role/title to designation; salary/ctc/current ctc to current_ctc; expected salary/expected ctc to expected_ctc; client/company/submitted to/working with to client; job/position/opening/role to job; status/stage to status; skill/technology/tech stack to skills.',
+    'Map mobile/phone/contact/contact number/number to mobile; consultant/recruiter/handled by/assigned by/owner to consultant; candidate/person/name to name; city/location/current location/from/located in to city or location; designation/current role/title to designation; salary/ctc/current ctc to current_ctc; expected salary/expected ctc to expected_ctc; client/company/submitted to/working with to client; job/position/opening/role to job; status/stage to status; skill/technology/tech stack to skills.',
     'Do not include SQL, code, markdown, explanations, or fields not listed.',
     `Request: ${cleanText(prompt).slice(0, 1000)}`
   ].join('\n\n')
@@ -611,7 +597,10 @@ function sortCandidateRows(rows, sort) {
     if (sort.field === 'candidate_name') {
       return compareText(a.full_name, b.full_name) * direction
     }
-    return compareText(a.consultant_name, b.consultant_name)
+    if (sort.field === 'consultant') {
+      return compareText(a.consultant_name, b.consultant_name)
+    }
+    return ((a._serial_no || 0) - (b._serial_no || 0)) * direction
   })
 }
 
@@ -761,15 +750,6 @@ function applyAiCondition(query, condition) {
   if (operator === 'isBlank') return applyBlankFilter(query, column)
   if (operator === 'isNotBlank') return applyBlankFilter(query, column, true)
 
-  if (condition.field === 'candidate_id') {
-    value = cleanText(value)
-    if (!value) return query
-    if (operator === 'equals' || operator === 'eq') return query.ilike(column, value)
-    if (operator === 'notEquals') return query.not(column, 'ilike', value)
-    if (operator === 'startsWith') return query.ilike(column, `${value}%`)
-    return query.ilike(column, `%${value}%`)
-  }
-
   if (info.type === 'number') {
     value = (info.normalize || normalizeNumber)(value)
     if (value === null) return query
@@ -802,9 +782,7 @@ function applyAiCondition(query, condition) {
 
   value = info.normalize ? info.normalize(value) : cleanText(value)
   if (!value) return query
-  if (operator === 'equals' || operator === 'eq') return query.ilike(column, info.fuzzy ? `%${value}%` : value)
-  if (operator === 'notEquals') return query.not(column, 'ilike', value)
-  if (operator === 'startsWith') return query.ilike(column, `${value}%`)
+  if (operator === 'eq') return query.ilike(column, info.fuzzy ? `%${value}%` : value)
   return query.ilike(column, `%${value}%`)
 }
 
@@ -948,7 +926,7 @@ async function listCandidates(req, res) {
     const { data, error, count } = sort.field ? await query.limit(10000) : await query.range(from, to)
 
     if (error) throw error
-    const rows = (data || []).map(flattenAssociation)
+    const rows = (data || []).map(flattenAssociation).map((row, index) => ({ ...row, _serial_no: index + 1 }))
     const sortedRows = sortCandidateRows(rows, sort)
 
     return res.json({
