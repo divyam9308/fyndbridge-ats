@@ -626,10 +626,7 @@
 /* ===== Modal ===== */
 .modal-overlay {
   position: fixed;
-  top: var(--topbar-height);
-  right: 0;
-  bottom: 0;
-  left: var(--sidebar-width);
+  inset: 0;
   background: transparent;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -637,7 +634,7 @@
   align-items: flex-start;
   justify-content: center;
   z-index: 80;
-  padding: 24px 28px;
+  padding: calc(var(--topbar-height) + 24px) 28px 24px var(--sidebar-width);
   box-sizing: border-box;
   overflow-y: auto;
   animation: overlayIn 0.2s ease both;

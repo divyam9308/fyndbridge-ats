@@ -16,6 +16,7 @@ export default function ClientsPage() {
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [clientDuplicate, setClientDuplicate] = useState(null)
+  const [editingClient, setEditingClient] = useState(null)
 
   const fetchClients = async () => {
     try {
@@ -53,13 +54,14 @@ export default function ClientsPage() {
   const openModal = () => {
     setForm(EMPTY_FORM)
     setErrors({})
+    setEditingClient(null)
     setIsOpen(true)
   }
 
   const saveClient = async (duplicateAction = '') => {
     const payload = duplicateAction ? { ...form, duplicate_action: duplicateAction } : form
-    const res = await fetch('/api/clients', {
-      method: 'POST',
+    const res = await fetch(editingClient ? `/api/clients/${editingClient.id}` : '/api/clients', {
+      method: editingClient ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
@@ -91,6 +93,7 @@ export default function ClientsPage() {
 
       await fetchClients()
       setIsOpen(false)
+      setEditingClient(null)
     } catch (err) {
       if (err.duplicate) {
         setClientDuplicate({ client: form, existing: err.duplicate.existing })
@@ -100,6 +103,21 @@ export default function ClientsPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const openEditModal = (client) => {
+    setForm({
+      name: client.name || '',
+      contact: client.contact || '',
+      phone: client.phone || '',
+      email: client.email || '',
+      city: client.city || '',
+      state: client.state || '',
+      notes: client.notes || ''
+    })
+    setErrors({})
+    setEditingClient(client)
+    setIsOpen(true)
   }
 
   const resolveClientDuplicate = async (duplicateAction) => {
@@ -186,7 +204,7 @@ export default function ClientsPage() {
                   </td>
                   <td>
                     <div className="row-actions">
-                      <button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`}><Pencil size={13} strokeWidth={2} /></button>
+                      <button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)}><Pencil size={13} strokeWidth={2} /></button>
                       <Link className="row-action-btn" to={`/dashboard/clients/${client.id}`} title="View Jobs" id={`view-jobs-${client.id}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Eye size={13} strokeWidth={2} />
                       </Link>
@@ -202,10 +220,10 @@ export default function ClientsPage() {
       {/* ===== Add Client Modal ===== */}
       {isOpen && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setIsOpen(false)}>
-          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Add Client">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label={editingClient ? 'Edit Client' : 'Add Client'}>
             <div className="modal-header">
-              <span className="modal-title">Add New Client</span>
-              <button className="modal-close" onClick={() => setIsOpen(false)} aria-label="Close"><X size={16} /></button>
+              <span className="modal-title">{editingClient ? 'Edit Client' : 'Add New Client'}</span>
+              <button className="modal-close" onClick={() => { setIsOpen(false); setEditingClient(null) }} aria-label="Close"><X size={16} /></button>
             </div>
             <div className="modal-body">
               <div className="form-grid-2">
@@ -259,9 +277,9 @@ export default function ClientsPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setIsOpen(false)} disabled={saving}>Cancel</button>
+              <button className="btn-secondary" onClick={() => { setIsOpen(false); setEditingClient(null) }} disabled={saving}>Cancel</button>
               <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving}>
-                {saving ? 'Saving...' : 'Save Client'}
+                {saving ? 'Saving...' : editingClient ? 'Update Client' : 'Save Client'}
               </button>
             </div>
           </div>
