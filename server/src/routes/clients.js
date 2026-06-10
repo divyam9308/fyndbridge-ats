@@ -8,6 +8,7 @@ router.get('/', controller.listClients)
 router.post('/', controller.createClient)
 router.get('/:id', controller.getClient)
 router.patch('/:id', controller.updateClient)
+router.post('/:id/follow-ups', controller.addFollowUp)
 router.delete('/:id', controller.deleteClient)
 
 module.exports = router

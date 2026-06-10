@@ -373,13 +373,16 @@ export default function CandidatesPage() {
   })
 
   const visibleCandidates = []
+  let candidateGroupSerial = 0
   Object.entries(mobileGroups).forEach(([mobile, rows]) => {
+    candidateGroupSerial += 1
     const isGroup = rows.length >= 2
     const visibleRows = isGroup && collapsed[mobile] ? rows.slice(0, 1) : rows
     visibleRows.forEach((candidate, index) => {
       visibleCandidates.push({
         candidate,
         mobile,
+        groupSerial: candidateGroupSerial,
         isGroup,
         groupSize: rows.length,
         groupIndex: index,
@@ -967,12 +970,12 @@ export default function CandidatesPage() {
   }
 
   const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
-  const renderCandidateCell = ({ key }, c, groupMeta, index) => {
-    const { mobile, isGroup, groupSize, groupIndex } = groupMeta
+  const renderCandidateCell = ({ key }, c, groupMeta) => {
+    const { mobile, groupSerial, isGroup, groupSize, groupIndex } = groupMeta
 
     switch (key) {
       case 'sno':
-        return <td key={key}>{(page - 1) * pageSize + index + 1}</td>
+        return <td key={key}>{(page - 1) * pageSize + groupSerial}</td>
       case 'date':
         return <td key={key}>{formatDate(c.createdAt)}</td>
       case 'consultant':
@@ -1207,13 +1210,13 @@ export default function CandidatesPage() {
                 </tr>
               </thead>
               <tbody>
-                {visibleCandidates.map(({ candidate: c, mobile, isGroup, groupSize, groupIndex, isLastInGroup }, index) => {
+                {visibleCandidates.map(({ candidate: c, mobile, groupSerial, isGroup, groupSize, groupIndex, isLastInGroup }) => {
                   const rowClass = isGroup
                     ? `candidate-mobile-group-row${groupIndex === 0 ? ' group-first' : ' group-child'}${isLastInGroup ? ' group-last' : ''}`
                     : ''
                   return (
                     <tr key={c.associationId || c.id} className={rowClass}>
-                      {activeColumns.map(column => renderCandidateCell(column, c, { mobile, isGroup, groupSize, groupIndex }, index))}
+                      {activeColumns.map(column => renderCandidateCell(column, c, { mobile, groupSerial, isGroup, groupSize, groupIndex }))}
                     </tr>
                   )
                 })}

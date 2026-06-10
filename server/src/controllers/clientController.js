@@ -1,28 +1,129 @@
 const supabase = require('../services/supabaseAdmin')
 
+const CLIENT_STATUSES = [
+  'Converted',
+  'Not Converted',
+  'Follow Up Required',
+  'Not Hiring',
+  'Not Adding Consultants',
+  "Didn't Pick Up"
+]
+
+const TERMS_TYPES = ['%', 'Fixed Fee Model', 'Slab %', 'Any Other']
+
 function logAndSendInternal(res, method, err) {
   console.error(`${method} error:`, err.message || err)
   return res.status(500).json({ error: 'Internal server error', detail: err.message })
 }
 
+function clean(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function nullable(value) {
+  const next = clean(value)
+  return next || null
+}
+
 function normalizeDuplicateText(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
+  return clean(value).toLowerCase()
+}
+
+function normalizeClient(row, activeJobs = 0, followUps = []) {
+  const clientName = row.client_name || row.name || ''
+  const contactPerson = row.contact_person || row.contact || ''
+  const mobile = row.mobile || row.phone || ''
+  const location = row.location || row.city || ''
+  const region = row.region || row.state || ''
+  const comments = row.comments || row.notes || ''
+
+  return {
+    ...row,
+    name: clientName,
+    client_name: clientName,
+    contact: contactPerson,
+    contact_person: contactPerson,
+    phone: mobile,
+    mobile,
+    city: location,
+    location,
+    state: region,
+    region,
+    notes: comments,
+    comments,
+    status: row.status || 'Not Converted',
+    terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
+    activeJobs,
+    follow_ups: followUps
+  }
+}
+
+function clientPayload(body) {
+  const status = body.status || 'Not Converted'
+  if (!CLIENT_STATUSES.includes(status)) {
+    const err = new Error(`Status must be one of: ${CLIENT_STATUSES.join(', ')}`)
+    err.statusCode = 400
+    throw err
+  }
+
+  const termsType = body.terms_signed_type || body.terms_type || ''
+  if (termsType && !TERMS_TYPES.includes(termsType)) {
+    const err = new Error(`Terms Signed must be one of: ${TERMS_TYPES.join(', ')}`)
+    err.statusCode = 400
+    throw err
+  }
+
+  const clientName = clean(body.client_name || body.name)
+  const mobile = clean(body.mobile || body.phone)
+
+  if (!clientName) {
+    const err = new Error('Client Name is required')
+    err.statusCode = 400
+    throw err
+  }
+  if (!mobile) {
+    const err = new Error('Mobile is required')
+    err.statusCode = 400
+    throw err
+  }
+
+  return {
+    client_group_id: body.client_group_id || null,
+    client_name: clientName,
+    name: clientName,
+    location: nullable(body.location || body.city),
+    city: nullable(body.location || body.city),
+    region: nullable(body.region || body.state),
+    state: nullable(body.region || body.state),
+    contact_person: nullable(body.contact_person || body.contact),
+    contact: nullable(body.contact_person || body.contact),
+    mobile,
+    phone: mobile,
+    email: nullable(body.email),
+    linkedin: nullable(body.linkedin),
+    sector: nullable(body.sector),
+    connected_on_date: body.connected_on_date || null,
+    comments: nullable(body.comments || body.notes),
+    notes: nullable(body.comments || body.notes),
+    follow_up_date: body.follow_up_date || null,
+    status,
+    terms_signed_type: status === 'Converted' ? nullable(termsType) : null,
+    terms_signed_custom: status === 'Converted' && termsType === 'Any Other' ? nullable(body.terms_signed_custom) : null,
+    terms_value: status === 'Converted' ? nullable(body.terms_value) : null,
+    gstin: status === 'Converted' ? nullable(body.gstin) : null,
+    pan: status === 'Converted' ? nullable(body.pan) : null,
+    address_on_invoice: status === 'Converted' ? nullable(body.address_on_invoice) : null
+  }
 }
 
 async function findClientDuplicate(name, email) {
   const normalizedName = normalizeDuplicateText(name)
   const normalizedEmail = normalizeDuplicateText(email)
-
   if (!normalizedName || !normalizedEmail) return null
 
-  const { data, error } = await supabase
-    .from('clients')
-    .select('*')
-    .ilike('email', normalizedEmail)
-
+  const { data, error } = await supabase.from('clients').select('*').ilike('email', normalizedEmail)
   if (error) throw error
-
-  return (data || []).find((client) => normalizeDuplicateText(client.name) === normalizedName) || null
+  return (data || []).find((client) => normalizeDuplicateText(client.client_name || client.name) === normalizedName) || null
 }
 
 async function checkClientDuplicate(req, res) {
@@ -34,37 +135,39 @@ async function checkClientDuplicate(req, res) {
   }
 }
 
+async function loadFollowUps(clientIds) {
+  if (!clientIds.length) return {}
+  const { data, error } = await supabase
+    .from('client_follow_ups')
+    .select('*')
+    .in('client_id', clientIds)
+    .order('follow_up_number', { ascending: true })
+
+  if (error) throw error
+  return (data || []).reduce((map, followUp) => {
+    map[followUp.client_id] = map[followUp.client_id] || []
+    map[followUp.client_id].push(followUp)
+    return map
+  }, {})
+}
+
 async function listClients(req, res) {
   try {
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .order('name', { ascending: true })
-
+    const { data, error } = await supabase.from('clients').select('*').order('name', { ascending: true })
     if (error) throw error
 
-    // Fetch active jobs count for each client from the jobs table
-    const { data: jobs, error: jobsError } = await supabase
-      .from('jobs')
-      .select('client_id, status')
-
+    const { data: jobs, error: jobsError } = await supabase.from('jobs').select('client_id, status')
     if (jobsError) throw jobsError
 
     const activeJobsMap = {}
-    if (jobs) {
-      jobs.forEach(job => {
-        if (job.status === 'Open' || job.status === 'Active') {
-          activeJobsMap[job.client_id] = (activeJobsMap[job.client_id] || 0) + 1
-        }
-      })
-    }
+    ;(jobs || []).forEach((job) => {
+      if (job.status === 'Open' || job.status === 'Active') activeJobsMap[job.client_id] = (activeJobsMap[job.client_id] || 0) + 1
+    })
 
-    const formatted = (data || []).map(client => ({
-      ...client,
-      activeJobs: activeJobsMap[client.id] || 0
-    }))
-
-    return res.json({ data: formatted })
+    const followUpsMap = await loadFollowUps((data || []).map((client) => client.id))
+    return res.json({
+      data: (data || []).map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || []))
+    })
   } catch (err) {
     return logAndSendInternal(res, 'listClients', err)
   }
@@ -72,16 +175,11 @@ async function listClients(req, res) {
 
 async function getClient(req, res) {
   try {
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', req.params.id)
-      .maybeSingle()
-
+    const { data, error } = await supabase.from('clients').select('*').eq('id', req.params.id).maybeSingle()
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Client not found' })
-
-    return res.json(data)
+    const followUpsMap = await loadFollowUps([data.id])
+    return res.json(normalizeClient(data, 0, followUpsMap[data.id] || []))
   } catch (err) {
     return logAndSendInternal(res, 'getClient', err)
   }
@@ -89,118 +187,112 @@ async function getClient(req, res) {
 
 async function createClient(req, res) {
   try {
-    const { name, contact, phone, email, city, state, notes, status } = req.body
-
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Client Name is required' })
-    }
-    if (!phone || !phone.trim()) {
-      return res.status(400).json({ error: 'Phone Number is required' })
-    }
-
-    const payload = {
-      name: name.trim(),
-      contact: contact ? contact.trim() : null,
-      phone: phone.trim(),
-      email: email ? email.trim() : null,
-      city: city ? city.trim() : null,
-      state: state ? state.trim() : null,
-      status: status || 'Active',
-      notes: notes ? notes.trim() : null
-    }
+    const payload = clientPayload(req.body)
     const duplicateAction = req.body.duplicate_action
-    const duplicate = await findClientDuplicate(payload.name, payload.email)
+    const duplicate = await findClientDuplicate(payload.client_name, payload.email)
 
-    if (duplicate && !['update_current', 'add_duplicate'].includes(duplicateAction)) {
-      return res.status(409).json({
-        error: 'A client with the same name and email already exists.',
-        duplicate: true,
-        existing: duplicate
-      })
+    if (duplicate && !payload.client_group_id && !['update_current', 'add_duplicate'].includes(duplicateAction)) {
+      return res.status(409).json({ error: 'A client with the same name and email already exists.', duplicate: true, existing: duplicate })
     }
 
     if (duplicate && duplicateAction === 'update_current') {
       const { data, error } = await supabase
         .from('clients')
-        .update({
-          ...payload,
-          updated_at: new Date().toISOString()
-        })
+        .update({ ...payload, client_group_id: duplicate.client_group_id || duplicate.id, updated_at: new Date().toISOString() })
         .eq('id', duplicate.id)
         .select('*')
         .single()
-
       if (error) throw error
-
-      return res.json(data)
+      return res.json(normalizeClient(data))
     }
 
-    const { data, error } = await supabase
-      .from('clients')
-      .insert(payload)
-      .select('*')
-      .single()
+    const { data, error } = await supabase.from('clients').insert(payload).select('*').single()
+    if (error) throw error
 
-    if (error) {
-      if (error.code === '23505') { // Unique constraint violation
-        return res.status(400).json({ error: 'A client with this name already exists' })
-      }
-      throw error
+    if (!data.client_group_id) {
+      const { data: grouped, error: groupError } = await supabase
+        .from('clients')
+        .update({ client_group_id: data.id })
+        .eq('id', data.id)
+        .select('*')
+        .single()
+      if (groupError) throw groupError
+      return res.status(201).json(normalizeClient(grouped))
     }
 
-    return res.status(201).json(data)
+    return res.status(201).json(normalizeClient(data))
   } catch (err) {
+    if (err.code === '23505' && /clients_name_key/i.test(err.message || '')) {
+      return res.status(400).json({ error: 'Client name is still unique in Supabase. Run server/supabase-clients-module-upgrade.sql once.' })
+    }
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'createClient', err)
   }
 }
 
 async function updateClient(req, res) {
   try {
-    const { name, contact, phone, email, city, state, notes, status } = req.body
-    const payload = {}
-
-    if (name !== undefined) payload.name = name.trim()
-    if (contact !== undefined) payload.contact = contact ? contact.trim() : null
-    if (phone !== undefined) payload.phone = phone.trim()
-    if (email !== undefined) payload.email = email ? email.trim() : null
-    if (city !== undefined) payload.city = city ? city.trim() : null
-    if (state !== undefined) payload.state = state ? state.trim() : null
-    if (status !== undefined) payload.status = status
-    if (notes !== undefined) payload.notes = notes ? notes.trim() : null
-
+    const payload = clientPayload(req.body)
     const { data, error } = await supabase
       .from('clients')
-      .update(payload)
-      .eq('id', req.params.id)
-      .select('*')
-      .maybeSingle()
-
-    if (error) {
-      if (error.code === '23505') {
-        return res.status(400).json({ error: 'A client with this name already exists' })
-      }
-      throw error
-    }
-    if (!data) return res.status(404).json({ error: 'Client not found' })
-
-    return res.json(data)
-  } catch (err) {
-    return logAndSendInternal(res, 'updateClient', err)
-  }
-}
-
-async function deleteClient(req, res) {
-  try {
-    const { data, error } = await supabase
-      .from('clients')
-      .delete()
+      .update({ ...payload, updated_at: new Date().toISOString() })
       .eq('id', req.params.id)
       .select('*')
       .maybeSingle()
 
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Client not found' })
+    return res.json(normalizeClient(data))
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
+    return logAndSendInternal(res, 'updateClient', err)
+  }
+}
 
+async function addFollowUp(req, res) {
+  try {
+    const { follow_up_date, follow_up_comments } = req.body
+    if (!follow_up_date) return res.status(400).json({ error: 'Follow Up Date is required' })
+
+    const { data: existing, error: existingError } = await supabase
+      .from('client_follow_ups')
+      .select('follow_up_number')
+      .eq('client_id', req.params.id)
+      .order('follow_up_number', { ascending: false })
+      .limit(1)
+
+    if (existingError) throw existingError
+    const followUpNumber = ((existing || [])[0]?.follow_up_number || 0) + 1
+
+    const { data, error } = await supabase
+      .from('client_follow_ups')
+      .insert({
+        client_id: req.params.id,
+        follow_up_number: followUpNumber,
+        follow_up_date,
+        follow_up_comments: nullable(follow_up_comments)
+      })
+      .select('*')
+      .single()
+
+    if (error) throw error
+
+    await supabase
+      .from('clients')
+      .update({ follow_up_date, comments: nullable(follow_up_comments), notes: nullable(follow_up_comments), updated_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+
+    return res.status(201).json(data)
+  } catch (err) {
+    return logAndSendInternal(res, 'addFollowUp', err)
+  }
+}
+
+async function deleteClient(req, res) {
+  try {
+    const { data, error } = await supabase.from('clients').delete().eq('id', req.params.id).select('*').maybeSingle()
+    if (error) throw error
+    if (!data) return res.status(404).json({ error: 'Client not found' })
     return res.json({ message: 'Client deleted successfully' })
   } catch (err) {
     return logAndSendInternal(res, 'deleteClient', err)
@@ -213,5 +305,6 @@ module.exports = {
   getClient,
   createClient,
   updateClient,
+  addFollowUp,
   deleteClient
 }
