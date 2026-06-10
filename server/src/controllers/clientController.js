@@ -29,6 +29,32 @@ function normalizeDuplicateText(value) {
   return clean(value).toLowerCase()
 }
 
+function displayIdNumber(value, prefix) {
+  const match = String(value || '').match(new RegExp(`^${prefix}(\\d+)$`, 'i'))
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
+}
+
+async function ensureClientDisplayIds() {
+  const { data, error } = await supabase
+    .from('clients')
+    .select('id, client_display_id, client_name, name, created_at')
+    .order('name', { ascending: true })
+
+  if (error || !data?.some((client) => !clean(client.client_display_id))) {
+    if (error) throw error
+    return
+  }
+
+  let next = Math.max(0, ...data.map((client) => displayIdNumber(client.client_display_id, 'CL')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
+  for (const client of data.filter((item) => !clean(item.client_display_id))) {
+    const { error: updateError } = await supabase
+      .from('clients')
+      .update({ client_display_id: `CL${next++}` })
+      .eq('id', client.id)
+    if (updateError) throw updateError
+  }
+}
+
 function normalizeClient(row, activeJobs = 0, followUps = []) {
   const clientName = row.client_name || row.name || ''
   const contactPerson = row.contact_person || row.contact || ''
@@ -39,6 +65,7 @@ function normalizeClient(row, activeJobs = 0, followUps = []) {
 
   return {
     ...row,
+    client_display_id: row.client_display_id,
     name: clientName,
     client_name: clientName,
     contact: contactPerson,
@@ -153,8 +180,25 @@ async function loadFollowUps(clientIds) {
 
 async function listClients(req, res) {
   try {
-    const { data, error } = await supabase.from('clients').select('*').order('name', { ascending: true })
+    await ensureClientDisplayIds()
+
+    let query = supabase.from('clients').select('*')
+    if (req.query.search) {
+      const search = clean(req.query.search)
+      query = query.or([
+        `client_display_id.ilike.%${search}%`,
+        `client_name.ilike.%${search}%`,
+        `name.ilike.%${search}%`,
+        `email.ilike.%${search}%`,
+        `mobile.ilike.%${search}%`,
+        `phone.ilike.%${search}%`,
+        `contact_person.ilike.%${search}%`,
+        `contact.ilike.%${search}%`
+      ].join(','))
+    }
+    const { data, error } = await query
     if (error) throw error
+    const sortedData = (data || []).sort((a, b) => displayIdNumber(a.client_display_id, 'CL') - displayIdNumber(b.client_display_id, 'CL'))
 
     const { data: jobs, error: jobsError } = await supabase.from('jobs').select('client_id, status')
     if (jobsError) throw jobsError
@@ -164,9 +208,9 @@ async function listClients(req, res) {
       if (job.status === 'Open' || job.status === 'Active') activeJobsMap[job.client_id] = (activeJobsMap[job.client_id] || 0) + 1
     })
 
-    const followUpsMap = await loadFollowUps((data || []).map((client) => client.id))
+    const followUpsMap = await loadFollowUps(sortedData.map((client) => client.id))
     return res.json({
-      data: (data || []).map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || []))
+      data: sortedData.map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || []))
     })
   } catch (err) {
     return logAndSendInternal(res, 'listClients', err)

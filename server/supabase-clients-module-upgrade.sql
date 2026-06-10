@@ -3,6 +3,7 @@ alter table public.clients
 
 alter table public.clients
   add column if not exists client_group_id uuid,
+  add column if not exists client_display_id text,
   add column if not exists client_name text,
   add column if not exists location text,
   add column if not exists region text,
@@ -39,6 +40,7 @@ alter table public.clients
   alter column client_group_id set not null;
 
 create index if not exists clients_client_group_id_idx on public.clients(client_group_id);
+create unique index if not exists clients_client_display_id_key on public.clients(client_display_id);
 create index if not exists clients_client_name_idx on public.clients(client_name);
 create index if not exists clients_contact_person_idx on public.clients(contact_person);
 create index if not exists clients_mobile_idx on public.clients(mobile);

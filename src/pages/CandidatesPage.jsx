@@ -63,6 +63,7 @@ const getConsultantNameFromUser = (user) => {
 }
 
 const AI_FILTER_FIELDS = [
+  'candidate_id',
   'name',
   'city',
   'state',
@@ -82,6 +83,7 @@ const AI_FILTER_FIELDS = [
 
 const CANDIDATE_TABLE_COLUMNS = [
   { key: 'sno', label: 'S.No' },
+  { key: 'candidateDisplayId', label: 'Candidate ID' },
   { key: 'date', label: 'Date' },
   { key: 'consultant', label: 'Consultant' },
   { key: 'client', label: 'Client Name' },
@@ -107,13 +109,19 @@ const CANDIDATE_TABLE_COLUMNS = [
 
 const DEFAULT_CANDIDATE_COLUMN_KEYS = CANDIDATE_TABLE_COLUMNS.map(column => column.key)
 
+const SORT_OPTIONS = [
+  { field: 'candidate_id', label: 'Candidate ID', toggle: true },
+  { field: 'candidate_name', label: 'Alphabetic Order', toggle: true },
+  { field: 'consultant', label: 'Consultant', toggle: false }
+]
+
 /* ====== Empty forms ====== */
 const EMPTY_CAND = {
   name:'', email:'', mobile:'', designation:'', city:'', state:'',
   location:'', currentCompany:'', currentOrganisation:'', exp:'', salary:'', expectedSalary:'', skills:[], education:'',
   noticePeriod:'', openToRelocate:false,
   client:'', job:'', clientPhone:'', status:'Interested',
-  cvLink:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', associationId:'',
+  cvLink:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
 }
 
 /* ====== Client phone lookup ====== */
@@ -130,6 +138,7 @@ const apiCandidateToUi = (row) => ({
   id: row.association_id || row.id,
   associationId: row.association_id || row.id,
   candidateId: row.candidate_id,
+  candidateDisplayId: row.candidate_display_id || '',
   name: row.full_name || '',
   email: row.email || '',
   mobile: row.mobile_number || '',
@@ -207,20 +216,21 @@ export default function CandidatesPage() {
 
   // Filters
   const [filterJob, setFilterJob]       = useState('All')
-  const [filterMinSal, setFilterMinSal] = useState('')
-  const [filterMaxSal, setFilterMaxSal] = useState('')
-  const [filterStatus, setFilterStatus] = useState([])
   const [aiFilterText, setAiFilterText] = useState('')
   const [aiFilters, setAiFilters] = useState(null)
   const [aiAppliedPrompt, setAiAppliedPrompt] = useState('')
   const [aiFilterLoading, setAiFilterLoading] = useState(false)
   const [aiFilterError, setAiFilterError] = useState('')
   const [aiFilterCount, setAiFilterCount] = useState(null)
+  const [sortField, setSortField] = useState('')
+  const [sortDirection, setSortDirection] = useState('asc')
+  const [sortOpen, setSortOpen] = useState(false)
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [visibleColumns, setVisibleColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const [pendingColumns, setPendingColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const [savedColumns, setSavedColumns] = useState(null)
   const columnsDropdownRef = useRef(null)
+  const sortDropdownRef = useRef(null)
 
   const [dbClients, setDbClients] = useState([])
   const [dbJobs, setDbJobs] = useState([])
@@ -267,6 +277,19 @@ export default function CandidatesPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [columnsOpen, visibleColumns])
 
+  useEffect(() => {
+    if (!sortOpen) return
+
+    const handleClickOutside = (event) => {
+      if (!sortDropdownRef.current?.contains(event.target)) {
+        setSortOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [sortOpen])
+
   // Add Candidate Modal
   const [addOpen, setAddOpen]   = useState(false)
   const [form, setForm]         = useState(EMPTY_CAND)
@@ -299,9 +322,10 @@ export default function CandidatesPage() {
       })
 
       if (filterJob !== 'All') params.set('job_title', filterJob)
-      if (filterMinSal) params.set('salary_min', filterMinSal)
-      if (filterMaxSal) params.set('salary_max', filterMaxSal)
-      if (filterStatus.length) params.set('status', filterStatus.join(','))
+      if (sortField) {
+        params.set('sortField', sortField)
+        params.set('sortDirection', sortDirection)
+      }
       if (aiFilters) {
         params.set('ai_filters', JSON.stringify(aiFilters))
         if (aiAppliedPrompt) params.set('ai_prompt', aiAppliedPrompt)
@@ -325,7 +349,7 @@ export default function CandidatesPage() {
     } finally {
       setLoadingCandidates(false)
     }
-  }, [aiAppliedPrompt, aiFilters, filterJob, filterMaxSal, filterMinSal, filterStatus, page, pageSize])
+  }, [aiAppliedPrompt, aiFilters, filterJob, page, pageSize, sortDirection, sortField])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -396,7 +420,7 @@ export default function CandidatesPage() {
   }
 
   const clearFilters = () => {
-    setFilterJob('All'); setFilterMinSal(''); setFilterMaxSal(''); setFilterStatus([])
+    setFilterJob('All')
     setAiFilterText('')
     setAiFilters(null)
     setAiAppliedPrompt('')
@@ -452,12 +476,28 @@ export default function CandidatesPage() {
     setPendingColumns(savedColumns?.length ? savedColumns : DEFAULT_CANDIDATE_COLUMN_KEYS)
   }
 
-  // ---- Status multi-select toggle ----
-  const toggleStatus = (s) => {
+  const sortLabel = () => {
+    const option = SORT_OPTIONS.find(item => item.field === sortField)
+    if (!option) return 'Sort By'
+    return option.toggle ? `${option.label} ${sortDirection === 'asc' ? '↓' : '↑'}` : option.label
+  }
+
+  const selectSort = (field) => {
+    const option = SORT_OPTIONS.find(item => item.field === field)
+    if (!option) return
+
+    if (!option.toggle) {
+      setSortField(field)
+      setSortDirection('asc')
+    } else if (sortField === field) {
+      setSortDirection(current => current === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+
     setPage(1)
-    setFilterStatus(prev =>
-      prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
-    )
+    setSortOpen(false)
   }
 
   // ---- Add Candidate form ----
@@ -807,6 +847,12 @@ export default function CandidatesPage() {
     })
     return (
       <div className="form-grid-2">
+        {f.candidateDisplayId && (
+          <div className="form-group">
+            <label className="form-label">Candidate ID</label>
+            <input value={f.candidateDisplayId} className="form-control" disabled readOnly />
+          </div>
+        )}
         <div className="form-group">
           <label className="form-label">Full Name <span className="req">*</span></label>
           <input name="name" value={f.name} onChange={handleLocalChange}
@@ -976,6 +1022,8 @@ export default function CandidatesPage() {
     switch (key) {
       case 'sno':
         return <td key={key}>{(page - 1) * pageSize + groupSerial}</td>
+      case 'candidateDisplayId':
+        return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{c.candidateDisplayId || '-'}</td>
       case 'date':
         return <td key={key}>{formatDate(c.createdAt)}</td>
       case 'consultant':
@@ -1143,23 +1191,6 @@ export default function CandidatesPage() {
 
         <div className="filter-divider" />
 
-        <span className="filter-label">Salary Rs.</span>
-        <input className="filter-input" type="number" value={filterMinSal}
-          onChange={e => { setFilterMinSal(e.target.value); setPage(1) }} id="filter-sal-min" />
-        <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>-</span>
-        <input className="filter-input" type="number" value={filterMaxSal}
-          onChange={e => { setFilterMaxSal(e.target.value); setPage(1) }} id="filter-sal-max" />
-
-        <div className="filter-divider" />
-
-        <div style={{ position: 'relative' }}>
-          <StatusMultiSelect
-            selected={filterStatus}
-            onToggle={toggleStatus}
-            options={ALL_STATUSES}
-          />
-        </div>
-
         <form onSubmit={applyAiFilter} className="candidate-ai-filter-form">
           <span className="filter-label">AI Filter</span>
           <input
@@ -1174,6 +1205,26 @@ export default function CandidatesPage() {
           </button>
           <button className="filter-clear" type="button" onClick={clearFilters}>Clear Filters</button>
         </form>
+
+        <div className="filter-divider" />
+
+        <span className="filter-label">Sort By</span>
+        <div className="candidate-sort-control" ref={sortDropdownRef}>
+          <button className="filter-select candidate-sort-btn" type="button" onClick={() => setSortOpen(open => !open)}>
+            <span>{sortLabel()}</span>
+            <ChevronDown size={13} strokeWidth={2} />
+          </button>
+          {sortOpen && (
+            <div className="filter-dropdown candidate-sort-dropdown">
+              {SORT_OPTIONS.map(option => (
+                <button className="candidate-columns-action" type="button" key={option.field} onClick={() => selectSort(option.field)}>
+                  {option.toggle ? `${option.label} ${sortField === option.field && sortDirection === 'desc' ? '↑' : '↓'}` : option.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button className="filter-clear" type="button" onClick={() => { setSortField(''); setSortDirection('asc'); setPage(1) }}>Clear</button>
       </div>
 
       {aiFilterError && (
@@ -1260,6 +1311,7 @@ export default function CandidatesPage() {
             <div className="candidate-detail-grid">
               {[
                 ['Date', formatDate(selectedCandidate.createdAt)],
+                ['Candidate ID', selectedCandidate.candidateDisplayId || '-'],
                 ['Consultant', selectedCandidate.consultant || '-'],
                 ['Client', selectedCandidate.client || '-'],
                 ['Role', selectedCandidate.job || '-'],
@@ -1481,65 +1533,6 @@ export default function CandidatesPage() {
               <button className="btn-primary" onClick={() => resolveCandidateDuplicate('update_current')} disabled={saving}>Update Current Entry</button>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/* ===== Status Multi-Select dropdown ===== */
-function StatusMultiSelect({ selected, onToggle, options }) {
-  const [open, setOpen] = useState(false)
-  const dropdownRef = useRef(null)
-  const label = selected.length === 0 ? 'All Statuses' : `${selected.length} selected`
-
-  useEffect(() => {
-    if (!open) return
-
-    const handleClickOutside = (event) => {
-      if (!dropdownRef.current?.contains(event.target)) {
-        setOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [open])
-
-  return (
-    <div ref={dropdownRef} style={{ position: 'relative' }}>
-      <button
-        className="filter-select"
-        style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', minWidth:140 }}
-        onClick={() => setOpen(o => !o)}
-        id="filter-status-dd"
-        type="button"
-      >
-        <span style={{ flex:1, textAlign:'left' }}>{label}</span>
-        <ChevronDown size={13} strokeWidth={2}
-          style={{ transform: open ? 'rotate(180deg)' : 'none', transition:'transform 0.15s' }} />
-      </button>
-      {open && (
-        <div className="filter-dropdown">
-          {options.map(s => (
-            <label key={s} style={{
-              display:'flex', alignItems:'center', gap:10, padding:'7px 14px',
-              cursor:'pointer', fontSize:13, color:'var(--gray-700)',
-              background: selected.includes(s) ? 'rgba(245,166,35,0.07)' : 'transparent',
-              transition:'background 0.1s',
-            }}>
-              <input type="checkbox" checked={selected.includes(s)} onChange={() => onToggle(s)}
-                style={{ accentColor:'var(--gold)', width:14, height:14 }} />
-              {s}
-            </label>
-          ))}
-          <div style={{ height:1, background:'var(--gray-100)', margin:'6px 0' }} />
-          <button onClick={() => { options.forEach(s => { if (selected.includes(s)) onToggle(s) }) }}
-            style={{ display:'block', width:'100%', textAlign:'left', padding:'7px 14px', border:'none',
-            background:'none', fontSize:12.5, color:'var(--gold)', fontWeight:600, cursor:'pointer',
-            fontFamily:'var(--font-body)' }}>
-            Clear Selection
-          </button>
         </div>
       )}
     </div>

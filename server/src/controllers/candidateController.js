@@ -52,6 +52,9 @@ const ASSOCIATION_FIELDS = [
 
 const AI_FILTER_OPERATORS = [
   'contains',
+  'equals',
+  'notEquals',
+  'startsWith',
   'eq',
   'gte',
   'lte',
@@ -62,6 +65,7 @@ const AI_FILTER_OPERATORS = [
 ]
 
 const AI_FILTER_FIELD_MAP = {
+  candidate_id: { column: 'candidates.candidate_display_id', type: 'text' },
   name: { column: 'candidates.full_name', type: 'text' },
   email: { column: 'candidates.email', type: 'text' },
   mobile: { column: 'candidates.mobile_number', type: 'text', normalize: normalizeMobile },
@@ -120,6 +124,8 @@ const AI_FILTER_FIELD_ALIASES = {
   consultant_name: 'consultant',
   mobile_number: 'mobile',
   email_id: 'email',
+  candidate_display_id: 'candidate_id',
+  display_id: 'candidate_id',
   comments: 'notes'
 }
 
@@ -280,9 +286,16 @@ function normalizeAiFilterOutput(data) {
   const logic = cleanText(data.logic || data.filters?.logic).toUpperCase() === 'OR' ? 'OR' : 'AND'
 
   const operatorMap = {
-    equals: 'eq',
-    equal: 'eq',
+    equals: 'equals',
+    equal: 'equals',
     '=': 'eq',
+    exactly: 'equals',
+    notEquals: 'notEquals',
+    not_equal: 'notEquals',
+    notEqual: 'notEquals',
+    not: 'notEquals',
+    startsWith: 'startsWith',
+    starts_with: 'startsWith',
     greaterThan: 'gt',
     greaterthan: 'gt',
     greater_than: 'gt',
@@ -298,7 +311,8 @@ function normalizeAiFilterOutput(data) {
     blank: 'isBlank',
     notBlank: 'isNotBlank',
     notblank: 'isNotBlank',
-    contains: 'contains'
+    contains: 'contains',
+    includes: 'contains'
   }
 
   const filters = inputFilters.map((filter) => {
@@ -321,7 +335,9 @@ function normalizeAiFilterOutput(data) {
       throw new Error(`Invalid AI filter operator: ${filter.operator}`)
     }
 
-    if (info.type !== 'number' && operator === 'eq') {
+    if (field === 'candidate_id' && operator === 'eq') {
+      operator = 'equals'
+    } else if (info.type !== 'number' && operator === 'eq') {
       operator = 'contains'
     }
 
@@ -438,6 +454,7 @@ function safeFilterPrompt(prompt, allowedFields) {
     'Return exactly: {"logic":"AND","filters":[{"field":"fieldName","operator":"operator","value":"value or null"}]}. Use OR only when the user explicitly says OR; otherwise use AND.',
     'AI is the only natural-language parser. Infer field, operator, and value from the full request.',
     'Use contains by default for text fields. Text "is" and "=" usually mean contains, not exact equality.',
+    'Exception: candidate_id is a unique identifier and defaults to exact matching. For candidate_id phrases "is", "equals", "=", "exactly", and "candidate CA10", return operator equals. For "candidate id contains CA10" return contains. For "candidate id starts with CA10" return startsWith. For "candidate id not equals CA10" return notEquals.',
     'Treat mobile/phone/email as text. For "mobile is 3" return field mobile, operator contains, value "3".',
     'Numeric fields are experience, notice_period, current_ctc, expected_ctc.',
     'Use numeric operators only for numeric fields.',
@@ -448,7 +465,7 @@ function safeFilterPrompt(prompt, allowedFields) {
     'For "experience 8+" return operator gte and value 8.',
     'For "consultant is rajneesh", return operator contains and value "rajneesh".',
     'Use isBlank for blank/empty/missing/null and isNotBlank for not blank/filled.',
-    'Map mobile/phone/contact/contact number/number to mobile; consultant/recruiter/handled by/assigned by/owner to consultant; candidate/person/name to name; city/location/current location/from/located in to city or location; designation/current role/title to designation; salary/ctc/current ctc to current_ctc; expected salary/expected ctc to expected_ctc; client/company/submitted to/working with to client; job/position/opening/role to job; status/stage to status; skill/technology/tech stack to skills.',
+    'Map candidate id/candidate ID/display id/candidate CA10 to candidate_id; mobile/phone/contact/contact number/number to mobile; consultant/recruiter/handled by/assigned by/owner to consultant; candidate/person/name to name unless followed by an ID like CA10; city/location/current location/from/located in to city or location; designation/current role/title to designation; salary/ctc/current ctc to current_ctc; expected salary/expected ctc to expected_ctc; client/company/submitted to/working with to client; job/position/opening/role to job; status/stage to status; skill/technology/tech stack to skills.',
     'Do not include SQL, code, markdown, explanations, or fields not listed.',
     `Request: ${cleanText(prompt).slice(0, 1000)}`
   ].join('\n\n')
@@ -561,6 +578,74 @@ function normalizeDuplicateText(value) {
   return cleanText(value).toLowerCase()
 }
 
+function displayIdNumber(value, prefix) {
+  const match = String(value || '').match(new RegExp(`^${prefix}(\\d+)$`, 'i'))
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
+}
+
+const SORT_FIELDS = new Set(['candidate_id', 'candidate_name', 'consultant'])
+const SORT_DIRECTIONS = new Set(['asc', 'desc'])
+
+function normalizeSort(query) {
+  const field = cleanText(query.sortField)
+  const direction = cleanText(query.sortDirection).toLowerCase()
+  if (!SORT_FIELDS.has(field)) return { field: '', direction: 'asc' }
+  return {
+    field,
+    direction: field === 'consultant' ? 'asc' : SORT_DIRECTIONS.has(direction) ? direction : 'asc'
+  }
+}
+
+function compareText(a, b) {
+  return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' })
+}
+
+function sortCandidateRows(rows, sort) {
+  if (!sort.field) return rows
+
+  const direction = sort.direction === 'desc' ? -1 : 1
+  return [...rows].sort((a, b) => {
+    if (sort.field === 'candidate_id') {
+      return (displayIdNumber(a.candidate_display_id, 'CA') - displayIdNumber(b.candidate_display_id, 'CA')) * direction
+    }
+    if (sort.field === 'candidate_name') {
+      return compareText(a.full_name, b.full_name) * direction
+    }
+    return compareText(a.consultant_name, b.consultant_name)
+  })
+}
+
+async function ensureCandidateDisplayIds() {
+  const { data, error } = await supabase
+    .from('candidate_associations')
+    .select('candidate_id, created_at, candidates(id, candidate_display_id)')
+    .order('candidate_id', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(10000)
+
+  if (error) throw error
+
+  const candidates = []
+  const seen = new Set()
+  for (const row of data || []) {
+    const candidate = row.candidates
+    if (!candidate?.id || seen.has(candidate.id)) continue
+    seen.add(candidate.id)
+    candidates.push(candidate)
+  }
+
+  if (!candidates.some((candidate) => !cleanText(candidate.candidate_display_id))) return
+
+  let next = Math.max(0, ...candidates.map((candidate) => displayIdNumber(candidate.candidate_display_id, 'CA')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
+  for (const candidate of candidates.filter((item) => !cleanText(item.candidate_display_id))) {
+    const { error: updateError } = await supabase
+      .from('candidates')
+      .update({ candidate_display_id: `CA${next++}` })
+      .eq('id', candidate.id)
+    if (updateError) throw updateError
+  }
+}
+
 async function findCandidateDuplicate(fullName, email) {
   const name = normalizeDuplicateText(fullName)
   const normalizedEmail = normalizeDuplicateText(email)
@@ -593,6 +678,7 @@ function flattenAssociation(row) {
     id: row.id,
     association_id: row.id,
     candidate_id: row.candidate_id,
+    candidate_display_id: candidate.candidate_display_id || null,
     full_name: candidate.full_name || null,
     email: candidate.email || null,
     mobile_number: candidate.mobile_number || null,
@@ -675,6 +761,15 @@ function applyAiCondition(query, condition) {
   if (operator === 'isBlank') return applyBlankFilter(query, column)
   if (operator === 'isNotBlank') return applyBlankFilter(query, column, true)
 
+  if (condition.field === 'candidate_id') {
+    value = cleanText(value)
+    if (!value) return query
+    if (operator === 'equals' || operator === 'eq') return query.ilike(column, value)
+    if (operator === 'notEquals') return query.not(column, 'ilike', value)
+    if (operator === 'startsWith') return query.ilike(column, `${value}%`)
+    return query.ilike(column, `%${value}%`)
+  }
+
   if (info.type === 'number') {
     value = (info.normalize || normalizeNumber)(value)
     if (value === null) return query
@@ -707,7 +802,9 @@ function applyAiCondition(query, condition) {
 
   value = info.normalize ? info.normalize(value) : cleanText(value)
   if (!value) return query
-  if (operator === 'eq') return query.ilike(column, info.fuzzy ? `%${value}%` : value)
+  if (operator === 'equals' || operator === 'eq') return query.ilike(column, info.fuzzy ? `%${value}%` : value)
+  if (operator === 'notEquals') return query.not(column, 'ilike', value)
+  if (operator === 'startsWith') return query.ilike(column, `${value}%`)
   return query.ilike(column, `%${value}%`)
 }
 
@@ -775,10 +872,13 @@ async function updateAssociation(associationId, payload) {
 
 async function listCandidates(req, res) {
   try {
+    await ensureCandidateDisplayIds()
+
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
     const to = from + limit - 1
+    const sort = normalizeSort(req.query)
 
     let query = supabase
       .from('candidate_associations')
@@ -813,6 +913,7 @@ async function listCandidates(req, res) {
       query = query.or(
         [
           `full_name.ilike.%${search}%`,
+          `candidate_display_id.ilike.%${search}%`,
           `email.ilike.%${search}%`,
           `mobile_number.ilike.%${mobile || search}%`,
           `city.ilike.%${search}%`,
@@ -844,12 +945,14 @@ async function listCandidates(req, res) {
       console.log('candidateAiFilter appliedFilters:', JSON.stringify(appliedFilters))
     }
 
-    const { data, error, count } = await query.range(from, to)
+    const { data, error, count } = sort.field ? await query.limit(10000) : await query.range(from, to)
 
     if (error) throw error
+    const rows = (data || []).map(flattenAssociation)
+    const sortedRows = sortCandidateRows(rows, sort)
 
     return res.json({
-      data: (data || []).map(flattenAssociation),
+      data: sort.field ? sortedRows.slice(from, to + 1) : rows,
       total: count || 0,
       page,
       limit

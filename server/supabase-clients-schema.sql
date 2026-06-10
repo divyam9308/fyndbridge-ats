@@ -1,5 +1,6 @@
 create table if not exists public.clients (
   id uuid primary key default gen_random_uuid(),
+  client_display_id text unique,
   name text unique not null,
   contact text,
   phone text not null,

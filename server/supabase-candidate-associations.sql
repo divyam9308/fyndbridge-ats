@@ -1,5 +1,6 @@
 create table if not exists public.candidates (
   id uuid primary key default gen_random_uuid(),
+  candidate_display_id text unique,
   full_name text not null,
   email text,
   mobile_number text not null,
@@ -123,6 +124,7 @@ create trigger on_auth_user_created
   for each row execute procedure public.handle_new_user();
 
 alter table public.candidates
+  add column if not exists candidate_display_id text,
   add column if not exists current_organisation text,
   add column if not exists notice_period integer,
   add column if not exists open_to_relocate boolean default false,

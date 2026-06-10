@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Pencil, Eye, X, Building2, AlertCircle, Loader2 } from 'lucide-react'
+import { Plus, Pencil, X, Building2, AlertCircle, Loader2 } from 'lucide-react'
 import '../styles/Shared.css'
 
 const STATUSES = ['Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const TERMS = ['%', 'Fixed Fee Model', 'Slab %', 'Any Other']
 const EMPTY_FORM = {
   client_group_id: '',
+  client_display_id: '',
   client_name: '',
   location: '',
   region: '',
@@ -34,6 +35,7 @@ const termsLabel = (client) => client.terms_signed_type === 'Any Other' ? client
 function clientToForm(client) {
   return {
     client_group_id: client.client_group_id || client.id || '',
+    client_display_id: client.client_display_id || '',
     client_name: client.client_name || client.name || '',
     location: client.location || client.city || '',
     region: client.region || client.state || '',
@@ -57,6 +59,7 @@ function clientToForm(client) {
 
 export default function ClientsPage() {
   const [clients, setClients] = useState([])
+  const [searchText, setSearchText] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -68,10 +71,12 @@ export default function ClientsPage() {
   const [followUpClient, setFollowUpClient] = useState(null)
   const [followUpForm, setFollowUpForm] = useState({ follow_up_date: '', follow_up_comments: '' })
 
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/clients')
+      const params = new URLSearchParams()
+      if (searchText.trim()) params.set('search', searchText.trim())
+      const res = await fetch(`/api/clients${params.toString() ? `?${params.toString()}` : ''}`)
       if (!res.ok) throw new Error('Failed to fetch clients from server.')
       const data = await res.json()
       setClients(data.data || [])
@@ -81,12 +86,12 @@ export default function ClientsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [searchText])
 
   useEffect(() => {
     const timer = window.setTimeout(fetchClients, 0)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [fetchClients])
 
   const serials = useMemo(() => {
     const map = {}
@@ -202,6 +207,7 @@ export default function ClientsPage() {
   return (
     <div>
       <div className="page-header">
+        <input className="filter-input" value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search clients" />
         <button className="btn-primary" onClick={openModal} id="btn-add-client">
           <Plus size={15} strokeWidth={2.5} /> Add Client
         </button>
@@ -226,7 +232,7 @@ export default function ClientsPage() {
           <table className="data-table" aria-label="Clients">
             <thead>
               <tr>
-                <th>S.No.</th><th>Client Name</th><th>Location</th><th>Region</th><th>Contact Person</th><th>Mobile</th><th>Email</th><th>LinkedIn</th><th>Sector</th><th>Connected On Date</th><th>Comments</th><th>Follow Up Date</th><th>Status</th><th>Terms Signed</th><th>Value</th><th>GSTIN</th><th>PAN</th><th>Address on Invoice</th><th>Actions</th>
+                <th>S.No.</th><th>Client ID</th><th>Client Name</th><th>Location</th><th>Region</th><th>Contact Person</th><th>Mobile</th><th>Email</th><th>LinkedIn</th><th>Sector</th><th>Connected On Date</th><th>Comments</th><th>Follow Up Date</th><th>Status</th><th>Terms Signed</th><th>Value</th><th>GSTIN</th><th>PAN</th><th>Address on Invoice</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -235,6 +241,7 @@ export default function ClientsPage() {
                 return (
                   <tr key={client.id}>
                     <td>{serials[client.client_group_id || client.id]}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(client.client_display_id)}</td>
                     <td>
                       <Link className="name-text" to={`/dashboard/clients/${client.id}`}>{client.client_name}</Link>
                     </td>
@@ -274,7 +281,6 @@ export default function ClientsPage() {
                     <td>
                       <div className="row-actions">
                         <button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)}><Pencil size={13} strokeWidth={2} /></button>
-                        <Link className="row-action-btn" to={`/dashboard/clients/${client.id}`} title="View Jobs" id={`view-jobs-${client.id}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Eye size={13} strokeWidth={2} /></Link>
                       </div>
                     </td>
                   </tr>
@@ -294,6 +300,12 @@ export default function ClientsPage() {
             </div>
             <div className="modal-body">
               <div className="form-grid-2">
+                {editingClient && (
+                  <div className="form-group">
+                    <label className="form-label">Client ID</label>
+                    <input value={form.client_display_id || ''} className="form-control" disabled readOnly />
+                  </div>
+                )}
                 {[
                   ['client_name', 'Client Name', 'text', true],
                   ['location', 'Location', 'text'],

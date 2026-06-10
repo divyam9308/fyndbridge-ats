@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "1e2da4a14ee70db5",
+        "id": "f9e613100e6a6592",
         "type": "tabs",
         "children": [
           {
-            "id": "908803adadb280ba",
+            "id": "1973d90f8d4a2046",
             "type": "leaf",
             "state": {
               "type": "graph",
@@ -17,7 +17,8 @@
               "title": "Graph view"
             }
           }
-        ]
+        ],
+        "stacked": true
       }
     ],
     "direction": "vertical"
@@ -176,9 +177,13 @@
       "bases:Create new base": false
     }
   },
-  "active": "908803adadb280ba",
+  "active": "476fc5b036abf678",
   "lastOpenFiles": [
-    "2026-06-10.md",
-    "Untitled.canvas"
+    "Untitled",
+    "Untitled.base",
+    "Untitled.canvas",
+    "Untitled.md",
+    "README.md",
+    "2026-06-10.md"
   ]
 }

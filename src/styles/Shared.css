@@ -103,11 +103,12 @@
   margin-bottom: 18px;
   flex-wrap: wrap;
   box-shadow: var(--shadow-card);
+  position: relative;
+  z-index: 20;
 }
 .candidates-filter-bar {
   flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: visible;
 }
 .candidate-ai-filter-form {
   display: flex;
@@ -120,6 +121,20 @@
   width: 220px;
   min-width: 180px;
   flex: 0 0 220px;
+}
+.candidate-sort-control {
+  position: relative;
+  flex: 0 0 auto;
+}
+.candidate-sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 160px;
+  justify-content: space-between;
+}
+.candidate-sort-dropdown {
+  min-width: 180px;
 }
 .filter-dropdown {
   position: absolute;
@@ -304,6 +319,8 @@
   border: 1px solid var(--gray-200);
   box-shadow: var(--shadow-card);
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 .table-wrapper {
   overflow-x: auto;
