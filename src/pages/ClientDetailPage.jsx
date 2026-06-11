@@ -507,7 +507,7 @@ export default function ClientDetailPage() {
               <tr>
                 <th>Job Title</th>
                 <th>Status</th>
-                <th className="align-center">Total Assigned</th>
+                <th className="align-center">Candidates Assigned</th>
                 {STATUS_COLUMNS.map(([, label]) => <th className="align-center" key={label}>{label}</th>)}
               </tr>
             </thead>

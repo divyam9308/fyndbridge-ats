@@ -1,4 +1,5 @@
 const supabase = require('../services/supabaseAdmin')
+const { randomUUID } = require('crypto')
 
 const CLIENT_STATUSES = [
   'Converted',
@@ -23,6 +24,10 @@ function clean(value) {
 function nullable(value) {
   const next = clean(value)
   return next || null
+}
+
+function normalizeBoolean(value) {
+  return value === true || String(value || '').toLowerCase() === 'true' || String(value || '').toLowerCase() === 'yes'
 }
 
 function normalizeDuplicateText(value) {
@@ -105,6 +110,7 @@ function normalizeClient(row, activeJobs = 0, followUps = []) {
     name: clientName,
     client_name: clientName,
     contact: contactPerson,
+    designation: row.designation || '',
     contact_person: contactPerson,
     phone: mobile,
     mobile,
@@ -116,9 +122,32 @@ function normalizeClient(row, activeJobs = 0, followUps = []) {
     comments,
     status: row.status || 'Not Converted',
     terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
+    contract_signed: Boolean(row.contract_signed),
+    contract_document: row.contract_document || '',
     activeJobs,
     follow_ups: followUps
   }
+}
+
+async function uploadContractPdf(file) {
+  if (!file) return null
+  if (file.mimetype !== 'application/pdf') {
+    const err = new Error('Contract document must be a PDF')
+    err.statusCode = 400
+    throw err
+  }
+
+  const bucket = 'client-contracts'
+  await supabase.storage.createBucket(bucket, { public: true }).catch(() => {})
+  const safeName = file.originalname.replace(/[^\w.-]+/g, '-')
+  const path = `${new Date().getFullYear()}/${randomUUID()}-${safeName}`
+  const { error } = await supabase.storage.from(bucket).upload(path, file.buffer, {
+    contentType: 'application/pdf',
+    upsert: false
+  })
+  if (error) throw error
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+  return data.publicUrl
 }
 
 function clientPayload(body) {
@@ -138,6 +167,7 @@ function clientPayload(body) {
 
   const clientName = clean(body.client_name || body.name)
   const mobile = clean(body.mobile || body.phone)
+  const contractSigned = normalizeBoolean(body.contract_signed)
 
   if (!clientName) {
     const err = new Error('Client Name is required')
@@ -161,6 +191,7 @@ function clientPayload(body) {
     state: nullable(body.region || body.state),
     contact_person: nullable(body.contact_person || body.contact),
     contact: nullable(body.contact_person || body.contact),
+    designation: nullable(body.designation),
     mobile,
     phone: mobile,
     email: nullable(body.email),
@@ -174,6 +205,8 @@ function clientPayload(body) {
     terms_signed_type: status === 'Converted' ? nullable(termsType) : null,
     terms_signed_custom: status === 'Converted' && termsType === 'Any Other' ? nullable(body.terms_signed_custom) : null,
     terms_value: status === 'Converted' ? nullable(body.terms_value) : null,
+    contract_signed: contractSigned,
+    contract_document: contractSigned ? nullable(body.contract_document) : null,
     gstin: status === 'Converted' ? nullable(body.gstin) : null,
     pan: status === 'Converted' ? nullable(body.pan) : null,
     address_on_invoice: status === 'Converted' ? nullable(body.address_on_invoice) : null
@@ -308,6 +341,7 @@ async function getClient(req, res) {
 
 async function createClient(req, res) {
   try {
+    if (req.file) req.body.contract_document = await uploadContractPdf(req.file)
     const payload = clientPayload(req.body)
     const duplicateAction = req.body.duplicate_action
     const duplicate = await findClientDuplicate(payload.client_name, payload.email)
@@ -357,6 +391,7 @@ async function createClient(req, res) {
 
 async function updateClient(req, res) {
   try {
+    if (req.file) req.body.contract_document = await uploadContractPdf(req.file)
     const payload = clientPayload(req.body)
     const { data, error } = await supabase
       .from('clients')

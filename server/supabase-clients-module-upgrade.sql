@@ -9,6 +9,7 @@ alter table public.clients
   add column if not exists location text,
   add column if not exists region text,
   add column if not exists contact_person text,
+  add column if not exists designation text,
   add column if not exists mobile text,
   add column if not exists linkedin text,
   add column if not exists sector text,
@@ -18,6 +19,8 @@ alter table public.clients
   add column if not exists terms_signed_type text,
   add column if not exists terms_signed_custom text,
   add column if not exists terms_value text,
+  add column if not exists contract_signed boolean default false,
+  add column if not exists contract_document text,
   add column if not exists gstin text,
   add column if not exists pan text,
   add column if not exists address_on_invoice text;
@@ -31,6 +34,7 @@ set
   contact_person = coalesce(contact_person, contact),
   mobile = coalesce(mobile, phone),
   comments = coalesce(comments, notes),
+  contract_signed = coalesce(contract_signed, false),
   status = case
     when status in ('Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', 'Didn''t Pick Up') then status
     else 'Not Converted'

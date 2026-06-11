@@ -23,6 +23,7 @@ const EMPTY_FORM = {
   location: '',
   region: '',
   contact_person: '',
+  designation: '',
   mobile: '',
   email: '',
   linkedin: '',
@@ -34,6 +35,8 @@ const EMPTY_FORM = {
   terms_signed_type: '',
   terms_signed_custom: '',
   terms_value: '',
+  contract_signed: 'No',
+  contract_document: '',
   gstin: '',
   pan: '',
   address_on_invoice: ''
@@ -42,6 +45,11 @@ const EMPTY_FORM = {
 const dash = (value) => value || '-'
 const convertedDash = (client, value) => client.status === 'Converted' ? dash(value) : '-'
 const termsLabel = (client) => client.terms_signed_type === 'Any Other' ? client.terms_signed_custom : client.terms_signed_type
+const todayLocal = () => {
+  const date = new Date()
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 10)
+}
 const CLIENT_TABLE_COLUMNS = [
   { key: 'sno', label: 'S.No.' },
   { key: 'clientId', label: 'Client ID' },
@@ -52,6 +60,7 @@ const CLIENT_TABLE_COLUMNS = [
   { key: 'contactPerson', label: 'Contact Person' },
   { key: 'mobile', label: 'Mobile' },
   { key: 'email', label: 'Email' },
+  { key: 'designation', label: 'Designation' },
   { key: 'linkedin', label: 'LinkedIn' },
   { key: 'sector', label: 'Sector' },
   { key: 'connectedOnDate', label: 'Connected On Date' },
@@ -60,6 +69,8 @@ const CLIENT_TABLE_COLUMNS = [
   { key: 'status', label: 'Status' },
   { key: 'termsSigned', label: 'Terms Signed' },
   { key: 'value', label: 'Value' },
+  { key: 'contractSigned', label: 'Contract Signed' },
+  { key: 'contractDocument', label: 'Contract Document' },
   { key: 'gstin', label: 'GSTIN' },
   { key: 'pan', label: 'PAN' },
   { key: 'addressOnInvoice', label: 'Address on Invoice' },
@@ -97,6 +108,7 @@ function clientToForm(client) {
     location: client.location || client.city || '',
     region: client.region || client.state || '',
     contact_person: client.contact_person || client.contact || '',
+    designation: client.designation || '',
     mobile: client.mobile || client.phone || '',
     email: client.email || '',
     linkedin: client.linkedin || '',
@@ -108,6 +120,8 @@ function clientToForm(client) {
     terms_signed_type: client.terms_signed_type || '',
     terms_signed_custom: client.terms_signed_custom || '',
     terms_value: client.terms_value || '',
+    contract_signed: client.contract_signed ? 'Yes' : 'No',
+    contract_document: client.contract_document || '',
     gstin: client.gstin || '',
     pan: client.pan || '',
     address_on_invoice: client.address_on_invoice || ''
@@ -127,6 +141,7 @@ export default function ClientsPage() {
   const [selectedContacts, setSelectedContacts] = useState({})
   const [followUpClient, setFollowUpClient] = useState(null)
   const [followUpForm, setFollowUpForm] = useState({ follow_up_date: '', follow_up_comments: '' })
+  const [contractFile, setContractFile] = useState(null)
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [visibleColumns, setVisibleColumns] = useState(DEFAULT_CLIENT_COLUMN_KEYS)
   const [pendingColumns, setPendingColumns] = useState(DEFAULT_CLIENT_COLUMN_KEYS)
@@ -286,6 +301,7 @@ export default function ClientsPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target
+    if (name === 'contract_signed' && value === 'No') setContractFile(null)
     setForm((current) => {
       const next = { ...current, [name]: value }
       if (name === 'status' && value !== 'Converted') {
@@ -296,9 +312,22 @@ export default function ClientsPage() {
         next.pan = ''
         next.address_on_invoice = ''
       }
+      if (name === 'contract_signed' && value === 'No') next.contract_document = ''
       return next
     })
     if (errors[name]) setErrors((current) => ({ ...current, [name]: '' }))
+  }
+
+  const handleContractFile = (event) => {
+    const file = event.target.files?.[0] || null
+    if (file && file.type !== 'application/pdf') {
+      setErrors((current) => ({ ...current, contract_document: 'Contract document must be a PDF' }))
+      setContractFile(null)
+      event.target.value = ''
+      return
+    }
+    setErrors((current) => ({ ...current, contract_document: '' }))
+    setContractFile(file)
   }
 
   const validate = () => {
@@ -307,12 +336,14 @@ export default function ClientsPage() {
     if (!form.mobile.trim()) next.mobile = 'Mobile is required'
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
     if (!STATUSES.includes(form.status)) next.status = 'Select a valid status'
+    if (!['Yes', 'No'].includes(form.contract_signed)) next.contract_signed = 'Select Yes or No'
     return next
   }
 
   const openModal = () => {
-    setForm({ ...EMPTY_FORM, consultant_name: getConsultantNameFromUser(getCurrentUser()) })
+    setForm({ ...EMPTY_FORM, consultant_name: getConsultantNameFromUser(getCurrentUser()), connected_on_date: todayLocal(), follow_up_date: todayLocal() })
     setErrors({})
+    setContractFile(null)
     setEditingClient(null)
     setIsOpen(true)
   }
@@ -320,6 +351,7 @@ export default function ClientsPage() {
   const openEditModal = (client) => {
     setForm(clientToForm(client))
     setErrors({})
+    setContractFile(null)
     setEditingClient(client)
     setIsOpen(true)
   }
@@ -339,9 +371,11 @@ export default function ClientsPage() {
       contact_person: '',
       mobile: '',
       email: '',
+      designation: '',
       linkedin: ''
     })
     setErrors({})
+    setContractFile(null)
     setEditingClient(null)
     setIsOpen(true)
   }
@@ -355,14 +389,17 @@ export default function ClientsPage() {
 
     setSaving(true)
     try {
+      const body = new FormData()
+      Object.entries(form).forEach(([key, value]) => body.append(key, value ?? ''))
+      if (contractFile) body.append('contract_document_file', contractFile)
       const res = await fetch(editingClient ? `/api/clients/${editingClient.id}` : '/api/clients', {
         method: editingClient ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Failed to save client.')
       setIsOpen(false)
+      setContractFile(null)
       setEditingClient(null)
       await fetchClients({ showLoading: false })
     } catch (err) {
@@ -486,6 +523,8 @@ export default function ClientsPage() {
         return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(contact.mobile || contact.phone)}</td>
       case 'email':
         return <td key={key} style={{ color: 'var(--info)', fontSize: 12.5 }}>{dash(contact.email)}</td>
+      case 'designation':
+        return <td key={key}>{dash(contact.designation)}</td>
       case 'linkedin':
         return <td key={key}>{contact.linkedin ? <a className="cv-table-link" href={contact.linkedin.startsWith('http') ? contact.linkedin : `https://${contact.linkedin}`} target="_blank" rel="noreferrer">LinkedIn</a> : '-'}</td>
       case 'sector':
@@ -506,7 +545,7 @@ export default function ClientsPage() {
                 <span>{dash(client.follow_up_date)}</span>
               )}
               <span>{followUp?.follow_up_date || ''}</span>
-              <button className="row-action-btn" type="button" title="Add Follow Up" onClick={() => { setFollowUpClient(client); setFollowUpForm({ follow_up_date: '', follow_up_comments: '' }) }}><Plus size={12} /></button>
+              <button className="row-action-btn" type="button" title="Add Follow Up" onClick={() => { setFollowUpClient(client); setFollowUpForm({ follow_up_date: todayLocal(), follow_up_comments: '' }) }}><Plus size={12} /></button>
             </span>
           </td>
         )
@@ -516,6 +555,10 @@ export default function ClientsPage() {
         return <td key={key}>{convertedDash(client, termsLabel(client))}</td>
       case 'value':
         return <td key={key}>{convertedDash(client, client.terms_value)}</td>
+      case 'contractSigned':
+        return <td key={key}>{client.contract_signed ? 'Yes' : 'No'}</td>
+      case 'contractDocument':
+        return <td key={key}>{client.contract_signed ? (client.contract_document ? <a className="cv-table-link" href={client.contract_document} target="_blank" rel="noreferrer">Open PDF</a> : 'Missing') : '-'}</td>
       case 'gstin':
         return <td key={key}>{convertedDash(client, client.gstin)}</td>
       case 'pan':
@@ -657,6 +700,7 @@ export default function ClientsPage() {
                   ['contact_person', 'Contact Person', 'text'],
                   ['mobile', 'Mobile', 'text', true],
                   ['email', 'Email', 'email'],
+                  ['designation', 'Designation', 'text'],
                   ['linkedin', 'LinkedIn', 'text'],
                   ['sector', 'Sector', 'text'],
                   ['connected_on_date', 'Connected On Date', 'date'],
@@ -678,6 +722,22 @@ export default function ClientsPage() {
                     {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
                   </select>
                 </div>
+                <div className="form-group">
+                  <label className="form-label">Contract Signed</label>
+                  <select name="contract_signed" value={form.contract_signed} onChange={handleChange} className={`form-control${errors.contract_signed ? ' is-error' : ''}`} disabled={saving}>
+                    <option value="No">No</option>
+                    <option value="Yes">Yes</option>
+                  </select>
+                  {errors.contract_signed && <span className="form-error">{errors.contract_signed}</span>}
+                </div>
+                {form.contract_signed === 'Yes' && (
+                  <div className="form-group">
+                    <label className="form-label">Contract PDF</label>
+                    <input type="file" accept="application/pdf" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving} />
+                    {form.contract_document && <a className="cv-table-link" href={form.contract_document} target="_blank" rel="noreferrer">Current Contract</a>}
+                    {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
+                  </div>
+                )}
                 {form.status === 'Converted' && (
                   <>
                     <div className="form-group">
