@@ -11,6 +11,9 @@ const ALL_STATUSES = [
 ]
 const STATUS_OPTIONS = ['', ...ALL_STATUSES]
 const RELOCATE_OPTIONS = ['', 'Yes', 'No']
+const MAX_RESUME_FILES = 10
+const MAX_RESUME_SIZE = 10 * 1024 * 1024
+const ACCEPTED_RESUME_EXTENSIONS = ['pdf', 'doc', 'docx']
 
 const STATUS_BADGE_MAP = {
   'Interested':           'badge-interested',
@@ -337,16 +340,17 @@ export default function CandidatesPage() {
   const [detailError, setDetailError] = useState('')
   const [expandedCells, setExpandedCells] = useState({})
 
-  // Import Resume Modal
+  // Bulk resume review modal
   const [importOpen, setImportOpen]   = useState(false)
-  const [importTab, setImportTab]     = useState('upload')  // 'upload' | 'url'
-  const [resumeUrl, setResumeUrl]     = useState('')
-  const [resumeFile, setResumeFile]   = useState(null)
+  const [resumeFiles, setResumeFiles] = useState([])
+  const [importQueue, setImportQueue] = useState([])
+  const [currentImportIndex, setCurrentImportIndex] = useState(0)
   const [importError, setImportError] = useState('')
   const [parsing, setParsing]         = useState(false)
   const [parsed, setParsed]           = useState(false)    // after parse success
   const [parsedForm, setParsedForm]   = useState(null)
   const [parsedSkillInput, setParsedSkillInput] = useState('')
+  const [reviewNotice, setReviewNotice] = useState('')
 
   const focusPopup = useCallback((ref) => {
     window.requestAnimationFrame(() => {
@@ -807,118 +811,81 @@ export default function CandidatesPage() {
   }
   const removeParsedSkill = (s) => setParsedForm(f => ({ ...f, skills: f.skills.filter(x => x !== s) }))
 
-  const fieldValue = (extracted, key, fallback = '') => extracted?.[key]?.value ?? fallback
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files || [])
+    handleBulkResumeFiles(files)
+  }
 
-  const mapParsedResponseToForm = (payload) => {
-    const extracted = payload.extracted || {}
-    const ai = payload.ai_extracted || null
-    const parsedClient = ai?.client || ai?.clientName || fieldValue(extracted, 'client_name') || fieldValue(extracted, 'client') || ''
+  const validateResumeFiles = (files) => {
+    if (!files.length) return 'Select at least one resume.'
+    if (files.length > MAX_RESUME_FILES) return 'Upload up to 10 resumes at once.'
+    const invalid = files.find(file => !ACCEPTED_RESUME_EXTENSIONS.includes(String(file.name.split('.').pop() || '').toLowerCase()))
+    if (invalid) return 'Only PDF, DOC, and DOCX files are accepted.'
+    const oversized = files.find(file => file.size > MAX_RESUME_SIZE)
+    if (oversized) return 'Each resume must be 10 MB or smaller.'
+    return ''
+  }
+
+  const mapBulkResumeRowToForm = (row) => {
+    const parsedClient = row.client_name || ''
     const matchedClient = findClientByName(parsedClient)
-    const lowConf = Object.entries(extracted)
-      .filter(([, data]) => data?.confidence === 'low' && data.value)
-      .map(([key]) => ({
-        full_name: 'name',
-        mobile_number: 'mobile',
-        current_designation: 'designation',
-        current_organisation: 'currentOrganisation',
-        experience_years: 'exp',
-        cover_letter: 'notes'
-      }[key] || key))
-
     return {
       ...EMPTY_CAND,
       consultantName: activeConsultantName,
-      name: ai?.name || fieldValue(extracted, 'full_name'),
-      email: ai?.email || fieldValue(extracted, 'email'),
-      mobile: ai?.mobile || fieldValue(extracted, 'mobile_number'),
-      designation: ai?.currentDesignation || fieldValue(extracted, 'current_designation'),
-      currentCompany: ai?.currentOrganisation || fieldValue(extracted, 'current_organisation') || fieldValue(extracted, 'current_company'),
-      currentOrganisation: ai?.currentOrganisation || fieldValue(extracted, 'current_organisation') || fieldValue(extracted, 'current_company'),
-      exp: ai?.experience ?? fieldValue(extracted, 'experience_years'),
-      city: ai?.city || fieldValue(extracted, 'city'),
-      state: ai?.state || fieldValue(extracted, 'state'),
-      location: ai?.location || [ai?.city || fieldValue(extracted, 'city'), ai?.state || fieldValue(extracted, 'state')].filter(Boolean).join(', ') || fieldValue(extracted, 'location'),
-      skills: ai?.skills?.length ? ai.skills : (fieldValue(extracted, 'skills', []) || []),
-      education: ai?.education || fieldValue(extracted, 'education'),
-      salary: ai?.salary ?? fieldValue(extracted, 'salary'),
+      name: row.candidate_name || '',
+      email: row.email || '',
+      mobile: row.phone_number || '',
+      designation: row.current_designation || '',
+      currentCompany: row.current_organization || '',
+      currentOrganisation: row.current_organization || '',
+      exp: row.experience_years ?? '',
+      city: row.city || '',
+      state: row.state || '',
+      location: row.location || [row.city, row.state].filter(Boolean).join(', '),
+      skills: Array.isArray(row.skills) ? row.skills : [],
+      education: row.education || '',
+      salary: row.salary ?? '',
       client: matchedClient ? clientName(matchedClient) : (parsedClient ? '__new_client__' : ''),
       clientId: matchedClient?.id || '',
       newClientName: matchedClient ? '' : parsedClient,
       clientPhone: matchedClient?.phone || '',
-      linkedinUrl: ai?.linkedin || '',
-      notes: ai?.summary || fieldValue(extracted, 'cover_letter'),
-      _lowConf: lowConf
+      linkedinUrl: row.linkedin_url || '',
+      cvLink: row.resume_url || '',
+      notes: row.summary || row.error || '',
+      source: 'resume'
     }
   }
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0]
-    handleResumeFile(file)
+  const startResumeReview = (rows) => {
+    setImportQueue(rows)
+    setCurrentImportIndex(0)
+    setParsedForm(mapBulkResumeRowToForm(rows[0]))
+    setParsed(true)
+    setReviewNotice(rows[0]?.error ? `Parsing warning: ${rows[0].error}` : '')
   }
 
-  const handleResumeFile = (file) => {
-    setImportError('')
-
-    if (!file) {
-      setResumeFile(null)
-      return
-    }
-
-    if (file.type !== 'application/pdf') {
-      setResumeFile(null)
-      setImportError('Only PDF files are accepted.')
-      return
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setResumeFile(null)
-      setImportError('PDF file must be 10 MB or smaller.')
-      return
-    }
-
-    setResumeFile(file)
-  }
-
-  // ---- Resume parsing ----
-  const handleParse = async () => {
-    setImportError('')
-
-    if (importTab === 'upload' && !resumeFile) {
-      setImportError('Choose a PDF resume first.')
-      return
-    }
-
-    if (importTab === 'url' && !resumeUrl.trim()) {
-      setImportError('Paste a resume PDF URL first.')
-      return
-    }
-
+  const handleBulkResumeFiles = async (files) => {
+    const validationError = validateResumeFiles(files)
+    setImportError(validationError)
+    if (validationError) return
+    setResumeFiles(files)
+    setImportOpen(true)
+    setParsed(false)
+    setParsedForm(null)
+    setReviewNotice('')
+    const body = new FormData()
+    files.forEach(file => body.append('resumes', file))
     setParsing(true)
     try {
-      let body
-      let headers
-
-      if (importTab === 'upload') {
-        body = new FormData()
-        body.append('resume', resumeFile)
-      } else {
-        headers = { 'Content-Type': 'application/json' }
-        body = JSON.stringify({ resume_url: resumeUrl.trim() })
-      }
-
-      const response = await fetch('/api/candidates/parse-resume', {
+      const response = await fetch('/api/resumes/bulk-parse', {
         method: 'POST',
-        headers,
         body
       })
       const payload = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        throw new Error(payload.detail || payload.error || 'Resume parsing failed.')
-      }
-
-      setParsedForm(mapParsedResponseToForm(payload))
-      setParsed(true)
+      if (!response.ok) throw new Error(payload.error || 'Unable to parse resumes.')
+      const rows = payload.rows || []
+      if (!rows.length) throw new Error('No resumes were parsed.')
+      startResumeReview(rows)
     } catch (err) {
       notifyAiQuota(err.message)
       setImportError(err.message)
@@ -927,23 +894,55 @@ export default function CandidatesPage() {
     }
   }
 
+  const fillEmptyCandidateFields = (candidate) => {
+    const textFields = ['name', 'email', 'mobile', 'designation', 'city', 'state', 'location', 'currentCompany', 'currentOrganisation', 'education', 'client', 'job', 'clientPhone', 'cvLink', 'linkedinUrl', 'notes', 'consultantName']
+    const next = { ...candidate }
+    textFields.forEach(field => {
+      if (String(next[field] ?? '').trim() === '') next[field] = '-'
+    })
+    if (next.client === '__new_client__' && String(next.newClientName || '').trim() === '') next.newClientName = '-'
+    return next
+  }
+
+  const advanceResumeReview = async (notice = '') => {
+    const nextIndex = currentImportIndex + 1
+    if (nextIndex >= importQueue.length) {
+      closeImport()
+      await loadCandidates(page, { showLoading: false })
+      return
+    }
+    setCurrentImportIndex(nextIndex)
+    setParsedForm(mapBulkResumeRowToForm(importQueue[nextIndex]))
+    setParsedSkillInput('')
+    setReviewNotice(importQueue[nextIndex]?.error ? `Parsing warning: ${importQueue[nextIndex].error}` : notice)
+  }
+
   const handleSaveParsed = async () => {
-    const e = validate(parsedForm)
+    const candidateToSave = fillEmptyCandidateFields({ ...parsedForm, source: 'resume' })
+    const e = validate(candidateToSave)
     if (Object.keys(e).length) { setImportError(Object.values(e)[0]); return }
     setSaving(true)
     try {
-      await saveCandidateToApi({ ...parsedForm, source: 'resume' })
-      closeImport()
+      await saveCandidateToApi(candidateToSave)
       await loadCandidates(page, { showLoading: false })
+      await advanceResumeReview('Candidate saved.')
     } catch (err) {
       if (err.duplicate) {
-        setCandidateDuplicate({ source: 'resume', candidate: { ...parsedForm, source: 'resume' }, existing: err.duplicate.existing })
+        setCandidateDuplicate({ source: 'resume', candidate: candidateToSave, existing: err.duplicate.existing })
         return
       }
       setImportError(err.message)
     } finally {
       setSaving(false)
     }
+  }
+
+  const skipCurrentResume = () => {
+    advanceResumeReview('Resume skipped.')
+  }
+
+  const cancelRemainingResumes = () => {
+    if (window.confirm('Cancel remaining resume reviews?')) closeImport()
   }
 
   const resolveCandidateDuplicate = async (duplicateAction) => {
@@ -953,10 +952,13 @@ export default function CandidatesPage() {
     try {
       await saveCandidateToApi(candidateDuplicate.candidate, { duplicateAction })
       setCandidateDuplicate(null)
+      await loadCandidates(page, { showLoading: false })
+      if (candidateDuplicate.source === 'resume') {
+        await advanceResumeReview('Duplicate resolved.')
+        return
+      }
       setAddOpen(false)
       setEditing(false)
-      closeImport()
-      await loadCandidates(page, { showLoading: false })
     } catch (err) {
       const message = err.message || 'Unable to resolve duplicate candidate.'
       if (candidateDuplicate.source === 'resume') setImportError(message)
@@ -967,7 +969,7 @@ export default function CandidatesPage() {
   }
 
   const closeImport = () => {
-    setImportOpen(false); setImportTab('upload'); setResumeUrl(''); setResumeFile(null); setImportError('')
+    setImportOpen(false); setResumeFiles([]); setImportQueue([]); setCurrentImportIndex(0); setImportError(''); setReviewNotice('')
     setParsing(false); setParsed(false); setParsedForm(null); setParsedSkillInput('')
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -1394,8 +1396,16 @@ export default function CandidatesPage() {
     <div>
       {/* Header */}
       <div className="page-header">
-        <button className="btn-secondary" onClick={() => { setImportOpen(true) }} id="btn-import-resume">
-          <Upload size={14} strokeWidth={2} /> Import Resume
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          multiple
+          onChange={handleFileSelect}
+          style={{ display: 'none' }}
+        />
+        <button className="btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={parsing} id="btn-upload-resumes">
+          {parsing ? <Loader2 size={14} className="spin" /> : <Upload size={14} strokeWidth={2} />} Upload Resumes
         </button>
         <button className="btn-primary" onClick={openAddModal} id="btn-add-candidate">
           <Plus size={15} strokeWidth={2.5} /> Add Candidate
@@ -1659,90 +1669,46 @@ export default function CandidatesPage() {
         </div>
       ), document.body)}
 
-      {/* ===== Import Resume Modal ===== */}
+      {/* ===== Bulk Resume Review Modal ===== */}
       {importOpen && createPortal((
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeImport()}>
-          <div className="modal-card modal-card-lg" ref={importModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Import Resume">
+          <div className="modal-card modal-card-lg" ref={importModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Parse and add candidates">
             <div className="modal-header">
-              <span className="modal-title">{parsed ? 'Review Extracted Data' : 'Import Resume'}</span>
+              <span className="modal-title">{parsed ? 'Parse & Add Candidates' : 'Upload Resumes'}</span>
               <button className="modal-close" onClick={closeImport} aria-label="Close"><X size={16} /></button>
             </div>
 
             <div className="modal-body">
               {!parsed ? (
                 <>
-                  {/* Tabs */}
-                  <div className="import-tabs">
-                    <button
-                      className={`import-tab${importTab === 'upload' ? ' active' : ''}`}
-                      onClick={() => { setImportTab('upload'); setImportError('') }}>Upload PDF</button>
-                    <button
-                      className={`import-tab${importTab === 'url' ? ' active' : ''}`}
-                      onClick={() => { setImportTab('url'); setImportError('') }}>Paste URL</button>
+                  <div className="review-banner">
+                    <Loader2 size={16} className={parsing ? 'spin' : ''} color="#9a6a00" />
+                    <span>
+                      <strong>{parsing ? 'Parsing resumes...' : 'No resumes selected.'}</strong>
+                      {resumeFiles.length ? ` ${resumeFiles.length} file${resumeFiles.length === 1 ? '' : 's'} selected.` : ' Choose PDF, DOC, or DOCX files from Upload Resumes.'}
+                    </span>
                   </div>
-
-                  {importTab === 'upload' ? (
-                    <div className="drop-zone" role="button" tabIndex={0}
-                      onClick={() => fileInputRef.current?.click()}
-                      onDragOver={e => e.preventDefault()}
-                      onDrop={e => {
-                        e.preventDefault()
-                        handleResumeFile(e.dataTransfer.files?.[0])
-                      }}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
-                      }}>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="application/pdf"
-                        onChange={handleFileSelect}
-                        style={{ display:'none' }}
-                      />
-                      <div className="drop-zone-icon">
-                        <Upload size={24} color="var(--gold)" strokeWidth={1.8} />
-                      </div>
-                      <div className="drop-zone-title">
-                        {resumeFile ? resumeFile.name : 'Drop your PDF here or click to browse'}
-                      </div>
-                      <div className="drop-zone-subtitle">Max file size: 10 MB - PDF only</div>
-                    </div>
-                  ) : (
-                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                      <label className="form-label">Resume URL</label>
-                      <input className="form-control" value={resumeUrl}
-                        onChange={e => { setResumeUrl(e.target.value); setImportError('') }}
-                        id="resume-url-input" />
-                    </div>
-                  )}
-
                   {importError && (
                     <div className="form-error" style={{ display:'block', marginTop:12 }} role="alert">
                       {importError}
                     </div>
                   )}
-
-                  <div style={{ marginTop: 20 }}>
-                    <button className="btn-primary" id="btn-parse-resume"
-                      onClick={handleParse} disabled={parsing}
-                      style={{ width:'100%', justifyContent:'center', height:44, fontSize:14 }}>
-                      {parsing ? (
-                        <><span className="parse-btn-spinner" /> Parsing Resume...</>
-                      ) : (
-                        <><Upload size={15} strokeWidth={2} /> Parse Resume</>
-                      )}
-                    </button>
-                  </div>
                 </>
               ) : (
                 <>
-                  {/* Review Banner */}
                   <div className="review-banner">
                     <AlertCircle size={16} color="#9a6a00" />
                     <span>
-                      <strong>Review extracted data before saving.</strong> Fields highlighted in amber were low-confidence and may need correction.
+                      <strong>Resume {currentImportIndex + 1} of {importQueue.length}</strong>
+                      {importQueue[currentImportIndex]?.file_name ? ` - ${importQueue[currentImportIndex].file_name}` : ''}
+                      {reviewNotice ? ` - ${reviewNotice}` : ''}
                     </span>
                   </div>
+                  {importError && (
+                    <div className="form-error" style={{ display:'block', marginBottom:12 }} role="alert">
+                      {importError}
+                    </div>
+                  )}
                   {CandidateFormBody({
                     f: parsedForm,
                     setF: setParsedForm,
@@ -1760,11 +1726,14 @@ export default function CandidatesPage() {
             </div>
 
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={closeImport}>Cancel</button>
+              <button className="btn-secondary" onClick={cancelRemainingResumes}>Cancel Remaining</button>
               {parsed && (
+                <>
+                <button className="btn-secondary" onClick={skipCurrentResume} disabled={saving}>Skip this resume</button>
                 <button className="btn-primary" onClick={handleSaveParsed} id="save-parsed-candidate-btn" disabled={saving}>
                   {saving ? 'Saving...' : 'Save Candidate'}
                 </button>
+                </>
               )}
             </div>
           </div>

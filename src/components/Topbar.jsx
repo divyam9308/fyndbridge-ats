@@ -7,7 +7,6 @@ const pageTitles = {
   '/dashboard/jobs':       { title: 'Jobs',        crumb: 'Home / Jobs' },
   '/dashboard/clients':    { title: 'Clients',     crumb: 'Home / Clients' },
   '/dashboard/candidates': { title: 'Candidates',  crumb: 'Home / Candidates' },
-  '/dashboard/cvs':        { title: 'CVs',         crumb: 'Home / CVs' },
   '/dashboard/settings':   { title: 'Settings',    crumb: 'Home / Settings' },
 }
 

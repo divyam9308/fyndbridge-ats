@@ -70,6 +70,14 @@ function rowFromParsed(file, index, parsed, error = null, storage = {}, warnings
     experience_years: Number.isFinite(Number(ai.experience ?? extracted.experience_years?.value))
       ? Number(ai.experience ?? extracted.experience_years?.value)
       : null,
+    city: cleanText(ai.city || extracted.city?.value),
+    state: cleanText(ai.state || extracted.state?.value),
+    location: cleanText(ai.location || extracted.location?.value),
+    skills: Array.isArray(ai.skills) && ai.skills.length ? ai.skills : (Array.isArray(extracted.skills?.value) ? extracted.skills.value : []),
+    education: cleanText(ai.education || extracted.education?.value),
+    salary: ai.salary ?? extracted.salary?.value ?? null,
+    linkedin_url: cleanText(ai.linkedin || extracted.linkedin_url?.value),
+    summary: cleanText(ai.summary || extracted.cover_letter?.value),
     resume_path: storage.resume_path || '',
     resume_url: storage.resume_url || '',
     warnings,

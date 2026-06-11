@@ -8,7 +8,6 @@ import ClientsPage from './pages/ClientsPage'
 import ClientDetailPage from './pages/ClientDetailPage'
 import ClientJobCandidatesPage from './pages/ClientJobCandidatesPage'
 import CandidatesPage from './pages/CandidatesPage'
-import CVsPage from './pages/CVsPage'
 import SettingsPage from './pages/SettingsPage'
 import { AuthProvider, RequireAuth } from './context/AuthContext'
 import './index.css'
@@ -49,7 +48,7 @@ function App() {
             <Route path="clients/:clientId" element={<ClientDetailPage />} />
             <Route path="clients/:clientId/jobs/:jobId/candidates" element={<ClientJobCandidatesPage />} />
             <Route path="candidates" element={<CandidatesPage />} />
-            <Route path="cvs" element={<CVsPage />} />
+            <Route path="cvs" element={<Navigate to="/dashboard/candidates" replace />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Routes>
