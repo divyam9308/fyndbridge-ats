@@ -232,6 +232,7 @@ export default function CandidatesPage() {
   const fileInputRef = useRef(null)
   const candidateModalRef = useRef(null)
   const candidateModalBodyRef = useRef(null)
+  const candidateDetailRef = useRef(null)
   const importModalRef = useRef(null)
   const duplicateModalRef = useRef(null)
   const [apiError, setApiError] = useState('')
@@ -353,11 +354,11 @@ export default function CandidatesPage() {
   }, [])
 
   useEffect(() => {
-    if (!addOpen && !importOpen && !candidateDuplicate) return
+    if (!addOpen && !importOpen && !candidateDuplicate && !selectedCandidate) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = previous }
-  }, [addOpen, importOpen, candidateDuplicate])
+  }, [addOpen, importOpen, candidateDuplicate, selectedCandidate])
 
   useEffect(() => {
     if (addOpen) focusPopup(candidateModalRef)
@@ -370,6 +371,10 @@ export default function CandidatesPage() {
   useEffect(() => {
     if (candidateDuplicate) focusPopup(duplicateModalRef)
   }, [candidateDuplicate, focusPopup])
+
+  useEffect(() => {
+    if (selectedCandidate) focusPopup(candidateDetailRef)
+  }, [selectedCandidate, focusPopup])
 
   const loadCandidates = useCallback(async (nextPage = page, { showLoading = true } = {}) => {
     if (showLoading) setLoadingCandidates(true)
@@ -1487,9 +1492,9 @@ export default function CandidatesPage() {
         <button className="btn-secondary" disabled={page >= Math.max(1, Math.ceil(totalCandidates / pageSize)) || loadingCandidates} onClick={() => setPage(p => p + 1)}>Next</button>
       </div>
 
-      {selectedCandidate && (
+      {selectedCandidate && createPortal((
         <div className="candidate-drawer-overlay" onClick={e => e.target === e.currentTarget && setSelectedCandidate(null)}>
-          <aside className="candidate-drawer" style={detailPosition ? { top: detailPosition.top } : undefined} aria-label="Candidate details">
+          <aside className="candidate-drawer" ref={candidateDetailRef} tabIndex={-1} style={detailPosition ? { top: detailPosition.top } : undefined} aria-label="Candidate details">
             <div className="candidate-drawer-header">
               <div>
                 <div className="candidate-drawer-title">{selectedCandidate.name}</div>
@@ -1558,7 +1563,7 @@ export default function CandidatesPage() {
             </div>
           </aside>
         </div>
-      )}
+      ), document.body)}
 
       {/* ===== Add Candidate Modal ===== */}
       {addOpen && createPortal((
