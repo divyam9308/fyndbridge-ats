@@ -68,27 +68,41 @@ async function ensureClientDisplayIds() {
   const { data, error } = await supabase
     .from('clients')
     .select('id, client_display_id, client_name, name, created_at')
-    .order('name', { ascending: true })
+    .order('created_at', { ascending: true })
 
-  if (error || !data?.some((client) => !clean(client.client_display_id))) {
-    if (error) throw error
-    return
-  }
+  if (error) throw error
 
-  let next = Math.max(0, ...data.map((client) => displayIdNumber(client.client_display_id, 'CL')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
-  for (const client of data.filter((item) => !clean(item.client_display_id))) {
-    const { error: updateError } = await supabase
-      .from('clients')
-      .update({ client_display_id: `CL${next++}` })
-      .eq('id', client.id)
+  const nameToDisplayId = new Map()
+  let next = Math.max(0, ...(data || []).map((client) => displayIdNumber(client.client_display_id, 'CL')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
+
+  for (const client of data || []) {
+    const normalizedName = normalizeDuplicateText(client.client_name || client.name)
+    if (!normalizedName) continue
+    const existing = nameToDisplayId.get(normalizedName)
+    const current = clean(client.client_display_id)
+    if (existing && current !== existing) {
+      const { error: updateError } = await supabase.from('clients').update({ client_display_id: existing }).eq('id', client.id)
+      if (updateError) throw updateError
+      continue
+    }
+    if (current) {
+      nameToDisplayId.set(normalizedName, current)
+      continue
+    }
+    const displayId = `CL${next++}`
+    nameToDisplayId.set(normalizedName, displayId)
+    const { error: updateError } = await supabase.from('clients').update({ client_display_id: displayId }).eq('id', client.id)
     if (updateError) throw updateError
   }
 }
 
-async function nextClientDisplayId() {
+async function nextClientDisplayId(clientName = '') {
   await ensureClientDisplayIds()
-  const { data, error } = await supabase.from('clients').select('client_display_id')
+  const normalizedName = normalizeDuplicateText(clientName)
+  const { data, error } = await supabase.from('clients').select('client_display_id, client_name, name, created_at').order('created_at', { ascending: true })
   if (error) throw error
+  const existing = (data || []).find((client) => normalizeDuplicateText(client.client_name || client.name) === normalizedName)
+  if (existing?.client_display_id) return existing.client_display_id
   const next = Math.max(0, ...(data || []).map((client) => displayIdNumber(client.client_display_id, 'CL')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
   return `CL${next}`
 }
@@ -362,7 +376,7 @@ async function createClient(req, res) {
       return res.json(normalizeClient(data))
     }
 
-    payload.client_display_id = payload.client_display_id || await nextClientDisplayId()
+    payload.client_display_id = payload.client_display_id || await nextClientDisplayId(payload.client_name)
     const { data, error } = await supabase.from('clients').insert(payload).select('*').single()
     if (error) throw error
 
@@ -393,6 +407,7 @@ async function updateClient(req, res) {
   try {
     if (req.file) req.body.contract_document = await uploadContractPdf(req.file)
     const payload = clientPayload(req.body)
+    payload.client_display_id = await nextClientDisplayId(payload.client_name)
     const { data, error } = await supabase
       .from('clients')
       .update({ ...payload, updated_at: new Date().toISOString() })

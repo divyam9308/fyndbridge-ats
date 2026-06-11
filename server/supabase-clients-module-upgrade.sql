@@ -45,7 +45,8 @@ alter table public.clients
   alter column client_group_id set not null;
 
 create index if not exists clients_client_group_id_idx on public.clients(client_group_id);
-create unique index if not exists clients_client_display_id_key on public.clients(client_display_id);
+drop index if exists public.clients_client_display_id_key;
+create index if not exists clients_client_display_id_idx on public.clients(client_display_id);
 create index if not exists clients_consultant_name_idx on public.clients(consultant_name);
 create index if not exists clients_client_name_idx on public.clients(client_name);
 create index if not exists clients_contact_person_idx on public.clients(contact_person);

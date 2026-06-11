@@ -7,15 +7,30 @@ alter table public.candidates
 create sequence if not exists public.client_display_id_seq;
 create sequence if not exists public.candidate_display_id_seq;
 
-with numbered as (
-  select id, 'CL' || row_number() over (order by coalesce(client_name, name), created_at, id) as display_id
+drop index if exists public.clients_client_display_id_key;
+
+with normalized as (
+  select id, lower(regexp_replace(trim(coalesce(client_name, name, '')), '\s+', ' ', 'g')) as normalized_name, client_display_id, created_at
   from public.clients
-  where nullif(client_display_id, '') is null
+),
+canonical as (
+  select distinct on (normalized_name)
+    normalized_name,
+    coalesce(
+      first_value(client_display_id) over (
+        partition by normalized_name
+        order by case when client_display_id ~ '^CL[0-9]+$' then 0 else 1 end, created_at, id
+      ),
+      'CL' || dense_rank() over (order by normalized_name)
+    ) as display_id
+  from normalized
+  where normalized_name <> ''
+  order by normalized_name, created_at, id
 )
 update public.clients c
-set client_display_id = numbered.display_id
-from numbered
-where c.id = numbered.id;
+set client_display_id = canonical.display_id
+from canonical
+where lower(regexp_replace(trim(coalesce(c.client_name, c.name, '')), '\s+', ' ', 'g')) = canonical.normalized_name;
 
 with numbered as (
   select
@@ -59,6 +74,9 @@ returns trigger
 language plpgsql
 as $$
 begin
+  if new.client_display_id is not null and trim(new.client_display_id) <> '' then
+    return new;
+  end if;
   new.client_display_id := 'CL' || nextval('public.client_display_id_seq');
   return new;
 end;
@@ -90,7 +108,7 @@ alter table public.clients
 alter table public.candidates
   alter column candidate_display_id set not null;
 
-create unique index if not exists clients_client_display_id_key
+create index if not exists clients_client_display_id_idx
   on public.clients(client_display_id);
 
 create unique index if not exists candidates_candidate_display_id_key
