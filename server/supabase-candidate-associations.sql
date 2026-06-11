@@ -26,8 +26,7 @@ create table if not exists public.candidates (
   updated_at timestamptz not null default now()
 );
 
-create unique index if not exists candidates_name_mobile_unique
-  on public.candidates (lower(trim(full_name)), mobile_number);
+drop index if exists public.candidates_name_mobile_unique;
 
 create table if not exists public.candidate_associations (
   id uuid primary key default gen_random_uuid(),
@@ -137,8 +136,20 @@ alter table public.candidate_associations
   add column if not exists client_id uuid references public.clients(id) on delete set null,
   add column if not exists consultant_name text;
 
+do $$
+begin
+  if to_regclass('public.jobs') is not null then
+    alter table public.candidate_associations add column if not exists job_id uuid references public.jobs(id) on delete set null;
+  else
+    alter table public.candidate_associations add column if not exists job_id uuid;
+  end if;
+end $$;
+
 create index if not exists candidates_client_id_idx
   on public.candidates(client_id);
 
 create index if not exists candidate_associations_client_id_idx
   on public.candidate_associations(client_id);
+
+create index if not exists candidate_associations_job_id_idx
+  on public.candidate_associations(job_id);

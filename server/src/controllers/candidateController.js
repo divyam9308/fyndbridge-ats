@@ -207,6 +207,11 @@ function normalizeDuplicateText(value) {
   return cleanText(value).toLowerCase()
 }
 
+function isDuplicateValue(value) {
+  const text = normalizeDuplicateText(value)
+  return Boolean(text && text !== '-' && text !== 'n/a' && text !== 'na')
+}
+
 function displayIdNumber(value, prefix) {
   const match = String(value || '').match(new RegExp(`^${prefix}(\\d+)$`, 'i'))
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
@@ -282,7 +287,7 @@ async function findCandidateDuplicate(fullName, email) {
   const name = normalizeDuplicateText(fullName)
   const normalizedEmail = normalizeDuplicateText(email)
 
-  if (!name || !normalizedEmail) return null
+  if (!name || !isDuplicateValue(normalizedEmail)) return null
 
   const { data, error } = await supabase
     .from('candidates')
@@ -294,9 +299,32 @@ async function findCandidateDuplicate(fullName, email) {
   return (data || []).find((candidate) => normalizeDuplicateText(candidate.full_name) === name) || null
 }
 
+async function findCandidateDuplicateByNameAndMobile(fullName, mobileNumber) {
+  const name = normalizeDuplicateText(fullName)
+  const mobile = normalizeMobile(mobileNumber)
+
+  if (!name || !isDuplicateValue(mobile)) return null
+
+  const { data, error } = await supabase
+    .from('candidates')
+    .select('*')
+    .eq('mobile_number', mobile)
+
+  if (error) throw error
+
+  return (data || []).find((candidate) => normalizeDuplicateText(candidate.full_name) === name) || null
+}
+
+async function findCandidateAnyDuplicate(fullName, email, mobileNumber) {
+  return (
+    await findCandidateDuplicate(fullName, email) ||
+    await findCandidateDuplicateByNameAndMobile(fullName, mobileNumber)
+  )
+}
+
 async function checkCandidateDuplicate(req, res) {
   try {
-    const existing = await findCandidateDuplicate(req.query.name, req.query.email)
+    const existing = await findCandidateAnyDuplicate(req.query.name, req.query.email, req.query.mobile)
     return res.json({ duplicate: Boolean(existing), existing })
   } catch (err) {
     return logAndSendInternal(res, 'checkCandidateDuplicate', err)
@@ -593,134 +621,12 @@ function localAiFilterFallback(prompt) {
   return filters
 }
 
-function includesText(source, needle) {
-  const haystack = cleanText(source).toLowerCase()
-  const query = cleanText(needle).toLowerCase()
-  if (!query) {
-    return true
-  }
-
-  return haystack.includes(query)
-}
-
-const ROLE_KEYWORD_GROUPS = {
-  software: [
-    'software engineer',
-    'software developer',
-    'backend engineer',
-    'backend developer',
-    'frontend engineer',
-    'frontend developer',
-    'full stack',
-    'devops',
-    'database',
-    'data engineer',
-    'programmer',
-    'react',
-    'node',
-    'java',
-    'sql'
-  ],
-  backend: ['backend', 'back end', 'server', 'api', 'node', 'node.js', 'express', 'django'],
-  frontend: ['frontend', 'front end', 'react', 'angular', 'vue', 'ui developer', 'web developer', 'javascript'],
-  database: ['database', 'sql', 'postgres', 'mysql', 'mongodb', 'dba', 'data engineer'],
-  data: ['data analyst', 'data engineer', 'analytics', 'python', 'sql', 'statistics'],
-  devops: ['devops', 'cloud', 'aws', 'azure', 'kubernetes', 'docker', 'ci/cd'],
-  product: ['product manager', 'product owner', 'pm']
-}
-
-const GENERIC_ROLE_WORDS = new Set(['engineer', 'developer', 'manager', 'lead', 'senior', 'junior', 'software'])
-
 function normalizeSearchText(value) {
   return cleanText(value)
     .toLowerCase()
     .replace(/[^a-z0-9+#./\s-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-}
-
-function searchTermsForQuery(query) {
-  const normalized = normalizeSearchText(query)
-  if (!normalized) {
-    return []
-  }
-
-  const terms = new Set([normalized])
-  Object.entries(ROLE_KEYWORD_GROUPS).forEach(([key, values]) => {
-    const groupHit = key === 'software'
-      ? /\b(software|sftware|softwar|programmer|developers?)\b/.test(normalized)
-      : normalized.includes(key) || values.some((value) => normalized.includes(normalizeSearchText(value)))
-    if (groupHit) {
-      values.forEach((value) => terms.add(normalizeSearchText(value)))
-    }
-  })
-
-  normalized
-    .split(/\s+/)
-    .filter((word) => word.length >= 4 && !GENERIC_ROLE_WORDS.has(word))
-    .forEach((word) => terms.add(word))
-
-  return [...terms].filter(Boolean)
-}
-
-function roleTermMatches(haystack, term) {
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const boundaryPattern = escaped.replace(/\s+/g, '\\s+')
-  return new RegExp(`(^|[^a-z0-9])${boundaryPattern}([^a-z0-9]|$)`, 'i').test(haystack)
-}
-
-function matchesRoleText(candidate, query) {
-  const haystack = normalizeSearchText([
-    candidate.current_designation,
-    candidate.job_title,
-    Array.isArray(candidate.skills) ? candidate.skills.join(' ') : ''
-  ].filter(Boolean).join(' '))
-  const terms = searchTermsForQuery(query)
-
-  if (!terms.length) {
-    return true
-  }
-
-  return terms.some((term) => roleTermMatches(haystack, term))
-}
-
-function matchesAiFilters(candidate, filters) {
-  if (!filters) {
-    return true
-  }
-
-  if (filters.name && !includesText(candidate.full_name, filters.name)) return false
-  if (filters.city && !includesText(candidate.city, filters.city)) return false
-  if (filters.state && !includesText(candidate.state, filters.state)) return false
-  if (filters.currentDesignation && !matchesRoleText(candidate, filters.currentDesignation)) return false
-  if (filters.email && !includesText(candidate.email, filters.email)) return false
-  if (filters.mobile && !includesText(candidate.mobile_number, filters.mobile)) return false
-  if (filters.consultant && !includesText(candidate.consultant_name, filters.consultant)) return false
-  if (filters.client && !includesText(candidate.client_name, filters.client)) return false
-  if (filters.job && !matchesRoleText(candidate, filters.job)) return false
-  if (filters.clientMobile && !includesText(candidate.client_phone_number, filters.clientMobile)) return false
-  if (filters.status && !includesText(candidate.status, filters.status)) return false
-  if (filters.education && !includesText(candidate.education, filters.education)) return false
-
-  if (filters.skills.length) {
-    const candidateSkills = Array.isArray(candidate.skills) ? candidate.skills.map((skill) => cleanText(skill).toLowerCase()) : []
-    const matches = filters.skills.every((skill) => candidateSkills.some((candidateSkill) => candidateSkill.includes(cleanText(skill).toLowerCase())))
-    if (!matches) return false
-  }
-
-  if (filters.experience) {
-    const exp = candidate.experience_years === null || candidate.experience_years === undefined ? null : Number(candidate.experience_years)
-    if (filters.experience.min !== null && (exp === null || exp < filters.experience.min)) return false
-    if (filters.experience.max !== null && (exp === null || exp > filters.experience.max)) return false
-  }
-
-  if (filters.salary) {
-    const salary = candidate.current_salary === null || candidate.current_salary === undefined ? null : Number(candidate.current_salary)
-    if (filters.salary.min !== null && (salary === null || salary < filters.salary.min)) return false
-    if (filters.salary.max !== null && (salary === null || salary > filters.salary.max)) return false
-  }
-
-  return true
 }
 
 function validateCandidatePayload(body, { partial = false } = {}) {
@@ -927,13 +833,16 @@ function adjustColumnForPrimaryCandidates(column) {
   return `candidate_associations.${column}`
 }
 
-function isMissingAssociationConsultantColumn(error) {
-  return error?.code === 'PGRST204' && /consultant_name.*candidate_associations/i.test(error.message || '')
+function missingAssociationColumn(error) {
+  if (error?.code !== 'PGRST204' || !/candidate_associations/i.test(error.message || '')) return null
+  const match = String(error.message || '').match(/'([^']+)' column/)
+  const column = match?.[1]
+  return ASSOCIATION_FIELDS.includes(column) ? column : null
 }
 
-function withoutConsultantName(payload) {
+function withoutColumn(payload, column) {
   const next = { ...payload }
-  delete next.consultant_name
+  delete next[column]
   return next
 }
 
@@ -1080,18 +989,17 @@ async function insertAssociation(payload) {
 
   console.log('[insertAssociation] Final payload before insert:', JSON.stringify(nextPayload))
 
-  let result = await supabase
-    .from('candidate_associations')
-    .insert(nextPayload)
-    .select('*, candidates(*)')
-    .single()
-
-  if (isMissingAssociationConsultantColumn(result.error)) {
+  let insertPayload = nextPayload
+  let result = null
+  for (let i = 0; i <= ASSOCIATION_FIELDS.length; i++) {
     result = await supabase
       .from('candidate_associations')
-      .insert(withoutConsultantName(nextPayload))
+      .insert(insertPayload)
       .select('*, candidates(*)')
       .single()
+    const missingColumn = missingAssociationColumn(result.error)
+    if (!missingColumn) break
+    insertPayload = withoutColumn(insertPayload, missingColumn)
   }
 
   return result
@@ -1108,16 +1016,16 @@ async function updateAssociation(associationId, payload) {
 
   console.log('[updateAssociation] Final payload before update:', JSON.stringify(nextPayload))
 
-  let result = await supabase
-    .from('candidate_associations')
-    .update(nextPayload)
-    .eq('id', associationId)
-
-  if (isMissingAssociationConsultantColumn(result.error)) {
+  let updatePayload = nextPayload
+  let result = null
+  for (let i = 0; i <= ASSOCIATION_FIELDS.length; i++) {
     result = await supabase
       .from('candidate_associations')
-      .update(withoutConsultantName(nextPayload))
+      .update(updatePayload)
       .eq('id', associationId)
+    const missingColumn = missingAssociationColumn(result.error)
+    if (!missingColumn) break
+    updatePayload = withoutColumn(updatePayload, missingColumn)
   }
 
   return result
@@ -1310,13 +1218,30 @@ async function createCandidate(req, res) {
 
     const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
     const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
+    const duplicateAction = cleanText(body.duplicate_action)
 
     associationPayload.status =
       typeof associationPayload.status === "string" && associationPayload.status.trim()
         ? associationPayload.status.trim()
         : "-";
 
-    let candidate = await findCandidateByNameAndMobile(candidatePayload.full_name, candidatePayload.mobile_number)
+    const duplicate = await findCandidateAnyDuplicate(
+      candidatePayload.full_name,
+      candidatePayload.email,
+      candidatePayload.mobile_number
+    )
+
+    if (duplicate && !['add_duplicate', 'update_current'].includes(duplicateAction)) {
+      return res.status(409).json({
+        duplicate: true,
+        error: 'Duplicate candidate found.',
+        existing: duplicate
+      })
+    }
+
+    let candidate = duplicateAction === 'update_current'
+      ? duplicate
+      : (duplicateAction === 'add_duplicate' ? null : await findCandidateByNameAndMobile(candidatePayload.full_name, candidatePayload.mobile_number))
 
     if (!candidate) {
       const insertPayload = {
@@ -1350,6 +1275,24 @@ async function createCandidate(req, res) {
       }
       candidate.candidate_display_id = correctDisplayId
     } else {
+      const updatePayload = {
+        ...candidatePayload,
+        updated_at: new Date().toISOString()
+      }
+
+      if (req.user?.id) {
+        updatePayload.updated_by = req.user.id
+      }
+
+      const { error: candidateUpdateError } = await supabase
+        .from('candidates')
+        .update(updatePayload)
+        .eq('id', candidate.id)
+
+      if (candidateUpdateError) {
+        throw candidateUpdateError
+      }
+
       const { data, error } = await supabase
         .from('candidates')
         .select('*')
