@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Plus, Upload, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
@@ -346,11 +347,17 @@ export default function CandidatesPage() {
     window.requestAnimationFrame(() => {
       const node = ref.current
       if (!node) return
-      node.scrollIntoView({ behavior: 'auto', block: node.offsetHeight > window.innerHeight ? 'start' : 'center', inline: 'nearest' })
       const target = node.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])')
       ;(target || node).focus({ preventScroll: true })
     })
   }, [])
+
+  useEffect(() => {
+    if (!addOpen && !importOpen && !candidateDuplicate) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previous }
+  }, [addOpen, importOpen, candidateDuplicate])
 
   useEffect(() => {
     if (addOpen) focusPopup(candidateModalRef)
@@ -1554,7 +1561,7 @@ export default function CandidatesPage() {
       )}
 
       {/* ===== Add Candidate Modal ===== */}
-      {addOpen && (
+      {addOpen && createPortal((
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !saving && setAddOpen(false)}>
           <div className="modal-card modal-card-lg" ref={candidateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add Candidate">
             <div className="modal-header">
@@ -1583,10 +1590,10 @@ export default function CandidatesPage() {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
       {/* ===== Import Resume Modal ===== */}
-      {importOpen && (
+      {importOpen && createPortal((
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeImport()}>
           <div className="modal-card modal-card-lg" ref={importModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Import Resume">
             <div className="modal-header">
@@ -1695,9 +1702,9 @@ export default function CandidatesPage() {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
-      {candidateDuplicate && (
+      {candidateDuplicate && createPortal((
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCandidateDuplicate(null)}>
           <div className="modal-card" ref={duplicateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Duplicate Candidate">
             <div className="modal-header">
@@ -1730,7 +1737,7 @@ export default function CandidatesPage() {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
     </div>
   )
 }

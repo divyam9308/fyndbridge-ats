@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Plus, Pencil, Eye, X, Briefcase, AlertCircle, Loader2 } from 'lucide-react'
 import '../styles/Shared.css'
 
@@ -30,6 +31,18 @@ export default function JobsPage() {
   const [errors, setErrors] = useState({})
   const [skillInput, setSkillInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const modalRef = useRef(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.requestAnimationFrame(() => {
+      const target = modalRef.current?.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])')
+      ;(target || modalRef.current)?.focus({ preventScroll: true })
+    })
+    return () => { document.body.style.overflow = previous }
+  }, [isOpen])
 
   const fetchData = async () => {
     try {
@@ -247,9 +260,9 @@ export default function JobsPage() {
         )}
       </div>
 
-      {isOpen && (
+      {isOpen && createPortal((
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setIsOpen(false)}>
-          <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label="Add Job">
+          <div className="modal-card modal-card-lg" ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add Job">
             <div className="modal-header">
               <span className="modal-title">Add New Job</span>
               <button className="modal-close" onClick={() => setIsOpen(false)} aria-label="Close"><X size={16} /></button>
@@ -354,7 +367,7 @@ export default function JobsPage() {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
     </div>
   )
 }

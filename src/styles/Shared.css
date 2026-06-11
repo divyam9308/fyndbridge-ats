@@ -738,16 +738,12 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: transparent;
+  background: rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
   z-index: 5000;
-  padding: calc(var(--topbar-height) + 24px) 28px 24px var(--sidebar-width);
   box-sizing: border-box;
-  overflow-y: auto;
+  overflow: hidden;
   animation: overlayIn 0.2s ease both;
 }
 @keyframes overlayIn {
@@ -756,20 +752,30 @@
 }
 .modal-card {
   background: var(--white);
-  position: relative;
+  position: fixed;
   z-index: 5001;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   border-radius: 20px;
-  width: 100%;
+  width: min(560px, calc(100vw - 32px));
   max-width: 560px;
-  max-height: calc(100vh - var(--topbar-height) - 48px);
+  max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--gray-200);
   box-shadow: var(--shadow-modal);
-  animation: modalIn 0.25s cubic-bezier(0.22,1,0.36,1) both;
+  animation: none;
 }
-.modal-card-lg { max-width: 720px; }
-.modal-card-xl { max-width: 980px; }
+.modal-card-lg {
+  width: min(900px, calc(100vw - 32px));
+  max-width: 900px;
+}
+.modal-card-xl {
+  width: min(1100px, calc(100vw - 32px));
+  max-width: 1100px;
+}
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(16px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -807,8 +813,8 @@
 .modal-body {
   padding: 18px 24px;
   overflow-y: auto;
-  max-height: calc(100vh - 190px);
   flex: 1;
+  min-height: 0;
 }
 .modal-footer {
   display: flex;
@@ -818,6 +824,7 @@
   padding: 14px 24px 18px;
   border-top: 1px solid var(--gray-100);
   flex-shrink: 0;
+  background: var(--white);
 }
 .cv-review-section {
   border: 1px solid var(--gray-200);
@@ -848,8 +855,10 @@
   box-sizing: border-box;
 }
 .review-modal {
-  width: min(1100px, 92vw);
-  max-height: calc(100vh - 96px);
+  position: relative;
+  z-index: 5001;
+  width: min(1100px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
   background: var(--white);
   border-radius: 20px;
   display: flex;

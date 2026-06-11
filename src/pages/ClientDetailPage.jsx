@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, Link } from 'react-router-dom'
 import { ChevronDown, ChevronLeft, AlertCircle, Loader2, Briefcase, FileText, Pencil, X } from 'lucide-react'
 import '../styles/Shared.css'
@@ -160,11 +161,17 @@ export default function ClientDetailPage() {
     window.requestAnimationFrame(() => {
       const node = ref.current
       if (!node) return
-      node.scrollIntoView({ behavior: 'auto', block: node.offsetHeight > window.innerHeight ? 'start' : 'center', inline: 'nearest' })
       const target = node.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])')
       ;(target || node).focus({ preventScroll: true })
     })
   }, [])
+
+  useEffect(() => {
+    if (!editCandidate) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previous }
+  }, [editCandidate])
 
   const fetchAllCandidates = useCallback(async (clientData) => {
     const candidateMap = new Map()
@@ -565,7 +572,7 @@ export default function ClientDetailPage() {
           </div>
         </>
       )}
-      {editCandidate && editForm && (
+      {editCandidate && editForm && createPortal((
         <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && !savingCandidate && setEditCandidate(null)}>
           <div className="modal-card modal-card-lg" ref={editModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Edit Candidate">
             <div className="modal-header">
@@ -626,7 +633,7 @@ export default function ClientDetailPage() {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
     </div>
   )
 }
