@@ -1,0 +1,49 @@
+/* ===================== Placeholder Page CSS ===================== */
+.placeholder-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  text-align: center;
+  animation: fadeInContent 0.35s ease both;
+}
+
+.placeholder-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  background: rgba(245,166,35,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+}
+
+.placeholder-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--navy-darkest);
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+}
+
+.placeholder-desc {
+  font-size: 14px;
+  color: var(--gray-400);
+  max-width: 340px;
+  line-height: 1.6;
+}
+
+.placeholder-badge {
+  display: inline-block;
+  margin-top: 18px;
+  padding: 5px 14px;
+  background: rgba(245,166,35,0.12);
+  color: var(--gold);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}

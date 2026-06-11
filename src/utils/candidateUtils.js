@@ -1,0 +1,36 @@
+/**
+ * Maps a raw candidate row from the API (Supabase snake_case) to the
+ * camelCase UI shape expected by all pages.
+ */
+export const apiCandidateToUi = (row) => ({
+  id: row.association_id || row.id,
+  associationId: row.association_id || row.id,
+  candidateId: row.candidate_id,
+  candidateDisplayId: row.candidate_display_id || '',
+  name: row.full_name || '',
+  email: row.email || '',
+  mobile: row.mobile_number || '',
+  city: row.city || '',
+  state: row.state || '',
+  location: row.location || '',
+  designation: row.current_designation || '',
+  currentCompany: row.current_company || '',
+  currentOrganisation: row.current_organisation || row.current_company || '',
+  exp: row.experience_years ?? '',
+  noticePeriod: row.notice_period ?? '',
+  openToRelocate: Boolean(row.open_to_relocate),
+  salary: row.current_salary ?? '',
+  expectedSalary: row.expected_salary ?? '',
+  skills: row.skills || [],
+  education: row.education || '',
+  client: row.client_name || '',
+  clientPhone: row.client_phone_number || '',
+  job: row.job_title || '',
+  status: row.status || 'Interested',
+  cvLink: row.cv_link || row.resume_url || '',
+  linkedinUrl: row.linkedin_url || '',
+  notes: row.notes || '',
+  consultant: row.consultant_name || '',
+  consultantName: row.consultant_name || '',
+  createdAt: row.created_at || '',
+})
