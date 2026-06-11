@@ -968,24 +968,32 @@ export default function CVsPage() {
             ))}
             <div className="form-group">
               <label className="form-label">Client</label>
-              <select
+              <input
                 className="form-control"
-                value={candidateDraft.client_id || (candidateDraft.client_name === '__new_client__' ? '__new_client__' : '')}
+                list="cv-import-client-options"
+                value={candidateDraft.client_name === '__new_client__' ? 'Other / Add New Client' : candidateDraft.client_name}
                 onChange={(event) => {
-                  const client = dbClients.find(c => c.id === event.target.value)
+                  const isNewClient = event.target.value === 'Other / Add New Client'
+                  const client = dbClients.find(c => String(c.name || c.client_name || '').toLowerCase() === String(event.target.value || '').toLowerCase())
                   setCandidateDraft((draft) => ({
                     ...draft,
                     client_id: client?.id || '',
-                    client_name: event.target.value === '__new_client__' ? '__new_client__' : (client?.name || ''),
+                    client_name: isNewClient ? '__new_client__' : event.target.value,
                     new_client_name: ''
                   }))
                 }}
-              >
-                <option value="">Select client...</option>
-                {dbClients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
-                <option value="__new_client__">Other / Add New Client</option>
-              </select>
+              />
+              <datalist id="cv-import-client-options">
+                {dbClients.map(client => <option key={client.id} value={client.name || client.client_name} />)}
+                <option value="Other / Add New Client" />
+              </datalist>
             </div>
+            {candidateDraft.client_id && (
+              <div className="form-group">
+                <label className="form-label">Client ID</label>
+                <input className="form-control" value={dbClients.find(c => c.id === candidateDraft.client_id)?.client_display_id || candidateDraft.client_id} readOnly />
+              </div>
+            )}
             {candidateDraft.client_name === '__new_client__' && (
               <div className="form-group">
                 <label className="form-label">New Client Name</label>

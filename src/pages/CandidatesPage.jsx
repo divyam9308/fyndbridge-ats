@@ -930,10 +930,11 @@ export default function CandidatesPage() {
       const { name, value, type, checked } = e.target
       const nextValue = type === 'checkbox' ? checked : value
       if (name === 'client') {
-        const matchedClient = dbClients.find(c => c.id === value)
+        const isNewClient = value === 'Other / Add New Client' || value === '__new_client__'
+        const matchedClient = dbClients.find(c => String(c.name || c.client_name || '').toLowerCase() === String(value || '').toLowerCase())
         setF(prev => ({
           ...prev,
-          client: value === '__new_client__' ? value : (matchedClient?.name || ''),
+          client: isNewClient ? '__new_client__' : value,
           clientId: matchedClient?.id || '',
           clientPhone: matchedClient?.phone || CLIENT_PHONES[matchedClient?.name] || '',
           job: ''
@@ -1065,17 +1066,30 @@ export default function CandidatesPage() {
 
         <div className="form-group">
           <label className="form-label">Client</label>
-          <select name="client" value={f.clientId || (f.client === '__new_client__' ? '__new_client__' : '')} onChange={handleLocalChange} className="form-control">
-            <option value="">Select client...</option>
-            {dbClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            <option value="__new_client__">Other / Add New Client</option>
-          </select>
+          <input
+            name="client"
+            list="candidate-client-options"
+            value={f.client === '__new_client__' ? 'Other / Add New Client' : f.client}
+            onChange={handleLocalChange}
+            className="form-control"
+          />
+          <datalist id="candidate-client-options">
+            {dbClients.map(c => <option key={c.id} value={c.name || c.client_name} />)}
+            <option value="Other / Add New Client" />
+          </datalist>
         </div>
 
         {f.client === '__new_client__' && (
           <div className="form-group">
             <label className="form-label">New Client Name</label>
             <input name="newClientName" value={f.newClientName || ''} onChange={handleLocalChange} className="form-control" />
+          </div>
+        )}
+
+        {f.clientId && (
+          <div className="form-group">
+            <label className="form-label">Client ID</label>
+            <input value={dbClients.find(c => c.id === f.clientId)?.client_display_id || f.clientId} className="form-control" readOnly />
           </div>
         )}
 
