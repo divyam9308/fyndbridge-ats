@@ -4,7 +4,26 @@ const attachUser = require('./middleware/authMiddleware')
 
 const app = express()
 
-app.use(cors())
+// Allow requests from the deployed Vercel frontend, any *.vercel.app domain,
+// and localhost for local development.
+const ALLOWED_ORIGINS = [
+  process.env.FRONTEND_URL,          // e.g. https://fyndbridge.vercel.app
+  /\.vercel\.app$/,                   // any Vercel preview URL
+  /^http:\/\/localhost(:\d+)?$/       // local dev
+].filter(Boolean)
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (server-to-server, curl, Postman)
+    if (!origin) return callback(null, true)
+    const allowed = ALLOWED_ORIGINS.some(o =>
+      typeof o === 'string' ? o === origin : o.test(origin)
+    )
+    callback(allowed ? null : new Error('Not allowed by CORS'), allowed)
+  },
+  credentials: true
+}))
+
 app.use(express.json())
 app.use(attachUser)
 
