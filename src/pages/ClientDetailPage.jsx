@@ -13,6 +13,17 @@ const STATUS_BADGE = {
   Filled: 'badge-filled',
 }
 
+const CANDIDATE_STATUS_COLUMNS = [
+  ['interested', 'Interested', 'Interested', 'badge-interested-link'],
+  ['notInterested', 'Not Interested', 'Not Interested', 'badge-not-interested-link'],
+  ['interview', 'Interview', 'Interview', 'badge-interview-link'],
+  ['clientSubmission', 'Client Submission', 'Client Submission', 'badge-client-submission-link'],
+  ['offered', 'Offered', 'Offered', 'badge-offered-link'],
+  ['hired', 'Hired', 'Hired', 'badge-hired-link'],
+  ['rejectedByClient', 'Rejected by Client', 'Rejected by Client', 'badge-rejected-client-link'],
+  ['rejectedByRecruiter', 'Rejected by Recruiter', 'Rejected by Recruiter', 'badge-rejected-recruiter-link']
+]
+
 export default function ClientDetailPage() {
   const { clientId } = useParams()
   const [client, setClient] = useState(null)
@@ -127,13 +138,17 @@ export default function ClientDetailPage() {
   const getJobCandidateStats = (jobTitle) => {
     const jobCandidates = candidates.filter(c => c.job === jobTitle)
     const total = jobCandidates.length
-    const interested = jobCandidates.filter(c => c.status === 'Interested').length
-    const interview = jobCandidates.filter(c => c.status === 'Interview').length
-    const offered = jobCandidates.filter(c => c.status === 'Offered').length
-    const hired = jobCandidates.filter(c => c.status === 'Hired').length
-    const rejected = jobCandidates.filter(c => c.status === 'Rejected by Recruiter' || c.status === 'Rejected by Client').length
-
-    return { total, interested, interview, offered, hired, rejected }
+    return {
+      total,
+      interested: jobCandidates.filter(c => c.status === 'Interested').length,
+      notInterested: jobCandidates.filter(c => c.status === 'Not Interested').length,
+      interview: jobCandidates.filter(c => c.status === 'Interview').length,
+      clientSubmission: jobCandidates.filter(c => c.status === 'Client Submission').length,
+      offered: jobCandidates.filter(c => c.status === 'Offered').length,
+      hired: jobCandidates.filter(c => c.status === 'Hired').length,
+      rejectedByClient: jobCandidates.filter(c => c.status === 'Rejected by Client').length,
+      rejectedByRecruiter: jobCandidates.filter(c => c.status === 'Rejected by Recruiter').length
+    }
   }
 
   return (
@@ -199,11 +214,7 @@ export default function ClientDetailPage() {
                 <th>City</th>
                 <th>Status</th>
                 <th className="align-center">Total Assigned</th>
-                <th className="align-center text-interested">Interested</th>
-                <th className="align-center text-interview">Interview</th>
-                <th className="align-center text-offered">Offered</th>
-                <th className="align-center text-hired">Hired</th>
-                <th className="align-center text-rejected">Rejected</th>
+                {CANDIDATE_STATUS_COLUMNS.map(([, label]) => <th className="align-center" key={label}>{label}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -231,66 +242,20 @@ export default function ClientDetailPage() {
                         <span className="count-zero">0</span>
                       )}
                     </td>
-                    <td className="align-center">
-                      {stats.interested > 0 ? (
-                        <Link 
-                          className="count-badge-link badge-interested-link" 
-                          to={`/dashboard/clients/${client.id}/jobs/${job.id}/candidates?status=Interested`}
-                        >
-                          {stats.interested}
-                        </Link>
-                      ) : (
-                        <span className="count-zero">0</span>
-                      )}
-                    </td>
-                    <td className="align-center">
-                      {stats.interview > 0 ? (
-                        <Link 
-                          className="count-badge-link badge-interview-link" 
-                          to={`/dashboard/clients/${client.id}/jobs/${job.id}/candidates?status=Interview`}
-                        >
-                          {stats.interview}
-                        </Link>
-                      ) : (
-                        <span className="count-zero">0</span>
-                      )}
-                    </td>
-                    <td className="align-center">
-                      {stats.offered > 0 ? (
-                        <Link 
-                          className="count-badge-link badge-offered-link" 
-                          to={`/dashboard/clients/${client.id}/jobs/${job.id}/candidates?status=Offered`}
-                        >
-                          {stats.offered}
-                        </Link>
-                      ) : (
-                        <span className="count-zero">0</span>
-                      )}
-                    </td>
-                    <td className="align-center">
-                      {stats.hired > 0 ? (
-                        <Link 
-                          className="count-badge-link badge-hired-link" 
-                          to={`/dashboard/clients/${client.id}/jobs/${job.id}/candidates?status=Hired`}
-                        >
-                          {stats.hired}
-                        </Link>
-                      ) : (
-                        <span className="count-zero">0</span>
-                      )}
-                    </td>
-                    <td className="align-center">
-                      {stats.rejected > 0 ? (
-                        <Link 
-                          className="count-badge-link badge-rejected-link" 
-                          to={`/dashboard/clients/${client.id}/jobs/${job.id}/candidates?status=Rejected`}
-                        >
-                          {stats.rejected}
-                        </Link>
-                      ) : (
-                        <span className="count-zero">0</span>
-                      )}
-                    </td>
+                    {CANDIDATE_STATUS_COLUMNS.map(([key, , status, className]) => (
+                      <td className="align-center" key={key}>
+                        {stats[key] > 0 ? (
+                          <Link
+                            className={`count-badge-link ${className}`}
+                            to={`/dashboard/clients/${client.id}/jobs/${job.id}/candidates?status=${encodeURIComponent(status)}`}
+                          >
+                            {stats[key]}
+                          </Link>
+                        ) : (
+                          <span className="count-zero">0</span>
+                        )}
+                      </td>
+                    ))}
                   </tr>
                 )
               })}
