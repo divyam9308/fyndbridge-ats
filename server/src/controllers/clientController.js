@@ -53,6 +53,10 @@ function compareText(a, b) {
   return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' })
 }
 
+function isClientDisplayIdUniqueError(err) {
+  return err?.code === '23505' && /client_display_id|clients_client_display_id/i.test(err.message || '')
+}
+
 function sortClientRows(rows, sort) {
   if (!sort.field) return rows.sort((a, b) => displayIdNumber(a.client_display_id, 'CL') - displayIdNumber(b.client_display_id, 'CL'))
   const direction = sort.direction === 'desc' ? -1 : 1
@@ -82,6 +86,7 @@ async function ensureClientDisplayIds() {
     const current = clean(client.client_display_id)
     if (existing && current !== existing) {
       const { error: updateError } = await supabase.from('clients').update({ client_display_id: existing }).eq('id', client.id)
+      if (isClientDisplayIdUniqueError(updateError)) return
       if (updateError) throw updateError
       continue
     }
@@ -92,6 +97,7 @@ async function ensureClientDisplayIds() {
     const displayId = `CL${next++}`
     nameToDisplayId.set(normalizedName, displayId)
     const { error: updateError } = await supabase.from('clients').update({ client_display_id: displayId }).eq('id', client.id)
+    if (isClientDisplayIdUniqueError(updateError)) return
     if (updateError) throw updateError
   }
 }
@@ -398,6 +404,9 @@ async function createClient(req, res) {
     if (err.code === '23505' && /clients_name_key/i.test(err.message || '')) {
       return res.status(400).json({ error: 'Client name is still unique in Supabase. Run server/supabase-clients-module-upgrade.sql once.' })
     }
+    if (isClientDisplayIdUniqueError(err)) {
+      return res.status(400).json({ error: 'Client ID is still unique in Supabase. Run server/supabase-client-shared-display-ids.sql once.' })
+    }
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'createClient', err)
   }
@@ -419,6 +428,9 @@ async function updateClient(req, res) {
     if (!data) return res.status(404).json({ error: 'Client not found' })
     return res.json(normalizeClient(data))
   } catch (err) {
+    if (isClientDisplayIdUniqueError(err)) {
+      return res.status(400).json({ error: 'Client ID is still unique in Supabase. Run server/supabase-client-shared-display-ids.sql once.' })
+    }
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'updateClient', err)
   }
