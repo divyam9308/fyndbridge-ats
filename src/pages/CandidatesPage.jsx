@@ -412,9 +412,13 @@ export default function CandidatesPage() {
     return apiCandidateToUi(payload)
   }
 
-  const findClientByName = (name) => {
-    const normalized = String(name || '').replace(/\s+/g, ' ').trim().toLowerCase()
-    return dbClients.find(c => String(c.name || c.client_name || '').replace(/\s+/g, ' ').trim().toLowerCase() === normalized)
+  const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
+  const clientName = (client) => client?.name || client?.client_name || ''
+  const findClientByName = (name) => dbClients.find(c => normalizeText(clientName(c)) === normalizeText(name))
+  const findClientByInput = (value) => dbClients.find(c => c.id === value) || findClientByName(value)
+  const clientDisplayIdForForm = (candidate) => {
+    const client = dbClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
+    return client?.client_display_id || ''
   }
 
   const createClientFromCandidate = async (candidate) => {
@@ -572,12 +576,13 @@ export default function CandidatesPage() {
     const { name, value, type, checked } = e.target
     const nextValue = type === 'checkbox' ? checked : value
     if (name === 'client') {
-      const matchingClient = dbClients.find(c => c.id === value)
+      const isNewClient = value === 'Other / Add New Client' || value === '__new_client__'
+      const matchingClient = findClientByInput(value)
       setForm(f => ({
         ...f,
-        client: value === '__new_client__' ? value : (matchingClient?.name || ''),
+        client: isNewClient ? '__new_client__' : (matchingClient ? clientName(matchingClient) : value),
         clientId: matchingClient?.id || '',
-        clientPhone: matchingClient ? matchingClient.phone : '',
+        clientPhone: matchingClient?.phone || CLIENT_PHONES[clientName(matchingClient)] || '',
         job: ''
       }))
     } else {
@@ -616,7 +621,7 @@ export default function CandidatesPage() {
   const openAddModal = () => { setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName }); setEditing(false); setErrors({}); setSkillInput(''); setAddOpen(true) }
 
   const candidateToForm = (candidate) => {
-    const matchedClient = findClientByName(candidate.client)
+    const matchedClient = dbClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
     return {
       ...EMPTY_CAND,
       ...candidate,
@@ -624,7 +629,7 @@ export default function CandidatesPage() {
       associationId: candidate.associationId,
       candidateId: candidate.candidateId,
       clientId: candidate.clientId || matchedClient?.id || '',
-      client: matchedClient?.name || candidate.client || '',
+      client: clientName(matchedClient) || candidate.client || '',
       currentOrganisation: candidate.currentOrganisation || candidate.currentCompany || '',
       skills: Array.isArray(candidate.skills) ? candidate.skills : []
     }
@@ -781,7 +786,7 @@ export default function CandidatesPage() {
       skills: ai?.skills?.length ? ai.skills : (fieldValue(extracted, 'skills', []) || []),
       education: ai?.education || fieldValue(extracted, 'education'),
       salary: ai?.salary ?? fieldValue(extracted, 'salary'),
-      client: matchedClient ? matchedClient.name : (parsedClient ? '__new_client__' : ''),
+      client: matchedClient ? clientName(matchedClient) : (parsedClient ? '__new_client__' : ''),
       clientId: matchedClient?.id || '',
       newClientName: matchedClient ? '' : parsedClient,
       clientPhone: matchedClient?.phone || '',
@@ -915,12 +920,13 @@ export default function CandidatesPage() {
     const { name, value, type, checked } = e.target
     const nextValue = type === 'checkbox' ? checked : value
     if (name === 'client') {
-      const matchingClient = dbClients.find(c => c.id === value)
+      const isNewClient = value === 'Other / Add New Client' || value === '__new_client__'
+      const matchingClient = findClientByInput(value)
       setParsedForm(f => ({
         ...f,
-        client: value === '__new_client__' ? value : (matchingClient?.name || ''),
+        client: isNewClient ? '__new_client__' : (matchingClient ? clientName(matchingClient) : value),
         clientId: matchingClient?.id || '',
-        clientPhone: matchingClient?.phone || CLIENT_PHONES[matchingClient?.name] || '',
+        clientPhone: matchingClient?.phone || CLIENT_PHONES[clientName(matchingClient)] || '',
         job: ''
       }))
     } else {
@@ -931,17 +937,40 @@ export default function CandidatesPage() {
   // ---- Candidate Form body (shared between Add + Review) ----
   const CandidateFormBody = ({ f, setF, errs, sInput, onSkillInputChange, onSkillKey, onAddSkill, rmSkill, lowConf = [], onChange }) => {
     const low = (field) => lowConf.includes(field) ? ' low-confidence' : ''
+    const visibleClientValue = f.client === '__new_client__' ? '' : f.client
+    const matchingClients = dbClients
+      .filter(client => normalizeText(clientName(client)).includes(normalizeText(visibleClientValue)))
+      .slice(0, 8)
+    const setClientValue = (value) => {
+      const matchedClient = findClientByInput(value)
+      setF(prev => ({
+        ...prev,
+        client: matchedClient ? clientName(matchedClient) : value,
+        clientId: matchedClient?.id || '',
+        clientPhone: matchedClient?.phone || CLIENT_PHONES[clientName(matchedClient)] || '',
+        job: ''
+      }))
+    }
+    const selectNewClient = () => {
+      setF(prev => ({
+        ...prev,
+        client: '__new_client__',
+        clientId: '',
+        clientPhone: '',
+        job: ''
+      }))
+    }
     const handleLocalChange = onChange || ((e) => {
       const { name, value, type, checked } = e.target
       const nextValue = type === 'checkbox' ? checked : value
       if (name === 'client') {
         const isNewClient = value === 'Other / Add New Client' || value === '__new_client__'
-        const matchedClient = dbClients.find(c => String(c.name || c.client_name || '').toLowerCase() === String(value || '').toLowerCase())
+        const matchedClient = findClientByInput(value)
         setF(prev => ({
           ...prev,
-          client: isNewClient ? '__new_client__' : value,
+          client: isNewClient ? '__new_client__' : (matchedClient ? clientName(matchedClient) : value),
           clientId: matchedClient?.id || '',
-          clientPhone: matchedClient?.phone || CLIENT_PHONES[matchedClient?.name] || '',
+          clientPhone: matchedClient?.phone || CLIENT_PHONES[clientName(matchedClient)] || '',
           job: ''
         }))
       } else {
@@ -1071,17 +1100,28 @@ export default function CandidatesPage() {
 
         <div className="form-group">
           <label className="form-label">Client</label>
-          <input
-            name="client"
-            list="candidate-client-options"
-            value={f.client === '__new_client__' ? 'Other / Add New Client' : f.client}
-            onChange={handleLocalChange}
-            className="form-control"
-          />
-          <datalist id="candidate-client-options">
-            {dbClients.map(c => <option key={c.id} value={c.name || c.client_name} />)}
-            <option value="Other / Add New Client" />
-          </datalist>
+          <div className="client-search-wrap">
+            <input
+              name="client"
+              value={visibleClientValue}
+              onChange={(event) => setClientValue(event.target.value)}
+              className={`form-control${errs?.client ? ' is-error' : ''}`}
+              placeholder={dbClients.length ? 'Search client...' : 'Loading clients...'}
+              autoComplete="off"
+            />
+            <div className="client-suggestions">
+              {matchingClients.map(client => (
+                <button type="button" key={client.id} onMouseDown={(event) => { event.preventDefault(); setClientValue(clientName(client)) }}>
+                  <span>{clientName(client)}</span>
+                  <small>{client.client_display_id || ''}</small>
+                </button>
+              ))}
+              <button type="button" onMouseDown={(event) => { event.preventDefault(); selectNewClient() }}>
+                <span>Other / Add New Client</span>
+              </button>
+            </div>
+          </div>
+          {errs?.client && <span className="form-error">{errs.client}</span>}
         </div>
 
         {f.client === '__new_client__' && (
@@ -1091,12 +1131,10 @@ export default function CandidatesPage() {
           </div>
         )}
 
-        {f.clientId && (
-          <div className="form-group">
-            <label className="form-label">Client ID</label>
-            <input value={dbClients.find(c => c.id === f.clientId)?.client_display_id || f.clientId} className="form-control" readOnly />
-          </div>
-        )}
+        <div className="form-group">
+          <label className="form-label">Client ID</label>
+          <input value={clientDisplayIdForForm(f)} placeholder="Auto-filled after selecting client" className="form-control" readOnly />
+        </div>
 
         <div className="form-group">
           <label className="form-label">Job</label>

@@ -453,6 +453,53 @@
   flex-wrap: wrap;
 }
 
+.client-search-wrap {
+  position: relative;
+}
+
+.client-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 120;
+  display: none;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(0,18,100,0.14);
+  padding: 6px;
+}
+
+.client-search-wrap:focus-within .client-suggestions {
+  display: block;
+}
+
+.client-suggestions button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--navy-darkest);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.client-suggestions button:hover {
+  background: var(--gray-50);
+}
+
+.client-suggestions small {
+  color: var(--gray-500);
+  font-family: monospace;
+}
+
 .candidate-detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
