@@ -65,6 +65,8 @@ const AI_FILTER_OPERATORS = [
 ]
 
 const AI_FILTER_FIELD_MAP = {
+  candidate_id: { column: 'candidates.candidate_display_id', type: 'text' },
+  candidateDisplayId: { column: 'candidates.candidate_display_id', type: 'text' },
   name: { column: 'candidates.full_name', type: 'text' },
   full_name: { column: 'candidates.full_name', type: 'text' },
   candidate: { column: 'candidates.full_name', type: 'text' },
@@ -207,31 +209,40 @@ function displayIdNumber(value, prefix) {
 }
 
 async function ensureCandidateDisplayIds() {
+  // Query ALL candidates directly (not just those with associations)
+  // so every candidate gets a display ID, not just ones with associations.
   const { data, error } = await supabase
-    .from('candidate_associations')
-    .select('candidate_id, created_at, candidates(id, candidate_display_id)')
-    .order('candidate_id', { ascending: true })
-    .order('created_at', { ascending: false })
+    .from('candidates')
+    .select('id, candidate_display_id')
+    .order('created_at', { ascending: true })
     .limit(10000)
 
   if (error) throw error
 
-  const candidates = []
-  const seen = new Set()
-  for (const row of data || []) {
-    const candidate = row.candidates
-    if (!candidate?.id || seen.has(candidate.id)) continue
-    seen.add(candidate.id)
-    candidates.push(candidate)
-  }
+  const candidates = data || []
 
   if (!candidates.some((candidate) => !cleanText(candidate.candidate_display_id))) return
 
+  // Find the highest existing numeric ID so we don't collide
+  const existingIds = new Set(
+    candidates
+      .map((candidate) => candidate.candidate_display_id)
+      .filter(Boolean)
+  )
+
   let next = Math.max(0, ...candidates.map((candidate) => displayIdNumber(candidate.candidate_display_id, 'CA')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
+
   for (const candidate of candidates.filter((item) => !cleanText(item.candidate_display_id))) {
+    // Find the next truly unused ID (skip any that are already taken)
+    while (existingIds.has(`CA${next}`)) {
+      next++
+    }
+    const displayId = `CA${next}`
+    existingIds.add(displayId)
+    next++
     const { error: updateError } = await supabase
       .from('candidates')
-      .update({ candidate_display_id: `CA${next++}` })
+      .update({ candidate_display_id: displayId })
       .eq('id', candidate.id)
     if (updateError) throw updateError
   }
@@ -241,8 +252,18 @@ async function nextCandidateDisplayId() {
   await ensureCandidateDisplayIds()
   const { data, error } = await supabase.from('candidates').select('candidate_display_id')
   if (error) throw error
-  const next = Math.max(0, ...(data || []).map((candidate) => displayIdNumber(candidate.candidate_display_id, 'CA')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
-  return `CA${next}`
+  
+  const existingIds = new Set(
+    (data || [])
+      .map((candidate) => candidate.candidate_display_id)
+      .filter(Boolean)
+  )
+
+  let nextNum = 1
+  while (existingIds.has(`CA${nextNum}`)) {
+    nextNum++
+  }
+  return `CA${nextNum}`
 }
 
 async function getNextCandidateDisplayId(req, res) {
@@ -368,6 +389,7 @@ function escapeRegExp(value) {
 function explicitAiFiltersFromPrompt(prompt) {
   const text = cleanText(prompt)
   const aliases = {
+    candidate_id: ['candidate id', 'id', 'display id', 'candidate_id', 'candidateDisplayId'],
     name: ['name', 'candidate', 'candidate name'],
     city: ['city', 'location'],
     state: ['state'],
@@ -399,6 +421,11 @@ function explicitAiConditionsFromPrompt(prompt) {
   const aliases = Object.entries(AI_FILTER_FIELD_MAP)
     .filter(([field]) => !field.includes('_') || ['full_name', 'current_designation', 'current_organisation', 'current_salary', 'expected_salary', 'consultant_name', 'client_name', 'job_title'].includes(field))
     .map(([field]) => field)
+
+  const idMatch = text.match(/\b(CA\d+)\b/i)
+  if (idMatch) {
+    conditions.push({ field: 'candidate_id', operator: 'equals', value: idMatch[1].toUpperCase() })
+  }
 
   text.split(/\s*,\s*|\s+and\s+/i).forEach((part) => {
     for (const field of aliases) {
@@ -509,6 +536,11 @@ function localAiFilterFallback(prompt) {
   const normalized = normalizeSearchText(prompt)
   const filters = normalizeAiFilterOutput(explicitAiFiltersFromPrompt(prompt))
   const roleIntent = /\b(role|designation|job|profile|position|engineer|developer|manager|analyst)\b/.test(normalized)
+
+  const idMatch = normalized.match(/\b(ca\d+)\b/i)
+  if (idMatch) {
+    filters.candidate_id = idMatch[1].toUpperCase()
+  }
 
   if (/\b(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b/.test(normalized)) {
     const value = Number(normalized.match(/\b(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b/)[1])
@@ -831,7 +863,7 @@ function flattenAssociation(row) {
     client_name: row.client_name || null,
     job_title: row.job_title || null,
     consultant_name: row.consultant_name || null,
-    status: row.status || 'Interested',
+    status: row.status || '-',
     current_salary: row.current_salary || null,
     expected_salary: row.expected_salary || null,
     notes: row.notes || null,
@@ -993,6 +1025,7 @@ function applyAiQueryFilters(query, filters) {
     return filters.conditions.reduce((nextQuery, condition) => applyAiCondition(nextQuery, condition), query)
   }
 
+  if (filters.candidate_id) query = query.ilike('candidate_display_id', `%${cleanText(filters.candidate_id)}%`)
   if (filters.name) query = query.ilike('full_name', `%${cleanText(filters.name)}%`)
   if (filters.city) query = query.ilike('city', `%${cleanText(filters.city)}%`)
   if (filters.state) query = query.ilike('state', `%${cleanText(filters.state)}%`)
@@ -1296,6 +1329,17 @@ async function createCandidate(req, res) {
       }
 
       candidate = data
+
+      const correctDisplayId = await nextCandidateDisplayId()
+      const { error: updateError } = await supabase
+        .from('candidates')
+        .update({ candidate_display_id: correctDisplayId })
+        .eq('id', candidate.id)
+
+      if (updateError) {
+        throw updateError
+      }
+      candidate.candidate_display_id = correctDisplayId
     } else {
       const { data, error } = await supabase
         .from('candidates')
