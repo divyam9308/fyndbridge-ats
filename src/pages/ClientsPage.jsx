@@ -6,6 +6,7 @@ import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 
 const STATUSES = ['Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
+const STATUS_OPTIONS = ['', ...STATUSES]
 const STATUS_BADGE_MAP = {
   Converted: 'badge-converted',
   'Not Converted': 'badge-not-converted',
@@ -31,7 +32,7 @@ const EMPTY_FORM = {
   connected_on_date: '',
   comments: '',
   follow_up_date: '',
-  status: 'Not Converted',
+  status: '',
   terms_signed_type: '',
   terms_signed_custom: '',
   terms_value: '',
@@ -116,7 +117,7 @@ function clientToForm(client) {
     connected_on_date: client.connected_on_date || '',
     comments: client.comments || client.notes || '',
     follow_up_date: client.follow_up_date || '',
-    status: STATUSES.includes(client.status) ? client.status : 'Not Converted',
+    status: STATUSES.includes(client.status) ? client.status : '',
     terms_signed_type: client.terms_signed_type || '',
     terms_signed_custom: client.terms_signed_custom || '',
     terms_value: client.terms_value || '',
@@ -279,7 +280,7 @@ export default function ClientsPage() {
   }, [clients, sortDirection, sortField])
 
   const filteredClients = useMemo(() => (
-    statusFilter === 'All' ? sortedClients : sortedClients.filter(client => client.status === statusFilter)
+    statusFilter === 'All' ? sortedClients : sortedClients.filter(client => statusFilter === '-' ? !client.status || client.status === '-' : client.status === statusFilter)
   ), [sortedClients, statusFilter])
 
   const groupedClients = useMemo(() => {
@@ -335,7 +336,7 @@ export default function ClientsPage() {
     if (!form.client_name.trim()) next.client_name = 'Client Name is required'
     if (!form.mobile.trim()) next.mobile = 'Mobile is required'
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
-    if (!STATUSES.includes(form.status)) next.status = 'Select a valid status'
+    if (form.status && !STATUSES.includes(form.status)) next.status = 'Select a valid status'
     if (!['Yes', 'No'].includes(form.contract_signed)) next.contract_signed = 'Select Yes or No'
     return next
   }
@@ -368,6 +369,9 @@ export default function ClientsPage() {
     setForm({
       ...clientToForm(client),
       client_group_id: client.client_group_id || client.id,
+      connected_on_date: todayLocal(),
+      follow_up_date: todayLocal(),
+      status: '',
       contact_person: '',
       mobile: '',
       email: '',
@@ -615,6 +619,7 @@ export default function ClientsPage() {
           {statusOpen && (
             <div className="filter-dropdown candidate-sort-dropdown">
               <button className="candidate-columns-action" type="button" onClick={() => { setStatusFilter('All'); setStatusOpen(false) }}>All Statuses</button>
+              <button className="candidate-columns-action" type="button" onClick={() => { setStatusFilter('-'); setStatusOpen(false) }}>-</button>
               {STATUSES.map(status => (
                 <button className="candidate-columns-action" type="button" key={status} onClick={() => { setStatusFilter(status); setStatusOpen(false) }}>
                   {status}
@@ -708,7 +713,7 @@ export default function ClientsPage() {
                 ].map(([name, label, type, required]) => (
                   <div className="form-group" key={name}>
                     <label className="form-label">{label} {required && <span className="req">*</span>}</label>
-                    <input name={name} type={type} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} />
+                    <input name={name} type={type} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving || (name === 'client_name' && !editingClient && Boolean(form.client_group_id))} readOnly={name === 'client_name' && !editingClient && Boolean(form.client_group_id)} />
                     {errors[name] && <span className="form-error">{errors[name]}</span>}
                   </div>
                 ))}
@@ -719,7 +724,7 @@ export default function ClientsPage() {
                 <div className="form-group">
                   <label className="form-label">Status</label>
                   <select name="status" value={form.status} onChange={handleChange} className="form-control" disabled={saving}>
-                    {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+                    {STATUS_OPTIONS.map((status) => <option key={status || '-'} value={status}>{status || '-'}</option>)}
                   </select>
                 </div>
                 <div className="form-group">

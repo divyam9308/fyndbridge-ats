@@ -71,6 +71,8 @@ const SORT_OPTIONS = [
   { field: 'consultant', label: 'Consultant', toggle: false },
 ]
 const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Interview', 'Client Submission', 'Offered', 'Hired', 'Rejected by Client', 'Rejected by Recruiter']
+const CANDIDATE_STATUS_OPTIONS = ['', ...CANDIDATE_STATUSES]
+const RELOCATE_OPTIONS = ['', 'Yes', 'No']
 const ACTIVE_CANDIDATE_STATUSES = new Set(['Interested', 'Interview', 'Client Submission', 'Offered'])
 
 const pageSize = 50
@@ -118,7 +120,7 @@ const candidateToEditForm = (candidate) => ({
   current_organisation: candidate.currentOrganisation || '',
   experience_years: candidate.exp ?? '',
   notice_period: candidate.noticePeriod ?? '',
-  open_to_relocate: Boolean(candidate.openToRelocate),
+  open_to_relocate: candidate.openToRelocate || '',
   education: candidate.education || '',
   skills: Array.isArray(candidate.skills) ? candidate.skills.join(', ') : '',
   cv_link: candidate.cvLink || '',
@@ -127,7 +129,7 @@ const candidateToEditForm = (candidate) => ({
   client_name: candidate.client || '',
   job_title: candidate.job || '',
   consultant_name: candidate.consultantName || candidate.consultant || '',
-  status: candidate.status || 'Interested',
+  status: candidate.status || '',
   current_salary: candidate.salary ?? '',
   expected_salary: candidate.expectedSalary ?? '',
   notes: candidate.notes || '',
@@ -394,6 +396,7 @@ export default function ClientDetailPage() {
         skills: editForm.skills.split(',').map(skill => skill.trim()).filter(Boolean),
         experience_years: editForm.experience_years === '' ? null : Number(editForm.experience_years),
         notice_period: editForm.notice_period === '' ? null : Number(editForm.notice_period),
+        open_to_relocate: editForm.open_to_relocate === '' ? null : editForm.open_to_relocate === 'Yes',
         current_salary: editForm.current_salary === '' ? null : Number(editForm.current_salary),
         expected_salary: editForm.expected_salary === '' ? null : Number(editForm.expected_salary),
       }
@@ -455,10 +458,10 @@ export default function ClientDetailPage() {
       case 'location': return <td key={key}>{c.location || c.city || '-'}</td>
       case 'notice': return <td key={key}>{c.noticePeriod !== '' && c.noticePeriod !== null ? c.noticePeriod : '-'}</td>
       case 'expectedSalary': return <td key={key}>{fmt(c.expectedSalary)}</td>
-      case 'relocate': return <td key={key}>{c.openToRelocate ? 'Yes' : 'No'}</td>
+      case 'relocate': return <td key={key}>{c.openToRelocate || '-'}</td>
       case 'comments': return <td key={key} className="cell-ellipsis">{c.notes || '-'}</td>
       case 'linkedin': return <td key={key}>{c.linkedinUrl ? <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link">LinkedIn</a> : '-'}</td>
-      case 'status': return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span></td>
+      case 'status': return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status || '-'}</span></td>
       case 'cv': return <td key={key}>{c.cvLink ? <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link"><FileText size={12} /> CV</a> : '-'}</td>
       case 'month': return <td key={key}>{formatMonth(c.createdAt)}</td>
       case 'action': return <td key={key}><button className="row-action-btn" type="button" title="Edit Candidate" onClick={() => openEditCandidate(c)}><Pencil size={13} /></button></td>
@@ -606,13 +609,15 @@ export default function ClientDetailPage() {
                 <div className="form-group">
                   <label className="form-label">Status</label>
                   <select className="form-control" value={editForm.status} onChange={(event) => updateEditField('status', event.target.value)} disabled={savingCandidate}>
-                    {CANDIDATE_STATUSES.map(status => <option key={status} value={status}>{status}</option>)}
+                    {CANDIDATE_STATUS_OPTIONS.map(status => <option key={status || '-'} value={status}>{status || '-'}</option>)}
                   </select>
                 </div>
-                <label className="filter-toggle" style={{ alignSelf: 'end', height: 38 }}>
-                  <input type="checkbox" checked={Boolean(editForm.open_to_relocate)} onChange={(event) => updateEditField('open_to_relocate', event.target.checked)} disabled={savingCandidate} />
-                  Open to Relocate
-                </label>
+                <div className="form-group">
+                  <label className="form-label">Open to Relocate</label>
+                  <select className="form-control" value={editForm.open_to_relocate} onChange={(event) => updateEditField('open_to_relocate', event.target.value)} disabled={savingCandidate}>
+                    {RELOCATE_OPTIONS.map(value => <option key={value || '-'} value={value}>{value || '-'}</option>)}
+                  </select>
+                </div>
                 <div className="form-group full">
                   <label className="form-label">Skills</label>
                   <input className="form-control" value={editForm.skills} onChange={(event) => updateEditField('skills', event.target.value)} disabled={savingCandidate} />

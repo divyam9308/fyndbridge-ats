@@ -9,6 +9,8 @@ const ALL_STATUSES = [
   'Interested', 'Not Interested', 'Interview', 'Client Submission',
   'Offered', 'Hired', 'Rejected by Recruiter', 'Rejected by Client',
 ]
+const STATUS_OPTIONS = ['', ...ALL_STATUSES]
+const RELOCATE_OPTIONS = ['', 'Yes', 'No']
 
 const STATUS_BADGE_MAP = {
   'Interested':           'badge-interested',
@@ -144,8 +146,8 @@ const SORT_OPTIONS = [
 const EMPTY_CAND = {
   name:'', email:'', mobile:'', designation:'', city:'', state:'',
   location:'', currentCompany:'', currentOrganisation:'', exp:'', salary:'', expectedSalary:'', skills:[], education:'',
-  noticePeriod:'', openToRelocate:false,
-  client:'', clientId:'', newClientName:'', job:'', clientPhone:'', status:'Interested',
+  noticePeriod:'', openToRelocate:'',
+  client:'', clientId:'', newClientName:'', job:'', clientPhone:'', status:'',
   cvLink:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
 }
 
@@ -176,7 +178,7 @@ const apiCandidateToUi = (row) => ({
   currentOrganisation: row.current_organisation || row.current_company || '',
   exp: row.experience_years ?? '',
   noticePeriod: row.notice_period ?? '',
-  openToRelocate: Boolean(row.open_to_relocate),
+  openToRelocate: row.open_to_relocate === null || row.open_to_relocate === undefined ? '' : (row.open_to_relocate ? 'Yes' : 'No'),
   salary: row.current_salary ?? '',
   expectedSalary: row.expected_salary ?? '',
   skills: row.skills || [],
@@ -184,7 +186,7 @@ const apiCandidateToUi = (row) => ({
   client: row.client_name || '',
   clientPhone: row.client_phone_number || CLIENT_PHONES[row.client_name] || '',
   job: row.job_title || '',
-  status: row.status || 'Interested',
+  status: row.status || '',
   cvLink: row.cv_link || row.resume_url || '',
   linkedinUrl: row.linkedin_url || '',
   notes: row.notes || '',
@@ -209,7 +211,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     current_organisation: f.currentOrganisation,
     experience_years: f.exp,
     notice_period: f.noticePeriod,
-    open_to_relocate: Boolean(f.openToRelocate),
+    open_to_relocate: f.openToRelocate === '' ? null : f.openToRelocate === 'Yes',
     skills: f.skills,
     education: f.education,
     client_name: f.client,
@@ -1100,7 +1102,7 @@ export default function CandidatesPage() {
         <div className="form-group">
           <label className="form-label">Status</label>
           <select name="status" value={f.status} onChange={handleLocalChange} className="form-control">
-            {ALL_STATUSES.map(s => <option key={s}>{s}</option>)}
+            {STATUS_OPTIONS.map(s => <option key={s || '-'} value={s}>{s || '-'}</option>)}
           </select>
         </div>
 
@@ -1117,10 +1119,12 @@ export default function CandidatesPage() {
             className="form-control" />
         </div>
 
-        <label className="filter-toggle" style={{ alignSelf:'end', height:38 }}>
-          <input name="openToRelocate" type="checkbox" checked={Boolean(f.openToRelocate)} onChange={handleLocalChange} />
-          Open to Relocate
-        </label>
+        <div className="form-group">
+          <label className="form-label">Open to Relocate</label>
+          <select name="openToRelocate" value={f.openToRelocate} onChange={handleLocalChange} className="form-control">
+            {RELOCATE_OPTIONS.map(value => <option key={value || '-'} value={value}>{value || '-'}</option>)}
+          </select>
+        </div>
 
         <div className="form-group full">
           <label className="form-label">Skills</label>
@@ -1293,7 +1297,7 @@ export default function CandidatesPage() {
       case 'expectedSalary':
         return <td key={key} style={{ fontWeight:600 }}>{fmt(c.expectedSalary)}</td>
       case 'relocate':
-        return <td key={key}>{c.openToRelocate ? 'Yes' : 'No'}</td>
+        return <td key={key}>{c.openToRelocate || '-'}</td>
       case 'comments':
         return <td key={key} className="cell-ellipsis">{c.notes || '-'}</td>
       case 'linkedin':
@@ -1544,7 +1548,7 @@ export default function CandidatesPage() {
                 ['Expected CTC', fmt(selectedCandidate.expectedSalary)],
                 ['Current Location', selectedCandidate.location || selectedCandidate.city || '-'],
                 ['Notice Period', selectedCandidate.noticePeriod !== '' && selectedCandidate.noticePeriod !== null ? selectedCandidate.noticePeriod : '-'],
-                ['Open to Relocate', selectedCandidate.openToRelocate ? 'Yes' : 'No'],
+                ['Open to Relocate', selectedCandidate.openToRelocate || '-'],
                 ['Status', selectedCandidate.status || '-'],
                 ['Month', formatMonth(selectedCandidate.createdAt)],
                 ['Education', selectedCandidate.education || '-'],

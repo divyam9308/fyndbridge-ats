@@ -696,7 +696,7 @@ function flattenAssociation(row) {
     current_organisation: candidate.current_organisation || candidate.current_company || null,
     experience_years: candidate.experience_years || null,
     notice_period: candidate.notice_period || null,
-    open_to_relocate: Boolean(candidate.open_to_relocate),
+    open_to_relocate: candidate.open_to_relocate === null || candidate.open_to_relocate === undefined ? null : Boolean(candidate.open_to_relocate),
     skills: candidate.skills || [],
     education: candidate.education || null,
     cv_link: candidate.cv_link || candidate.resume_url || null,
@@ -706,7 +706,7 @@ function flattenAssociation(row) {
     client_name: row.client_name || null,
     job_title: row.job_title || null,
     consultant_name: row.consultant_name || null,
-    status: row.status || 'Interested',
+    status: row.status || '',
     current_salary: row.current_salary || null,
     expected_salary: row.expected_salary || null,
     notes: row.notes || null,
@@ -999,7 +999,7 @@ async function createCandidate(req, res) {
   try {
     const body = {
       ...req.body,
-      status: req.body.status || 'Interested',
+      status: req.body.status || '',
       source: req.body.source || 'manual'
     }
 
@@ -1178,7 +1178,7 @@ async function updateCandidate(req, res) {
 
 async function updateCandidateStatus(req, res) {
   try {
-    if (!VALID_STATUSES.includes(req.body.status)) {
+    if (req.body.status && !VALID_STATUSES.includes(req.body.status)) {
       return res.status(400).json({
         errors: {
           status: `status must be one of: ${VALID_STATUSES.join(', ')}`
@@ -1187,7 +1187,7 @@ async function updateCandidateStatus(req, res) {
     }
 
     const updatePayload = {
-      status: req.body.status,
+      status: req.body.status || null,
       updated_at: new Date().toISOString()
     }
 

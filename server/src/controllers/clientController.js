@@ -140,7 +140,7 @@ function normalizeClient(row, activeJobs = 0, followUps = []) {
     region,
     notes: comments,
     comments,
-    status: row.status || 'Not Converted',
+    status: row.status || '',
     terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
     contract_signed: Boolean(row.contract_signed),
     contract_document: row.contract_document || '',
@@ -171,8 +171,8 @@ async function uploadContractPdf(file) {
 }
 
 function clientPayload(body) {
-  const status = body.status || 'Not Converted'
-  if (!CLIENT_STATUSES.includes(status)) {
+  const status = clean(body.status) || null
+  if (status && !CLIENT_STATUSES.includes(status)) {
     const err = new Error(`Status must be one of: ${CLIENT_STATUSES.join(', ')}`)
     err.statusCode = 400
     throw err
