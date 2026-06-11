@@ -192,7 +192,11 @@ function isValidEmail(email) {
 }
 
 function isValidMobile(value) {
-  return /^(\+?\d{1,3}[\s-]?)?[6-9]\d{9}$/.test(String(value || '').trim())
+  const v = String(value || '').trim()
+  // Allow '-' as a placeholder (e.g. when CV has no phone number)
+  if (v === '-') return true
+  // Accept Indian numbers (starting with 6-9, 10 digits) OR international (7-15 digits, optional + prefix)
+  return /^(\+?\d{1,4}[\s-]?)?(\d[\s-]?){7,14}\d$/.test(v)
 }
 
 function isPositiveInteger(value) {
@@ -729,11 +733,15 @@ function validateCandidatePayload(body, { partial = false } = {}) {
   }
 
   if (!partial || Object.prototype.hasOwnProperty.call(body, 'mobile_number')) {
-    const mobile = normalizeMobile(body.mobile_number)
-    if (!mobile) {
-      errors.mobile_number = 'mobile_number is required'
-    } else if (!isValidMobile(mobile)) {
-      errors.mobile_number = 'mobile_number must be a valid Indian mobile number'
+    const raw = String(body.mobile_number || '').trim()
+    // Allow '-' as a placeholder when CV has no phone number
+    if (raw !== '-') {
+      const mobile = normalizeMobile(body.mobile_number)
+      if (!mobile) {
+        errors.mobile_number = 'mobile_number is required'
+      } else if (!isValidMobile(mobile)) {
+        errors.mobile_number = 'mobile_number must be a valid mobile number (min 7 digits)'
+      }
     }
   }
 

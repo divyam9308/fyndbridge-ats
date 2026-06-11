@@ -907,6 +907,8 @@ export default function CandidatesPage() {
   }
 
   const fillEmptyCandidateFields = (candidate) => {
+    // mobile is included so a missing phone number from a CV defaults to '-' rather than ''
+    // which avoids 'Mobile is required' blocking the save silently
     const textFields = ['name', 'email', 'mobile', 'designation', 'city', 'state', 'location', 'currentCompany', 'currentOrganisation', 'education', 'client', 'job', 'clientPhone', 'cvLink', 'linkedinUrl', 'notes', 'consultantName']
     const next = { ...candidate }
     textFields.forEach(field => {
@@ -1739,6 +1741,12 @@ export default function CandidatesPage() {
             </div>
 
             <div className="modal-footer">
+              {/* Show error in footer so it is always visible without scrolling */}
+              {importError && parsed && (
+                <div className="form-error" style={{ display: 'block', flex: '1 1 100%', marginBottom: 0 }} role="alert">
+                  {importError}
+                </div>
+              )}
               <button className="btn-secondary" onClick={cancelRemainingResumes}>Cancel Remaining</button>
               {parsed && (
                 <>
