@@ -1,7 +1,6 @@
 create table if not exists public.cvs (
   id uuid primary key default gen_random_uuid(),
   temp_id text,
-  serial_no integer,
   file_name text not null,
   resume_path text,
   resume_url text,
@@ -42,3 +41,6 @@ create index if not exists cvs_imported_idx
 
 create index if not exists cvs_created_at_idx
   on public.cvs(created_at desc);
+
+alter table public.cvs
+  drop column if exists serial_no;

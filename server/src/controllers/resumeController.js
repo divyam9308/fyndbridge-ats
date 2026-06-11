@@ -54,13 +54,12 @@ async function uploadResumeToStorage(file) {
   }
 }
 
-function rowFromParsed(file, index, parsed, error = null, storage = {}, warnings = []) {
+function rowFromParsed(file, parsed, error = null, storage = {}, warnings = []) {
   const extracted = parsed?.extracted || {}
   const ai = parsed?.ai_extracted || {}
 
   return {
     temp_id: uuidv4(),
-    serial_no: index + 1,
     file_name: file.originalname,
     candidate_name: cleanText(ai.name || extracted.full_name?.value),
     phone_number: cleanText(ai.mobile || extracted.mobile_number?.value),
@@ -85,7 +84,7 @@ function rowFromParsed(file, index, parsed, error = null, storage = {}, warnings
   }
 }
 
-async function parseOne(file, index) {
+async function parseOne(file) {
   let storage = { resume_path: '', resume_url: '' }
   const warnings = []
 
@@ -98,9 +97,9 @@ async function parseOne(file, index) {
 
   try {
     const parsed = await parseResume(file.path)
-    return rowFromParsed(file, index, parsed, null, storage, warnings)
+    return rowFromParsed(file, parsed, null, storage, warnings)
   } catch (err) {
-    return rowFromParsed(file, index, null, err.message || 'Unable to parse resume', storage, warnings)
+    return rowFromParsed(file, null, err.message || 'Unable to parse resume', storage, warnings)
   } finally {
     try {
       await fs.unlink(file.path)

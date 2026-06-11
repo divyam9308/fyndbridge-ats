@@ -38,7 +38,6 @@ const STATUS_COLUMNS = [
 ]
 
 const CANDIDATE_TABLE_COLUMNS = [
-  { key: 'sno', label: 'S.No' },
   { key: 'candidateDisplayId', label: 'Candidate ID' },
   { key: 'date', label: 'Date' },
   { key: 'consultant', label: 'Consultant' },
@@ -438,9 +437,8 @@ export default function ClientDetailPage() {
     }
   }
 
-  const renderCandidateCell = ({ key }, c, index) => {
+  const renderCandidateCell = ({ key }, c) => {
     switch (key) {
-      case 'sno': return <td key={key}>{(page - 1) * pageSize + index + 1}</td>
       case 'candidateDisplayId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.candidateDisplayId || '-'}</td>
       case 'date': return <td key={key}>{formatDate(c.createdAt)}</td>
       case 'consultant': return <td key={key}>{c.consultant || '-'}</td>

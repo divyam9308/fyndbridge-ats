@@ -52,7 +52,6 @@ const todayLocal = () => {
   return date.toISOString().slice(0, 10)
 }
 const CLIENT_TABLE_COLUMNS = [
-  { key: 'sno', label: 'S.No.' },
   { key: 'clientId', label: 'Client ID' },
   { key: 'clientName', label: 'Client Name' },
   { key: 'consultant', label: 'Consultant' },
@@ -253,16 +252,6 @@ export default function ClientsPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [statusOpen])
 
-  const serials = useMemo(() => {
-    const map = {}
-    let serial = 0
-    clients.forEach((client) => {
-      const key = client.client_group_id || client.id
-      if (!map[key]) map[key] = ++serial
-    })
-    return map
-  }, [clients])
-
   const sortedClients = useMemo(() => {
     const rows = [...clients]
     if (sortField === 'client_id') {
@@ -334,8 +323,9 @@ export default function ClientsPage() {
   const validate = () => {
     const next = {}
     if (!form.client_name.trim()) next.client_name = 'Client Name is required'
-    if (!form.mobile.trim()) next.mobile = 'Mobile is required'
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
+    if (!form.email.trim()) next.email = 'Email is required'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
+    if (form.client_group_id && !form.contact_person.trim()) next.contact_person = 'Contact Person is required'
     if (form.status && !STATUSES.includes(form.status)) next.status = 'Select a valid status'
     if (!['Yes', 'No'].includes(form.contract_signed)) next.contract_signed = 'Select Yes or No'
     return next
@@ -496,8 +486,6 @@ export default function ClientsPage() {
     const followUp = selectedFollowUp(client)
     const contact = selectedContact(client)
     switch (key) {
-      case 'sno':
-        return <td key={key}>{serials[client.client_group_id || client.id]}</td>
       case 'clientId':
         return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(client.client_display_id)}</td>
       case 'consultant':
@@ -702,9 +690,9 @@ export default function ClientsPage() {
                   ['client_name', 'Client Name', 'text', true],
                   ['location', 'Location', 'text'],
                   ['region', 'Region', 'text'],
-                  ['contact_person', 'Contact Person', 'text'],
-                  ['mobile', 'Mobile', 'text', true],
-                  ['email', 'Email', 'email'],
+                  ['contact_person', 'Contact Person', 'text', Boolean(form.client_group_id)],
+                  ['mobile', 'Mobile', 'text'],
+                  ['email', 'Email', 'email', true],
                   ['designation', 'Designation', 'text'],
                   ['linkedin', 'LinkedIn', 'text'],
                   ['sector', 'Sector', 'text'],

@@ -187,6 +187,8 @@ function clientPayload(body) {
 
   const clientName = clean(body.client_name || body.name)
   const mobile = clean(body.mobile || body.phone)
+  const email = clean(body.email)
+  const contactPerson = clean(body.contact_person || body.contact)
   const contractSigned = normalizeBoolean(body.contract_signed)
 
   if (!clientName) {
@@ -194,8 +196,18 @@ function clientPayload(body) {
     err.statusCode = 400
     throw err
   }
-  if (!mobile) {
-    const err = new Error('Mobile is required')
+  if (!email) {
+    const err = new Error('Email is required')
+    err.statusCode = 400
+    throw err
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const err = new Error('Enter a valid email')
+    err.statusCode = 400
+    throw err
+  }
+  if (body.client_group_id && !contactPerson) {
+    const err = new Error('Contact Person is required')
     err.statusCode = 400
     throw err
   }
@@ -209,12 +221,12 @@ function clientPayload(body) {
     city: nullable(body.location || body.city),
     region: nullable(body.region || body.state),
     state: nullable(body.region || body.state),
-    contact_person: nullable(body.contact_person || body.contact),
-    contact: nullable(body.contact_person || body.contact),
+    contact_person: nullable(contactPerson),
+    contact: nullable(contactPerson),
     designation: nullable(body.designation),
     mobile,
     phone: mobile,
-    email: nullable(body.email),
+    email,
     linkedin: nullable(body.linkedin),
     sector: nullable(body.sector),
     connected_on_date: body.connected_on_date || null,
