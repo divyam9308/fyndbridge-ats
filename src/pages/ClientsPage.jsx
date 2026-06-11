@@ -123,6 +123,7 @@ export default function ClientsPage() {
   const [saving, setSaving] = useState(false)
   const [editingClient, setEditingClient] = useState(null)
   const [selectedFollowUps, setSelectedFollowUps] = useState({})
+  const [selectedContacts, setSelectedContacts] = useState({})
   const [followUpClient, setFollowUpClient] = useState(null)
   const [followUpForm, setFollowUpForm] = useState({ follow_up_date: '', follow_up_comments: '' })
   const [columnsOpen, setColumnsOpen] = useState(false)
@@ -247,6 +248,21 @@ export default function ClientsPage() {
     statusFilter === 'All' ? sortedClients : sortedClients.filter(client => client.status === statusFilter)
   ), [sortedClients, statusFilter])
 
+  const groupedClients = useMemo(() => {
+    const groups = new Map()
+    filteredClients.forEach((client) => {
+      const key = client.client_group_id || client.id
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(client)
+    })
+
+    return [...groups.entries()].map(([key, contacts]) => {
+      const selectedId = selectedContacts[key] || contacts[0]?.id
+      const selected = contacts.find(contact => contact.id === selectedId) || contacts[0]
+      return { ...selected, _contact_group_id: key, _contacts: contacts }
+    })
+  }, [filteredClients, selectedContacts])
+
   const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
 
   const handleChange = (e) => {
@@ -290,7 +306,14 @@ export default function ClientsPage() {
   }
 
   const openContactModal = (client) => {
-    setForm(clientToForm(client))
+    setForm({
+      ...clientToForm(client),
+      client_group_id: client.client_group_id || client.id,
+      contact_person: '',
+      mobile: '',
+      email: '',
+      linkedin: ''
+    })
     setErrors({})
     setEditingClient(null)
     setIsOpen(true)
@@ -326,6 +349,12 @@ export default function ClientsPage() {
     const followUps = client.follow_ups || []
     const selected = selectedFollowUps[client.id] || followUps[followUps.length - 1]?.id
     return followUps.find((item) => item.id === selected) || followUps[followUps.length - 1] || null
+  }
+
+  const selectedContact = (client) => {
+    const contacts = client._contacts || [client]
+    const selected = selectedContacts[client._contact_group_id] || client.id
+    return contacts.find((item) => item.id === selected) || contacts[0] || client
   }
 
   const saveFollowUp = async () => {
@@ -397,6 +426,7 @@ export default function ClientsPage() {
 
   const renderClientCell = ({ key }, client) => {
     const followUp = selectedFollowUp(client)
+    const contact = selectedContact(client)
     switch (key) {
       case 'sno':
         return <td key={key}>{serials[client.client_group_id || client.id]}</td>
@@ -414,17 +444,23 @@ export default function ClientsPage() {
         return (
           <td key={key}>
             <span className="inline-action-cell">
-              {dash(client.contact_person)}
+              {(client._contacts || []).length > 1 ? (
+                <select className="filter-select compact-select" value={contact.id} onChange={(event) => setSelectedContacts((current) => ({ ...current, [client._contact_group_id]: event.target.value }))}>
+                  {client._contacts.map((item, index) => <option key={item.id} value={item.id}>{item.contact_person || item.contact || `Contact ${index + 1}`}</option>)}
+                </select>
+              ) : (
+                <span>{dash(contact.contact_person || contact.contact)}</span>
+              )}
               <button className="row-action-btn" type="button" title="Add Contact" onClick={() => openContactModal(client)}><Plus size={12} /></button>
             </span>
           </td>
         )
       case 'mobile':
-        return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(client.mobile)}</td>
+        return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(contact.mobile || contact.phone)}</td>
       case 'email':
-        return <td key={key} style={{ color: 'var(--info)', fontSize: 12.5 }}>{dash(client.email)}</td>
+        return <td key={key} style={{ color: 'var(--info)', fontSize: 12.5 }}>{dash(contact.email)}</td>
       case 'linkedin':
-        return <td key={key}>{client.linkedin ? <a className="cv-table-link" href={client.linkedin.startsWith('http') ? client.linkedin : `https://${client.linkedin}`} target="_blank" rel="noreferrer">LinkedIn</a> : '-'}</td>
+        return <td key={key}>{contact.linkedin ? <a className="cv-table-link" href={contact.linkedin.startsWith('http') ? contact.linkedin : `https://${contact.linkedin}`} target="_blank" rel="noreferrer">LinkedIn</a> : '-'}</td>
       case 'sector':
         return <td key={key}>{dash(client.sector)}</td>
       case 'connectedOnDate':
@@ -561,8 +597,8 @@ export default function ClientsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredClients.map((client) => (
-                <tr key={client.id}>
+              {groupedClients.map((client) => (
+                <tr key={client._contact_group_id || client.id}>
                   {activeColumns.map(column => renderClientCell(column, client))}
                 </tr>
               ))}
