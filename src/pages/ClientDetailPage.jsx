@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ChevronDown, ChevronLeft, AlertCircle, Loader2, Briefcase, FileText } from 'lucide-react'
+import { ChevronDown, ChevronLeft, AlertCircle, Loader2, Briefcase, FileText, Pencil, X } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientDetailPage.css'
 import { apiCandidateToUi } from '../utils/candidateUtils'
@@ -60,6 +60,7 @@ const CANDIDATE_TABLE_COLUMNS = [
   { key: 'status', label: 'Status' },
   { key: 'cv', label: 'CV Link' },
   { key: 'month', label: 'Month' },
+  { key: 'action', label: 'Action' },
 ]
 
 const DEFAULT_CANDIDATE_COLUMN_KEYS = CANDIDATE_TABLE_COLUMNS.map(column => column.key)
@@ -68,6 +69,8 @@ const SORT_OPTIONS = [
   { field: 'candidate_name', label: 'Alphabetic Order', toggle: true },
   { field: 'consultant', label: 'Consultant', toggle: false },
 ]
+const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Interview', 'Client Submission', 'Offered', 'Hired', 'Rejected by Client', 'Rejected by Recruiter']
+const ACTIVE_CANDIDATE_STATUSES = new Set(['Interested', 'Interview', 'Client Submission', 'Offered'])
 
 const pageSize = 50
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
@@ -93,6 +96,41 @@ const getCurrentUser = () => {
     return {}
   }
 }
+const deriveJobStatus = (jobTitle, candidateRows, jobRows) => {
+  const relatedJob = jobRows.find(job => normalizeText(job.title) === normalizeText(jobTitle))
+  if (relatedJob?.status === 'On Hold') return 'On Hold'
+  const rows = candidateRows.filter(candidate => normalizeText(getJobText(candidate)) === normalizeText(jobTitle))
+  if (rows.some(candidate => candidate.status === 'Hired')) return 'Closed'
+  if (rows.some(candidate => ACTIVE_CANDIDATE_STATUSES.has(candidate.status))) return 'Active'
+  return 'Open'
+}
+const candidateToEditForm = (candidate) => ({
+  association_id: candidate.associationId,
+  full_name: candidate.name || '',
+  email: candidate.email || '',
+  mobile_number: candidate.mobile || '',
+  city: candidate.city || '',
+  state: candidate.state || '',
+  location: candidate.location || '',
+  current_designation: candidate.designation || '',
+  current_company: candidate.currentCompany || '',
+  current_organisation: candidate.currentOrganisation || '',
+  experience_years: candidate.exp ?? '',
+  notice_period: candidate.noticePeriod ?? '',
+  open_to_relocate: Boolean(candidate.openToRelocate),
+  education: candidate.education || '',
+  skills: Array.isArray(candidate.skills) ? candidate.skills.join(', ') : '',
+  cv_link: candidate.cvLink || '',
+  linkedin_url: candidate.linkedinUrl || '',
+  client_id: candidate.clientId || '',
+  client_name: candidate.client || '',
+  job_title: candidate.job || '',
+  consultant_name: candidate.consultantName || candidate.consultant || '',
+  status: candidate.status || 'Interested',
+  current_salary: candidate.salary ?? '',
+  expected_salary: candidate.expectedSalary ?? '',
+  notes: candidate.notes || '',
+})
 
 export default function ClientDetailPage() {
   const { clientId } = useParams()
@@ -110,8 +148,23 @@ export default function ClientDetailPage() {
   const [sortField, setSortField] = useState('')
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
+  const [editCandidate, setEditCandidate] = useState(null)
+  const [editForm, setEditForm] = useState(null)
+  const [editError, setEditError] = useState('')
+  const [savingCandidate, setSavingCandidate] = useState(false)
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
+  const editModalRef = useRef(null)
+
+  const focusPopup = useCallback((ref) => {
+    window.requestAnimationFrame(() => {
+      const node = ref.current
+      if (!node) return
+      node.scrollIntoView({ behavior: 'auto', block: node.offsetHeight > window.innerHeight ? 'start' : 'center', inline: 'nearest' })
+      const target = node.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])')
+      ;(target || node).focus({ preventScroll: true })
+    })
+  }, [])
 
   const fetchAllCandidates = useCallback(async (clientData) => {
     const candidateMap = new Map()
@@ -234,16 +287,32 @@ export default function ClientDetailPage() {
         rejectedByClient: group.candidates.filter(c => c.status === 'Rejected by Client').length,
         rejectedByRecruiter: group.candidates.filter(c => c.status === 'Rejected by Recruiter').length,
       }
-      return { ...group, status: relatedJob?.status || '-', stats }
+      const manualOnHold = relatedJob?.status === 'On Hold'
+      const derivedStatus = manualOnHold
+        ? 'On Hold'
+        : stats.hired > 0
+          ? 'Closed'
+          : group.candidates.some(candidate => ACTIVE_CANDIDATE_STATUSES.has(candidate.status))
+            ? 'Active'
+            : 'Open'
+      return { ...group, relatedJob, status: derivedStatus, stats }
     }).sort((a, b) => compareText(a.title, b.title))
   }, [candidates, clientJobs])
 
   const jobCounts = useMemo(() => ({
-    active: clientJobs.filter(job => ['Open', 'Active'].includes(job.status)).length,
-    open: clientJobs.filter(job => job.status === 'Open').length,
-    onHold: clientJobs.filter(job => job.status === 'On Hold').length,
-    closed: clientJobs.filter(job => ['Closed', 'Filled'].includes(job.status)).length,
-  }), [clientJobs])
+    active: jobGroups.filter(job => job.status === 'Active').length,
+    open: jobGroups.filter(job => job.status === 'Open').length,
+    onHold: jobGroups.filter(job => job.status === 'On Hold').length,
+    closed: jobGroups.filter(job => job.status === 'Closed').length,
+  }), [jobGroups])
+
+  const calculatedClientStatus = useMemo(() => {
+    if (!jobGroups.length) return 'Open'
+    if (jobGroups.some(job => job.status === 'Active')) return 'Active'
+    if (jobGroups.some(job => job.status === 'On Hold')) return 'On Hold'
+    if (jobGroups.some(job => job.status === 'Open')) return 'Open'
+    return 'Closed'
+  }, [jobGroups])
 
   const selectedCandidates = useMemo(() => {
     if (!selectedGroup) return []
@@ -297,6 +366,67 @@ export default function ClientDetailPage() {
     }
     setSortOpen(false)
   }
+  const openEditCandidate = (candidate) => {
+    setEditCandidate(candidate)
+    setEditForm(candidateToEditForm(candidate))
+    setEditError('')
+  }
+  useEffect(() => {
+    if (editCandidate) focusPopup(editModalRef)
+  }, [editCandidate, focusPopup])
+  const updateEditField = (field, value) => {
+    setEditForm(form => ({ ...form, [field]: value }))
+  }
+  const saveEditCandidate = async () => {
+    if (!editCandidate || !editForm) return
+    setSavingCandidate(true)
+    setEditError('')
+    try {
+      const payload = {
+        ...editForm,
+        skills: editForm.skills.split(',').map(skill => skill.trim()).filter(Boolean),
+        experience_years: editForm.experience_years === '' ? null : Number(editForm.experience_years),
+        notice_period: editForm.notice_period === '' ? null : Number(editForm.notice_period),
+        current_salary: editForm.current_salary === '' ? null : Number(editForm.current_salary),
+        expected_salary: editForm.expected_salary === '' ? null : Number(editForm.expected_salary),
+      }
+      const response = await fetch(`/api/candidates/${editCandidate.associationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || Object.values(data.errors || {})[0] || 'Unable to update candidate.')
+      const updated = apiCandidateToUi(data)
+      const oldJobTitle = getJobText(editCandidate)
+      const newJobTitle = getJobText(updated)
+      const affectedTitles = [...new Set([oldJobTitle, newJobTitle])]
+      const nextCandidates = candidates.map(candidate => candidate.associationId === updated.associationId ? updated : candidate)
+      const updates = affectedTitles
+        .map(title => {
+          const job = clientJobs.find(item => normalizeText(item.title) === normalizeText(title))
+          if (!job || job.status === 'On Hold') return null
+          const status = deriveJobStatus(title, nextCandidates, clientJobs)
+          return status !== job.status ? { id: job.id, status } : null
+        })
+        .filter(Boolean)
+      setCandidates(nextCandidates)
+      if (updates.length) {
+        await Promise.all(updates.map(update => fetch(`/api/jobs/${update.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: update.status }),
+        })))
+        setClientJobs(rows => rows.map(job => updates.find(update => update.id === job.id) ? { ...job, status: updates.find(update => update.id === job.id).status } : job))
+      }
+      setEditCandidate(null)
+      setEditForm(null)
+    } catch (err) {
+      setEditError(err.message)
+    } finally {
+      setSavingCandidate(false)
+    }
+  }
 
   const renderCandidateCell = ({ key }, c, index) => {
     switch (key) {
@@ -324,6 +454,7 @@ export default function ClientDetailPage() {
       case 'status': return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span></td>
       case 'cv': return <td key={key}>{c.cvLink ? <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link"><FileText size={12} /> CV</a> : '-'}</td>
       case 'month': return <td key={key}>{formatMonth(c.createdAt)}</td>
+      case 'action': return <td key={key}><button className="row-action-btn" type="button" title="Edit Candidate" onClick={() => openEditCandidate(c)}><Pencil size={13} /></button></td>
       default: return null
     }
   }
@@ -350,7 +481,7 @@ export default function ClientDetailPage() {
         <div className="client-header-info">
           <h2 className="client-title-text">{client.name}</h2>
           <div className="client-metrics-grid">
-            <div><span>Status</span><strong>{client.status || '-'}</strong></div>
+            <div><span>Client Status</span><strong>{calculatedClientStatus}</strong></div>
             <div><span>Active Jobs</span><strong>{jobCounts.active}</strong></div>
             <div><span>Open Jobs</span><strong>{jobCounts.open}</strong></div>
             <div><span>On Hold Jobs</span><strong>{jobCounts.onHold}</strong></div>
@@ -433,6 +564,68 @@ export default function ClientDetailPage() {
             <button className="btn-secondary" disabled={page >= Math.max(1, Math.ceil(sortedCandidates.length / pageSize))} onClick={() => setPage(p => p + 1)}>Next</button>
           </div>
         </>
+      )}
+      {editCandidate && editForm && (
+        <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && !savingCandidate && setEditCandidate(null)}>
+          <div className="modal-card modal-card-lg" ref={editModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Edit Candidate">
+            <div className="modal-header">
+              <span className="modal-title">Edit Candidate</span>
+              <button className="modal-close" type="button" onClick={() => setEditCandidate(null)} disabled={savingCandidate} aria-label="Close"><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              {editError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{editError}</div>}
+              <div className="form-grid-2">
+                {[
+                  ['full_name', 'Full Name', 'text'],
+                  ['email', 'Email', 'email'],
+                  ['mobile_number', 'Mobile Number', 'text'],
+                  ['consultant_name', 'Consultant', 'text'],
+                  ['current_designation', 'Current Designation', 'text'],
+                  ['current_organisation', 'Current Organisation', 'text'],
+                  ['location', 'Current Location', 'text'],
+                  ['experience_years', 'Experience Years', 'number'],
+                  ['notice_period', 'Notice Period', 'number'],
+                  ['current_salary', 'Current Salary', 'number'],
+                  ['expected_salary', 'Expected Salary', 'number'],
+                  ['job_title', 'Job', 'text'],
+                  ['linkedin_url', 'LinkedIn URL', 'text'],
+                  ['cv_link', 'Resume / CV', 'text'],
+                ].map(([field, label, type]) => (
+                  <div className="form-group" key={field}>
+                    <label className="form-label">{label}</label>
+                    <input className="form-control" type={type} value={editForm[field] ?? ''} onChange={(event) => updateEditField(field, event.target.value)} disabled={savingCandidate} />
+                  </div>
+                ))}
+                <div className="form-group">
+                  <label className="form-label">Status</label>
+                  <select className="form-control" value={editForm.status} onChange={(event) => updateEditField('status', event.target.value)} disabled={savingCandidate}>
+                    {CANDIDATE_STATUSES.map(status => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                </div>
+                <label className="filter-toggle" style={{ alignSelf: 'end', height: 38 }}>
+                  <input type="checkbox" checked={Boolean(editForm.open_to_relocate)} onChange={(event) => updateEditField('open_to_relocate', event.target.checked)} disabled={savingCandidate} />
+                  Open to Relocate
+                </label>
+                <div className="form-group full">
+                  <label className="form-label">Skills</label>
+                  <input className="form-control" value={editForm.skills} onChange={(event) => updateEditField('skills', event.target.value)} disabled={savingCandidate} />
+                </div>
+                <div className="form-group full">
+                  <label className="form-label">Education</label>
+                  <textarea className="form-control" rows={3} value={editForm.education} onChange={(event) => updateEditField('education', event.target.value)} disabled={savingCandidate} />
+                </div>
+                <div className="form-group full">
+                  <label className="form-label">Comments</label>
+                  <textarea className="form-control" rows={3} value={editForm.notes} onChange={(event) => updateEditField('notes', event.target.value)} disabled={savingCandidate} />
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" type="button" onClick={() => setEditCandidate(null)} disabled={savingCandidate}>Cancel</button>
+              <button className="btn-primary" type="button" onClick={saveEditCandidate} disabled={savingCandidate}>{savingCandidate ? 'Saving...' : 'Save Candidate'}</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

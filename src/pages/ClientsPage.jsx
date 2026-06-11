@@ -138,6 +138,18 @@ export default function ClientsPage() {
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
   const statusDropdownRef = useRef(null)
+  const clientModalRef = useRef(null)
+  const followUpModalRef = useRef(null)
+
+  const focusPopup = useCallback((ref) => {
+    window.requestAnimationFrame(() => {
+      const node = ref.current
+      if (!node) return
+      node.scrollIntoView({ behavior: 'auto', block: node.offsetHeight > window.innerHeight ? 'start' : 'center', inline: 'nearest' })
+      const target = node.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])')
+      ;(target || node).focus({ preventScroll: true })
+    })
+  }, [])
 
   const fetchClients = useCallback(async ({ showLoading = true } = {}) => {
     try {
@@ -299,12 +311,19 @@ export default function ClientsPage() {
   }
 
   const openEditModal = (client) => {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
     setForm(clientToForm(client))
     setErrors({})
     setEditingClient(client)
     setIsOpen(true)
   }
+
+  useEffect(() => {
+    if (isOpen) focusPopup(clientModalRef)
+  }, [isOpen, focusPopup])
+
+  useEffect(() => {
+    if (followUpClient) focusPopup(followUpModalRef)
+  }, [followUpClient, focusPopup])
 
   const openContactModal = (client) => {
     setForm({
@@ -610,7 +629,7 @@ export default function ClientsPage() {
 
       {isOpen && (
         <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && setIsOpen(false)}>
-          <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label={editingClient ? 'Edit Client' : 'Add Client'}>
+          <div className="modal-card modal-card-lg" ref={clientModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingClient ? 'Edit Client' : 'Add Client'}>
             <div className="modal-header">
               <span className="modal-title">{editingClient ? 'Edit Client' : 'Add New Client'}</span>
               <button className="modal-close" onClick={() => setIsOpen(false)} aria-label="Close"><X size={16} /></button>
@@ -692,7 +711,7 @@ export default function ClientsPage() {
 
       {followUpClient && (
         <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && setFollowUpClient(null)}>
-          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Add Follow Up">
+          <div className="modal-card" ref={followUpModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add Follow Up">
             <div className="modal-header">
               <span className="modal-title">Add Follow Up {(followUpClient.follow_ups || []).length + 1}</span>
               <button className="modal-close" onClick={() => setFollowUpClient(null)} aria-label="Close"><X size={16} /></button>

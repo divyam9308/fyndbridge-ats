@@ -229,7 +229,10 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
 export default function CandidatesPage() {
   const [candidates, setCandidates] = useState([])
   const fileInputRef = useRef(null)
+  const candidateModalRef = useRef(null)
   const candidateModalBodyRef = useRef(null)
+  const importModalRef = useRef(null)
+  const duplicateModalRef = useRef(null)
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -338,6 +341,28 @@ export default function CandidatesPage() {
   const [parsed, setParsed]           = useState(false)    // after parse success
   const [parsedForm, setParsedForm]   = useState(null)
   const [parsedSkillInput, setParsedSkillInput] = useState('')
+
+  const focusPopup = useCallback((ref) => {
+    window.requestAnimationFrame(() => {
+      const node = ref.current
+      if (!node) return
+      node.scrollIntoView({ behavior: 'auto', block: node.offsetHeight > window.innerHeight ? 'start' : 'center', inline: 'nearest' })
+      const target = node.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])')
+      ;(target || node).focus({ preventScroll: true })
+    })
+  }, [])
+
+  useEffect(() => {
+    if (addOpen) focusPopup(candidateModalRef)
+  }, [addOpen, focusPopup])
+
+  useEffect(() => {
+    if (importOpen) focusPopup(importModalRef)
+  }, [importOpen, parsed, focusPopup])
+
+  useEffect(() => {
+    if (candidateDuplicate) focusPopup(duplicateModalRef)
+  }, [candidateDuplicate, focusPopup])
 
   const loadCandidates = useCallback(async (nextPage = page, { showLoading = true } = {}) => {
     if (showLoading) setLoadingCandidates(true)
@@ -635,7 +660,6 @@ export default function CandidatesPage() {
   }
 
   const openEditCandidate = (candidate) => {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
     setForm(candidateToForm(candidate))
     setEditing(true)
     setErrors({})
@@ -1532,7 +1556,7 @@ export default function CandidatesPage() {
       {/* ===== Add Candidate Modal ===== */}
       {addOpen && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !saving && setAddOpen(false)}>
-          <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label="Add Candidate">
+          <div className="modal-card modal-card-lg" ref={candidateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add Candidate">
             <div className="modal-header">
               <span className="modal-title">{editing ? 'Edit Candidate' : 'Add New Candidate'}</span>
               <button className="modal-close" onClick={() => setAddOpen(false)} aria-label="Close" disabled={saving}><X size={16} /></button>
@@ -1564,7 +1588,7 @@ export default function CandidatesPage() {
       {/* ===== Import Resume Modal ===== */}
       {importOpen && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeImport()}>
-          <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label="Import Resume">
+          <div className="modal-card modal-card-lg" ref={importModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Import Resume">
             <div className="modal-header">
               <span className="modal-title">{parsed ? 'Review Extracted Data' : 'Import Resume'}</span>
               <button className="modal-close" onClick={closeImport} aria-label="Close"><X size={16} /></button>
@@ -1675,7 +1699,7 @@ export default function CandidatesPage() {
 
       {candidateDuplicate && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCandidateDuplicate(null)}>
-          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Duplicate Candidate">
+          <div className="modal-card" ref={duplicateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Duplicate Candidate">
             <div className="modal-header">
               <span className="modal-title">Duplicate Candidate</span>
               <button className="modal-close" onClick={() => setCandidateDuplicate(null)} aria-label="Close"><X size={16} /></button>
