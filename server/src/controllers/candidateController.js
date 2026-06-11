@@ -772,7 +772,8 @@ function validateCandidatePayload(body, { partial = false } = {}) {
     }
   }
 
-  if (body.status !== undefined && body.status !== null && body.status !== '' && !VALID_STATUSES.includes(body.status)) {
+  // Allow '-' as a sentinel meaning "no status selected yet" (not just '' and null)
+  if (body.status !== undefined && body.status !== null && body.status !== '' && body.status !== '-' && !VALID_STATUSES.includes(body.status)) {
     errors.status = `status must be one of: ${VALID_STATUSES.join(', ')}`
   }
 
