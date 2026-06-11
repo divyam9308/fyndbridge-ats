@@ -339,8 +339,8 @@ export default function CandidatesPage() {
   const [parsedForm, setParsedForm]   = useState(null)
   const [parsedSkillInput, setParsedSkillInput] = useState('')
 
-  const loadCandidates = useCallback(async (nextPage = page) => {
-    setLoadingCandidates(true)
+  const loadCandidates = useCallback(async (nextPage = page, { showLoading = true } = {}) => {
+    if (showLoading) setLoadingCandidates(true)
     try {
       const params = new URLSearchParams({
         page: String(nextPage),
@@ -373,7 +373,7 @@ export default function CandidatesPage() {
       setCandidates([])
       setTotalCandidates(0)
     } finally {
-      setLoadingCandidates(false)
+      if (showLoading) setLoadingCandidates(false)
     }
   }, [aiAppliedPrompt, aiFilters, filterJob, page, pageSize, sortDirection, sortField])
 
@@ -408,7 +408,6 @@ export default function CandidatesPage() {
       throw new Error(message || 'Unable to save candidate.')
     }
 
-    await loadCandidates()
     return apiCandidateToUi(payload)
   }
 
@@ -723,6 +722,7 @@ export default function CandidatesPage() {
       await saveCandidateToApi(form, { update: editing })
       setAddOpen(false)
       setEditing(false)
+      await loadCandidates(page, { showLoading: false })
     } catch (err) {
       if (err.duplicate) {
         setCandidateDuplicate({ source: 'manual', candidate: form, existing: err.duplicate.existing })
@@ -880,6 +880,7 @@ export default function CandidatesPage() {
     try {
       await saveCandidateToApi({ ...parsedForm, source: 'resume' })
       closeImport()
+      await loadCandidates(page, { showLoading: false })
     } catch (err) {
       if (err.duplicate) {
         setCandidateDuplicate({ source: 'resume', candidate: { ...parsedForm, source: 'resume' }, existing: err.duplicate.existing })
@@ -901,6 +902,7 @@ export default function CandidatesPage() {
       setAddOpen(false)
       setEditing(false)
       closeImport()
+      await loadCandidates(page, { showLoading: false })
     } catch (err) {
       const message = err.message || 'Unable to resolve duplicate candidate.'
       if (candidateDuplicate.source === 'resume') setImportError(message)
@@ -1529,11 +1531,11 @@ export default function CandidatesPage() {
 
       {/* ===== Add Candidate Modal ===== */}
       {addOpen && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setAddOpen(false)}>
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !saving && setAddOpen(false)}>
           <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label="Add Candidate">
             <div className="modal-header">
               <span className="modal-title">{editing ? 'Edit Candidate' : 'Add New Candidate'}</span>
-              <button className="modal-close" onClick={() => setAddOpen(false)} aria-label="Close"><X size={16} /></button>
+              <button className="modal-close" onClick={() => setAddOpen(false)} aria-label="Close" disabled={saving}><X size={16} /></button>
             </div>
             <div className="modal-body" ref={candidateModalBodyRef}>
               {errors.form && <div className="form-error" style={{ display:'block', marginBottom:12 }}>{errors.form}</div>}
@@ -1550,7 +1552,7 @@ export default function CandidatesPage() {
               })}
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setAddOpen(false)}>Cancel</button>
+              <button className="btn-secondary" onClick={() => setAddOpen(false)} disabled={saving}>Cancel</button>
               <button className="btn-primary" onClick={handleSave} id="save-candidate-btn" disabled={saving}>
                 {saving ? 'Saving...' : 'Save Candidate'}
               </button>
