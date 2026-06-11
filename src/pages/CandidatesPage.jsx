@@ -1264,7 +1264,7 @@ export default function CandidatesPage() {
     if (!text) return '-'
     const cellKey = `${candidate.associationId || candidate.id}-comments`
     const expanded = Boolean(expandedCells[cellKey])
-    const isLong = text.length > 90
+    const isLong = text.length > 24
     return (
       <div className="table-comment-cell">
         <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{text}</div>
