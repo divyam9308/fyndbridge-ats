@@ -409,7 +409,7 @@
 .candidate-drawer-overlay {
   position: fixed;
   inset: 0;
-  z-index: 5000;
+  z-index: 100000;
   background: rgba(255,255,255,0.01);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -417,7 +417,7 @@
 
 .candidate-drawer {
   position: fixed;
-  z-index: 5001;
+  z-index: 100001;
   right: 22px;
   top: calc(var(--topbar-height) + 16px);
   width: min(520px, 100%);
@@ -739,9 +739,7 @@
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.18);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  z-index: 5000;
+  z-index: 100000;
   box-sizing: border-box;
   overflow: hidden;
   animation: overlayIn 0.2s ease both;
@@ -753,10 +751,9 @@
 .modal-card {
   background: var(--white);
   position: fixed;
-  z-index: 5001;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  z-index: 100001;
+  top: 24px;
+  left: max(16px, calc(50vw - 280px));
   border-radius: 20px;
   width: min(560px, calc(100vw - 32px));
   max-width: 560px;
@@ -771,10 +768,12 @@
 .modal-card-lg {
   width: min(900px, calc(100vw - 32px));
   max-width: 900px;
+  left: max(16px, calc(50vw - 450px));
 }
 .modal-card-xl {
   width: min(1100px, calc(100vw - 32px));
   max-width: 1100px;
+  left: max(16px, calc(50vw - 550px));
 }
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(16px) scale(0.97); }
@@ -846,7 +845,7 @@
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 5000;
+  z-index: 100000;
   background: rgba(15, 23, 42, 0.45);
   display: flex;
   align-items: center;
@@ -856,7 +855,7 @@
 }
 .review-modal {
   position: relative;
-  z-index: 5001;
+  z-index: 100001;
   width: min(1100px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   background: var(--white);
