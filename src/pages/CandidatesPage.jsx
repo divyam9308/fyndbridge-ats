@@ -512,7 +512,9 @@ export default function CandidatesPage() {
   filtered.forEach(c => {
     const name = normalizeCandidateGroupName(c.name)
     const email = normalizeCandidateGroupEmail(c.email)
-    const key = name && email ? `${name}|${email}` : c.associationId || c.id
+    const key = sortField
+      ? c.associationId || c.id
+      : (name && email ? `${name}|${email}` : c.associationId || c.id)
     if (!mobileGroups[key]) mobileGroups[key] = []
     mobileGroups[key].push(c)
   })
