@@ -54,20 +54,27 @@ export default function ClientDetailPage() {
         setClient(clientData)
 
         // 2. Fetch jobs and candidates
-        const [jobsRes, candidatesRes] = await Promise.all([
+        const [jobsRes, linkedCandidatesRes, namedCandidatesRes] = await Promise.all([
           fetch(`/api/jobs?client_id=${clientId}`),
+          fetch(`/api/candidates?client_id=${clientId}&limit=100`),
           fetch(`/api/candidates?client_name=${encodeURIComponent(clientData.name)}&limit=100`)
         ])
 
         if (!jobsRes.ok) throw new Error('Failed to fetch client jobs.')
-        if (!candidatesRes.ok) throw new Error('Failed to fetch candidate associations.')
+        if (!linkedCandidatesRes.ok || !namedCandidatesRes.ok) throw new Error('Failed to fetch candidate associations.')
 
         const jobsPayload = await jobsRes.json()
-        const candidatesPayload = await candidatesRes.json()
+        const linkedCandidatesPayload = await linkedCandidatesRes.json()
+        const namedCandidatesPayload = await namedCandidatesRes.json()
+        const candidateMap = new Map()
+        ;[...(linkedCandidatesPayload.data || []), ...(namedCandidatesPayload.data || [])].forEach((row) => {
+          if (row.client_id && row.client_id !== clientId) return
+          candidateMap.set(row.association_id || row.id, row)
+        })
 
         if (active) {
           setClientJobs(jobsPayload.data || [])
-          setCandidates((candidatesPayload.data || []).map(apiCandidateToUi))
+          setCandidates([...candidateMap.values()].map(apiCandidateToUi))
           setError(null)
         }
       } catch (err) {

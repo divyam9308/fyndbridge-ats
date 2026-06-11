@@ -80,6 +80,14 @@ async function ensureClientDisplayIds() {
   }
 }
 
+async function nextClientDisplayId() {
+  await ensureClientDisplayIds()
+  const { data, error } = await supabase.from('clients').select('client_display_id')
+  if (error) throw error
+  const next = Math.max(0, ...(data || []).map((client) => displayIdNumber(client.client_display_id, 'CL')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
+  return `CL${next}`
+}
+
 function normalizeClient(row, activeJobs = 0, followUps = []) {
   const clientName = row.client_name || row.name || ''
   const contactPerson = row.contact_person || row.contact || ''
@@ -175,11 +183,50 @@ function clientPayload(body) {
 async function findClientDuplicate(name, email) {
   const normalizedName = normalizeDuplicateText(name)
   const normalizedEmail = normalizeDuplicateText(email)
-  if (!normalizedName || !normalizedEmail) return null
+  if (!normalizedName) return null
 
-  const { data, error } = await supabase.from('clients').select('*').ilike('email', normalizedEmail)
+  let query = supabase.from('clients').select('*')
+  if (normalizedEmail) query = query.ilike('email', normalizedEmail)
+  else query = query.or(`client_name.ilike.${clean(name)},name.ilike.${clean(name)}`)
+  const { data, error } = await query
   if (error) throw error
   return (data || []).find((client) => normalizeDuplicateText(client.client_name || client.name) === normalizedName) || null
+}
+
+async function linkCandidatesToClient(client) {
+  const name = clean(client.client_name || client.name)
+  if (!name) return
+  const normalized = normalizeDuplicateText(name)
+
+  const { data: associations, error: assocError } = await supabase
+    .from('candidate_associations')
+    .select('id, client_name')
+    .is('client_id', null)
+    .ilike('client_name', name)
+  if (assocError) throw assocError
+
+  const assocIds = (associations || [])
+    .filter((row) => normalizeDuplicateText(row.client_name) === normalized)
+    .map((row) => row.id)
+  if (assocIds.length) {
+    const { error } = await supabase.from('candidate_associations').update({ client_id: client.id }).in('id', assocIds)
+    if (error) throw error
+  }
+
+  const { data: candidates, error: candidateError } = await supabase
+    .from('candidates')
+    .select('id, current_company, current_organisation')
+    .is('client_id', null)
+    .or(`current_company.ilike.${name},current_organisation.ilike.${name}`)
+  if (candidateError) throw candidateError
+
+  const candidateIds = (candidates || [])
+    .filter((row) => [row.current_company, row.current_organisation].some((value) => normalizeDuplicateText(value) === normalized))
+    .map((row) => row.id)
+  if (candidateIds.length) {
+    const { error } = await supabase.from('candidates').update({ client_id: client.id }).in('id', candidateIds)
+    if (error) throw error
+  }
 }
 
 async function checkClientDuplicate(req, res) {
@@ -277,9 +324,11 @@ async function createClient(req, res) {
         .select('*')
         .single()
       if (error) throw error
+      await linkCandidatesToClient(data)
       return res.json(normalizeClient(data))
     }
 
+    payload.client_display_id = payload.client_display_id || await nextClientDisplayId()
     const { data, error } = await supabase.from('clients').insert(payload).select('*').single()
     if (error) throw error
 
@@ -291,9 +340,11 @@ async function createClient(req, res) {
         .select('*')
         .single()
       if (groupError) throw groupError
+      await linkCandidatesToClient(grouped)
       return res.status(201).json(normalizeClient(grouped))
     }
 
+    await linkCandidatesToClient(data)
     return res.status(201).json(normalizeClient(data))
   } catch (err) {
     if (err.code === '23505' && /clients_name_key/i.test(err.message || '')) {

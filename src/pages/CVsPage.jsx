@@ -26,7 +26,9 @@ const EMPTY_CANDIDATE_DRAFT = {
   linkedin_url: '',
   resume_url: '',
   cv_link: '',
+  client_id: '',
   client_name: '',
+  new_client_name: '',
   job_title: '',
   consultant_name: '',
   status: 'Interested',
@@ -93,6 +95,7 @@ export default function CVsPage() {
   const [activeDuplicate, setActiveDuplicate] = useState(null)
   const [importMode, setImportMode] = useState(null)
   const [candidateDraft, setCandidateDraft] = useState(EMPTY_CANDIDATE_DRAFT)
+  const [dbClients, setDbClients] = useState([])
   const [candidateDraftError, setCandidateDraftError] = useState('')
   const [aiParsingDraft, setAiParsingDraft] = useState(false)
   const [aiParsedDraft, setAiParsedDraft] = useState(false)
@@ -115,6 +118,13 @@ export default function CVsPage() {
     }
 
     loadCvs()
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/clients')
+      .then(res => res.json())
+      .then(payload => setDbClients(payload.data || []))
+      .catch(() => setDbClients([]))
   }, [])
 
   useEffect(() => {
@@ -175,18 +185,43 @@ export default function CVsPage() {
     linkedin_url: existing?.linkedin_url || '',
     resume_url: existing?.resume_url || row.resume_url || '',
     cv_link: existing?.cv_link || row.resume_url || '',
+    client_id: existing?.client_id || '',
+    client_name: existing?.client_name || '',
     consultant_name: '',
     status: 'Interested',
     notes: ''
   })
 
-  const candidateDraftPayload = (duplicateAction = '', existingId = '') => ({
-    ...candidateDraft,
-    skills: candidateDraft.skills.split(',').map((skill) => skill.trim()).filter(Boolean),
-    experience_years: candidateDraft.experience_years === '' ? null : Number(candidateDraft.experience_years),
-    notice_period: candidateDraft.notice_period === '' ? null : Number(candidateDraft.notice_period),
-    current_salary: candidateDraft.current_salary === '' ? null : Number(candidateDraft.current_salary),
-    expected_salary: candidateDraft.expected_salary === '' ? null : Number(candidateDraft.expected_salary),
+  const findClientByName = (name) => {
+    const normalized = String(name || '').replace(/\s+/g, ' ').trim().toLowerCase()
+    return dbClients.find(c => String(c.name || c.client_name || '').replace(/\s+/g, ' ').trim().toLowerCase() === normalized)
+  }
+
+  const createClientFromDraft = async () => {
+    const name = String(candidateDraft.new_client_name || candidateDraft.client_name || '').replace(/\s+/g, ' ').trim()
+    if (!name) throw new Error('Client is required.')
+    const existing = findClientByName(name)
+    if (existing) return existing
+
+    const response = await fetch('/api/clients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, client_name: name, mobile: 'N/A', phone: 'N/A', status: 'Not Converted', consultant_name: candidateDraft.consultant_name })
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (response.status === 409 && payload.existing) return payload.existing
+    if (!response.ok) throw new Error(payload.error || 'Unable to create client.')
+    setDbClients(clients => clients.some(c => c.id === payload.id) ? clients : [...clients, payload])
+    return payload
+  }
+
+  const candidateDraftPayload = (duplicateAction = '', existingId = '', draft = candidateDraft) => ({
+    ...draft,
+    skills: draft.skills.split(',').map((skill) => skill.trim()).filter(Boolean),
+    experience_years: draft.experience_years === '' ? null : Number(draft.experience_years),
+    notice_period: draft.notice_period === '' ? null : Number(draft.notice_period),
+    current_salary: draft.current_salary === '' ? null : Number(draft.current_salary),
+    expected_salary: draft.expected_salary === '' ? null : Number(draft.expected_salary),
     duplicate_action: duplicateAction || undefined,
     existing_id: existingId || undefined,
     source: 'cv_import'
@@ -525,6 +560,13 @@ export default function CVsPage() {
       education: ai.education || extracted.education?.value || '',
       linkedin_url: ai.linkedin || ''
     }
+    const parsedClient = ai.client || ai.clientName || extracted.client_name?.value || extracted.client?.value || ''
+    const matchedClient = findClientByName(parsedClient)
+    if (parsedClient) {
+      parsedDraft.client_id = matchedClient?.id || ''
+      parsedDraft.client_name = matchedClient ? (matchedClient.name || matchedClient.client_name) : '__new_client__'
+      parsedDraft.new_client_name = matchedClient ? '' : parsedClient
+    }
 
     setCandidateDraft((draft) => ({
       ...draft,
@@ -574,10 +616,16 @@ export default function CVsPage() {
     const existingId = isUpdate ? activeDuplicate?.existing?.id : ''
 
     try {
+      let draft = candidateDraft
+      if (!draft.client_id && draft.client_name === '__new_client__') {
+        const client = await createClientFromDraft()
+        draft = { ...draft, client_id: client.id, client_name: client.name || client.client_name || draft.new_client_name }
+        setCandidateDraft(draft)
+      }
       const response = await fetch('/api/candidates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(candidateDraftPayload(duplicateAction, existingId))
+        body: JSON.stringify(candidateDraftPayload(duplicateAction, existingId, draft))
       })
       const payload = await response.json().catch(() => ({}))
 
@@ -904,7 +952,6 @@ export default function CVsPage() {
               ['expected_salary', 'Expected Salary', 'number'],
               ['linkedin_url', 'LinkedIn URL', 'text'],
               ['resume_url', 'Resume URL', 'text'],
-              ['client_name', 'Client', 'text'],
               ['job_title', 'Job', 'text'],
               ['consultant_name', 'Consultant', 'text'],
               ['status', 'Status', 'text']
@@ -919,6 +966,32 @@ export default function CVsPage() {
                 />
               </div>
             ))}
+            <div className="form-group">
+              <label className="form-label">Client</label>
+              <select
+                className="form-control"
+                value={candidateDraft.client_id || (candidateDraft.client_name === '__new_client__' ? '__new_client__' : '')}
+                onChange={(event) => {
+                  const client = dbClients.find(c => c.id === event.target.value)
+                  setCandidateDraft((draft) => ({
+                    ...draft,
+                    client_id: client?.id || '',
+                    client_name: event.target.value === '__new_client__' ? '__new_client__' : (client?.name || ''),
+                    new_client_name: ''
+                  }))
+                }}
+              >
+                <option value="">Select client...</option>
+                {dbClients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
+                <option value="__new_client__">Other / Add New Client</option>
+              </select>
+            </div>
+            {candidateDraft.client_name === '__new_client__' && (
+              <div className="form-group">
+                <label className="form-label">New Client Name</label>
+                <input className="form-control" value={candidateDraft.new_client_name} onChange={(event) => setCandidateDraft((draft) => ({ ...draft, new_client_name: event.target.value }))} />
+              </div>
+            )}
             <label className="filter-toggle" style={{ alignSelf: 'end', height: 38 }}>
               <input
                 type="checkbox"

@@ -35,7 +35,8 @@ const CANDIDATE_FIELDS = [
   'cv_link',
   'linkedin_url',
   'resume_url',
-  'source'
+  'source',
+  'client_id'
 ]
 
 const ASSOCIATION_FIELDS = [
@@ -685,6 +686,7 @@ function flattenAssociation(row) {
     cv_link: candidate.cv_link || candidate.resume_url || null,
     linkedin_url: candidate.linkedin_url || null,
     resume_url: candidate.resume_url || null,
+    client_id: row.client_id || candidate.client_id || null,
     client_name: row.client_name || null,
     job_title: row.job_title || null,
     consultant_name: row.consultant_name || null,
@@ -865,6 +867,7 @@ async function listCandidates(req, res) {
       .order('created_at', { ascending: false })
 
     if (req.query.job_title) query = query.ilike('job_title', `%${cleanText(req.query.job_title)}%`)
+    if (req.query.client_id) query = query.eq('client_id', req.query.client_id)
     if (req.query.client_name) query = query.ilike('client_name', `%${cleanText(req.query.client_name)}%`)
 
     if (req.query.status) {

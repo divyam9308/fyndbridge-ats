@@ -1,5 +1,6 @@
 create table if not exists public.candidates (
   id uuid primary key default gen_random_uuid(),
+  client_id uuid references public.clients(id) on delete set null,
   candidate_display_id text unique,
   full_name text not null,
   email text,
@@ -31,6 +32,7 @@ create unique index if not exists candidates_name_mobile_unique
 create table if not exists public.candidate_associations (
   id uuid primary key default gen_random_uuid(),
   candidate_id uuid not null references public.candidates(id) on delete cascade,
+  client_id uuid references public.clients(id) on delete set null,
   consultant_name text,
   client_name text,
   job_title text,
@@ -124,6 +126,7 @@ create trigger on_auth_user_created
   for each row execute procedure public.handle_new_user();
 
 alter table public.candidates
+  add column if not exists client_id uuid references public.clients(id) on delete set null,
   add column if not exists candidate_display_id text,
   add column if not exists current_organisation text,
   add column if not exists notice_period integer,
@@ -131,4 +134,11 @@ alter table public.candidates
   add column if not exists linkedin_url text;
 
 alter table public.candidate_associations
+  add column if not exists client_id uuid references public.clients(id) on delete set null,
   add column if not exists consultant_name text;
+
+create index if not exists candidates_client_id_idx
+  on public.candidates(client_id);
+
+create index if not exists candidate_associations_client_id_idx
+  on public.candidate_associations(client_id);

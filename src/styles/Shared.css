@@ -193,6 +193,22 @@
   background: linear-gradient(180deg, #fff 0%, #fbfaf3 100%);
   box-shadow: 0 5px 12px rgba(0,18,100,0.12), inset 0 1px 0 rgba(255,255,255,0.95);
 }
+.candidate-sort-btn {
+  min-width: 140px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, #fff 0%, #f7f7fb 100%);
+  border-color: rgba(0,18,100,0.14);
+  box-shadow: 0 2px 5px rgba(0,18,100,0.08), inset 0 1px 0 rgba(255,255,255,0.9);
+  color: var(--navy-darkest);
+  font-weight: 650;
+}
+.candidate-sort-btn:hover {
+  border-color: rgba(218,177,17,0.55);
+  background: linear-gradient(180deg, #fff 0%, #fbfaf3 100%);
+  box-shadow: 0 5px 12px rgba(0,18,100,0.12), inset 0 1px 0 rgba(255,255,255,0.95);
+}
 .candidate-columns-proceed {
   width: 80px;
   height: 34px;

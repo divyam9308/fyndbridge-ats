@@ -42,6 +42,29 @@ const formatMonth = (value) => {
   if (Number.isNaN(date.getTime())) return '-'
   return date.toLocaleString('en-US', { month: 'short' })
 }
+
+const getReadableClientId = (candidate, dbClients) => {
+  if (!candidate.client || candidate.client.trim() === '') {
+    return 'Unassigned'
+  }
+  // Try matching by UUID first
+  if (candidate.clientId) {
+    const matchedByUuid = dbClients.find(client => client.id === candidate.clientId)
+    if (matchedByUuid?.client_display_id) {
+      return matchedByUuid.client_display_id
+    }
+  }
+  // Fallback to name matching
+  const normalizedCandidateClientName = String(candidate.client).replace(/\s+/g, ' ').trim().toLowerCase()
+  const matchedByName = dbClients.find(client => {
+    const name = client.name || client.client_name || ''
+    return name.replace(/\s+/g, ' ').trim().toLowerCase() === normalizedCandidateClientName
+  })
+  if (matchedByName?.client_display_id) {
+    return matchedByName.client_display_id
+  }
+  return 'Client not found'
+}
 const getCurrentUser = () => {
   if (typeof window === 'undefined') return {}
   try {
@@ -87,6 +110,7 @@ const CANDIDATE_TABLE_COLUMNS = [
   { key: 'date', label: 'Date' },
   { key: 'consultant', label: 'Consultant' },
   { key: 'client', label: 'Client Name' },
+  { key: 'clientId', label: 'Client ID' },
   { key: 'job', label: 'Role (Job)' },
   { key: 'name', label: 'Candidate Name' },
   { key: 'organisation', label: 'Organisation' },
@@ -120,7 +144,7 @@ const EMPTY_CAND = {
   name:'', email:'', mobile:'', designation:'', city:'', state:'',
   location:'', currentCompany:'', currentOrganisation:'', exp:'', salary:'', expectedSalary:'', skills:[], education:'',
   noticePeriod:'', openToRelocate:false,
-  client:'', job:'', clientPhone:'', status:'Interested',
+  client:'', clientId:'', newClientName:'', job:'', clientPhone:'', status:'Interested',
   cvLink:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
 }
 
@@ -139,6 +163,7 @@ const apiCandidateToUi = (row) => ({
   associationId: row.association_id || row.id,
   candidateId: row.candidate_id,
   candidateDisplayId: row.candidate_display_id || '',
+  clientId: row.client_id || '',
   name: row.full_name || '',
   email: row.email || '',
   mobile: row.mobile_number || '',
@@ -168,7 +193,7 @@ const apiCandidateToUi = (row) => ({
 })
 
 const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) => {
-  const matchingClient = dbClients.find(c => c.name === f.client)
+  const matchingClient = dbClients.find(c => c.id === f.clientId) || dbClients.find(c => c.name === f.client)
   const matchingJob = dbJobs.find(j => j.title === f.job && (matchingClient ? j.client_id === matchingClient.id : true))
   return {
     association_id: f.associationId || undefined,
@@ -188,7 +213,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     education: f.education,
     client_name: f.client,
     job_title: f.job,
-    client_id: matchingClient ? matchingClient.id : undefined,
+    client_id: f.clientId || (matchingClient ? matchingClient.id : undefined),
     job_id: matchingJob ? matchingJob.id : undefined,
     status: f.status,
     current_salary: f.salary,
@@ -360,7 +385,8 @@ export default function CandidatesPage() {
   }, [loadCandidates, page])
 
   const saveCandidateToApi = async (candidate, { update = false, duplicateAction = '' } = {}) => {
-    const body = uiCandidateToApi(candidate, activeConsultantName, dbClients, dbJobs)
+    const prepared = await ensureCandidateClient(candidate)
+    const body = uiCandidateToApi(prepared, activeConsultantName, dbClients, dbJobs)
     if (duplicateAction) body.duplicate_action = duplicateAction
 
     const response = await fetch(update ? `/api/candidates/${candidate.associationId}` : '/api/candidates', {
@@ -383,6 +409,46 @@ export default function CandidatesPage() {
 
     await loadCandidates()
     return apiCandidateToUi(payload)
+  }
+
+  const findClientByName = (name) => {
+    const normalized = String(name || '').replace(/\s+/g, ' ').trim().toLowerCase()
+    return dbClients.find(c => String(c.name || c.client_name || '').replace(/\s+/g, ' ').trim().toLowerCase() === normalized)
+  }
+
+  const createClientFromCandidate = async (candidate) => {
+    const name = String(candidate.newClientName || candidate.client || '').replace(/\s+/g, ' ').trim()
+    if (!name) throw new Error('Client is required.')
+    const existing = findClientByName(name)
+    if (existing) return existing
+
+    const response = await fetch('/api/clients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        client_name: name,
+        mobile: candidate.clientPhone || 'N/A',
+        phone: candidate.clientPhone || 'N/A',
+        status: 'Not Converted',
+        consultant_name: candidate.consultantName || activeConsultantName || ''
+      })
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (response.status === 409 && payload.existing) return payload.existing
+    if (!response.ok) throw new Error(payload.error || 'Unable to create client.')
+    setDbClients(clients => clients.some(c => c.id === payload.id) ? clients : [...clients, payload])
+    return payload
+  }
+
+  const ensureCandidateClient = async (candidate) => {
+    if (candidate.clientId) return candidate
+    if (candidate.client === '__new_client__') {
+      const client = await createClientFromCandidate(candidate)
+      return { ...candidate, clientId: client.id, client: client.name || client.client_name || candidate.newClientName }
+    }
+    const client = findClientByName(candidate.client)
+    return client ? { ...candidate, clientId: client.id, client: client.name || client.client_name } : candidate
   }
 
   const filtered = candidates
@@ -505,8 +571,14 @@ export default function CandidatesPage() {
     const { name, value, type, checked } = e.target
     const nextValue = type === 'checkbox' ? checked : value
     if (name === 'client') {
-      const matchingClient = dbClients.find(c => c.name === value)
-      setForm(f => ({ ...f, client: value, clientPhone: matchingClient ? matchingClient.phone : '', job: '' }))
+      const matchingClient = dbClients.find(c => c.id === value)
+      setForm(f => ({
+        ...f,
+        client: value === '__new_client__' ? value : (matchingClient?.name || ''),
+        clientId: matchingClient?.id || '',
+        clientPhone: matchingClient ? matchingClient.phone : '',
+        job: ''
+      }))
     } else {
       setForm(f => ({ ...f, [name]: nextValue }))
     }
@@ -536,20 +608,26 @@ export default function CandidatesPage() {
     const e = {}
     if (!f.name.trim()) e.name = 'Full Name is required'
     if (!f.mobile.trim()) e.mobile = 'Mobile is required'
+    if (f.client === '__new_client__' && !String(f.newClientName || '').trim()) e.client = 'Client is required'
     return e
   }
 
   const openAddModal = () => { setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName }); setEditing(false); setErrors({}); setSkillInput(''); setAddOpen(true) }
 
-  const candidateToForm = (candidate) => ({
-    ...EMPTY_CAND,
-    ...candidate,
-    consultantName: candidate.consultantName || candidate.consultant || activeConsultantName,
-    associationId: candidate.associationId,
-    candidateId: candidate.candidateId,
-    currentOrganisation: candidate.currentOrganisation || candidate.currentCompany || '',
-    skills: Array.isArray(candidate.skills) ? candidate.skills : []
-  })
+  const candidateToForm = (candidate) => {
+    const matchedClient = findClientByName(candidate.client)
+    return {
+      ...EMPTY_CAND,
+      ...candidate,
+      consultantName: candidate.consultantName || candidate.consultant || activeConsultantName,
+      associationId: candidate.associationId,
+      candidateId: candidate.candidateId,
+      clientId: candidate.clientId || matchedClient?.id || '',
+      client: matchedClient?.name || candidate.client || '',
+      currentOrganisation: candidate.currentOrganisation || candidate.currentCompany || '',
+      skills: Array.isArray(candidate.skills) ? candidate.skills : []
+    }
+  }
 
   const openEditCandidate = (candidate) => {
     setForm(candidateToForm(candidate))
@@ -669,6 +747,8 @@ export default function CandidatesPage() {
   const mapParsedResponseToForm = (payload) => {
     const extracted = payload.extracted || {}
     const ai = payload.ai_extracted || null
+    const parsedClient = ai?.client || ai?.clientName || fieldValue(extracted, 'client_name') || fieldValue(extracted, 'client') || ''
+    const matchedClient = findClientByName(parsedClient)
     const lowConf = Object.entries(extracted)
       .filter(([, data]) => data?.confidence === 'low' && data.value)
       .map(([key]) => ({
@@ -696,6 +776,10 @@ export default function CandidatesPage() {
       skills: ai?.skills?.length ? ai.skills : (fieldValue(extracted, 'skills', []) || []),
       education: ai?.education || fieldValue(extracted, 'education'),
       salary: ai?.salary ?? fieldValue(extracted, 'salary'),
+      client: matchedClient ? matchedClient.name : (parsedClient ? '__new_client__' : ''),
+      clientId: matchedClient?.id || '',
+      newClientName: matchedClient ? '' : parsedClient,
+      clientPhone: matchedClient?.phone || '',
       linkedinUrl: ai?.linkedin || '',
       notes: ai?.summary || fieldValue(extracted, 'cover_letter'),
       _lowConf: lowConf
@@ -826,7 +910,14 @@ export default function CandidatesPage() {
     const { name, value, type, checked } = e.target
     const nextValue = type === 'checkbox' ? checked : value
     if (name === 'client') {
-      setParsedForm(f => ({ ...f, client: value, clientPhone: CLIENT_PHONES[value] || '', job: '' }))
+      const matchingClient = dbClients.find(c => c.id === value)
+      setParsedForm(f => ({
+        ...f,
+        client: value === '__new_client__' ? value : (matchingClient?.name || ''),
+        clientId: matchingClient?.id || '',
+        clientPhone: matchingClient?.phone || CLIENT_PHONES[matchingClient?.name] || '',
+        job: ''
+      }))
     } else {
       setParsedForm(f => ({ ...f, [name]: nextValue }))
     }
@@ -839,8 +930,14 @@ export default function CandidatesPage() {
       const { name, value, type, checked } = e.target
       const nextValue = type === 'checkbox' ? checked : value
       if (name === 'client') {
-        const matchedClient = dbClients.find(c => c.name === value)
-        setF(prev => ({ ...prev, client: value, clientPhone: matchedClient?.phone || CLIENT_PHONES[value] || '', job: '' }))
+        const matchedClient = dbClients.find(c => c.id === value)
+        setF(prev => ({
+          ...prev,
+          client: value === '__new_client__' ? value : (matchedClient?.name || ''),
+          clientId: matchedClient?.id || '',
+          clientPhone: matchedClient?.phone || CLIENT_PHONES[matchedClient?.name] || '',
+          job: ''
+        }))
       } else {
         setF(prev => ({ ...prev, [name]: nextValue }))
       }
@@ -968,18 +1065,26 @@ export default function CandidatesPage() {
 
         <div className="form-group">
           <label className="form-label">Client</label>
-          <select name="client" value={f.client} onChange={handleLocalChange} className="form-control">
+          <select name="client" value={f.clientId || (f.client === '__new_client__' ? '__new_client__' : '')} onChange={handleLocalChange} className="form-control">
             <option value="">Select client...</option>
-            {dbClients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+            {dbClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <option value="__new_client__">Other / Add New Client</option>
           </select>
         </div>
+
+        {f.client === '__new_client__' && (
+          <div className="form-group">
+            <label className="form-label">New Client Name</label>
+            <input name="newClientName" value={f.newClientName || ''} onChange={handleLocalChange} className="form-control" />
+          </div>
+        )}
 
         <div className="form-group">
           <label className="form-label">Job</label>
           <select name="job" value={f.job} onChange={handleLocalChange} className="form-control">
             <option value="">Select job...</option>
             {dbJobs
-              .filter(j => !f.client || dbClients.find(c => c.name === f.client)?.id === j.client_id)
+              .filter(j => !f.clientId || f.clientId === j.client_id)
               .map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
           </select>
         </div>
@@ -1030,6 +1135,8 @@ export default function CandidatesPage() {
         return <td key={key}>{c.consultant || '-'}</td>
       case 'client':
         return <td key={key}>{c.client || '-'}</td>
+      case 'clientId':
+        return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{getReadableClientId(c, dbClients)}</td>
       case 'job':
         return <td key={key} className="cell-ellipsis">{c.job || '-'}</td>
       case 'name':

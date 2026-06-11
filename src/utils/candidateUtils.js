@@ -6,6 +6,7 @@ export const apiCandidateToUi = (row) => ({
   id: row.association_id || row.id,
   associationId: row.association_id || row.id,
   candidateId: row.candidate_id,
+  clientId: row.client_id || '',
   candidateDisplayId: row.candidate_display_id || '',
   name: row.full_name || '',
   email: row.email || '',
