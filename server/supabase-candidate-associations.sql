@@ -13,7 +13,7 @@ create table if not exists public.candidates (
   current_organisation text,
   experience_years numeric,
   notice_period integer,
-  open_to_relocate boolean not null default false,
+  open_to_relocate boolean,
   skills text[] not null default '{}',
   education text,
   cv_link text,
@@ -129,8 +129,12 @@ alter table public.candidates
   add column if not exists candidate_display_id text,
   add column if not exists current_organisation text,
   add column if not exists notice_period integer,
-  add column if not exists open_to_relocate boolean default false,
+  add column if not exists open_to_relocate boolean,
   add column if not exists linkedin_url text;
+
+alter table public.candidates
+  alter column open_to_relocate drop not null,
+  alter column open_to_relocate drop default;
 
 alter table public.candidate_associations
   add column if not exists client_id uuid references public.clients(id) on delete set null,

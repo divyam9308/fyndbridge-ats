@@ -217,6 +217,11 @@ function displayIdNumber(value, prefix) {
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
 }
 
+function candidateDisplayIdNumber(value) {
+  const number = displayIdNumber(value, 'CA')
+  return number < Number.MAX_SAFE_INTEGER ? number : 0
+}
+
 async function ensureCandidateDisplayIds() {
   // Query ALL candidates directly (not just those with associations)
   // so every candidate gets a display ID, not just ones with associations.
@@ -768,7 +773,7 @@ function flattenAssociation(row) {
     current_organisation: candidate.current_organisation || candidate.current_company || null,
     experience_years: candidate.experience_years || null,
     notice_period: candidate.notice_period || null,
-    open_to_relocate: Boolean(candidate.open_to_relocate),
+    open_to_relocate: candidate.open_to_relocate,
     skills: candidate.skills || [],
     education: candidate.education || null,
     cv_link: candidate.cv_link || candidate.resume_url || null,
@@ -804,7 +809,7 @@ function flattenCandidateOnly(candidate) {
     current_organisation: candidate.current_organisation || candidate.current_company || null,
     experience_years: candidate.experience_years || null,
     notice_period: candidate.notice_period || null,
-    open_to_relocate: Boolean(candidate.open_to_relocate),
+    open_to_relocate: candidate.open_to_relocate,
     skills: candidate.skills || [],
     education: candidate.education || null,
     cv_link: candidate.cv_link || candidate.resume_url || null,
@@ -1063,7 +1068,7 @@ async function listCandidates(req, res) {
       .select(`*, ${relationSelect}`, { count: 'exact' })
 
     if (req.query.sortField === 'candidate_id') {
-      query = query.order('candidate_display_id', { ascending: req.query.sortDirection !== 'desc' })
+      query = query.order('created_at', { ascending: false })
     } else if (req.query.sortField === 'candidate_name') {
       query = query.order('full_name', { ascending: req.query.sortDirection !== 'desc' })
     } else {
@@ -1136,8 +1141,14 @@ async function listCandidates(req, res) {
       throw error
     }
 
+    const candidates = data || []
+    if (req.query.sortField === 'candidate_id') {
+      const direction = req.query.sortDirection === 'desc' ? -1 : 1
+      candidates.sort((a, b) => direction * (candidateDisplayIdNumber(a.candidate_display_id) - candidateDisplayIdNumber(b.candidate_display_id)))
+    }
+
     const flattened = []
-    for (const candidate of data || []) {
+    for (const candidate of candidates) {
       const associations = candidate.candidate_associations || []
       if (associations.length === 0) {
         flattened.push(flattenCandidateOnly(candidate))
