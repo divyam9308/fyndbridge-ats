@@ -335,7 +335,7 @@ export default function CandidatesPage() {
   const [candidateAssociations, setCandidateAssociations] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
-  const [cellPopup, setCellPopup] = useState(null)
+  const [expandedCells, setExpandedCells] = useState({})
 
   // Import Resume Modal
   const [importOpen, setImportOpen]   = useState(false)
@@ -1235,24 +1235,45 @@ export default function CandidatesPage() {
   }
 
   const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
-  const openCellPopup = (title, value, event) => {
+  const toggleExpandedCell = (id, key, event) => {
     event.stopPropagation()
-    const rect = event.currentTarget.getBoundingClientRect()
-    setCellPopup({
-      title,
-      value,
-      top: Math.min(rect.bottom + 8, window.innerHeight - 260),
-      left: Math.min(rect.left, window.innerWidth - 340)
-    })
+    const cellKey = `${id}-${key}`
+    setExpandedCells(current => ({ ...current, [cellKey]: !current[cellKey] }))
   }
-  const renderCompactCell = (title, value, preview) => {
-    const text = Array.isArray(value) ? value.filter(Boolean).join(', ') : String(value || '')
-    if (!text) return '-'
+  const renderSkillsCell = (candidate) => {
+    const skills = Array.isArray(candidate.skills) ? candidate.skills.filter(Boolean) : []
+    if (!skills.length) return '-'
+    const cellKey = `${candidate.associationId || candidate.id}-skills`
+    const expanded = Boolean(expandedCells[cellKey])
+    const visibleSkills = expanded ? skills : skills.slice(0, 3)
     return (
-      <span className="compact-cell-text">
-        {preview}
-        <button type="button" className="inline-view-more" onClick={(event) => openCellPopup(title, value, event)}>View more</button>
-      </span>
+      <div className="table-chip-cell">
+        <div className="table-chip-list">
+          {visibleSkills.map(skill => <span className="table-skill-chip" key={skill}>{skill}</span>)}
+        </div>
+        {skills.length > 3 && (
+          <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(candidate.associationId || candidate.id, 'skills', event)}>
+            <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'Show less' : `+ ${skills.length - 3} more skills`}
+          </button>
+        )}
+      </div>
+    )
+  }
+  const renderCommentsCell = (candidate) => {
+    const text = String(candidate.notes || '').trim()
+    if (!text) return '-'
+    const cellKey = `${candidate.associationId || candidate.id}-comments`
+    const expanded = Boolean(expandedCells[cellKey])
+    const isLong = text.length > 90
+    return (
+      <div className="table-comment-cell">
+        <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{text}</div>
+        {isLong && (
+          <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(candidate.associationId || candidate.id, 'comments', event)}>
+            <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'Show less' : 'View full comment'}
+          </button>
+        )}
+      </div>
     )
   }
   const renderCandidateCell = ({ key }, c, groupMeta) => {
@@ -1311,9 +1332,7 @@ export default function CandidatesPage() {
       case 'experience':
         return <td key={key}>{c.exp ? `${c.exp} yrs` : '-'}</td>
       case 'skills': {
-        const skills = Array.isArray(c.skills) ? c.skills.filter(Boolean) : []
-        const preview = skills.length > 3 ? `${skills.slice(0, 3).join(', ')}... ` : skills.join(', ')
-        return <td key={key}>{renderCompactCell('Skills', skills, preview)}</td>
+        return <td key={key}>{renderSkillsCell(c)}</td>
       }
       case 'salary':
         return <td key={key} style={{ fontWeight:600 }}>{fmt(c.salary)}</td>
@@ -1326,7 +1345,7 @@ export default function CandidatesPage() {
       case 'relocate':
         return <td key={key}>{c.openToRelocate || '-'}</td>
       case 'comments':
-        return <td key={key}>{renderCompactCell('Comments', c.notes, String(c.notes || '').length > 42 ? `${String(c.notes).slice(0, 42)}... ` : c.notes)}</td>
+        return <td key={key}>{renderCommentsCell(c)}</td>
       case 'linkedin':
         return (
           <td key={key}>
@@ -1605,26 +1624,6 @@ export default function CandidatesPage() {
               ))}
             </div>
           </aside>
-        </div>
-      ), document.body)}
-
-      {cellPopup && createPortal((
-        <div className="mini-popup-backdrop" onClick={() => setCellPopup(null)}>
-          <div className="mini-popup" style={{ top: cellPopup.top, left: cellPopup.left }} onClick={(event) => event.stopPropagation()}>
-            <div className="mini-popup-header">
-              <span>{cellPopup.title}</span>
-              <button type="button" className="modal-close" onClick={() => setCellPopup(null)} aria-label="Close"><X size={14} /></button>
-            </div>
-            <div className="mini-popup-body">
-              {Array.isArray(cellPopup.value) ? (
-                <div className="mini-skill-list">
-                  {cellPopup.value.filter(Boolean).map((skill) => <span className="tag-chip" key={skill}>{skill}</span>)}
-                </div>
-              ) : (
-                <p>{cellPopup.value || '-'}</p>
-              )}
-            </div>
-          </div>
         </div>
       ), document.body)}
 
