@@ -149,7 +149,7 @@ const AI_FILTER_SCHEMA = {
 
 function logAndSendInternal(res, routeName, err) {
   console.error(`${routeName}:`, err.message)
-  return res.status(500).json({ error: 'Internal server error' })
+  return res.status(500).json({ error: err.message || 'Internal server error' })
 }
 
 function normalizeNullable(value) {

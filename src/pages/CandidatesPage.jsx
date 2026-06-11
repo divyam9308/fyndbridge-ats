@@ -199,6 +199,12 @@ const apiCandidateToUi = (row) => ({
   createdAt: row.created_at || '',
 })
 
+const cleanNumberForApi = (value) => {
+  const text = String(value ?? '').trim()
+  if (!text || text === '-') return ''
+  return value
+}
+
 const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) => {
   const matchingClient = dbClients.find(c => c.id === f.clientId) || dbClients.find(c => c.name === f.client)
   const matchingJob = dbJobs.find(j => j.title === f.job && (matchingClient ? j.client_id === matchingClient.id : true))
@@ -213,8 +219,8 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     current_designation: f.designation,
     current_company: f.currentOrganisation,
     current_organisation: f.currentOrganisation,
-    experience_years: f.exp,
-    notice_period: f.noticePeriod,
+    experience_years: cleanNumberForApi(f.exp),
+    notice_period: cleanNumberForApi(f.noticePeriod),
     open_to_relocate: f.openToRelocate === '' ? null : f.openToRelocate === 'Yes',
     skills: f.skills,
     education: f.education,
@@ -223,8 +229,8 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     client_id: f.clientId || (matchingClient ? matchingClient.id : undefined),
     job_id: matchingJob ? matchingJob.id : undefined,
     status: f.status,
-    current_salary: f.salary,
-    expected_salary: f.expectedSalary,
+    current_salary: cleanNumberForApi(f.salary),
+    expected_salary: cleanNumberForApi(f.expectedSalary),
     cv_link: f.cvLink,
     linkedin_url: f.linkedinUrl,
     notes: f.notes,
@@ -662,6 +668,13 @@ export default function CandidatesPage() {
     return e
   }
 
+  const fetchNextCandidateDisplayId = async () => {
+    const response = await fetch('/api/candidates/next-display-id')
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.error || 'Unable to load candidate ID')
+    return payload.candidate_display_id || ''
+  }
+
   const openAddModal = async () => {
     setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName, candidateDisplayId: 'Loading...' })
     setEditing(false)
@@ -669,10 +682,8 @@ export default function CandidatesPage() {
     setSkillInput('')
     setAddOpen(true)
     try {
-      const response = await fetch('/api/candidates/next-display-id')
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error || 'Unable to load candidate ID')
-      setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: payload.candidate_display_id || '' } : current)
+      const candidateDisplayId = await fetchNextCandidateDisplayId()
+      setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId } : current)
     } catch {
       setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current)
     }
@@ -856,10 +867,11 @@ export default function CandidatesPage() {
     }
   }
 
-  const startResumeReview = (rows) => {
+  const startResumeReview = async (rows) => {
+    const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
     setImportQueue(rows)
     setCurrentImportIndex(0)
-    setParsedForm(mapBulkResumeRowToForm(rows[0]))
+    setParsedForm({ ...mapBulkResumeRowToForm(rows[0]), candidateDisplayId })
     setParsed(true)
     setReviewNotice(rows[0]?.error ? `Parsing warning: ${rows[0].error}` : '')
   }
@@ -885,7 +897,7 @@ export default function CandidatesPage() {
       if (!response.ok) throw new Error(payload.error || 'Unable to parse resumes.')
       const rows = payload.rows || []
       if (!rows.length) throw new Error('No resumes were parsed.')
-      startResumeReview(rows)
+      await startResumeReview(rows)
     } catch (err) {
       notifyAiQuota(err.message)
       setImportError(err.message)
@@ -911,8 +923,9 @@ export default function CandidatesPage() {
       await loadCandidates(page, { showLoading: false })
       return
     }
+    const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
     setCurrentImportIndex(nextIndex)
-    setParsedForm(mapBulkResumeRowToForm(importQueue[nextIndex]))
+    setParsedForm({ ...mapBulkResumeRowToForm(importQueue[nextIndex]), candidateDisplayId })
     setParsedSkillInput('')
     setReviewNotice(importQueue[nextIndex]?.error ? `Parsing warning: ${importQueue[nextIndex].error}` : notice)
   }
