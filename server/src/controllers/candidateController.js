@@ -636,6 +636,22 @@ async function ensureCandidateDisplayIds() {
   }
 }
 
+async function nextCandidateDisplayId() {
+  await ensureCandidateDisplayIds()
+  const { data, error } = await supabase.from('candidates').select('candidate_display_id')
+  if (error) throw error
+  const next = Math.max(0, ...(data || []).map((candidate) => displayIdNumber(candidate.candidate_display_id, 'CA')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
+  return `CA${next}`
+}
+
+async function getNextCandidateDisplayId(req, res) {
+  try {
+    return res.json({ candidate_display_id: await nextCandidateDisplayId() })
+  } catch (err) {
+    return logAndSendInternal(res, 'getNextCandidateDisplayId', err)
+  }
+}
+
 async function findCandidateDuplicate(fullName, email) {
   const name = normalizeDuplicateText(fullName)
   const normalizedEmail = normalizeDuplicateText(email)
@@ -1396,6 +1412,7 @@ async function parseResumeRoute(req, res) {
 module.exports = {
   VALID_STATUSES,
   checkCandidateDuplicate,
+  getNextCandidateDisplayId,
   listCandidates,
   listCandidateAssociations,
   getCandidate,

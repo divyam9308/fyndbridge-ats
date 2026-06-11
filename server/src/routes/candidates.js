@@ -8,6 +8,7 @@ router.post('/parse-resume', upload.single('resume'), handleUploadErrors, contro
 router.post('/ai-filter', controller.buildAiCandidateFilters)
 
 router.get('/check-duplicate', controller.checkCandidateDuplicate)
+router.get('/next-display-id', controller.getNextCandidateDisplayId)
 router.get('/', controller.listCandidates)
 router.post('/', controller.createCandidate)
 router.get('/by-candidate/:candidateId/associations', controller.listCandidateAssociations)

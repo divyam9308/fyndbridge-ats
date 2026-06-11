@@ -654,7 +654,21 @@ export default function CandidatesPage() {
     return e
   }
 
-  const openAddModal = () => { setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName }); setEditing(false); setErrors({}); setSkillInput(''); setAddOpen(true) }
+  const openAddModal = async () => {
+    setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName, candidateDisplayId: 'Loading...' })
+    setEditing(false)
+    setErrors({})
+    setSkillInput('')
+    setAddOpen(true)
+    try {
+      const response = await fetch('/api/candidates/next-display-id')
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'Unable to load candidate ID')
+      setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: payload.candidate_display_id || '' } : current)
+    } catch {
+      setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current)
+    }
+  }
 
   const candidateToForm = (candidate) => {
     const matchedClient = dbClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
@@ -1018,12 +1032,10 @@ export default function CandidatesPage() {
     })
     return (
       <div className="form-grid-2">
-        {f.candidateDisplayId && (
-          <div className="form-group">
-            <label className="form-label">Candidate ID</label>
-            <input value={f.candidateDisplayId} className="form-control" disabled readOnly />
-          </div>
-        )}
+        <div className="form-group">
+          <label className="form-label">Candidate ID</label>
+          <input value={f.candidateDisplayId || 'Auto-generated'} className="form-control" disabled readOnly />
+        </div>
         <div className="form-group">
           <label className="form-label">Full Name <span className="req">*</span></label>
           <input name="name" value={f.name} onChange={handleLocalChange}
