@@ -121,6 +121,7 @@ const CANDIDATE_TABLE_COLUMNS = [
   { key: 'mobile', label: 'Mobile' },
   { key: 'email', label: 'Email ID' },
   { key: 'experience', label: 'Experience' },
+  { key: 'skills', label: 'Skills' },
   { key: 'salary', label: 'Current CTC' },
   { key: 'location', label: 'Current Location' },
   { key: 'notice', label: 'Notice Period' },
@@ -334,6 +335,7 @@ export default function CandidatesPage() {
   const [candidateAssociations, setCandidateAssociations] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
+  const [cellPopup, setCellPopup] = useState(null)
 
   // Import Resume Modal
   const [importOpen, setImportOpen]   = useState(false)
@@ -1233,6 +1235,26 @@ export default function CandidatesPage() {
   }
 
   const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
+  const openCellPopup = (title, value, event) => {
+    event.stopPropagation()
+    const rect = event.currentTarget.getBoundingClientRect()
+    setCellPopup({
+      title,
+      value,
+      top: Math.min(rect.bottom + 8, window.innerHeight - 260),
+      left: Math.min(rect.left, window.innerWidth - 340)
+    })
+  }
+  const renderCompactCell = (title, value, preview) => {
+    const text = Array.isArray(value) ? value.filter(Boolean).join(', ') : String(value || '')
+    if (!text) return '-'
+    return (
+      <span className="compact-cell-text">
+        {preview}
+        <button type="button" className="inline-view-more" onClick={(event) => openCellPopup(title, value, event)}>View more</button>
+      </span>
+    )
+  }
   const renderCandidateCell = ({ key }, c, groupMeta) => {
     const { mobile, groupSerial, isGroup, groupSize, groupIndex } = groupMeta
 
@@ -1288,6 +1310,11 @@ export default function CandidatesPage() {
         return <td key={key}>{c.email || '-'}</td>
       case 'experience':
         return <td key={key}>{c.exp ? `${c.exp} yrs` : '-'}</td>
+      case 'skills': {
+        const skills = Array.isArray(c.skills) ? c.skills.filter(Boolean) : []
+        const preview = skills.length > 3 ? `${skills.slice(0, 3).join(', ')}... ` : skills.join(', ')
+        return <td key={key}>{renderCompactCell('Skills', skills, preview)}</td>
+      }
       case 'salary':
         return <td key={key} style={{ fontWeight:600 }}>{fmt(c.salary)}</td>
       case 'location':
@@ -1299,7 +1326,7 @@ export default function CandidatesPage() {
       case 'relocate':
         return <td key={key}>{c.openToRelocate || '-'}</td>
       case 'comments':
-        return <td key={key} className="cell-ellipsis">{c.notes || '-'}</td>
+        return <td key={key}>{renderCompactCell('Comments', c.notes, String(c.notes || '').length > 42 ? `${String(c.notes).slice(0, 42)}... ` : c.notes)}</td>
       case 'linkedin':
         return (
           <td key={key}>
@@ -1578,6 +1605,26 @@ export default function CandidatesPage() {
               ))}
             </div>
           </aside>
+        </div>
+      ), document.body)}
+
+      {cellPopup && createPortal((
+        <div className="mini-popup-backdrop" onClick={() => setCellPopup(null)}>
+          <div className="mini-popup" style={{ top: cellPopup.top, left: cellPopup.left }} onClick={(event) => event.stopPropagation()}>
+            <div className="mini-popup-header">
+              <span>{cellPopup.title}</span>
+              <button type="button" className="modal-close" onClick={() => setCellPopup(null)} aria-label="Close"><X size={14} /></button>
+            </div>
+            <div className="mini-popup-body">
+              {Array.isArray(cellPopup.value) ? (
+                <div className="mini-skill-list">
+                  {cellPopup.value.filter(Boolean).map((skill) => <span className="tag-chip" key={skill}>{skill}</span>)}
+                </div>
+              ) : (
+                <p>{cellPopup.value || '-'}</p>
+              )}
+            </div>
+          </div>
         </div>
       ), document.body)}
 
