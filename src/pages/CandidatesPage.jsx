@@ -323,6 +323,7 @@ export default function CandidatesPage() {
   const [editing, setEditing] = useState(false)
   const [collapsed, setCollapsed] = useState({})
   const [selectedCandidate, setSelectedCandidate] = useState(null)
+  const [detailPosition, setDetailPosition] = useState(null)
   const [candidateAssociations, setCandidateAssociations] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
@@ -638,7 +639,11 @@ export default function CandidatesPage() {
     setAddOpen(true)
   }
 
-  const openCandidateDetail = async (candidate) => {
+  const openCandidateDetail = async (candidate, event) => {
+    const rect = event?.currentTarget?.getBoundingClientRect()
+    const viewportHeight = window.innerHeight || 0
+    const top = rect ? Math.min(Math.max(rect.top - 16, 16), Math.max(16, viewportHeight - 620)) : 96
+    setDetailPosition({ top })
     setSelectedCandidate(candidate)
     setCandidateAssociations([])
     setDetailError('')
@@ -1231,9 +1236,14 @@ export default function CandidatesPage() {
       case 'action':
         return (
           <td key={key}>
-            <button className="btn-secondary" style={{ height:30, padding:'0 10px' }} onClick={(event) => { event.stopPropagation(); openCandidateDetail(c) }}>
-              View
-            </button>
+            <div className="row-actions">
+              <button className="btn-secondary" style={{ height:30, padding:'0 10px' }} onClick={(event) => { event.stopPropagation(); openCandidateDetail(c, event) }}>
+                View
+              </button>
+              <button className="btn-secondary" style={{ height:30, padding:'0 10px' }} onClick={(event) => { event.stopPropagation(); openEditCandidate(c) }}>
+                Edit
+              </button>
+            </div>
           </td>
         )
       default:
@@ -1407,7 +1417,7 @@ export default function CandidatesPage() {
 
       {selectedCandidate && (
         <div className="candidate-drawer-overlay" onClick={e => e.target === e.currentTarget && setSelectedCandidate(null)}>
-          <aside className="candidate-drawer" aria-label="Candidate details">
+          <aside className="candidate-drawer" style={detailPosition ? { top: detailPosition.top } : undefined} aria-label="Candidate details">
             <div className="candidate-drawer-header">
               <div>
                 <div className="candidate-drawer-title">{selectedCandidate.name}</div>
