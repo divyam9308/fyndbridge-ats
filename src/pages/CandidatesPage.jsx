@@ -636,6 +636,7 @@ export default function CandidatesPage() {
   }
 
   const openEditCandidate = (candidate) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
     setForm(candidateToForm(candidate))
     setEditing(true)
     setErrors({})

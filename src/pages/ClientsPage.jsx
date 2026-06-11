@@ -299,6 +299,7 @@ export default function ClientsPage() {
   }
 
   const openEditModal = (client) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
     setForm(clientToForm(client))
     setErrors({})
     setEditingClient(client)
