@@ -591,6 +591,18 @@
   display: block;
 }
 
+.client-suggestions.is-open {
+  display: block;
+}
+
+.client-search-wrap:focus-within .client-suggestions.manual-suggestions {
+  display: none;
+}
+
+.client-suggestions.manual-suggestions.is-open {
+  display: block;
+}
+
 .client-suggestions button {
   width: 100%;
   border: 0;

@@ -165,6 +165,7 @@ export default function ClientsPage() {
   const [sortOpen, setSortOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState('All')
   const [statusOpen, setStatusOpen] = useState(false)
+  const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
   const statusDropdownRef = useRef(null)
@@ -324,6 +325,7 @@ export default function ClientsPage() {
       linkedin: ''
     })
     setErrors({})
+    setClientSuggestionsOpen(false)
   }
 
   const selectNewClient = () => {
@@ -335,11 +337,13 @@ export default function ClientsPage() {
       follow_up_date: todayLocal()
     }))
     setErrors({})
+    setClientSuggestionsOpen(false)
   }
 
   const handleChange = (e) => {
     const { name, value } = e.target
     if (name === 'contract_signed' && value === 'No') setContractFile(null)
+    if (name === 'client_name') setClientSuggestionsOpen(true)
     setForm((current) => {
       const next = { ...current, [name]: value }
       if (name === 'status' && value !== 'Converted') {
@@ -384,6 +388,7 @@ export default function ClientsPage() {
     setErrors({})
     setContractFile(null)
     setEditingClient(null)
+    setClientSuggestionsOpen(false)
     setIsOpen(true)
   }, [])
 
@@ -402,6 +407,7 @@ export default function ClientsPage() {
     setErrors({})
     setContractFile(null)
     setEditingClient(client)
+    setClientSuggestionsOpen(false)
     setIsOpen(true)
   }
 
@@ -429,6 +435,7 @@ export default function ClientsPage() {
     setErrors({})
     setContractFile(null)
     setEditingClient(null)
+    setClientSuggestionsOpen(false)
     setIsOpen(true)
   }
 
@@ -761,8 +768,9 @@ export default function ClientsPage() {
                     <label className="form-label">{label} {required && <span className="req">*</span>}</label>
                     {name === 'client_name' && !editingClient ? (
                       <div className="client-search-wrap">
-                        <input name={name} type={type} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} readOnly={Boolean(form.client_group_id)} autoComplete="off" />
-                        <div className="client-suggestions">
+                        <input name={name} type={type} value={form[name]} onChange={handleChange} onFocus={() => setClientSuggestionsOpen(true)} onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} readOnly={Boolean(form.client_group_id)} autoComplete="off" />
+                        {clientSuggestionsOpen && (
+                        <div className="client-suggestions manual-suggestions is-open">
                           <button type="button" onMouseDown={(event) => { event.preventDefault(); selectNewClient() }}>
                             <span>Add New Client</span>
                           </button>
@@ -773,6 +781,7 @@ export default function ClientsPage() {
                             </button>
                           ))}
                         </div>
+                        )}
                       </div>
                     ) : (
                       <input name={name} type={type} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} />

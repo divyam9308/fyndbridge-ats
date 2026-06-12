@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { AlertCircle, ChevronDown, Loader2, Pencil, Plus, X } from 'lucide-react'
+import { AlertCircle, ChevronDown, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 
@@ -63,6 +63,7 @@ export default function JobsPage() {
   const [sortOpen, setSortOpen] = useState(false)
   const [consultantOpen, setConsultantOpen] = useState({})
   const [clientSearch, setClientSearch] = useState('')
+  const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
   const modalRef = useRef(null)
   const sortRef = useRef(null)
 
@@ -133,6 +134,7 @@ export default function JobsPage() {
     setErrors({})
     setForm({ ...EMPTY_FORM, job_display_id: 'Loading...', allocation_date: todayLocal() })
     setClientSearch('')
+    setClientSuggestionsOpen(false)
     setIsOpen(true)
     try {
       const nextId = await fetchNextId()
@@ -169,6 +171,7 @@ export default function JobsPage() {
       allocation_date: job.allocation_date || todayLocal()
     })
     setClientSearch(job.client_name || '')
+    setClientSuggestionsOpen(false)
     setIsOpen(true)
   }
 
@@ -296,7 +299,7 @@ export default function JobsPage() {
           <span className="filter-label">AI Filter</span>
           <input className="filter-input candidate-ai-filter-input" value={aiText} onChange={e => { setAiText(e.target.value); setAiError('') }} />
           <button className="btn-secondary" type="submit" disabled={aiLoading} style={{ height: 34, padding: '0 12px' }}>
-            {aiLoading ? <Loader2 size={14} className="spin" /> : null}
+            {aiLoading ? <Loader2 size={14} className="spin" /> : <Search size={14} />}
             Apply
           </button>
           <button className="filter-clear" type="button" onClick={clearFilters}>Clear Filters</button>
@@ -423,23 +426,29 @@ export default function JobsPage() {
                       onChange={e => {
                         setClientSearch(e.target.value)
                         setForm(current => ({ ...current, client_id: '' }))
+                        setClientSuggestionsOpen(true)
                       }}
+                      onFocus={() => setClientSuggestionsOpen(true)}
+                      onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)}
                       placeholder={dbClients.length ? 'Search client...' : 'Loading clients...'}
                       disabled={saving}
                       autoComplete="off"
                     />
-                    <div className="client-suggestions">
+                    {clientSuggestionsOpen && (
+                    <div className="client-suggestions manual-suggestions is-open">
                       {matchingClients.map(client => (
                         <button type="button" key={client.id} onMouseDown={(event) => {
                           event.preventDefault()
                           setClientSearch(clientName(client))
                           setForm(current => ({ ...current, client_id: client.id }))
+                          setClientSuggestionsOpen(false)
                         }}>
                           <span>{clientName(client)}</span>
                           <small>{client.client_display_id || ''}</small>
                         </button>
                       ))}
                     </div>
+                    )}
                   </div>
                   {errors.client_id && <span className="form-error">{errors.client_id}</span>}
                 </div>

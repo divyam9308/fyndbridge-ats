@@ -368,6 +368,8 @@ export default function CandidatesPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [expandedCells, setExpandedCells] = useState({})
+  const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
+  const [jobSuggestionsOpen, setJobSuggestionsOpen] = useState(false)
 
   // Bulk resume review modal
   const [importOpen, setImportOpen]   = useState(false)
@@ -1045,6 +1047,7 @@ export default function CandidatesPage() {
         jobId: '',
         jobDisplayId: ''
       }))
+      setClientSuggestionsOpen(!matchedClient)
     }
     const setJobValue = (value) => {
       const matchedJob = dbJobs.find(job => job.id === value) || dbJobs.find(job => jobName(job) === value && (!f.clientId || job.client_id === f.clientId))
@@ -1054,6 +1057,7 @@ export default function CandidatesPage() {
         jobId: matchedJob?.id || '',
         jobDisplayId: matchedJob?.job_display_id || ''
       }))
+      setJobSuggestionsOpen(!matchedJob)
     }
     const handleLocalChange = onChange || ((e) => {
       const { name, value, type, checked } = e.target
@@ -1201,18 +1205,22 @@ export default function CandidatesPage() {
               name="client"
               value={visibleClientValue}
               onChange={(event) => setClientValue(event.target.value)}
+              onFocus={() => setClientSuggestionsOpen(true)}
+              onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)}
               className={`form-control${errs?.client ? ' is-error' : ''}`}
               placeholder={dbClients.length ? 'Search client...' : 'Loading clients...'}
               autoComplete="off"
             />
-            <div className="client-suggestions">
+            {clientSuggestionsOpen && (
+            <div className="client-suggestions manual-suggestions is-open">
               {matchingClients.map(client => (
-                <button type="button" key={client.id} onMouseDown={(event) => { event.preventDefault(); setClientValue(client.id) }}>
+                <button type="button" key={client.id} onMouseDown={(event) => { event.preventDefault(); setClientValue(client.id); setClientSuggestionsOpen(false) }}>
                   <span>{clientName(client)}</span>
                   <small>{client.client_display_id || ''}</small>
                 </button>
               ))}
             </div>
+            )}
           </div>
           {errs?.client && <span className="form-error">{errs.client}</span>}
         </div>
@@ -1234,18 +1242,22 @@ export default function CandidatesPage() {
               name="job"
               value={f.job || ''}
               onChange={(event) => setJobValue(event.target.value)}
+              onFocus={() => setJobSuggestionsOpen(true)}
+              onBlur={() => window.setTimeout(() => setJobSuggestionsOpen(false), 120)}
               className="form-control"
               placeholder={dbJobs.length ? 'Search mandate...' : 'Loading mandates...'}
               autoComplete="off"
             />
-            <div className="client-suggestions">
+            {jobSuggestionsOpen && (
+            <div className="client-suggestions manual-suggestions is-open">
               {matchingJobs.map(job => (
-                <button type="button" key={job.id} onMouseDown={(event) => { event.preventDefault(); setJobValue(job.id) }}>
+                <button type="button" key={job.id} onMouseDown={(event) => { event.preventDefault(); setJobValue(job.id); setJobSuggestionsOpen(false) }}>
                   <span>{jobName(job)}</span>
                   <small>{job.job_display_id || ''}</small>
                 </button>
               ))}
             </div>
+            )}
           </div>
         </div>
 
