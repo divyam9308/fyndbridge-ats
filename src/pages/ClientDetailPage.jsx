@@ -177,20 +177,25 @@ export default function ClientDetailPage() {
   const fetchAllCandidates = useCallback(async (clientData) => {
     const candidateMap = new Map()
     let nextPage = 1
+    const clientName = clientData.name || clientData.client_name || ''
 
     while (true) {
-      const [linkedRes, namedRes] = await Promise.all([
+      const results = await Promise.allSettled([
         fetch(`/api/candidates?client_id=${clientId}&page=${nextPage}&limit=100`),
-        fetch(`/api/candidates?client_name=${encodeURIComponent(clientData.name)}&page=${nextPage}&limit=100`),
+        fetch(`/api/candidates?client_name=${encodeURIComponent(clientName)}&page=${nextPage}&limit=100`),
       ])
-      if (!linkedRes.ok || !namedRes.ok) throw new Error('Failed to fetch candidate associations.')
-      const linked = await linkedRes.json()
-      const named = await namedRes.json()
-      ;[...(linked.data || []), ...(named.data || [])].forEach((row) => {
-        const clientTextMatches = normalizeText(row.client_name) === normalizeText(clientData.name)
+
+      const responses = results
+        .filter(result => result.status === 'fulfilled' && result.value.ok)
+        .map(result => result.value)
+      if (!responses.length) throw new Error('Failed to fetch candidate associations.')
+
+      const payloads = await Promise.all(responses.map(response => response.json()))
+      payloads.flatMap(payload => payload.data || []).forEach((row) => {
+        const clientTextMatches = normalizeText(row.client_name) === normalizeText(clientName)
         if (row.client_id === clientId || clientTextMatches) candidateMap.set(row.association_id || row.id, row)
       })
-      if ((linked.data || []).length < 100 && (named.data || []).length < 100) break
+      if (payloads.every(payload => (payload.data || []).length < 100)) break
       nextPage += 1
     }
 

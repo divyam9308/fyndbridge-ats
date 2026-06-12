@@ -1046,6 +1046,7 @@ async function listCandidates(req, res) {
     const to = from + limit - 1
 
     const hasAssocFilters = req.query.job_title || 
+                            req.query.client_id ||
                             req.query.client_name || 
                             req.query.status || 
                             req.query.salary_min || 
@@ -1081,6 +1082,10 @@ async function listCandidates(req, res) {
 
     if (req.query.client_name) {
       query = query.ilike('candidate_associations.client_name', `%${cleanText(req.query.client_name)}%`)
+    }
+
+    if (req.query.client_id) {
+      query = query.eq('candidate_associations.client_id', cleanText(req.query.client_id))
     }
 
     if (req.query.status) {
