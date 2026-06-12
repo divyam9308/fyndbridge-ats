@@ -274,6 +274,12 @@
 .consultant-picker-list .form-control {
   width: 190px;
 }
+.ai-filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 12px 0;
+}
 .mandate-consultants-control {
   width: auto;
 }

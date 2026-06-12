@@ -51,6 +51,11 @@ const formatMonth = (value) => {
   return date.toLocaleString('en-US', { month: 'short' })
 }
 
+const formatFilterChip = (condition) => {
+  const value = Array.isArray(condition.value) ? condition.value.join(' - ') : condition.value
+  return `${condition.field} ${condition.operator}${value !== undefined && value !== null ? ` ${value}` : ''}`
+}
+
 const getReadableClientId = (candidate, dbClients) => {
   if (!candidate.client || candidate.client.trim() === '') {
     return 'Unassigned'
@@ -486,37 +491,8 @@ export default function CandidatesPage() {
     return client?.client_display_id || ''
   }
 
-  const createClientFromCandidate = async (candidate) => {
-    const name = String(candidate.newClientName || candidate.client || '').replace(/\s+/g, ' ').trim()
-    if (!name) throw new Error('Client is required.')
-    const existing = findClientByName(name)
-    if (existing) return existing
-
-    const response = await fetch('/api/clients', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        client_name: name,
-        mobile: candidate.clientPhone || 'N/A',
-        phone: candidate.clientPhone || 'N/A',
-        status: 'Not Converted',
-        consultant_name: candidate.consultantName || activeConsultantName || ''
-      })
-    })
-    const payload = await response.json().catch(() => ({}))
-    if (response.status === 409 && payload.existing) return payload.existing
-    if (!response.ok) throw new Error(payload.error || 'Unable to create client.')
-    setDbClients(clients => clients.some(c => c.id === payload.id) ? clients : [...clients, payload])
-    return payload
-  }
-
   const ensureCandidateClient = async (candidate) => {
     if (candidate.clientId) return candidate
-    if (candidate.client === '__new_client__') {
-      const client = await createClientFromCandidate(candidate)
-      return { ...candidate, clientId: client.id, client: client.name || client.client_name || candidate.newClientName }
-    }
     const client = findClientByName(candidate.client)
     return client ? { ...candidate, clientId: client.id, client: client.name || client.client_name } : candidate
   }
@@ -640,11 +616,10 @@ export default function CandidatesPage() {
     const { name, value, type, checked } = e.target
     const nextValue = type === 'checkbox' ? checked : value
     if (name === 'client') {
-      const isNewClient = value === 'Other / Add New Client' || value === '__new_client__'
       const matchingClient = findClientByInput(value)
       setForm(f => ({
         ...f,
-        client: isNewClient ? '__new_client__' : (matchingClient ? clientName(matchingClient) : value),
+        client: matchingClient ? clientName(matchingClient) : value,
         clientId: matchingClient?.id || '',
         clientPhone: matchingClient?.phone || CLIENT_PHONES[clientName(matchingClient)] || '',
         job: ''
@@ -678,7 +653,6 @@ export default function CandidatesPage() {
     const e = {}
     if (!f.name.trim()) e.name = 'Full Name is required'
     if (!f.mobile.trim()) e.mobile = 'Mobile is required'
-    if (f.client === '__new_client__' && !String(f.newClientName || '').trim()) e.client = 'Client is required'
     return e
   }
 
@@ -890,9 +864,9 @@ export default function CandidatesPage() {
       skills: Array.isArray(row.skills) ? row.skills : [],
       education: row.education || '',
       salary: row.salary ?? '',
-      client: matchedClient ? clientName(matchedClient) : (parsedClient ? '__new_client__' : ''),
+      client: matchedClient ? clientName(matchedClient) : '',
       clientId: matchedClient?.id || '',
-      newClientName: matchedClient ? '' : parsedClient,
+      newClientName: '',
       clientPhone: matchedClient?.phone || '',
       linkedinUrl: row.linkedin_url || '',
       cvLink: row.resume_url || '',
@@ -948,7 +922,6 @@ export default function CandidatesPage() {
     textFields.forEach(field => {
       if (String(next[field] ?? '').trim() === '') next[field] = '-'
     })
-    if (next.client === '__new_client__' && String(next.newClientName || '').trim() === '') next.newClientName = '-'
     return next
   }
 
@@ -1028,11 +1001,10 @@ export default function CandidatesPage() {
     const { name, value, type, checked } = e.target
     const nextValue = type === 'checkbox' ? checked : value
     if (name === 'client') {
-      const isNewClient = value === 'Other / Add New Client' || value === '__new_client__'
       const matchingClient = findClientByInput(value)
       setParsedForm(f => ({
         ...f,
-        client: isNewClient ? '__new_client__' : (matchingClient ? clientName(matchingClient) : value),
+        client: matchingClient ? clientName(matchingClient) : value,
         clientId: matchingClient?.id || '',
         clientPhone: matchingClient?.phone || CLIENT_PHONES[clientName(matchingClient)] || '',
         job: ''
@@ -1045,7 +1017,7 @@ export default function CandidatesPage() {
   // ---- Candidate Form body (shared between Add + Review) ----
   const CandidateFormBody = ({ f, setF, errs, sInput, onSkillInputChange, onSkillKey, onAddSkill, rmSkill, lowConf = [], onChange }) => {
     const low = (field) => lowConf.includes(field) ? ' low-confidence' : ''
-    const visibleClientValue = f.client === '__new_client__' ? '' : f.client
+    const visibleClientValue = f.client || ''
     const matchingClients = canonicalClients
       .filter(client => normalizeText(clientName(client)).includes(normalizeText(visibleClientValue)))
       .slice(0, 8)
@@ -1059,24 +1031,14 @@ export default function CandidatesPage() {
         job: ''
       }))
     }
-    const selectNewClient = () => {
-      setF(prev => ({
-        ...prev,
-        client: '__new_client__',
-        clientId: '',
-        clientPhone: '',
-        job: ''
-      }))
-    }
     const handleLocalChange = onChange || ((e) => {
       const { name, value, type, checked } = e.target
       const nextValue = type === 'checkbox' ? checked : value
       if (name === 'client') {
-        const isNewClient = value === 'Other / Add New Client' || value === '__new_client__'
         const matchedClient = findClientByInput(value)
         setF(prev => ({
           ...prev,
-          client: isNewClient ? '__new_client__' : (matchedClient ? clientName(matchedClient) : value),
+          client: matchedClient ? clientName(matchedClient) : value,
           clientId: matchedClient?.id || '',
           clientPhone: matchedClient?.phone || CLIENT_PHONES[clientName(matchedClient)] || '',
           job: ''
@@ -1224,20 +1186,10 @@ export default function CandidatesPage() {
                   <small>{client.client_display_id || ''}</small>
                 </button>
               ))}
-              <button type="button" onMouseDown={(event) => { event.preventDefault(); selectNewClient() }}>
-                <span>Other / Add New Client</span>
-              </button>
             </div>
           </div>
           {errs?.client && <span className="form-error">{errs.client}</span>}
         </div>
-
-        {f.client === '__new_client__' && (
-          <div className="form-group">
-            <label className="form-label">New Client Name</label>
-            <input name="newClientName" value={f.newClientName || ''} onChange={handleLocalChange} className="form-control" />
-          </div>
-        )}
 
         <div className="form-group">
           <label className="form-label">Client ID</label>
@@ -1560,6 +1512,14 @@ export default function CandidatesPage() {
       {aiFilters && (
         <div style={{ marginBottom:12, fontSize:12.5, color:'var(--gray-500)' }}>
           AI filter active{aiFilterCount !== null ? ` · ${aiFilterCount} match${aiFilterCount === 1 ? '' : 'es'}` : ''}
+        </div>
+      )}
+
+      {aiFilters && (
+        <div className="ai-filter-chips">
+          {(aiFilters.conditions || []).map((condition, index) => (
+            <span className="tag-chip" key={`${condition.field}-${index}`}>{formatFilterChip(condition)}</span>
+          ))}
         </div>
       )}
 

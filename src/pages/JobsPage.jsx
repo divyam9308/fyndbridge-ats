@@ -31,6 +31,10 @@ const todayLocal = () => {
   return date.toISOString().slice(0, 10)
 }
 const dash = (value) => value || '-'
+const formatFilterChip = (condition) => {
+  const value = Array.isArray(condition.value) ? condition.value.join(' - ') : condition.value
+  return `${condition.field} ${condition.operator}${value !== undefined && value !== null ? ` ${value}` : ''}`
+}
 const clientName = (client) => client?.name || client?.client_name || ''
 const canonicalClients = (clients) => {
   const map = new Map()
@@ -61,6 +65,7 @@ export default function JobsPage() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
   const [consultantOpen, setConsultantOpen] = useState({})
+  const [clientSearch, setClientSearch] = useState('')
   const modalRef = useRef(null)
   const sortRef = useRef(null)
 
@@ -130,6 +135,7 @@ export default function JobsPage() {
     setEditingJob(null)
     setErrors({})
     setForm({ ...EMPTY_FORM, job_display_id: 'Loading...', allocation_date: todayLocal() })
+    setClientSearch('')
     setIsOpen(true)
     try {
       const nextId = await fetchNextId()
@@ -165,11 +171,15 @@ export default function JobsPage() {
       vertical: job.vertical || '',
       allocation_date: job.allocation_date || todayLocal()
     })
+    setClientSearch(job.client_name || '')
     setIsOpen(true)
   }
 
   const sortedUsers = useMemo(() => ['-', ...userOptions.filter(Boolean)], [userOptions])
   const clientOptions = useMemo(() => canonicalClients(dbClients), [dbClients])
+  const matchingClients = useMemo(() => clientOptions
+    .filter(client => `${clientName(client)} ${client.client_display_id || ''}`.toLowerCase().includes(clientSearch.trim().toLowerCase()))
+    .slice(0, 8), [clientOptions, clientSearch])
   const selectedConsultants = form.consultants || []
   const availableConsultants = userOptions.filter(user => !selectedConsultants.includes(user))
 
@@ -303,6 +313,13 @@ export default function JobsPage() {
         </div>
       </div>
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}
+      {aiFilters && (
+        <div className="ai-filter-chips">
+          {(aiFilters.conditions || []).map((condition, index) => (
+            <span className="tag-chip" key={`${condition.field}-${index}`}>{formatFilterChip(condition)}</span>
+          ))}
+        </div>
+      )}
 
       <div className="table-card">
         {loading ? (
@@ -400,14 +417,31 @@ export default function JobsPage() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Client Name <span className="req">*</span></label>
-                  <select className={`form-control${errors.client_id ? ' is-error' : ''}`} value={form.client_id} onChange={e => setForm(current => ({ ...current, client_id: e.target.value }))} disabled={saving}>
-                    <option value="">Select client...</option>
-                    {clientOptions.map(client => (
-                      <option key={client.id} value={client.id}>
-                        {clientName(client)}{client.client_display_id ? ` (${client.client_display_id})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="client-search-wrap">
+                    <input
+                      className={`form-control${errors.client_id ? ' is-error' : ''}`}
+                      value={clientSearch}
+                      onChange={e => {
+                        setClientSearch(e.target.value)
+                        setForm(current => ({ ...current, client_id: '' }))
+                      }}
+                      placeholder={dbClients.length ? 'Search client...' : 'Loading clients...'}
+                      disabled={saving}
+                      autoComplete="off"
+                    />
+                    <div className="client-suggestions">
+                      {matchingClients.map(client => (
+                        <button type="button" key={client.id} onMouseDown={(event) => {
+                          event.preventDefault()
+                          setClientSearch(clientName(client))
+                          setForm(current => ({ ...current, client_id: client.id }))
+                        }}>
+                          <span>{clientName(client)}</span>
+                          <small>{client.client_display_id || ''}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   {errors.client_id && <span className="form-error">{errors.client_id}</span>}
                 </div>
                 <div className="form-group">

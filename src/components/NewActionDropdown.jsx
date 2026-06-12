@@ -39,7 +39,7 @@ export default function NewActionDropdown({ onUploadResumes, onAddCandidate, onA
           {item('Upload resumes', Upload, onUploadResumes)}
           {item('Add candidate', UserPlus, onAddCandidate)}
           {item('Add client', Building2, onAddClient)}
-          {item('Add job', Briefcase, onAddJob)}
+          {item('Add mandate', Briefcase, onAddJob)}
         </div>
       )}
     </div>

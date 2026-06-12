@@ -1,4 +1,6 @@
 const supabase = require('../services/supabaseAdmin')
+const { callAiJson } = require('../services/aiProvider')
+const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const PRIORITIES = ['P1', 'P2', 'P3', 'Scrap', 'Completed']
@@ -70,68 +72,19 @@ async function nextJobDisplayId() {
   return `JB${next}`
 }
 
-function applyLocalFilters(rows, filters) {
-  if (!filters || !Array.isArray(filters.conditions)) return rows
-  return rows.filter(row => filters.conditions.every(({ field, operator, value }) => {
-    const source = {
-      job_id: row.job_display_id,
-      consultant: (row.consultants || []).join(', '),
-      team_lead: row.team_lead || '-',
-      client_name: row.client_name,
-      role: row.role,
-      location: row.location,
-      budget: row.budget,
-      priority: row.priority,
-      vertical: row.vertical,
-      allocation_date: row.allocation_date
-    }[field]
-    const haystack = clean(source).toLowerCase()
-    const needle = clean(value).toLowerCase()
-    if (operator === 'blank') return !haystack || haystack === '-'
-    if (operator === 'after') return row.allocation_date && row.allocation_date > value
-    if (operator === 'before') return row.allocation_date && row.allocation_date < value
-    if (operator === 'equals') return haystack === needle
-    return haystack.includes(needle)
-  }))
-}
-
-function parseAiFilters(prompt) {
-  const text = clean(prompt)
-  const lower = text.toLowerCase()
-  const conditions = []
-  const add = (field, operator, value) => {
-    if (value !== undefined && clean(value)) conditions.push({ field, operator, value: clean(value) })
-  }
-
-  add('job_id', 'equals', text.match(/\bJB\d+\b/i)?.[0]?.toUpperCase())
-  PRIORITIES.forEach(priority => {
-    if (new RegExp(`\\b${priority.toLowerCase()}\\b`).test(lower)) add('priority', 'equals', priority)
-  })
-  BUDGETS.forEach(budget => {
-    const key = budget.replace(/\s*lac/i, '').replace('>', '\\>')
-    if (lower.includes(budget.toLowerCase()) || lower.includes(key.toLowerCase())) add('budget', 'equals', budget)
-  })
-
-  ;[
-    ['consultant', /consultant\s+(?:is\s+)?([a-z][\w\s.-]*?)(?=\s+(?:team lead|client|role|location|budget|priority|vertical|date|for|in)\b|$)/i],
-    ['team_lead', /team lead\s+(?:is\s+)?(-|[a-z][\w\s.-]*?)(?=\s+(?:consultant|client|role|location|budget|priority|vertical|date|for|in)\b|$)/i],
-    ['client_name', /client\s+(?:is\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:consultant|team lead|role|location|budget|priority|vertical|date|for|in)\b|$)/i],
-    ['role', /role\s+(?:contains\s+|is\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:consultant|team lead|client|location|budget|priority|vertical|date|for|in)\b|$)/i],
-    ['location', /(?:location\s+(?:is\s+)?|in\s+)([a-z][\w\s.-]*?)(?=\s+(?:consultant|team lead|client|role|budget|priority|vertical|date|for)\b|$)/i],
-    ['vertical', /vertical\s+(?:contains\s+|is\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:consultant|team lead|client|role|location|budget|priority|date|for|in)\b|$)/i]
-  ].forEach(([field, regex]) => {
-    const match = text.match(regex)
-    if (match) add(field, match[0].toLowerCase().includes('contains') ? 'contains' : 'equals', match[1])
-  })
-
-  const dateMatch = text.match(/date\s+(after|before)\s+(.+)$/i)
-  if (dateMatch) {
-    const date = new Date(dateMatch[2])
-    if (!Number.isNaN(date.getTime())) add('allocation_date', dateMatch[1].toLowerCase(), date.toISOString().slice(0, 10))
-  }
-
-  if (!conditions.length) return null
-  return { conditions }
+function jobFilterValue(row, field) {
+  return {
+    job_id: row.job_display_id,
+    consultant: row.consultants,
+    team_lead: row.team_lead,
+    client_name: row.client_name,
+    role: row.role,
+    location: row.location,
+    budget: row.budget,
+    priority: row.priority,
+    vertical: row.vertical,
+    date_of_allocation: row.allocation_date
+  }[field]
 }
 
 async function listJobs(req, res) {
@@ -142,7 +95,7 @@ async function listJobs(req, res) {
     const { data, error } = await query
     if (error) throw error
     let rows = (data || []).map(formatJob)
-    rows = applyLocalFilters(rows, req.query.ai_filters ? JSON.parse(req.query.ai_filters) : null)
+    rows = applySharedFilters('mandates', rows, req.query.ai_filters ? JSON.parse(req.query.ai_filters) : null, jobFilterValue)
     const direction = req.query.sortDirection === 'desc' ? -1 : 1
     if (req.query.sortField === 'job_id') rows.sort((a, b) => direction * (jobIdNumber(a.job_display_id) - jobIdNumber(b.job_display_id)))
     else if (req.query.sortField === 'role') rows.sort((a, b) => direction * String(a.role || '').localeCompare(String(b.role || '')))
@@ -241,7 +194,15 @@ async function listJobUsers(req, res) {
 
 async function buildJobFilters(req, res) {
   try {
-    const filters = parseAiFilters(req.body.prompt)
+    const prompt = clean(req.body.prompt)
+    if (!prompt) return res.status(400).json({ error: 'prompt is required' })
+    const parsed = await callAiJson({
+      prompt: buildAiFilterPrompt('mandates', prompt),
+      schema: aiFilterSchema(),
+      schemaName: 'mandate_filter',
+      temperature: 0
+    })
+    const filters = validateAiFilters('mandates', parsed)
     if (!filters) return res.status(400).json({ error: 'Could not parse Mandate Tracker filter.' })
     return res.json({ filters })
   } catch (err) {

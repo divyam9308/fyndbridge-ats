@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid')
 const supabase = require('../services/supabaseAdmin')
 const { parseResume } = require('../services/resumeParser')
 const { callAiJson } = require('../services/aiProvider')
+const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
 
 const VALID_STATUSES = [
   'Interested',
@@ -51,98 +52,6 @@ const ASSOCIATION_FIELDS = [
   'job_id'
 ]
 
-const AI_FILTER_OPERATORS = [
-  'equals',
-  'contains',
-  'startsWith',
-  'endsWith',
-  'greaterThan',
-  'lessThan',
-  'greaterThanOrEqual',
-  'lessThanOrEqual',
-  'blank',
-  'notBlank'
-]
-
-const AI_FILTER_FIELD_MAP = {
-  candidate_id: { column: 'candidates.candidate_display_id', type: 'text' },
-  candidateDisplayId: { column: 'candidates.candidate_display_id', type: 'text' },
-  name: { column: 'candidates.full_name', type: 'text' },
-  full_name: { column: 'candidates.full_name', type: 'text' },
-  candidate: { column: 'candidates.full_name', type: 'text' },
-  email: { column: 'candidates.email', type: 'text' },
-  mobile: { column: 'candidates.mobile_number', type: 'text', normalize: normalizeMobile },
-  phone: { column: 'candidates.mobile_number', type: 'text', normalize: normalizeMobile },
-  contact_number: { column: 'candidates.mobile_number', type: 'text', normalize: normalizeMobile },
-  city: { column: 'candidates.city', type: 'text' },
-  location: { column: 'candidates.location', type: 'text' },
-  state: { column: 'candidates.state', type: 'text' },
-  designation: { column: 'candidates.current_designation', type: 'text', fuzzy: true },
-  currentDesignation: { column: 'candidates.current_designation', type: 'text', fuzzy: true },
-  current_designation: { column: 'candidates.current_designation', type: 'text', fuzzy: true },
-  current_role: { column: 'candidates.current_designation', type: 'text', fuzzy: true },
-  company: { column: 'candidates.current_organisation', type: 'text' },
-  organisation: { column: 'candidates.current_organisation', type: 'text' },
-  organization: { column: 'candidates.current_organisation', type: 'text' },
-  current_organisation: { column: 'candidates.current_organisation', type: 'text' },
-  current_organization: { column: 'candidates.current_organisation', type: 'text' },
-  experience: { column: 'candidates.experience_years', type: 'number' },
-  years: { column: 'candidates.experience_years', type: 'number' },
-  notice: { column: 'candidates.notice_period', type: 'number' },
-  notice_period: { column: 'candidates.notice_period', type: 'number' },
-  noticePeriod: { column: 'candidates.notice_period', type: 'number' },
-  relocation: { column: 'candidates.open_to_relocate', type: 'boolean' },
-  relocate: { column: 'candidates.open_to_relocate', type: 'boolean' },
-  open_to_relocate: { column: 'candidates.open_to_relocate', type: 'boolean' },
-  openToRelocate: { column: 'candidates.open_to_relocate', type: 'boolean' },
-  salary: { column: 'current_salary', type: 'number', normalize: normalizeMoney },
-  ctc: { column: 'current_salary', type: 'number', normalize: normalizeMoney },
-  current_salary: { column: 'current_salary', type: 'number', normalize: normalizeMoney },
-  expected_salary: { column: 'expected_salary', type: 'number', normalize: normalizeMoney },
-  expectedSalary: { column: 'expected_salary', type: 'number', normalize: normalizeMoney },
-  consultant: { column: 'consultant_name', type: 'text' },
-  consultant_name: { column: 'consultant_name', type: 'text' },
-  recruiter: { column: 'consultant_name', type: 'text' },
-  client: { column: 'client_name', type: 'text' },
-  client_name: { column: 'client_name', type: 'text' },
-  job: { column: 'job_title', type: 'text', fuzzy: true },
-  role: { column: 'job_title', type: 'text', fuzzy: true },
-  position: { column: 'job_title', type: 'text', fuzzy: true },
-  job_title: { column: 'job_title', type: 'text', fuzzy: true },
-  status: { column: 'status', type: 'text' },
-  stage: { column: 'status', type: 'text' },
-  education: { column: 'candidates.education', type: 'text' },
-  skills: { column: 'candidates.skills', type: 'array' },
-  technology: { column: 'candidates.skills', type: 'array' },
-  cv_link: { column: 'candidates.cv_link', type: 'text' },
-  linkedin: { column: 'candidates.linkedin_url', type: 'text' },
-  notes: { column: 'notes', type: 'text' },
-  comments: { column: 'notes', type: 'text' },
-  date: { column: 'created_at', type: 'date' },
-  month: { column: 'created_at', type: 'month' }
-}
-
-const AI_FILTER_FIELDS = Object.keys(AI_FILTER_FIELD_MAP)
-
-const AI_FILTER_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    conditions: {
-      type: ['array', 'null'],
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          field: { type: 'string' },
-          operator: { type: 'string', enum: AI_FILTER_OPERATORS },
-          value: { type: ['string', 'number', 'boolean', 'null'] }
-        }
-      }
-    }
-  }
-}
-
 function logAndSendInternal(res, routeName, err) {
   console.error(`${routeName}:`, err.message)
   return res.status(500).json({ error: 'Internal server error' })
@@ -158,29 +67,6 @@ function normalizeMatchValue(value) {
 
 function normalizeMobile(value) {
   return String(value || '').replace(/[^\d+]/g, '').trim()
-}
-
-function normalizeMoney(value) {
-  const text = cleanText(value).toLowerCase()
-  if (!text) return null
-  const number = Number((text.match(/\d+(?:\.\d+)?/) || [])[0])
-  if (!Number.isFinite(number)) return null
-  if (/\b(lpa|lac|lakh|lakhs)\b/.test(text)) return Math.round(number * 100000)
-  if (/\b(cr|crore|crores)\b/.test(text)) return Math.round(number * 10000000)
-  return Math.round(number)
-}
-
-function normalizeNumber(value) {
-  const number = Number((cleanText(value).match(/\d+(?:\.\d+)?/) || [])[0])
-  return Number.isFinite(number) ? number : null
-}
-
-function normalizeBoolean(value) {
-  if (value === true || value === false) return value
-  const text = cleanText(value).toLowerCase()
-  if (/^(yes|true|y|open|relocate|willing|available)$/i.test(text)) return true
-  if (/^(no|false|n|not open|not willing)$/i.test(text)) return false
-  return null
 }
 
 function cleanText(value) {
@@ -334,304 +220,6 @@ async function checkCandidateDuplicate(req, res) {
   } catch (err) {
     return logAndSendInternal(res, 'checkCandidateDuplicate', err)
   }
-}
-
-function normalizeAiField(value) {
-  const text = cleanText(value)
-  return text ? text : null
-}
-
-function normalizeAiRange(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null
-  }
-
-  const min = value.min === null || value.min === undefined || value.min === '' ? null : Number(value.min)
-  const max = value.max === null || value.max === undefined || value.max === '' ? null : Number(value.max)
-
-  if (min !== null && !Number.isFinite(min)) {
-    return null
-  }
-
-  if (max !== null && !Number.isFinite(max)) {
-    return null
-  }
-
-  return {
-    min: min === null ? null : min,
-    max: max === null ? null : max
-  }
-}
-
-function normalizeAiFilterOutput(data) {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return null
-  }
-
-  if (Array.isArray(data.conditions)) {
-    const conditions = data.conditions
-      .map((condition) => {
-        if (!condition || typeof condition !== 'object' || Array.isArray(condition)) return null
-        const field = cleanText(condition.field)
-        const mapped = AI_FILTER_FIELD_MAP[field]
-        const operator = cleanText(condition.operator)
-        if (!mapped || !AI_FILTER_OPERATORS.includes(operator)) return null
-        let value = condition.value
-        if (operator === 'blank' || operator === 'notBlank') value = null
-        else if (mapped.type === 'number') value = (mapped.normalize || normalizeNumber)(value)
-        else if (mapped.type === 'boolean') value = normalizeBoolean(value)
-        else value = cleanText(value)
-        if (!['blank', 'notBlank'].includes(operator) && (value === null || value === '')) return null
-        return { field, operator, value }
-      })
-      .filter(Boolean)
-    const seen = new Set()
-    const unique = conditions.filter((condition) => {
-      const key = `${AI_FILTER_FIELD_MAP[condition.field].column}|${condition.operator}|${condition.value}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    }).slice(0, 12)
-
-    return { conditions: unique }
-  }
-
-  const skills = Array.isArray(data.skills)
-    ? [...new Set(data.skills.map((skill) => cleanText(skill)).filter(Boolean))].slice(0, 12)
-    : []
-
-  return {
-    name: normalizeAiField(data.name),
-    city: normalizeAiField(data.city),
-    state: normalizeAiField(data.state),
-    currentDesignation: normalizeAiField(data.currentDesignation),
-    email: normalizeAiField(data.email),
-    mobile: normalizeAiField(data.mobile),
-    experience: normalizeAiRange(data.experience),
-    salary: normalizeAiRange(data.salary),
-    consultant: normalizeAiField(data.consultant),
-    client: normalizeAiField(data.client),
-    job: normalizeAiField(data.job),
-    clientMobile: normalizeAiField(data.clientMobile),
-    status: normalizeAiField(data.status),
-    skills,
-    education: normalizeAiField(data.education)
-  }
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function explicitAiFiltersFromPrompt(prompt) {
-  const text = cleanText(prompt)
-  const aliases = {
-    candidate_id: ['candidate id', 'id', 'display id', 'candidate_id', 'candidateDisplayId'],
-    name: ['name', 'candidate', 'candidate name'],
-    city: ['city', 'location'],
-    state: ['state'],
-    currentDesignation: ['designation', 'current designation', 'profile'],
-    email: ['email', 'email id'],
-    mobile: ['mobile', 'phone', 'mobile number'],
-    consultant: ['consultant', 'consultant name', 'recruiter'],
-    client: ['client', 'client name'],
-    job: ['job', 'role', 'position'],
-    clientMobile: ['client mobile', 'client phone'],
-    status: ['status'],
-    education: ['education']
-  }
-
-  return Object.entries(aliases).reduce((filters, [field, names]) => {
-    const match = names
-      .map((name) => text.match(new RegExp(`(?:^|\\b)${escapeRegExp(name)}\\s*(?:=|:|is|contains)\\s*([^,;]+)`, 'i')))
-      .find(Boolean)
-    const value = match ? cleanText(match[1]).replace(/^['"]|['"]$/g, '') : null
-    if (value) filters[field] = value
-    return filters
-  }, {})
-}
-
-function explicitAiConditionsFromPrompt(prompt) {
-  const text = cleanText(prompt)
-  const normalized = normalizeSearchText(prompt)
-  const conditions = []
-  const aliases = Object.entries(AI_FILTER_FIELD_MAP)
-    .filter(([field]) => !field.includes('_') || ['full_name', 'current_designation', 'current_organisation', 'current_salary', 'expected_salary', 'consultant_name', 'client_name', 'job_title'].includes(field))
-    .map(([field]) => field)
-
-  const idMatch = text.match(/\b(CA\d+)\b/i)
-  if (idMatch) {
-    conditions.push({ field: 'candidate_id', operator: 'equals', value: idMatch[1].toUpperCase() })
-  }
-
-  text.split(/\s*,\s*|\s+and\s+/i).forEach((part) => {
-    for (const field of aliases) {
-      const label = field.replace(/_/g, ' ')
-      const match = part.match(new RegExp(`(?:^|\\b)${escapeRegExp(label)}\\s*(=|:|is|contains|starts with|ends with|above|over|more than|greater than|below|under|less than)\\s*(.+)$`, 'i'))
-      if (!match) continue
-      const rawOperator = match[1].toLowerCase()
-      const rawValue = cleanText(match[2]).replace(/^['"]|['"]$/g, '')
-      const operator = rawOperator === '=' || rawOperator === ':' || rawOperator === 'is'
-        ? (/^(blank|null|empty)$/i.test(rawValue) ? 'blank' : (AI_FILTER_FIELD_MAP[field]?.fuzzy ? 'contains' : 'equals'))
-        : rawOperator === 'contains'
-          ? 'contains'
-          : rawOperator === 'starts with'
-            ? 'startsWith'
-            : rawOperator === 'ends with'
-              ? 'endsWith'
-              : /above|over|more than|greater than/.test(rawOperator)
-                ? 'greaterThanOrEqual'
-                : 'lessThanOrEqual'
-      conditions.push({ field, operator, value: operator === 'blank' ? null : rawValue })
-      break
-    }
-  })
-
-  if (/\bclient\s+(?:is\s+)?(?:blank|null|empty)\b/i.test(text)) {
-    conditions.push({ field: 'client', operator: 'blank', value: null })
-  }
-  if (/\bnot\s+blank\b/i.test(text)) {
-    const field = aliases.find((item) => new RegExp(`\\b${escapeRegExp(item.replace(/_/g, ' '))}\\b`, 'i').test(text))
-    if (field) conditions.push({ field, operator: 'notBlank', value: null })
-  }
-  if (/\b(open to relocate|relocation\s+(?:yes|true)|relocate\s+(?:yes|true)|willing to relocate)\b/i.test(text)) {
-    conditions.push({ field: 'relocation', operator: 'equals', value: true })
-  }
-  if (/\b(not open to relocate|relocation\s+(?:no|false)|relocate\s+(?:no|false)|not willing to relocate)\b/i.test(text)) {
-    conditions.push({ field: 'relocation', operator: 'equals', value: false })
-  }
-  if (/\b(?:experience|years?|yrs?)\b/i.test(text) && /\b(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b/i.test(text)) {
-    const value = Number(text.match(/\b(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b/i)[1])
-    const operator = /\b(below|under|less than|max|maximum)\b/i.test(text)
-      ? 'lessThanOrEqual'
-      : /\+|\b(more than|above|over|greater than|min|minimum)\b/i.test(text)
-        ? 'greaterThanOrEqual'
-        : 'equals'
-    conditions.push({ field: 'experience', operator, value })
-  }
-  if (/\bsalary|ctc|lpa|lakhs?\b/i.test(text) && /\b(below|under|less than|max|maximum|above|over|more than|greater than|min|minimum)\b/i.test(text)) {
-    const value = cleanText((text.match(/\d+(?:\.\d+)?\s*(?:lpa|lac|lakh|lakhs|cr|crore|crores)?|[1-9]\d{4,}/i) || [])[0])
-    if (value) {
-      conditions.push({
-        field: 'salary',
-        operator: /\b(below|under|less than|max|maximum)\b/i.test(text) ? 'lessThanOrEqual' : 'greaterThanOrEqual',
-        value
-      })
-    }
-  }
-  const city = [
-    'bengaluru',
-    'bangalore',
-    'mumbai',
-    'delhi',
-    'hyderabad',
-    'chennai',
-    'pune',
-    'kolkata',
-    'kochi',
-    'noida',
-    'gurgaon',
-    'gurugram'
-  ].find((item) => new RegExp(`\\b${escapeRegExp(item)}\\b`, 'i').test(normalized))
-  if (city && !conditions.some((condition) => ['city', 'location'].includes(condition.field))) {
-    conditions.push({ field: 'city', operator: 'contains', value: city === 'bangalore' ? 'Bengaluru' : city })
-  }
-  const technology = ['react', 'angular', 'vue', 'node', 'java', 'python', 'sql', 'excel', 'salesforce', 'aws', 'azure'].find((item) => new RegExp(`\\b${escapeRegExp(item)}\\b`, 'i').test(normalized))
-  if (technology && !conditions.some((condition) => condition.field === 'skills')) {
-    conditions.push({ field: 'skills', operator: 'contains', value: technology })
-  }
-  if (/\bsales\b/i.test(normalized) && !conditions.some((condition) => ['designation', 'job', 'role'].includes(condition.field))) {
-    conditions.push({ field: 'designation', operator: 'contains', value: 'sales' })
-  }
-  const status = VALID_STATUSES.find((item) => new RegExp(`\\b${escapeRegExp(item)}\\b`, 'i').test(text))
-  if (status) conditions.push({ field: 'status', operator: 'equals', value: status })
-
-  return normalizeAiFilterOutput({ conditions })?.conditions || []
-}
-
-function safeFilterPrompt(prompt, allowedFields) {
-  const fieldList = allowedFields.join(', ')
-  const schemaLines = Object.entries(AI_FILTER_FIELD_MAP)
-    .map(([field, info]) => `${field} -> ${info.column} (${info.type})`)
-    .join('\n')
-  return [
-    'Convert the recruiting search request into safe JSON filters only. Do not fetch data and do not invent values.',
-    `Allowed fields: ${fieldList}.`,
-    'Available schema/aliases:',
-    schemaLines,
-    `Operators: ${AI_FILTER_OPERATORS.join(', ')}.`,
-    'Return exactly: {"conditions":[{"field":"fieldName","operator":"operator","value":"value or null"}]}.',
-    'Use greaterThanOrEqual for phrases like 3+ years. Convert salary like 8 LPA to 800000. Use blank for blank/null/empty.',
-    'For technology words like React, Java, Python, use field skills with contains.',
-    'For interested/interview/hired/client submission phrases, use field status.',
-    'Do not include SQL, code, markdown, explanations, or fields not listed.',
-    `Request: ${cleanText(prompt).slice(0, 1000)}`
-  ].join('\n\n')
-}
-
-function localAiFilterFallback(prompt) {
-  const normalized = normalizeSearchText(prompt)
-  const filters = normalizeAiFilterOutput(explicitAiFiltersFromPrompt(prompt))
-  const roleIntent = /\b(role|designation|job|profile|position|engineer|developer|manager|analyst)\b/.test(normalized)
-
-  const idMatch = normalized.match(/\b(ca\d+)\b/i)
-  if (idMatch) {
-    filters.candidate_id = idMatch[1].toUpperCase()
-  }
-
-  if (/\b(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b/.test(normalized)) {
-    const value = Number(normalized.match(/\b(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b/)[1])
-    filters.experience = /less than|below|under|max|maximum/.test(normalized)
-      ? { min: null, max: value }
-      : { min: value, max: null }
-  }
-
-  if (/\b(back ?end|bakend|backend)\b/.test(normalized)) {
-    if (!filters.currentDesignation) filters.currentDesignation = 'backend engineer'
-  } else if (/\b(front ?end|fronend|frntend|react|angular|vue)\b/.test(normalized)) {
-    if (!filters.currentDesignation) filters.currentDesignation = 'frontend engineer'
-  } else if (/\b(software|sftware|softwar)\b/.test(normalized)) {
-    if (!filters.currentDesignation) filters.currentDesignation = 'software engineer'
-  } else if (/\b(database|data ?base|dba|postgres|mysql|mongodb)\b/.test(normalized)) {
-    if (!filters.currentDesignation) filters.currentDesignation = 'database engineer'
-  } else if (/\b(data analyst|data engineer|analytics)\b/.test(normalized) || (roleIntent && /\bdata\b/.test(normalized))) {
-    if (!filters.currentDesignation) filters.currentDesignation = 'data'
-  } else if (/\b(devops|dev ops|kubernetes|docker|cloud)\b/.test(normalized)) {
-    if (!filters.currentDesignation) filters.currentDesignation = 'devops engineer'
-  } else if (/\b(product manager|product owner|pm)\b/.test(normalized) || (roleIntent && /\bproduct\b/.test(normalized))) {
-    if (!filters.currentDesignation) filters.currentDesignation = 'product'
-  }
-
-  const city = [
-    'bengaluru',
-    'bangalore',
-    'mumbai',
-    'delhi',
-    'hyderabad',
-    'chennai',
-    'pune',
-    'kolkata',
-    'kochi'
-  ].find((item) => normalized.includes(item))
-
-  if (city) {
-    if (!filters.city) filters.city = city === 'bangalore' ? 'Bengaluru' : city
-  }
-
-  const status = VALID_STATUSES.find((item) => normalized.includes(item.toLowerCase()))
-  if (status) {
-    if (!filters.status) filters.status = status
-  }
-
-  return filters
-}
-
-function normalizeSearchText(value) {
-  return cleanText(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9+#./\s-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 function validateCandidatePayload(body, { partial = false } = {}) {
@@ -828,14 +416,33 @@ function flattenCandidateOnly(candidate) {
   }
 }
 
-function adjustColumnForPrimaryCandidates(column) {
-  if (column.startsWith('candidates.')) {
-    return column.slice('candidates.'.length)
+function candidateFilterValue(row, field) {
+  const values = {
+    candidate_id: row.candidate_display_id,
+    candidate_name: row.full_name,
+    consultant: row.consultant_name,
+    email: row.email,
+    mobile: row.mobile_number,
+    designation: row.current_designation,
+    organisation: row.current_organisation || row.current_company,
+    experience: row.experience_years,
+    client_id: row.client_display_id || row.client_id,
+    client_name: row.client_name,
+    role: row.job_title,
+    date: row.created_at,
+    skills: Array.isArray(row.skills) ? row.skills.join(', ') : row.skills,
+    current_ctc: row.current_salary,
+    current_location: row.location || row.city,
+    notice_period: row.notice_period,
+    expected_ctc: row.expected_salary,
+    open_to_relocate: row.open_to_relocate,
+    comments: row.notes,
+    status: row.status,
+    month: row.created_at ? new Date(row.created_at).toLocaleString('en-US', { month: 'long' }) : '',
+    linkedin: row.linkedin_url,
+    cv: row.cv_link || row.resume_url
   }
-  if (column === 'created_at' || column === 'updated_at') {
-    return column
-  }
-  return `candidate_associations.${column}`
+  return values[field]
 }
 
 function missingAssociationColumn(error) {
@@ -861,128 +468,6 @@ function parseJsonFilter(value) {
   } catch {
     return null
   }
-}
-
-function splitFilterColumn(column) {
-  if (column.startsWith('candidate_associations.')) {
-    return { column: column.slice('candidate_associations.'.length), foreignTable: 'candidate_associations' }
-  }
-  return { column, foreignTable: null }
-}
-
-function applyBlankFilter(query, column, notBlank = false) {
-  const { column: name, foreignTable } = splitFilterColumn(column)
-  if (foreignTable) {
-    return notBlank
-      ? query.not(column, 'is', null).neq(column, '')
-      : query.or(`${name}.is.null,${name}.eq.`, { foreignTable })
-  }
-  return notBlank
-    ? query.not(column, 'is', null).neq(column, '')
-    : query.or(`${column}.is.null,${column}.eq.`)
-}
-
-function applyAiCondition(query, condition) {
-  const info = AI_FILTER_FIELD_MAP[condition.field]
-  if (!info || !AI_FILTER_OPERATORS.includes(condition.operator)) return query
-
-  const column = adjustColumnForPrimaryCandidates(info.column)
-  const operator = condition.operator
-  let value = condition.value
-
-  if (operator === 'blank') return applyBlankFilter(query, column)
-  if (operator === 'notBlank') return applyBlankFilter(query, column, true)
-
-  if (info.type === 'number') {
-    value = (info.normalize || normalizeNumber)(value)
-    if (value === null) return query
-    if (operator === 'greaterThan') return query.gt(column, value)
-    if (operator === 'lessThan') return query.lt(column, value)
-    if (operator === 'greaterThanOrEqual') return query.gte(column, value)
-    if (operator === 'lessThanOrEqual') return query.lte(column, value)
-    return query.eq(column, value)
-  }
-
-  if (info.type === 'boolean') {
-    value = normalizeBoolean(value)
-    return value === null ? query : query.eq(column, value)
-  }
-
-  if (info.type === 'date' || info.type === 'month') {
-    value = cleanText(value)
-    if (!value) return query
-    if (info.type === 'month') {
-      const month = new Date(`${value} 1, 2026`).getMonth()
-      if (!Number.isFinite(month) || month < 0) return query
-      const year = new Date().getFullYear()
-      const start = new Date(Date.UTC(year, month, 1)).toISOString()
-      const end = new Date(Date.UTC(year, month + 1, 1)).toISOString()
-      return query.gte(column, start).lt(column, end)
-    }
-    if (operator === 'greaterThan') return query.gt(column, value)
-    if (operator === 'lessThan') return query.lt(column, value)
-    if (operator === 'greaterThanOrEqual') return query.gte(column, value)
-    if (operator === 'lessThanOrEqual') return query.lte(column, value)
-    return query.ilike(column, `${value}%`)
-  }
-
-  if (info.type === 'array') {
-    const text = cleanText(value)
-    return text ? query.contains(column, [text]) : query
-  }
-
-  value = info.normalize ? info.normalize(value) : cleanText(value)
-  if (!value) return query
-  if (operator === 'equals') return query.ilike(column, info.fuzzy ? `%${value}%` : value)
-  if (operator === 'startsWith') return query.ilike(column, `${value}%`)
-  if (operator === 'endsWith') return query.ilike(column, `%${value}`)
-  return query.ilike(column, `%${value}%`)
-}
-
-function applyAiQueryFilters(query, filters) {
-  if (!filters) {
-    return query
-  }
-
-  if (Array.isArray(filters.conditions)) {
-    return filters.conditions.reduce((nextQuery, condition) => applyAiCondition(nextQuery, condition), query)
-  }
-
-  if (filters.candidate_id) query = query.ilike('candidate_display_id', `%${cleanText(filters.candidate_id)}%`)
-  if (filters.name) query = query.ilike('full_name', `%${cleanText(filters.name)}%`)
-  if (filters.city) query = query.ilike('city', `%${cleanText(filters.city)}%`)
-  if (filters.state) query = query.ilike('state', `%${cleanText(filters.state)}%`)
-  if (filters.currentDesignation) query = query.ilike('current_designation', `%${cleanText(filters.currentDesignation)}%`)
-  if (filters.email) query = query.ilike('email', `%${cleanText(filters.email)}%`)
-  if (filters.mobile) query = query.ilike('mobile_number', `%${normalizeMobile(filters.mobile)}%`)
-  if (filters.consultant) query = query.ilike('candidate_associations.consultant_name', `%${cleanText(filters.consultant)}%`)
-  if (filters.client) query = query.ilike('candidate_associations.client_name', `%${cleanText(filters.client)}%`)
-  if (filters.job) query = query.ilike('candidate_associations.job_title', `%${cleanText(filters.job)}%`)
-  if (filters.status) query = query.ilike('candidate_associations.status', `%${cleanText(filters.status)}%`)
-  if (filters.education) query = query.ilike('education', `%${cleanText(filters.education)}%`)
-  if (Array.isArray(filters.skills) && filters.skills.length) {
-    query = query.contains('skills', filters.skills.map(cleanText).filter(Boolean))
-  }
-
-  if (filters.experience) {
-    if (filters.experience.min !== null && filters.experience.min !== undefined) {
-      query = query.gte('experience_years', Number(filters.experience.min))
-    }
-    if (filters.experience.max !== null && filters.experience.max !== undefined) {
-      query = query.lte('experience_years', Number(filters.experience.max))
-    }
-  }
-
-  if (filters.salary) {
-    if (filters.salary.min !== null && filters.salary.min !== undefined) {
-      query = query.gte('candidate_associations.current_salary', Number(filters.salary.min))
-    }
-    if (filters.salary.max !== null && filters.salary.max !== undefined) {
-      query = query.lte('candidate_associations.current_salary', Number(filters.salary.max))
-    }
-  }
-
-  return query
 }
 
 async function insertAssociation(payload) {
@@ -1138,9 +623,8 @@ async function listCandidates(req, res) {
       )
     }
 
-    query = applyAiQueryFilters(query, parseJsonFilter(req.query.ai_filters))
-
-    const { data, error, count } = await query.range(from, to)
+    const aiFilters = parseJsonFilter(req.query.ai_filters)
+    const { data, error, count } = await (aiFilters ? query.limit(10000) : query.range(from, to))
 
     if (error) {
       throw error
@@ -1152,7 +636,7 @@ async function listCandidates(req, res) {
       candidates.sort((a, b) => direction * (candidateDisplayIdNumber(a.candidate_display_id) - candidateDisplayIdNumber(b.candidate_display_id)))
     }
 
-    const flattened = []
+    let flattened = []
     for (const candidate of candidates) {
       const associations = candidate.candidate_associations || []
       if (associations.length === 0) {
@@ -1167,9 +651,23 @@ async function listCandidates(req, res) {
       }
     }
 
+    if (aiFilters) {
+      const clientIds = [...new Set(flattened.map(row => row.client_id).filter(Boolean))]
+      if (clientIds.length) {
+        const { data: clientRows, error: clientsError } = await supabase
+          .from('clients')
+          .select('id, client_display_id')
+          .in('id', clientIds)
+        if (clientsError) throw clientsError
+        const clientDisplayIds = new Map((clientRows || []).map(client => [client.id, client.client_display_id]))
+        flattened = flattened.map(row => ({ ...row, client_display_id: clientDisplayIds.get(row.client_id) || '' }))
+      }
+      flattened = applySharedFilters('candidates', flattened, aiFilters, candidateFilterValue)
+    }
+
     return res.json({
-      data: flattened,
-      total: count || 0,
+      data: aiFilters ? flattened.slice(from, to + 1) : flattened,
+      total: aiFilters ? flattened.length : count || 0,
       page,
       limit
     })
@@ -1559,49 +1057,18 @@ async function buildAiCandidateFilters(req, res) {
       return res.status(400).json({ error: 'prompt is required' })
     }
 
-    const allowedFields = AI_FILTER_FIELDS
-
-    let parsed
-    let usedFallback = false
-
-    try {
-      parsed = await callAiJson({
-        prompt: safeFilterPrompt(prompt, allowedFields.length ? allowedFields : AI_FILTER_FIELDS),
-        schema: AI_FILTER_SCHEMA,
-        temperature: 0,
-        schemaName: 'candidate_filters'
-      })
-    } catch (err) {
-      if (/invalid json/i.test(err.message)) {
-        return res.status(400).json({ error: 'AI returned invalid JSON. No filter was applied.' })
-      }
-      console.warn('buildAiCandidateFilters AI fallback:', err.message)
-      parsed = { conditions: explicitAiConditionsFromPrompt(prompt) }
-      usedFallback = true
-    }
-
-    const explicitConditions = explicitAiConditionsFromPrompt(prompt)
-    const parsedConditions = Array.isArray(parsed?.conditions) ? parsed.conditions : []
-    const filters = normalizeAiFilterOutput({
-      ...parsed,
-      conditions: [...parsedConditions, ...explicitConditions]
-    }) || normalizeAiFilterOutput(localAiFilterFallback(prompt))
+    const parsed = await callAiJson({
+      prompt: buildAiFilterPrompt('candidates', prompt),
+      schema: aiFilterSchema(),
+      schemaName: 'candidate_filter',
+      temperature: 0
+    })
+    const filters = validateAiFilters('candidates', parsed)
     if (!filters) {
-      return res.status(400).json({ error: 'AI filter output was invalid' })
+      return res.status(400).json({ error: 'Could not parse Candidates filter.' })
     }
 
-    const { count, error } = await applyAiQueryFilters(
-      supabase
-        .from('candidates')
-        .select('id, candidate_associations(*)', { count: 'exact', head: true }),
-      filters
-    )
-
-    if (error) {
-      throw error
-    }
-
-    return res.json({ filters, matchedCount: count || 0, fallback: usedFallback })
+    return res.json({ filters })
   } catch (err) {
     if (err.statusCode) {
       return res.status(err.statusCode).json({ error: err.message })
