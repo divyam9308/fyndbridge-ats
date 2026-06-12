@@ -245,15 +245,11 @@ function clientPayload(body) {
   }
 }
 
-async function findClientDuplicate(name, email) {
+async function findClientDuplicate(name) {
   const normalizedName = normalizeDuplicateText(name)
-  const normalizedEmail = normalizeDuplicateText(email)
   if (!normalizedName) return null
 
-  let query = supabase.from('clients').select('*')
-  if (normalizedEmail) query = query.ilike('email', normalizedEmail)
-  else query = query.or(`client_name.ilike.${clean(name)},name.ilike.${clean(name)}`)
-  const { data, error } = await query
+  const { data, error } = await supabase.from('clients').select('*')
   if (error) throw error
   return (data || []).find((client) => normalizeDuplicateText(client.client_name || client.name) === normalizedName) || null
 }
@@ -296,7 +292,7 @@ async function linkCandidatesToClient(client) {
 
 async function checkClientDuplicate(req, res) {
   try {
-    const existing = await findClientDuplicate(req.query.name, req.query.email)
+    const existing = await findClientDuplicate(req.query.name)
     return res.json({ duplicate: Boolean(existing), existing })
   } catch (err) {
     return logAndSendInternal(res, 'checkClientDuplicate', err)
@@ -376,10 +372,10 @@ async function createClient(req, res) {
     if (req.file) req.body.contract_document = await uploadContractPdf(req.file)
     const payload = clientPayload(req.body)
     const duplicateAction = req.body.duplicate_action
-    const duplicate = await findClientDuplicate(payload.client_name, payload.email)
+    const duplicate = await findClientDuplicate(payload.client_name)
 
-    if (duplicate && !payload.client_group_id && !['update_current', 'add_duplicate'].includes(duplicateAction)) {
-      return res.status(409).json({ error: 'A client with the same name and email already exists.', duplicate: true, existing: duplicate })
+    if (duplicate && !payload.client_group_id && duplicateAction !== 'update_current') {
+      return res.status(409).json({ error: 'A client with the same name already exists.', duplicate: true, existing: duplicate })
     }
 
     if (duplicate && duplicateAction === 'update_current') {

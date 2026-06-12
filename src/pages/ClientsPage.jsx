@@ -155,6 +155,8 @@ export default function ClientsPage() {
   const [selectedContacts, setSelectedContacts] = useState({})
   const [followUpClient, setFollowUpClient] = useState(null)
   const [followUpForm, setFollowUpForm] = useState({ follow_up_date: '', follow_up_comments: '' })
+  const [clientDuplicate, setClientDuplicate] = useState(null)
+  const [duplicateMoreOpen, setDuplicateMoreOpen] = useState(false)
   const [contractFile, setContractFile] = useState(null)
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [visibleColumns, setVisibleColumns] = useState(DEFAULT_CLIENT_COLUMN_KEYS)
@@ -171,6 +173,7 @@ export default function ClientsPage() {
   const statusDropdownRef = useRef(null)
   const clientModalRef = useRef(null)
   const followUpModalRef = useRef(null)
+  const duplicateModalRef = useRef(null)
 
   const focusPopup = useCallback((ref) => {
     window.requestAnimationFrame(() => {
@@ -182,11 +185,11 @@ export default function ClientsPage() {
   }, [])
 
   useEffect(() => {
-    if (!isOpen && !followUpClient) return
+    if (!isOpen && !followUpClient && !clientDuplicate) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = previous }
-  }, [isOpen, followUpClient])
+  }, [isOpen, followUpClient, clientDuplicate])
 
   const fetchClients = useCallback(async ({ showLoading = true } = {}) => {
     try {
@@ -419,6 +422,10 @@ export default function ClientsPage() {
     if (followUpClient) focusPopup(followUpModalRef)
   }, [followUpClient, focusPopup])
 
+  useEffect(() => {
+    if (clientDuplicate) focusPopup(duplicateModalRef)
+  }, [clientDuplicate, focusPopup])
+
   const openContactModal = (client) => {
     setForm({
       ...clientToForm(client),
@@ -439,6 +446,25 @@ export default function ClientsPage() {
     setIsOpen(true)
   }
 
+  const saveClientToApi = async (duplicateAction = '') => {
+    const body = new FormData()
+    Object.entries(form).forEach(([key, value]) => body.append(key, value ?? ''))
+    if (duplicateAction) body.append('duplicate_action', duplicateAction)
+    if (contractFile) body.append('contract_document_file', contractFile)
+    const res = await fetch(editingClient ? `/api/clients/${editingClient.id}` : '/api/clients', {
+      method: editingClient ? 'PATCH' : 'POST',
+      body
+    })
+    const data = await res.json().catch(() => ({}))
+    if (res.status === 409 && data.duplicate) {
+      const error = new Error(data.error || 'Duplicate client found.')
+      error.duplicate = data
+      throw error
+    }
+    if (!res.ok) throw new Error(data.error || 'Failed to save client.')
+    return data
+  }
+
   const handleSave = async () => {
     const nextErrors = validate()
     if (Object.keys(nextErrors).length) {
@@ -448,23 +474,63 @@ export default function ClientsPage() {
 
     setSaving(true)
     try {
-      const body = new FormData()
-      Object.entries(form).forEach(([key, value]) => body.append(key, value ?? ''))
-      if (contractFile) body.append('contract_document_file', contractFile)
-      const res = await fetch(editingClient ? `/api/clients/${editingClient.id}` : '/api/clients', {
-        method: editingClient ? 'PATCH' : 'POST',
-        body
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Failed to save client.')
+      await saveClientToApi()
       setIsOpen(false)
       setContractFile(null)
       setEditingClient(null)
       await fetchClients({ showLoading: false })
     } catch (err) {
+      if (err.duplicate) {
+        setClientDuplicate({ client: { ...form }, existing: err.duplicate.existing, message: err.message })
+        setDuplicateMoreOpen(false)
+        return
+      }
       setErrors({ client_name: err.message })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const resolveClientDuplicate = () => {
+    if (!clientDuplicate?.existing) return
+    setForm({
+      ...clientDuplicate.client,
+      client_group_id: clientDuplicate.existing.client_group_id || clientDuplicate.existing.id || '',
+      client_display_id: clientDuplicate.existing.client_display_id || ''
+    })
+    setEditingClient(clientDuplicate.existing)
+    setClientDuplicate(null)
+    setDuplicateMoreOpen(false)
+    setErrors({})
+    setIsOpen(true)
+  }
+
+  const duplicateClientValue = (row, key) => {
+    switch (key) {
+      case 'clientId': return row.client_display_id || row.clientId || '-'
+      case 'clientName': return row.client_name || row.name || '-'
+      case 'consultant': return row.consultant_name || row.consultant || '-'
+      case 'location': return row.location || row.city || '-'
+      case 'region': return row.region || row.state || '-'
+      case 'contactPerson': return row.contact_person || row.contact || '-'
+      case 'mobile': return row.mobile || row.phone || '-'
+      case 'email': return row.email || '-'
+      case 'designation': return row.designation || '-'
+      case 'linkedin': return row.linkedin || '-'
+      case 'sector': return row.sector || '-'
+      case 'connectedOnDate': return row.connected_on_date || '-'
+      case 'comments': return row.comments || row.notes || '-'
+      case 'followUpDate': return row.follow_up_date || '-'
+      case 'status': return row.status || '-'
+      case 'termsSigned': return row.terms_signed_type === 'Any Other' ? row.terms_signed_custom || '-' : row.terms_signed_type || '-'
+      case 'value': return row.terms_value || '-'
+      case 'contractSigned': return row.contract_signed === 'Yes' || row.contract_signed === true ? 'Yes' : 'No'
+      case 'contractDocument': return row.contract_document || '-'
+      case 'gstin': return row.gstin || '-'
+      case 'pan': return row.pan || '-'
+      case 'addressOnInvoice': return row.address_on_invoice || '-'
+      case 'actions': return '-'
+      default: return '-'
     }
   }
 
@@ -852,6 +918,81 @@ export default function ClientsPage() {
           </div>
         </div>
       ), document.body)}
+
+      {clientDuplicate && createPortal((
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setClientDuplicate(null)}>
+          <div className="modal-card" ref={duplicateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Duplicate Client">
+            <div className="modal-header">
+              <span className="modal-title">Duplicate Client</span>
+              <button className="modal-close" onClick={() => setClientDuplicate(null)} aria-label="Close"><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="form-error" style={{ marginBottom: 12 }}>
+                {clientDuplicate.message || 'A client with the same name and email already exists.'}
+              </div>
+              <div className="duplicate-compare-grid">
+                <div className="duplicate-compare-card">
+                  <div className="section-label">Existing Client</div>
+                  <div className="name-text">{clientDuplicate.existing?.client_name || clientDuplicate.existing?.name || '-'}</div>
+                  <div className="sub-text">{clientDuplicate.existing?.email || '-'}</div>
+                  <div className="sub-text">{clientDuplicate.existing?.mobile || clientDuplicate.existing?.phone || '-'}</div>
+                </div>
+                <div className="duplicate-compare-card">
+                  <div className="section-label">New Client</div>
+                  <div className="name-text">{clientDuplicate.client?.client_name || '-'}</div>
+                  <div className="sub-text">{clientDuplicate.client?.email || '-'}</div>
+                  <div className="sub-text">{clientDuplicate.client?.mobile || '-'}</div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setDuplicateMoreOpen(true)} disabled={saving}>View More</button>
+              <button className="btn-secondary" onClick={() => { setClientDuplicate(null); setDuplicateMoreOpen(false) }} disabled={saving}>Cancel</button>
+              <button className="btn-primary" onClick={resolveClientDuplicate} disabled={saving}>Update Client</button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {clientDuplicate && duplicateMoreOpen && createPortal((() => {
+        const existing = clientDuplicate.existing || {}
+        const incoming = clientDuplicate.client || {}
+        return (
+          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDuplicateMoreOpen(false)}>
+            <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label="Duplicate Client Details">
+              <div className="modal-header">
+                <span className="modal-title">Duplicate Client Details</span>
+                <button className="modal-close" onClick={() => setDuplicateMoreOpen(false)} aria-label="Close"><X size={16} /></button>
+              </div>
+              <div className="modal-body">
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Column</th>
+                        <th>Existing Client</th>
+                        <th>New Client</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {CLIENT_TABLE_COLUMNS.map(column => (
+                        <tr key={column.key}>
+                          <td>{column.label}</td>
+                          <td>{duplicateClientValue(existing, column.key)}</td>
+                          <td>{duplicateClientValue(incoming, column.key)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn-secondary" onClick={() => setDuplicateMoreOpen(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )
+      })(), document.body)}
 
       {followUpClient && createPortal((
         <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && setFollowUpClient(null)}>
