@@ -5,6 +5,7 @@ import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } f
 import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
+import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 
 /* ====== Static reference data ====== */
 const ALL_STATUSES = [
@@ -116,36 +117,6 @@ const AI_FILTER_FIELDS = [
   'skills',
   'education'
 ]
-
-const CANDIDATE_TABLE_COLUMNS = [
-  { key: 'candidateDisplayId', label: 'Candidate ID' },
-  { key: 'date', label: 'Date' },
-  { key: 'consultant', label: 'Consultant' },
-  { key: 'client', label: 'Client Name' },
-  { key: 'clientId', label: 'Client ID' },
-  { key: 'jobId', label: 'Job ID' },
-  { key: 'job', label: 'Role' },
-  { key: 'name', label: 'Candidate Name' },
-  { key: 'organisation', label: 'Organisation' },
-  { key: 'designation', label: 'Designation' },
-  { key: 'mobile', label: 'Mobile' },
-  { key: 'email', label: 'Email ID' },
-  { key: 'experience', label: 'Experience' },
-  { key: 'skills', label: 'Skills' },
-  { key: 'salary', label: 'Current CTC' },
-  { key: 'location', label: 'Current Location' },
-  { key: 'notice', label: 'Notice Period' },
-  { key: 'expectedSalary', label: 'Expected CTC' },
-  { key: 'relocate', label: 'Open to Relocate' },
-  { key: 'comments', label: 'Comments' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'status', label: 'Status' },
-  { key: 'cv', label: 'CV Link' },
-  { key: 'month', label: 'Month' },
-  { key: 'action', label: 'Action' },
-]
-
-const DEFAULT_CANDIDATE_COLUMN_KEYS = CANDIDATE_TABLE_COLUMNS.map(column => column.key)
 
 const SORT_OPTIONS = [
   { field: 'candidate_id', label: 'Candidate ID', toggle: true },
@@ -311,13 +282,12 @@ export default function CandidatesPage() {
         const userId = session?.user?.id || getCurrentUser()?.id || getCurrentUser()?.email || 'anonymous'
         const response = await fetch(`/api/user-preferences/candidate_columns?user_id=${encodeURIComponent(userId)}`)
         const payload = await response.json().catch(() => ({}))
-        const value = Array.isArray(payload.data?.value) ? payload.data.value.filter(key => DEFAULT_CANDIDATE_COLUMN_KEYS.includes(key)) : null
+        const value = mergeCandidateColumnPreference(payload.data?.value)
 
         if (value?.length) {
-          const nextValue = value.includes('jobId') ? value : [...value, 'jobId']
-          setVisibleColumns(nextValue)
-          setPendingColumns(nextValue)
-          setSavedColumns(nextValue)
+          setVisibleColumns(value)
+          setPendingColumns(value)
+          setSavedColumns(value)
         }
       } catch {
         setVisibleColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)

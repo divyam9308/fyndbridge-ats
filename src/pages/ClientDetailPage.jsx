@@ -5,6 +5,7 @@ import { ChevronDown, ChevronLeft, AlertCircle, Loader2, Briefcase, FileText, Pe
 import '../styles/Shared.css'
 import './ClientDetailPage.css'
 import { apiCandidateToUi } from '../utils/candidateUtils'
+import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { supabase } from '../services/supabaseClient'
 
 const STATUS_BADGE = {
@@ -37,34 +38,6 @@ const STATUS_COLUMNS = [
   ['rejectedByRecruiter', 'Rejected by Recruiter'],
 ]
 
-const CANDIDATE_TABLE_COLUMNS = [
-  { key: 'candidateDisplayId', label: 'Candidate ID' },
-  { key: 'date', label: 'Date' },
-  { key: 'consultant', label: 'Consultant' },
-  { key: 'client', label: 'Client Name' },
-  { key: 'clientId', label: 'Client ID' },
-  { key: 'jobId', label: 'Job ID' },
-  { key: 'job', label: 'Role' },
-  { key: 'name', label: 'Candidate Name' },
-  { key: 'organisation', label: 'Organisation' },
-  { key: 'designation', label: 'Designation' },
-  { key: 'mobile', label: 'Mobile' },
-  { key: 'email', label: 'Email ID' },
-  { key: 'experience', label: 'Experience' },
-  { key: 'salary', label: 'Current CTC' },
-  { key: 'location', label: 'Current Location' },
-  { key: 'notice', label: 'Notice Period' },
-  { key: 'expectedSalary', label: 'Expected CTC' },
-  { key: 'relocate', label: 'Open to Relocate' },
-  { key: 'comments', label: 'Comments' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'status', label: 'Status' },
-  { key: 'cv', label: 'CV Link' },
-  { key: 'month', label: 'Month' },
-  { key: 'action', label: 'Action' },
-]
-
-const DEFAULT_CANDIDATE_COLUMN_KEYS = CANDIDATE_TABLE_COLUMNS.map(column => column.key)
 const SORT_OPTIONS = [
   { field: 'candidate_id', label: 'Candidate ID', toggle: true },
   { field: 'candidate_name', label: 'Alphabetic Order', toggle: true },
@@ -244,12 +217,11 @@ export default function ClientDetailPage() {
         const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
         const response = await fetch(`/api/user-preferences/candidate_columns?user_id=${encodeURIComponent(userId)}`)
         const payload = await response.json().catch(() => ({}))
-        const value = Array.isArray(payload.data?.value) ? payload.data.value.filter(key => DEFAULT_CANDIDATE_COLUMN_KEYS.includes(key)) : null
+        const value = mergeCandidateColumnPreference(payload.data?.value)
         if (value?.length) {
-          const nextValue = value.includes('jobId') ? value : [...value, 'jobId']
-          setVisibleColumns(nextValue)
-          setPendingColumns(nextValue)
-          setSavedColumns(nextValue)
+          setVisibleColumns(value)
+          setPendingColumns(value)
+          setSavedColumns(value)
         }
       } catch {
         setVisibleColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)
@@ -444,6 +416,16 @@ export default function ClientDetailPage() {
     }
   }
 
+  const renderSkillsCell = (candidate) => {
+    const skills = Array.isArray(candidate.skills) ? candidate.skills.filter(Boolean) : []
+    if (!skills.length) return '-'
+    return (
+      <div className="table-chip-list">
+        {skills.map(skill => <span className="table-skill-chip" key={skill}>{skill}</span>)}
+      </div>
+    )
+  }
+
   const renderCandidateCell = ({ key }, c) => {
     switch (key) {
       case 'candidateDisplayId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.candidateDisplayId || '-'}</td>
@@ -460,6 +442,7 @@ export default function ClientDetailPage() {
       case 'mobile': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.mobile || '-'}</td>
       case 'email': return <td key={key}>{c.email || '-'}</td>
       case 'experience': return <td key={key}>{c.exp ? `${c.exp} yrs` : '-'}</td>
+      case 'skills': return <td key={key}>{renderSkillsCell(c)}</td>
       case 'salary': return <td key={key}>{fmt(c.salary)}</td>
       case 'location': return <td key={key}>{c.location || c.city || '-'}</td>
       case 'notice': return <td key={key}>{c.noticePeriod !== '' && c.noticePeriod !== null ? c.noticePeriod : '-'}</td>
