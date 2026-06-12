@@ -123,6 +123,7 @@ const CANDIDATE_TABLE_COLUMNS = [
   { key: 'consultant', label: 'Consultant' },
   { key: 'client', label: 'Client Name' },
   { key: 'clientId', label: 'Client ID' },
+  { key: 'jobId', label: 'Job ID' },
   { key: 'job', label: 'Role' },
   { key: 'name', label: 'Candidate Name' },
   { key: 'organisation', label: 'Organisation' },
@@ -157,7 +158,7 @@ const EMPTY_CAND = {
   name:'', email:'', mobile:'', designation:'', city:'', state:'',
   location:'', currentCompany:'', currentOrganisation:'', exp:'', salary:'', expectedSalary:'', skills:[], education:'',
   noticePeriod:'', openToRelocate:'',
-  client:'', clientId:'', newClientName:'', job:'', clientPhone:'', status:'',
+  client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', clientPhone:'', status:'',
   cvLink:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
 }
 
@@ -177,6 +178,8 @@ const apiCandidateToUi = (row) => ({
   candidateId: row.candidate_id,
   candidateDisplayId: row.candidate_display_id || '',
   clientId: row.client_id || '',
+  jobId: row.job_id || '',
+  jobDisplayId: row.job_display_id || '',
   name: row.full_name || '',
   email: row.email || '',
   mobile: row.mobile_number || '',
@@ -224,7 +227,7 @@ const getCanonicalClients = (clients) => {
 
 const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) => {
   const matchingClient = dbClients.find(c => c.id === f.clientId) || dbClients.find(c => c.name === f.client)
-  const matchingJob = dbJobs.find(j => j.title === f.job && (matchingClient ? j.client_id === matchingClient.id : true))
+  const matchingJob = dbJobs.find(j => j.id === f.jobId) || dbJobs.find(j => (j.title || j.role) === f.job && (matchingClient ? j.client_id === matchingClient.id : true))
   return {
     association_id: f.associationId || undefined,
     full_name: f.name,
@@ -244,7 +247,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     client_name: f.client,
     job_title: f.job,
     client_id: f.clientId || (matchingClient ? matchingClient.id : undefined),
-    job_id: matchingJob ? matchingJob.id : undefined,
+    job_id: f.jobId || (matchingJob ? matchingJob.id : undefined),
     status: f.status,
     current_salary: cleanNumberForApi(f.salary),
     expected_salary: cleanNumberForApi(f.expectedSalary),
@@ -311,9 +314,10 @@ export default function CandidatesPage() {
         const value = Array.isArray(payload.data?.value) ? payload.data.value.filter(key => DEFAULT_CANDIDATE_COLUMN_KEYS.includes(key)) : null
 
         if (value?.length) {
-          setVisibleColumns(value)
-          setPendingColumns(value)
-          setSavedColumns(value)
+          const nextValue = value.includes('jobId') ? value : [...value, 'jobId']
+          setVisibleColumns(nextValue)
+          setPendingColumns(nextValue)
+          setSavedColumns(nextValue)
         }
       } catch {
         setVisibleColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)
@@ -489,6 +493,11 @@ export default function CandidatesPage() {
   const clientDisplayIdForForm = (candidate) => {
     const client = canonicalClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
     return client?.client_display_id || ''
+  }
+  const jobName = (job) => job?.title || job?.role || ''
+  const jobDisplayIdForForm = (candidate) => {
+    const job = dbJobs.find(j => j.id === candidate.jobId) || dbJobs.find(j => jobName(j) === candidate.job && (!candidate.clientId || j.client_id === candidate.clientId))
+    return job?.job_display_id || candidate.jobDisplayId || ''
   }
 
   const ensureCandidateClient = async (candidate) => {
@@ -1021,6 +1030,10 @@ export default function CandidatesPage() {
     const matchingClients = canonicalClients
       .filter(client => normalizeText(clientName(client)).includes(normalizeText(visibleClientValue)))
       .slice(0, 8)
+    const matchingJobs = dbJobs
+      .filter(job => !f.clientId || job.client_id === f.clientId)
+      .filter(job => `${jobName(job)} ${job.job_display_id || ''}`.toLowerCase().includes(String(f.job || '').trim().toLowerCase()))
+      .slice(0, 8)
     const setClientValue = (value) => {
       const matchedClient = findClientByInput(value)
       setF(prev => ({
@@ -1028,7 +1041,18 @@ export default function CandidatesPage() {
         client: matchedClient ? clientName(matchedClient) : value,
         clientId: matchedClient?.id || '',
         clientPhone: matchedClient?.phone || CLIENT_PHONES[clientName(matchedClient)] || '',
-        job: ''
+        job: '',
+        jobId: '',
+        jobDisplayId: ''
+      }))
+    }
+    const setJobValue = (value) => {
+      const matchedJob = dbJobs.find(job => job.id === value) || dbJobs.find(job => jobName(job) === value && (!f.clientId || job.client_id === f.clientId))
+      setF(prev => ({
+        ...prev,
+        job: matchedJob ? jobName(matchedJob) : value,
+        jobId: matchedJob?.id || '',
+        jobDisplayId: matchedJob?.job_display_id || ''
       }))
     }
     const handleLocalChange = onChange || ((e) => {
@@ -1041,7 +1065,9 @@ export default function CandidatesPage() {
           client: matchedClient ? clientName(matchedClient) : value,
           clientId: matchedClient?.id || '',
           clientPhone: matchedClient?.phone || CLIENT_PHONES[clientName(matchedClient)] || '',
-          job: ''
+          job: '',
+          jobId: '',
+          jobDisplayId: ''
         }))
       } else {
         setF(prev => ({ ...prev, [name]: nextValue }))
@@ -1197,13 +1223,30 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
+          <label className="form-label">Job ID</label>
+          <input value={jobDisplayIdForForm(f)} placeholder="Auto-filled after selecting mandate" className="form-control" readOnly />
+        </div>
+
+        <div className="form-group">
           <label className="form-label">Mandate / Role</label>
-          <select name="job" value={f.job} onChange={handleLocalChange} className="form-control">
-            <option value="">Select job...</option>
-            {dbJobs
-              .filter(j => !f.clientId || f.clientId === j.client_id)
-              .map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
-          </select>
+          <div className="client-search-wrap">
+            <input
+              name="job"
+              value={f.job || ''}
+              onChange={(event) => setJobValue(event.target.value)}
+              className="form-control"
+              placeholder={dbJobs.length ? 'Search mandate...' : 'Loading mandates...'}
+              autoComplete="off"
+            />
+            <div className="client-suggestions">
+              {matchingJobs.map(job => (
+                <button type="button" key={job.id} onMouseDown={(event) => { event.preventDefault(); setJobValue(job.id) }}>
+                  <span>{jobName(job)}</span>
+                  <small>{job.job_display_id || ''}</small>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="form-group">
@@ -1237,7 +1280,7 @@ export default function CandidatesPage() {
     )
   }
 
-  const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
+  const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'jobId')
   const toggleExpandedCell = (id, key, event) => {
     event.stopPropagation()
     const cellKey = `${id}-${key}`
@@ -1293,6 +1336,8 @@ export default function CandidatesPage() {
         return <td key={key}>{c.client || '-'}</td>
       case 'clientId':
         return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{getReadableClientId(c, dbClients)}</td>
+      case 'jobId':
+        return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{c.jobDisplayId || jobDisplayIdForForm(c) || '-'}</td>
       case 'job':
         return <td key={key} className="cell-ellipsis">{c.job || '-'}</td>
       case 'name':

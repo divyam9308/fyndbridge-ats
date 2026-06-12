@@ -369,6 +369,8 @@ function flattenAssociation(row) {
     resume_url: candidate.resume_url || null,
     client_id: row.client_id || candidate.client_id || null,
     client_name: row.client_name || null,
+    job_id: row.job_id || null,
+    job_display_id: row.job_display_id || null,
     job_title: row.job_title || null,
     consultant_name: row.consultant_name || null,
     status: row.status || '-',
@@ -405,6 +407,8 @@ function flattenCandidateOnly(candidate) {
     resume_url: candidate.resume_url || null,
     client_id: candidate.client_id || null,
     client_name: null,
+    job_id: null,
+    job_display_id: null,
     job_title: null,
     consultant_name: null,
     status: '-',
@@ -649,6 +653,17 @@ async function listCandidates(req, res) {
           }))
         }
       }
+    }
+
+    const jobIds = [...new Set(flattened.map(row => row.job_id).filter(Boolean))]
+    if (jobIds.length) {
+      const { data: jobRows, error: jobsError } = await supabase
+        .from('jobs')
+        .select('id, job_display_id')
+        .in('id', jobIds)
+      if (jobsError) throw jobsError
+      const jobDisplayIds = new Map((jobRows || []).map(job => [job.id, job.job_display_id]))
+      flattened = flattened.map(row => ({ ...row, job_display_id: row.job_display_id || jobDisplayIds.get(row.job_id) || '' }))
     }
 
     if (aiFilters) {

@@ -223,9 +223,10 @@ export default function ClientsPage() {
         const value = Array.isArray(payload.data?.value) ? payload.data.value.filter(key => DEFAULT_CLIENT_COLUMN_KEYS.includes(key)) : null
 
         if (value?.length) {
-          setVisibleColumns(value)
-          setPendingColumns(value)
-          setSavedColumns(value)
+          const nextValue = value.includes('designation') ? value : [...value, 'designation']
+          setVisibleColumns(nextValue)
+          setPendingColumns(nextValue)
+          setSavedColumns(nextValue)
         }
       } catch {
         setVisibleColumns(DEFAULT_CLIENT_COLUMN_KEYS)
@@ -301,7 +302,7 @@ export default function ClientsPage() {
     })
   }, [filteredClients, selectedContacts])
 
-  const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
+  const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'designation')
   const canonicalClients = useMemo(() => getCanonicalClients(clients), [clients])
   const matchingClients = useMemo(() => (
     canonicalClients

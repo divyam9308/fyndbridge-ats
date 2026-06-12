@@ -43,6 +43,7 @@ const CANDIDATE_TABLE_COLUMNS = [
   { key: 'consultant', label: 'Consultant' },
   { key: 'client', label: 'Client Name' },
   { key: 'clientId', label: 'Client ID' },
+  { key: 'jobId', label: 'Job ID' },
   { key: 'job', label: 'Role' },
   { key: 'name', label: 'Candidate Name' },
   { key: 'organisation', label: 'Organisation' },
@@ -99,7 +100,7 @@ const getCurrentUser = () => {
   }
 }
 const deriveJobStatus = (jobTitle, candidateRows, jobRows) => {
-  const relatedJob = jobRows.find(job => normalizeText(job.title) === normalizeText(jobTitle))
+  const relatedJob = jobRows.find(job => normalizeText(job.title || job.role) === normalizeText(jobTitle))
   if (relatedJob?.status === 'On Hold') return 'On Hold'
   const rows = candidateRows.filter(candidate => normalizeText(getJobText(candidate)) === normalizeText(jobTitle))
   if (rows.some(candidate => candidate.status === 'Hired')) return 'Closed'
@@ -245,9 +246,10 @@ export default function ClientDetailPage() {
         const payload = await response.json().catch(() => ({}))
         const value = Array.isArray(payload.data?.value) ? payload.data.value.filter(key => DEFAULT_CANDIDATE_COLUMN_KEYS.includes(key)) : null
         if (value?.length) {
-          setVisibleColumns(value)
-          setPendingColumns(value)
-          setSavedColumns(value)
+          const nextValue = value.includes('jobId') ? value : [...value, 'jobId']
+          setVisibleColumns(nextValue)
+          setPendingColumns(nextValue)
+          setSavedColumns(nextValue)
         }
       } catch {
         setVisibleColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)
@@ -288,7 +290,7 @@ export default function ClientDetailPage() {
     })
 
     return [...groups.values()].map((group) => {
-      const relatedJob = clientJobs.find(job => normalizeText(job.title) === normalizeText(group.title))
+      const relatedJob = clientJobs.find(job => normalizeText(job.title || job.role) === normalizeText(group.title))
       const stats = {
         total: group.candidates.length,
         interested: group.candidates.filter(c => c.status === 'Interested').length,
@@ -344,7 +346,7 @@ export default function ClientDetailPage() {
   }, [selectedCandidates, sortDirection, sortField])
 
   const pagedCandidates = sortedCandidates.slice((page - 1) * pageSize, page * pageSize)
-  const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
+  const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'jobId')
 
   const openGroup = (jobTitle, status = '') => {
     setSelectedGroup({ jobTitle, status })
@@ -418,7 +420,7 @@ export default function ClientDetailPage() {
       const nextCandidates = candidates.map(candidate => candidate.associationId === updated.associationId ? updated : candidate)
       const updates = affectedTitles
         .map(title => {
-          const job = clientJobs.find(item => normalizeText(item.title) === normalizeText(title))
+          const job = clientJobs.find(item => normalizeText(item.title || item.role) === normalizeText(title))
           if (!job || job.status === 'On Hold') return null
           const status = deriveJobStatus(title, nextCandidates, clientJobs)
           return status !== job.status ? { id: job.id, status } : null
@@ -449,6 +451,7 @@ export default function ClientDetailPage() {
       case 'consultant': return <td key={key}>{c.consultant || '-'}</td>
       case 'client': return <td key={key}>{c.client || '-'}</td>
       case 'clientId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{client?.client_display_id || '-'}</td>
+      case 'jobId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.jobDisplayId || '-'}</td>
       case 'job': return <td key={key} className="cell-ellipsis">{getJobText(c)}</td>
       case 'name':
         return <td key={key}><div className="name-cell"><div className="name-avatar">{initials(c.name)}</div><div><div className="name-text">{c.name}</div><div className="sub-text">{c.location || [c.city, c.state].filter(Boolean).join(', ')}</div></div></div></td>
@@ -511,6 +514,7 @@ export default function ClientDetailPage() {
           <table className="data-table" aria-label="Client Mandate Groups">
             <thead>
               <tr>
+                <th>Job ID</th>
                 <th>Mandate / Role</th>
                 <th>Status</th>
                 <th className="align-center">Candidates Assigned</th>
@@ -520,6 +524,7 @@ export default function ClientDetailPage() {
             <tbody>
               {jobGroups.map(group => (
                 <tr key={group.title}>
+                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{group.relatedJob?.job_display_id || '-'}</td>
                   <td><button className="table-link-button" type="button" onClick={() => openGroup(group.title)}>{group.title}</button></td>
                   <td><span className={`badge ${STATUS_BADGE[group.status] || ''}`}>{group.status}</span></td>
                   <td className="align-center"><button className="count-badge-link" type="button" onClick={() => openGroup(group.title)}>{group.stats.total}</button></td>
