@@ -46,7 +46,7 @@ export default function ClientJobCandidatesPage() {
       try {
         setLoading(true)
 
-        // 1. Fetch Client and Job Info
+        // 1. Fetch Client and Mandate Info
         const [clientRes, jobRes] = await Promise.all([
           fetch(`/api/clients/${clientId}`),
           fetch(`/api/jobs/${jobId}`)
@@ -57,8 +57,8 @@ export default function ClientJobCandidatesPage() {
           throw new Error('Failed to fetch client.')
         }
         if (!jobRes.ok) {
-          if (jobRes.status === 404) throw new Error('Job not found.')
-          throw new Error('Failed to fetch job.')
+          if (jobRes.status === 404) throw new Error('Mandate not found.')
+          throw new Error('Failed to fetch mandate.')
         }
 
         const clientData = await clientRes.json()
@@ -164,7 +164,7 @@ export default function ClientJobCandidatesPage() {
           <div className="mandate-sub-label">Client Name</div>
           <h2 className="mandate-client-title">{client.name}</h2>
           <div className="mandate-job-block">
-            <div className="mandate-sub-label">Job Mandate / Position</div>
+            <div className="mandate-sub-label">Mandate / Role</div>
             <h3 className="mandate-job-title">{job.title}</h3>
           </div>
         </div>

@@ -118,7 +118,7 @@ const CANDIDATE_TABLE_COLUMNS = [
   { key: 'consultant', label: 'Consultant' },
   { key: 'client', label: 'Client Name' },
   { key: 'clientId', label: 'Client ID' },
-  { key: 'job', label: 'Role (Job)' },
+  { key: 'job', label: 'Role' },
   { key: 'name', label: 'Candidate Name' },
   { key: 'organisation', label: 'Organisation' },
   { key: 'designation', label: 'Designation' },
@@ -1183,7 +1183,7 @@ export default function CandidatesPage() {
             />
         </div>
 
-        <div className="form-section-title">Job Assignment</div>
+        <div className="form-section-title">Mandate Assignment</div>
 
         <div className="form-group">
           <label className="form-label">Client</label>
@@ -1224,7 +1224,7 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Job</label>
+          <label className="form-label">Mandate / Role</label>
           <select name="job" value={f.job} onChange={handleLocalChange} className="form-control">
             <option value="">Select job...</option>
             {dbJobs
@@ -1485,10 +1485,10 @@ export default function CandidatesPage() {
 
       {/* Filter Bar */}
       <div className="filter-bar candidates-filter-bar">
-        <span className="filter-label">Job</span>
+        <span className="filter-label">Mandate</span>
         <select className="filter-select" value={filterJob}
           onChange={e => { setFilterJob(e.target.value); setPage(1) }} id="filter-candidate-job">
-          <option value="All">All Jobs</option>
+          <option value="All">All Mandates</option>
           {dbJobs.map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
         </select>
 
@@ -1646,7 +1646,7 @@ export default function CandidatesPage() {
             </div>
 
             <div className="candidate-detail-section">
-              <div className="candidate-detail-section-title">Client / Job Associations</div>
+              <div className="candidate-detail-section-title">Client / Mandate Associations</div>
               {(candidateAssociations.length ? candidateAssociations : [selectedCandidate]).map(item => (
                 <div className="candidate-association-card" key={item.associationId || item.id}>
                   <div><strong>{item.client || '-'}</strong></div>

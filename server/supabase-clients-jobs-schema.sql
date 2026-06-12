@@ -16,10 +16,17 @@ create table if not exists public.clients (
 
 create table if not exists public.jobs (
   id uuid primary key default gen_random_uuid(),
+  job_display_id text unique,
   client_id uuid not null references public.clients(id) on delete cascade,
   title text not null,
   city text,
   state text,
+  consultants text[] not null default '{}',
+  team_lead text,
+  budget text,
+  priority text,
+  vertical text,
+  allocation_date date,
   status text not null default 'Open',
   salary_min integer,
   salary_max integer,
@@ -39,7 +46,16 @@ create table if not exists public.jobs (
 create index if not exists clients_name_idx on public.clients(name);
 create index if not exists jobs_client_id_idx on public.jobs(client_id);
 create index if not exists jobs_title_idx on public.jobs(title);
-create index if not exists jobs_status_idx on public.jobs(status);
+create index if not exists jobs_display_id_idx on public.jobs(job_display_id);
+
+alter table public.jobs
+  add column if not exists job_display_id text,
+  add column if not exists consultants text[] not null default '{}',
+  add column if not exists team_lead text,
+  add column if not exists budget text,
+  add column if not exists priority text,
+  add column if not exists vertical text,
+  add column if not exists allocation_date date;
 
 -- Modify candidate_associations to add optional client_id and job_id foreign keys for mapping
 alter table public.candidate_associations

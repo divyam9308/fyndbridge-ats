@@ -265,6 +265,21 @@
   background: var(--gray-50);
   color: var(--gold);
 }
+.consultant-picker-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.consultant-picker-list .form-control {
+  width: 190px;
+}
+.mandate-consultants-control {
+  width: auto;
+}
+.mandate-consultants-dropdown {
+  width: 180px;
+}
 .candidate-columns-control {
   position: relative;
   display: flex;

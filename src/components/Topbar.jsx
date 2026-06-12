@@ -4,7 +4,7 @@ import './Topbar.css'
 
 const pageTitles = {
   '/dashboard':            { title: 'Dashboard',   crumb: 'Home / Dashboard' },
-  '/dashboard/jobs':       { title: 'Jobs',        crumb: 'Home / Jobs' },
+  '/dashboard/jobs':       { title: 'Mandate Tracker', crumb: 'Home / Mandate Tracker' },
   '/dashboard/clients':    { title: 'Clients',     crumb: 'Home / Clients' },
   '/dashboard/candidates': { title: 'Candidates',  crumb: 'Home / Candidates' },
   '/dashboard/settings':   { title: 'Settings',    crumb: 'Home / Settings' },
@@ -17,7 +17,7 @@ export default function Topbar() {
   const getPageInfo = (path) => {
     if (pageTitles[path]) return pageTitles[path]
     if (path.startsWith('/dashboard/clients/') && path.endsWith('/candidates')) {
-      return { title: 'Client Job Candidates', crumb: 'Home / Clients / Client Details / Candidates' }
+      return { title: 'Client Mandate Candidates', crumb: 'Home / Clients / Client Details / Candidates' }
     }
     if (path.startsWith('/dashboard/clients/')) {
       return { title: 'Client Details', crumb: 'Home / Clients / Client Details' }

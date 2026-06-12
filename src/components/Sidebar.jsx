@@ -8,7 +8,7 @@ import './Sidebar.css'
 
 const navItems = [
   { to: '/dashboard',            label: 'Dashboard',  Icon: LayoutDashboard, end: true },
-  { to: '/dashboard/jobs',       label: 'Jobs',       Icon: Briefcase },
+  { to: '/dashboard/jobs',       label: 'Mandate Tracker', Icon: Briefcase },
   { to: '/dashboard/clients',    label: 'Clients',    Icon: Building2 },
   { to: '/dashboard/candidates', label: 'Candidates', Icon: Users },
 ]
@@ -37,7 +37,7 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `sidebar-nav-link${isActive ? ' active' : ''}`
             }
-            id={`nav-${label.toLowerCase()}`}
+            id={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}
           >
             <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
             <span className="sidebar-nav-label">{label}</span>

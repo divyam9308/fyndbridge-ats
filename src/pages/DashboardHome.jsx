@@ -12,7 +12,7 @@ const stats = [
     trend: '↑ 12 this week',
   },
   {
-    label: 'Open Jobs',
+    label: 'Open Mandates',
     value: '17',
     Icon: Briefcase,
     accent: '#F5A623',
@@ -98,7 +98,7 @@ export default function DashboardHome() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Job</th>
+                <th>Mandate</th>
                 <th>Status</th>
                 <th>Added</th>
               </tr>
@@ -121,13 +121,13 @@ export default function DashboardHome() {
           </table>
         </div>
 
-        {/* Job Pipeline */}
+        {/* Mandate Pipeline */}
         <div className="panel">
           <div className="panel-header">
-            <span className="panel-title">Job Pipeline</span>
+            <span className="panel-title">Mandate Pipeline</span>
             <span className="panel-action">View all →</span>
           </div>
-          <ul className="pipeline-list" aria-label="Job pipeline">
+          <ul className="pipeline-list" aria-label="Mandate pipeline">
             {pipeline.map((job) => (
               <li className="pipeline-item" key={job.title}>
                 <div className="pipeline-info">

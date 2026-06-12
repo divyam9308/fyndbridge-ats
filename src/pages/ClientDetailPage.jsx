@@ -43,7 +43,7 @@ const CANDIDATE_TABLE_COLUMNS = [
   { key: 'consultant', label: 'Consultant' },
   { key: 'client', label: 'Client Name' },
   { key: 'clientId', label: 'Client ID' },
-  { key: 'job', label: 'Role (Job)' },
+  { key: 'job', label: 'Role' },
   { key: 'name', label: 'Candidate Name' },
   { key: 'organisation', label: 'Organisation' },
   { key: 'designation', label: 'Designation' },
@@ -76,7 +76,7 @@ const ACTIVE_CANDIDATE_STATUSES = new Set(['Interested', 'Interview', 'Client Su
 
 const pageSize = 50
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
-const getJobText = (candidate) => candidate.job || candidate.job_title || candidate.jobTitle || candidate.role || candidate.position || 'Unassigned Job'
+const getJobText = (candidate) => candidate.job || candidate.job_title || candidate.jobTitle || candidate.role || candidate.position || 'Unassigned Mandate'
 const displayIdNumber = (value, prefix) => Number(String(value || '').replace(new RegExp(`^${prefix}`, 'i'), '')) || Number.MAX_SAFE_INTEGER
 const compareText = (a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' })
 const fmt = (n) => n ? `Rs. ${Number(n).toLocaleString('en-IN')}` : '-'
@@ -281,8 +281,8 @@ export default function ClientDetailPage() {
   const jobGroups = useMemo(() => {
     const groups = new Map()
     candidates.forEach((candidate) => {
-      const title = getJobText(candidate) || 'Unassigned Job'
-      const key = normalizeText(title) || 'unassigned job'
+      const title = getJobText(candidate) || 'Unassigned Mandate'
+      const key = normalizeText(title) || 'unassigned mandate'
       if (!groups.has(key)) groups.set(key, { title, candidates: [] })
       groups.get(key).candidates.push(candidate)
     })
@@ -495,23 +495,23 @@ export default function ClientDetailPage() {
           <h2 className="client-title-text">{client.name}</h2>
           <div className="client-metrics-grid">
             <div><span>Client Status</span><strong>{calculatedClientStatus}</strong></div>
-            <div><span>Active Jobs</span><strong>{jobCounts.active}</strong></div>
-            <div><span>Open Jobs</span><strong>{jobCounts.open}</strong></div>
-            <div><span>On Hold Jobs</span><strong>{jobCounts.onHold}</strong></div>
-            <div><span>Closed Jobs</span><strong>{jobCounts.closed}</strong></div>
+            <div><span>Active Mandates</span><strong>{jobCounts.active}</strong></div>
+            <div><span>Open Mandates</span><strong>{jobCounts.open}</strong></div>
+            <div><span>On Hold Mandates</span><strong>{jobCounts.onHold}</strong></div>
+            <div><span>Closed Mandates</span><strong>{jobCounts.closed}</strong></div>
           </div>
         </div>
       </div>
 
-      <div className="section-title"><Briefcase size={18} /><h3>Job Groups ({jobGroups.length})</h3></div>
+      <div className="section-title"><Briefcase size={18} /><h3>Mandate Groups ({jobGroups.length})</h3></div>
       <div className="table-card">
         {jobGroups.length === 0 ? (
           <div className="empty-state"><div className="empty-state-title">No candidate job groups</div><div className="empty-state-desc">No candidates are linked to this client yet.</div></div>
         ) : (
-          <table className="data-table" aria-label="Client Job Groups">
+          <table className="data-table" aria-label="Client Mandate Groups">
             <thead>
               <tr>
-                <th>Job Title</th>
+                <th>Mandate / Role</th>
                 <th>Status</th>
                 <th className="align-center">Candidates Assigned</th>
                 {STATUS_COLUMNS.map(([, label]) => <th className="align-center" key={label}>{label}</th>)}
@@ -564,7 +564,7 @@ export default function ClientDetailPage() {
           </div>
           <div className="table-card">
             <div className="table-wrapper">
-              <table className="data-table candidates-master-table" aria-label="Client Job Candidates">
+              <table className="data-table candidates-master-table" aria-label="Client Mandate Candidates">
                 <thead><tr>{activeColumns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead>
                 <tbody>{pagedCandidates.map((candidate, index) => <tr key={candidate.associationId || candidate.id}>{activeColumns.map(column => renderCandidateCell(column, candidate, index))}</tr>)}</tbody>
               </table>
@@ -600,7 +600,7 @@ export default function ClientDetailPage() {
                   ['notice_period', 'Notice Period', 'number'],
                   ['current_salary', 'Current Salary', 'number'],
                   ['expected_salary', 'Expected Salary', 'number'],
-                  ['job_title', 'Job', 'text'],
+                  ['job_title', 'Mandate / Role', 'text'],
                   ['linkedin_url', 'LinkedIn URL', 'text'],
                   ['cv_link', 'Resume / CV', 'text'],
                 ].map(([field, label, type]) => (

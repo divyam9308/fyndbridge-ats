@@ -1,9 +1,16 @@
 create table if not exists public.jobs (
   id uuid primary key default gen_random_uuid(),
+  job_display_id text unique,
   client_id uuid not null references public.clients(id) on delete cascade,
   title text not null,
   city text,
   state text,
+  consultants text[] not null default '{}',
+  team_lead text,
+  budget text,
+  priority text,
+  vertical text,
+  allocation_date date,
   status text not null default 'Open',
   salary_min integer,
   salary_max integer,
@@ -25,8 +32,27 @@ create index if not exists jobs_client_id_idx
 create index if not exists jobs_title_idx
   on public.jobs(title);
 
-create index if not exists jobs_status_idx
-  on public.jobs(status);
+create index if not exists jobs_display_id_idx
+  on public.jobs(job_display_id);
+
+create index if not exists jobs_priority_idx
+  on public.jobs(priority);
+
+create index if not exists jobs_allocation_date_idx
+  on public.jobs(allocation_date);
+
+alter table public.jobs
+  add column if not exists job_display_id text,
+  add column if not exists consultants text[] not null default '{}',
+  add column if not exists team_lead text,
+  add column if not exists budget text,
+  add column if not exists priority text,
+  add column if not exists vertical text,
+  add column if not exists allocation_date date;
+
+update public.jobs
+set allocation_date = coalesce(allocation_date, created_at::date)
+where allocation_date is null;
 
 alter table public.candidate_associations
   add column if not exists client_id uuid references public.clients(id) on delete set null,
