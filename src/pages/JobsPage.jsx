@@ -31,6 +31,15 @@ const todayLocal = () => {
   return date.toISOString().slice(0, 10)
 }
 const dash = (value) => value || '-'
+const clientName = (client) => client?.name || client?.client_name || ''
+const canonicalClients = (clients) => {
+  const map = new Map()
+  clients.forEach(client => {
+    const key = String(client?.client_display_id || clientName(client)).trim().toLowerCase()
+    if (key && !map.has(key)) map.set(key, client)
+  })
+  return [...map.values()]
+}
 
 export default function JobsPage() {
   const location = useLocation()
@@ -160,6 +169,7 @@ export default function JobsPage() {
   }
 
   const sortedUsers = useMemo(() => ['-', ...userOptions.filter(Boolean)], [userOptions])
+  const clientOptions = useMemo(() => canonicalClients(dbClients), [dbClients])
   const selectedConsultants = form.consultants || []
   const availableConsultants = userOptions.filter(user => !selectedConsultants.includes(user))
 
@@ -392,7 +402,11 @@ export default function JobsPage() {
                   <label className="form-label">Client Name <span className="req">*</span></label>
                   <select className={`form-control${errors.client_id ? ' is-error' : ''}`} value={form.client_id} onChange={e => setForm(current => ({ ...current, client_id: e.target.value }))} disabled={saving}>
                     <option value="">Select client...</option>
-                    {dbClients.map(client => <option key={client.id} value={client.id}>{client.name || client.client_name}</option>)}
+                    {clientOptions.map(client => (
+                      <option key={client.id} value={client.id}>
+                        {clientName(client)}{client.client_display_id ? ` (${client.client_display_id})` : ''}
+                      </option>
+                    ))}
                   </select>
                   {errors.client_id && <span className="form-error">{errors.client_id}</span>}
                 </div>

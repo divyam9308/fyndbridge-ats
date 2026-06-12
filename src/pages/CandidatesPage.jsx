@@ -206,6 +206,17 @@ const cleanNumberForApi = (value) => {
   return value
 }
 
+const getCanonicalClients = (clients) => {
+  const map = new Map()
+  clients.forEach(client => {
+    const name = client?.name || client?.client_name || ''
+    const key = (client?.client_display_id || name).toString().trim().toLowerCase()
+    if (!key || map.has(key)) return
+    map.set(key, client)
+  })
+  return [...map.values()]
+}
+
 const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) => {
   const matchingClient = dbClients.find(c => c.id === f.clientId) || dbClients.find(c => c.name === f.client)
   const matchingJob = dbJobs.find(j => j.title === f.job && (matchingClient ? j.client_id === matchingClient.id : true))
@@ -467,10 +478,11 @@ export default function CandidatesPage() {
 
   const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
   const clientName = (client) => client?.name || client?.client_name || ''
-  const findClientByName = (name) => dbClients.find(c => normalizeText(clientName(c)) === normalizeText(name))
-  const findClientByInput = (value) => dbClients.find(c => c.id === value) || findClientByName(value)
+  const canonicalClients = getCanonicalClients(dbClients)
+  const findClientByName = (name) => canonicalClients.find(c => normalizeText(clientName(c)) === normalizeText(name))
+  const findClientByInput = (value) => canonicalClients.find(c => c.id === value) || findClientByName(value)
   const clientDisplayIdForForm = (candidate) => {
-    const client = dbClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
+    const client = canonicalClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
     return client?.client_display_id || ''
   }
 
@@ -677,7 +689,7 @@ export default function CandidatesPage() {
     return payload.candidate_display_id || ''
   }, [])
 
-  const openAddModal = useCallback(async () => {
+  const openAddModal = async () => {
     setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName, candidateDisplayId: 'Loading...' })
     setEditing(false)
     setErrors({})
@@ -689,7 +701,7 @@ export default function CandidatesPage() {
     } catch {
       setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current)
     }
-  }, [activeConsultantName, fetchNextCandidateDisplayId])
+  }
 
   useEffect(() => {
     const action = location.state?.action
@@ -697,10 +709,19 @@ export default function CandidatesPage() {
     const timer = window.setTimeout(() => {
       navigate(location.pathname, { replace: true, state: {} })
       if (action === 'upload-resumes') fileInputRef.current?.click()
-      if (action === 'add-candidate') openAddModal()
+      if (action === 'add-candidate') {
+        setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName, candidateDisplayId: 'Loading...' })
+        setEditing(false)
+        setErrors({})
+        setSkillInput('')
+        setAddOpen(true)
+        fetchNextCandidateDisplayId()
+          .then(candidateDisplayId => setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId } : current))
+          .catch(() => setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current))
+      }
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [location.pathname, location.state, navigate, openAddModal])
+  }, [activeConsultantName, fetchNextCandidateDisplayId, location.pathname, location.state, navigate])
 
   const candidateToForm = (candidate) => {
     const matchedClient = dbClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
@@ -1025,7 +1046,7 @@ export default function CandidatesPage() {
   const CandidateFormBody = ({ f, setF, errs, sInput, onSkillInputChange, onSkillKey, onAddSkill, rmSkill, lowConf = [], onChange }) => {
     const low = (field) => lowConf.includes(field) ? ' low-confidence' : ''
     const visibleClientValue = f.client === '__new_client__' ? '' : f.client
-    const matchingClients = dbClients
+    const matchingClients = canonicalClients
       .filter(client => normalizeText(clientName(client)).includes(normalizeText(visibleClientValue)))
       .slice(0, 8)
     const setClientValue = (value) => {
@@ -1198,7 +1219,7 @@ export default function CandidatesPage() {
             />
             <div className="client-suggestions">
               {matchingClients.map(client => (
-                <button type="button" key={client.id} onMouseDown={(event) => { event.preventDefault(); setClientValue(clientName(client)) }}>
+                <button type="button" key={client.id} onMouseDown={(event) => { event.preventDefault(); setClientValue(client.id) }}>
                   <span>{clientName(client)}</span>
                   <small>{client.client_display_id || ''}</small>
                 </button>

@@ -47,6 +47,7 @@ const EMPTY_FORM = {
 const dash = (value) => value || '-'
 const convertedDash = (client, value) => client.status === 'Converted' ? dash(value) : '-'
 const termsLabel = (client) => client.terms_signed_type === 'Any Other' ? client.terms_signed_custom : client.terms_signed_type
+const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
 const todayLocal = () => {
   const date = new Date()
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
@@ -93,6 +94,16 @@ const getCurrentUser = () => {
 }
 
 const getNumericId = (id) => Number(String(id || '').replace(/\D/g, '')) || 0
+
+const getCanonicalClients = (clients) => {
+  const map = new Map()
+  clients.forEach(client => {
+    const name = client.client_name || client.name || ''
+    const key = String(client.client_group_id || client.client_display_id || name).trim().toLowerCase()
+    if (key && !map.has(key)) map.set(key, client)
+  })
+  return [...map.values()]
+}
 
 const getConsultantNameFromUser = (user) => {
   const email = String(user?.email || user?.id || '').trim()
@@ -291,6 +302,39 @@ export default function ClientsPage() {
   }, [filteredClients, selectedContacts])
 
   const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
+  const canonicalClients = useMemo(() => getCanonicalClients(clients), [clients])
+  const matchingClients = useMemo(() => (
+    canonicalClients
+      .filter(client => normalizeText(client.client_name || client.name).includes(normalizeText(form.client_name)))
+      .slice(0, 8)
+  ), [canonicalClients, form.client_name])
+
+  const selectExistingClient = (client) => {
+    setForm({
+      ...clientToForm(client),
+      client_group_id: client.client_group_id || client.id,
+      connected_on_date: todayLocal(),
+      follow_up_date: todayLocal(),
+      status: '',
+      contact_person: '',
+      mobile: '',
+      email: '',
+      designation: '',
+      linkedin: ''
+    })
+    setErrors({})
+  }
+
+  const selectNewClient = () => {
+    setForm(current => ({
+      ...EMPTY_FORM,
+      consultant_name: current.consultant_name,
+      client_name: '',
+      connected_on_date: todayLocal(),
+      follow_up_date: todayLocal()
+    }))
+    setErrors({})
+  }
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -714,7 +758,24 @@ export default function ClientsPage() {
                 ].map(([name, label, type, required]) => (
                   <div className="form-group" key={name}>
                     <label className="form-label">{label} {required && <span className="req">*</span>}</label>
-                    <input name={name} type={type} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving || (name === 'client_name' && !editingClient && Boolean(form.client_group_id))} readOnly={name === 'client_name' && !editingClient && Boolean(form.client_group_id)} />
+                    {name === 'client_name' && !editingClient ? (
+                      <div className="client-search-wrap">
+                        <input name={name} type={type} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} readOnly={Boolean(form.client_group_id)} autoComplete="off" />
+                        <div className="client-suggestions">
+                          <button type="button" onMouseDown={(event) => { event.preventDefault(); selectNewClient() }}>
+                            <span>Add New Client</span>
+                          </button>
+                          {matchingClients.map(client => (
+                            <button type="button" key={client.client_group_id || client.id} onMouseDown={(event) => { event.preventDefault(); selectExistingClient(client) }}>
+                              <span>{client.client_name || client.name}</span>
+                              <small>{client.client_display_id || ''}</small>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <input name={name} type={type} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} />
+                    )}
                     {errors[name] && <span className="form-error">{errors[name]}</span>}
                   </div>
                 ))}
