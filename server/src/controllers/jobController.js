@@ -202,7 +202,7 @@ async function buildJobFilters(req, res) {
       schemaName: 'mandate_filter',
       temperature: 0
     })
-    const filters = validateAiFilters('mandates', parsed)
+    const filters = validateAiFilters('mandates', parsed, prompt)
     if (!filters) return res.status(400).json({ error: 'Could not parse Mandate Tracker filter.' })
     return res.json({ filters })
   } catch (err) {

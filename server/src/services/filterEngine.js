@@ -105,6 +105,8 @@ const configs = {
   mandates: { fields: mandateFields }
 }
 
+const mandateSearchFields = ['client_name', 'role', 'consultant', 'team_lead', 'location', 'vertical']
+
 Object.values(configs).forEach(config => {
   Object.entries(config.fields).forEach(([field, meta]) => {
     meta.field = field
@@ -179,6 +181,8 @@ function buildAiFilterPrompt(page, prompt) {
     `Allowed operators: ${OPERATORS.join(', ')}.`,
     'Use canonical field names only. Never invent fields.',
     'Default text searches to contains. Use equals only for explicit exact matches.',
+    page === 'mandates' ? 'For plain text with no field, search across client_name, role, consultant, team_lead, location, and vertical using contains.' : '',
+    page === 'mandates' ? 'For phrases like "client bluepeak", "client name bluepeak", and "mandates for bluepeak", use client_name contains bluepeak.' : '',
     'Use is_empty for blank/null/empty/- and is_not_empty for not blank.',
     'Detect IDs: CA10 -> candidate_id equals CA10; CL5 -> client_id equals CL5; JB10 -> job_id equals JB10.',
     'Normalize budget examples 20-25, 20 to 25, 20-25 lac, 20 lpa to 25 lpa as 20-25 lac.',
@@ -186,13 +190,35 @@ function buildAiFilterPrompt(page, prompt) {
     'Fields:',
     fields,
     `Request: ${clean(prompt)}`
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 }
 
-function validateAiFilters(page, data) {
+function isExactPrompt(prompt) {
+  return /\b(exact|exactly|equals?|equal to)\b/i.test(clean(prompt))
+}
+
+function isPlainMandatePrompt(prompt) {
+  const text = lower(prompt)
+  if (!text || /\b(JB\d+|P[123])\b/i.test(prompt)) return false
+  if (/[<>=]/.test(text) || /\b(before|after|on|between|budget|priority|date|allocation|team lead|tl|consultant|client|client name|role|job role|location|city|vertical|domain)\b/i.test(text)) return false
+  return /^[a-z0-9][\w\s&.-]+$/i.test(clean(prompt))
+}
+
+function validateAiFilters(page, data, prompt = '') {
   const config = configs[page]
+  if (page === 'mandates' && isPlainMandatePrompt(prompt)) {
+    const value = clean(prompt).replace(/^mandates?\s+(?:for\s+)?/i, '').replace(/\bmandates?\b/gi, '').trim()
+    if (value) return { mode: 'any', conditions: mandateSearchFields.map(field => ({ field, operator: 'contains', value })) }
+  }
   const normalized = (Array.isArray(data?.conditions) ? data.conditions : [])
-    .map(condition => normalizeCondition(config, condition))
+    .map(condition => {
+      const next = { ...condition }
+      if (page === 'mandates') {
+        const field = aliasMap(config).get(lower(next.field)) || next.field
+        if (mandateSearchFields.includes(field) && !isExactPrompt(prompt)) next.operator = 'contains'
+      }
+      return normalizeCondition(config, next)
+    })
     .filter(Boolean)
   const seen = new Set()
   const conditions = normalized.filter(condition => {
@@ -201,6 +227,7 @@ function validateAiFilters(page, data) {
     seen.add(key)
     return true
   })
+  if (!conditions.length && page === 'mandates' && clean(prompt)) return parsePrompt(page, prompt)
   return conditions.length ? { conditions } : null
 }
 
@@ -320,10 +347,13 @@ function applyFilters(page, rows, filters, valueGetter) {
   const config = configs[page]
   const normalized = (filters?.conditions || []).map(condition => normalizeCondition(config, condition)).filter(Boolean)
   if (!normalized.length) return rows
-  return rows.filter(row => normalized.every(condition => {
+  const match = (row, condition) => {
     const meta = config.fields[condition.field]
     return compareValue(valueGetter(row, condition.field), condition.operator, condition.value, meta.type)
-  }))
+  }
+  return rows.filter(row => filters?.mode === 'any'
+    ? normalized.some(condition => match(row, condition))
+    : normalized.every(condition => match(row, condition)))
 }
 
 module.exports = { configs, parsePrompt, applyFilters, normalizeCondition, buildAiFilterPrompt, validateAiFilters, aiFilterSchema, OPERATORS }

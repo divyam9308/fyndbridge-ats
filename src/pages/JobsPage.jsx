@@ -31,10 +31,6 @@ const todayLocal = () => {
   return date.toISOString().slice(0, 10)
 }
 const dash = (value) => value || '-'
-const formatFilterChip = (condition) => {
-  const value = Array.isArray(condition.value) ? condition.value.join(' - ') : condition.value
-  return `${condition.field} ${condition.operator}${value !== undefined && value !== null ? ` ${value}` : ''}`
-}
 const clientName = (client) => client?.name || client?.client_name || ''
 const canonicalClients = (clients) => {
   const map = new Map()
@@ -61,6 +57,7 @@ export default function JobsPage() {
   const [aiText, setAiText] = useState('')
   const [aiFilters, setAiFilters] = useState(null)
   const [aiError, setAiError] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
   const [sortField, setSortField] = useState('')
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
@@ -232,24 +229,30 @@ export default function JobsPage() {
     event.preventDefault()
     setAiError('')
     if (!aiText.trim()) return
-    const res = await fetch('/api/jobs/ai-filter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: aiText })
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      setAiFilters(null)
-      setAiError(data.error || 'Could not parse Mandate Tracker filter.')
-      return
+    setAiLoading(true)
+    try {
+      const res = await fetch('/api/jobs/ai-filter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: aiText })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setAiFilters(null)
+        setAiError(data.error || 'Could not parse Mandate Tracker filter.')
+        return
+      }
+      setAiFilters(data.filters)
+    } finally {
+      setAiLoading(false)
     }
-    setAiFilters(data.filters)
   }
 
   const clearFilters = () => {
     setAiText('')
     setAiFilters(null)
     setAiError('')
+    setAiLoading(false)
   }
 
   const selectSort = (field) => {
@@ -291,8 +294,11 @@ export default function JobsPage() {
       <div className="filter-bar candidates-filter-bar">
         <form onSubmit={applyAiFilter} className="candidate-ai-filter-form">
           <span className="filter-label">AI Filter</span>
-          <input className="filter-input candidate-ai-filter-input" value={aiText} onChange={e => setAiText(e.target.value)} />
-          <button className="btn-secondary" type="submit" style={{ height: 34, padding: '0 12px' }}>Apply</button>
+          <input className="filter-input candidate-ai-filter-input" value={aiText} onChange={e => { setAiText(e.target.value); setAiError('') }} />
+          <button className="btn-secondary" type="submit" disabled={aiLoading} style={{ height: 34, padding: '0 12px' }}>
+            {aiLoading ? <Loader2 size={14} className="spin" /> : null}
+            Apply
+          </button>
           <button className="filter-clear" type="button" onClick={clearFilters}>Clear Filters</button>
         </form>
         <div className="filter-divider" />
@@ -313,13 +319,6 @@ export default function JobsPage() {
         </div>
       </div>
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}
-      {aiFilters && (
-        <div className="ai-filter-chips">
-          {(aiFilters.conditions || []).map((condition, index) => (
-            <span className="tag-chip" key={`${condition.field}-${index}`}>{formatFilterChip(condition)}</span>
-          ))}
-        </div>
-      )}
 
       <div className="table-card">
         {loading ? (
