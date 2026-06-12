@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown } from 'lucide-react'
+import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 
@@ -129,6 +130,8 @@ function clientToForm(client) {
 }
 
 export default function ClientsPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -331,13 +334,23 @@ export default function ClientsPage() {
     return next
   }
 
-  const openModal = () => {
+  const openModal = useCallback(() => {
     setForm({ ...EMPTY_FORM, consultant_name: getConsultantNameFromUser(getCurrentUser()), connected_on_date: todayLocal(), follow_up_date: todayLocal() })
     setErrors({})
     setContractFile(null)
     setEditingClient(null)
     setIsOpen(true)
-  }
+  }, [])
+
+  useEffect(() => {
+    const action = location.state?.action
+    if (!action) return
+    const timer = window.setTimeout(() => {
+      navigate(location.pathname, { replace: true, state: {} })
+      if (action === 'add-client') openModal()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [location.pathname, location.state, navigate, openModal])
 
   const openEditModal = (client) => {
     setForm(clientToForm(client))
@@ -566,13 +579,13 @@ export default function ClientsPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <button className="btn-primary" onClick={openModal} id="btn-add-client">
-          <Plus size={15} strokeWidth={2.5} /> Add Client
-        </button>
-      </div>
-
       <div className="candidate-columns-toolbar">
+        <NewActionDropdown
+          onUploadResumes={() => navigate('/dashboard/candidates', { state: { action: 'upload-resumes' } })}
+          onAddCandidate={() => navigate('/dashboard/candidates', { state: { action: 'add-candidate' } })}
+          onAddClient={openModal}
+          onAddJob={() => navigate('/dashboard/jobs', { state: { action: 'add-job' } })}
+        />
         <div className="candidate-columns-control" ref={columnsDropdownRef}>
           <button className="filter-select candidate-columns-btn" type="button" onClick={() => { setPendingColumns(visibleColumns); setColumnsOpen(open => !open) }}>
             <span>Columns</span>

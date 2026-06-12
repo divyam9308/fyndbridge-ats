@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Upload, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
+import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 
@@ -239,6 +241,8 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
 }
 
 export default function CandidatesPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [candidates, setCandidates] = useState([])
   const fileInputRef = useRef(null)
   const candidateModalRef = useRef(null)
@@ -666,14 +670,14 @@ export default function CandidatesPage() {
     return e
   }
 
-  const fetchNextCandidateDisplayId = async () => {
+  const fetchNextCandidateDisplayId = useCallback(async () => {
     const response = await fetch('/api/candidates/next-display-id')
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(payload.error || 'Unable to load candidate ID')
     return payload.candidate_display_id || ''
-  }
+  }, [])
 
-  const openAddModal = async () => {
+  const openAddModal = useCallback(async () => {
     setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName, candidateDisplayId: 'Loading...' })
     setEditing(false)
     setErrors({})
@@ -685,7 +689,18 @@ export default function CandidatesPage() {
     } catch {
       setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current)
     }
-  }
+  }, [activeConsultantName, fetchNextCandidateDisplayId])
+
+  useEffect(() => {
+    const action = location.state?.action
+    if (!action) return
+    const timer = window.setTimeout(() => {
+      navigate(location.pathname, { replace: true, state: {} })
+      if (action === 'upload-resumes') fileInputRef.current?.click()
+      if (action === 'add-candidate') openAddModal()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [location.pathname, location.state, navigate, openAddModal])
 
   const candidateToForm = (candidate) => {
     const matchedClient = dbClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
@@ -1405,23 +1420,14 @@ export default function CandidatesPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="page-header">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          multiple
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-        />
-        <button className="btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={parsing} id="btn-upload-resumes">
-          {parsing ? <Loader2 size={14} className="spin" /> : <Upload size={14} strokeWidth={2} />} Upload Resumes
-        </button>
-        <button className="btn-primary" onClick={openAddModal} id="btn-add-candidate">
-          <Plus size={15} strokeWidth={2.5} /> Add Candidate
-        </button>
-      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        multiple
+        onChange={handleFileSelect}
+        style={{ display: 'none' }}
+      />
       {apiError && (
         <div className="form-error" style={{ display:'block', marginBottom:12 }}>
           {apiError}
@@ -1429,6 +1435,12 @@ export default function CandidatesPage() {
       )}
 
       <div className="candidate-columns-toolbar">
+        <NewActionDropdown
+          onUploadResumes={() => fileInputRef.current?.click()}
+          onAddCandidate={openAddModal}
+          onAddClient={() => navigate('/dashboard/clients', { state: { action: 'add-client' } })}
+          onAddJob={() => navigate('/dashboard/jobs', { state: { action: 'add-job' } })}
+        />
         <div className="candidate-columns-control" ref={columnsDropdownRef}>
           <button
             className="filter-select candidate-columns-btn"

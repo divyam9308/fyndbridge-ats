@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Pencil, Eye, X, Briefcase, AlertCircle, Loader2 } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Pencil, Eye, X, Briefcase, AlertCircle, Loader2 } from 'lucide-react'
+import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 
 const STATUS_BADGE = {
@@ -20,6 +22,8 @@ const EMPTY_FORM = {
 }
 
 export default function JobsPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [jobs, setJobs] = useState([])
   const [dbClients, setDbClients] = useState([])
   const [loading, setLoading] = useState(true)
@@ -105,12 +109,22 @@ export default function JobsPage() {
     return next
   }
 
-  const openModal = () => {
+  const openModal = useCallback(() => {
     setForm(EMPTY_FORM)
     setErrors({})
     setSkillInput('')
     setIsOpen(true)
-  }
+  }, [])
+
+  useEffect(() => {
+    const action = location.state?.action
+    if (!action) return
+    const timer = window.setTimeout(() => {
+      navigate(location.pathname, { replace: true, state: {} })
+      if (action === 'add-job') openModal()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [location.pathname, location.state, navigate, openModal])
 
   const handleSave = async () => {
     const nextErrors = validate()
@@ -159,10 +173,13 @@ export default function JobsPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <button className="btn-primary" onClick={openModal} id="btn-add-job">
-          <Plus size={15} strokeWidth={2.5} /> Add Job
-        </button>
+      <div className="candidate-columns-toolbar">
+        <NewActionDropdown
+          onUploadResumes={() => navigate('/dashboard/candidates', { state: { action: 'upload-resumes' } })}
+          onAddCandidate={() => navigate('/dashboard/candidates', { state: { action: 'add-candidate' } })}
+          onAddClient={() => navigate('/dashboard/clients', { state: { action: 'add-client' } })}
+          onAddJob={openModal}
+        />
       </div>
 
       <div className="filter-bar">
