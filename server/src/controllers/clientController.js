@@ -39,6 +39,13 @@ function displayIdNumber(value, prefix) {
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
 }
 
+function nextFreeDisplayId(rows, prefix) {
+  const used = new Set((rows || []).map((row) => displayIdNumber(row.client_display_id, prefix)).filter((number) => number < Number.MAX_SAFE_INTEGER))
+  let next = 1
+  while (used.has(next)) next += 1
+  return `${prefix}${next}`
+}
+
 const SORT_FIELDS = new Set(['client_id', 'client_name'])
 const SORT_DIRECTIONS = new Set(['asc', 'desc'])
 
@@ -77,7 +84,8 @@ async function ensureClientDisplayIds() {
   if (error) throw error
 
   const nameToDisplayId = new Map()
-  let next = Math.max(0, ...(data || []).map((client) => displayIdNumber(client.client_display_id, 'CL')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
+  const usedDisplayIds = new Set((data || []).map((client) => displayIdNumber(client.client_display_id, 'CL')).filter((number) => number < Number.MAX_SAFE_INTEGER))
+  let next = displayIdNumber(nextFreeDisplayId(data, 'CL'), 'CL')
 
   for (const client of data || []) {
     const normalizedName = normalizeDuplicateText(client.client_name || client.name)
@@ -94,7 +102,9 @@ async function ensureClientDisplayIds() {
       nameToDisplayId.set(normalizedName, current)
       continue
     }
+    while (usedDisplayIds.has(next)) next += 1
     const displayId = `CL${next++}`
+    usedDisplayIds.add(displayIdNumber(displayId, 'CL'))
     nameToDisplayId.set(normalizedName, displayId)
     const { error: updateError } = await supabase.from('clients').update({ client_display_id: displayId }).eq('id', client.id)
     if (isClientDisplayIdUniqueError(updateError)) return
@@ -109,8 +119,7 @@ async function nextClientDisplayId(clientName = '') {
   if (error) throw error
   const existing = (data || []).find((client) => normalizeDuplicateText(client.client_name || client.name) === normalizedName)
   if (existing?.client_display_id) return existing.client_display_id
-  const next = Math.max(0, ...(data || []).map((client) => displayIdNumber(client.client_display_id, 'CL')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
-  return `CL${next}`
+  return nextFreeDisplayId(data, 'CL')
 }
 
 function normalizeClient(row, activeJobs = 0, followUps = []) {
@@ -214,6 +223,7 @@ function clientPayload(body) {
 
   return {
     client_group_id: body.client_group_id || null,
+    client_display_id: nullable(body.client_display_id),
     consultant_name: nullable(body.consultant_name || body.consultant),
     client_name: clientName,
     name: clientName,
@@ -424,7 +434,11 @@ async function updateClient(req, res) {
   try {
     if (req.file) req.body.contract_document = await uploadContractPdf(req.file)
     const payload = clientPayload(req.body)
-    payload.client_display_id = await nextClientDisplayId(payload.client_name)
+    if (!payload.client_display_id) {
+      const { data: existing, error: existingError } = await supabase.from('clients').select('client_display_id').eq('id', req.params.id).maybeSingle()
+      if (existingError) throw existingError
+      payload.client_display_id = existing?.client_display_id || await nextClientDisplayId(payload.client_name)
+    }
     const { data, error } = await supabase
       .from('clients')
       .update({ ...payload, updated_at: new Date().toISOString() })

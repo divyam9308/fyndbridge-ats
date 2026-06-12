@@ -94,6 +94,12 @@ const getCurrentUser = () => {
 }
 
 const getNumericId = (id) => Number(String(id || '').replace(/\D/g, '')) || 0
+const nextFreeClientDisplayId = (rows) => {
+  const used = new Set(rows.map(client => getNumericId(client.client_display_id)).filter(Boolean))
+  let next = 1
+  while (used.has(next)) next += 1
+  return `CL${next}`
+}
 
 const getCanonicalClients = (clients) => {
   const map = new Map()
@@ -168,10 +174,13 @@ export default function ClientsPage() {
   const [statusFilter, setStatusFilter] = useState('All')
   const [statusOpen, setStatusOpen] = useState(false)
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
+  const [selectedExistingClientId, setSelectedExistingClientId] = useState(null)
+  const [addingNewClient, setAddingNewClient] = useState(false)
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
   const statusDropdownRef = useRef(null)
   const clientModalRef = useRef(null)
+  const clientNameInputRef = useRef(null)
   const followUpModalRef = useRef(null)
   const duplicateModalRef = useRef(null)
 
@@ -308,6 +317,7 @@ export default function ClientsPage() {
 
   const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'designation')
   const canonicalClients = useMemo(() => getCanonicalClients(clients), [clients])
+  const nextClientId = useMemo(() => nextFreeClientDisplayId(clients), [clients])
   const matchingClients = useMemo(() => (
     canonicalClients
       .filter(client => normalizeText(client.client_name || client.name).includes(normalizeText(form.client_name)))
@@ -315,32 +325,33 @@ export default function ClientsPage() {
   ), [canonicalClients, form.client_name])
 
   const selectExistingClient = (client) => {
-    setForm({
-      ...clientToForm(client),
+    setForm(current => ({
+      ...current,
       client_group_id: client.client_group_id || client.id,
-      connected_on_date: todayLocal(),
-      follow_up_date: todayLocal(),
-      status: '',
-      contact_person: '',
-      mobile: '',
-      email: '',
-      designation: '',
-      linkedin: ''
-    })
+      client_display_id: client.client_display_id || '',
+      client_name: client.client_name || client.name || '',
+      location: client.location || client.city || current.location,
+      region: client.region || client.state || current.region,
+      sector: client.sector || current.sector
+    }))
+    setSelectedExistingClientId(client.client_group_id || client.id)
+    setAddingNewClient(false)
     setErrors({})
     setClientSuggestionsOpen(false)
   }
 
   const selectNewClient = () => {
     setForm(current => ({
-      ...EMPTY_FORM,
-      consultant_name: current.consultant_name,
+      ...current,
+      client_group_id: '',
+      client_display_id: nextClientId,
       client_name: '',
-      connected_on_date: todayLocal(),
-      follow_up_date: todayLocal()
     }))
+    setSelectedExistingClientId(null)
+    setAddingNewClient(true)
     setErrors({})
     setClientSuggestionsOpen(false)
+    window.setTimeout(() => clientNameInputRef.current?.focus(), 0)
   }
 
   const handleChange = (e) => {
@@ -349,6 +360,10 @@ export default function ClientsPage() {
     if (name === 'client_name') setClientSuggestionsOpen(true)
     setForm((current) => {
       const next = { ...current, [name]: value }
+      if (name === 'client_name' && selectedExistingClientId && value !== current.client_name) {
+        next.client_group_id = ''
+        next.client_display_id = addingNewClient ? current.client_display_id || nextClientId : ''
+      }
       if (name === 'status' && value !== 'Converted') {
         next.terms_signed_type = ''
         next.terms_signed_custom = ''
@@ -360,6 +375,7 @@ export default function ClientsPage() {
       if (name === 'contract_signed' && value === 'No') next.contract_document = ''
       return next
     })
+    if (name === 'client_name' && selectedExistingClientId) setSelectedExistingClientId(null)
     if (errors[name]) setErrors((current) => ({ ...current, [name]: '' }))
   }
 
@@ -391,6 +407,8 @@ export default function ClientsPage() {
     setErrors({})
     setContractFile(null)
     setEditingClient(null)
+    setSelectedExistingClientId(null)
+    setAddingNewClient(false)
     setClientSuggestionsOpen(false)
     setIsOpen(true)
   }, [])
@@ -410,6 +428,8 @@ export default function ClientsPage() {
     setErrors({})
     setContractFile(null)
     setEditingClient(client)
+    setSelectedExistingClientId(null)
+    setAddingNewClient(false)
     setClientSuggestionsOpen(false)
     setIsOpen(true)
   }
@@ -442,6 +462,8 @@ export default function ClientsPage() {
     setErrors({})
     setContractFile(null)
     setEditingClient(null)
+    setSelectedExistingClientId(client.client_group_id || client.id)
+    setAddingNewClient(false)
     setClientSuggestionsOpen(false)
     setIsOpen(true)
   }
@@ -499,6 +521,8 @@ export default function ClientsPage() {
       client_display_id: clientDuplicate.existing.client_display_id || ''
     })
     setEditingClient(clientDuplicate.existing)
+    setSelectedExistingClientId(clientDuplicate.existing.client_group_id || clientDuplicate.existing.id)
+    setAddingNewClient(false)
     setClientDuplicate(null)
     setDuplicateMoreOpen(false)
     setErrors({})
@@ -810,7 +834,7 @@ export default function ClientsPage() {
             </div>
             <div className="modal-body">
               <div className="form-grid-2">
-                {editingClient && (
+                {(editingClient || addingNewClient) && (
                   <div className="form-group">
                     <label className="form-label">Client ID</label>
                     <input value={form.client_display_id || ''} className="form-control" disabled readOnly />
@@ -834,7 +858,13 @@ export default function ClientsPage() {
                     <label className="form-label">{label} {required && <span className="req">*</span>}</label>
                     {name === 'client_name' && !editingClient ? (
                       <div className="client-search-wrap">
-                        <input name={name} type={type} value={form[name]} onChange={handleChange} onFocus={() => setClientSuggestionsOpen(true)} onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} readOnly={Boolean(form.client_group_id)} autoComplete="off" />
+                        {addingNewClient && (
+                          <div className="sub-text" style={{ marginBottom: 6 }}>
+                            Adding new client
+                            <button type="button" className="filter-clear" style={{ marginLeft: 8 }} onMouseDown={(event) => { event.preventDefault(); setAddingNewClient(false); setSelectedExistingClientId(null); setForm(current => ({ ...current, client_group_id: '', client_display_id: '', client_name: '' })); setClientSuggestionsOpen(true) }}>Switch</button>
+                          </div>
+                        )}
+                        <input ref={clientNameInputRef} name={name} type={type} value={form[name]} onChange={handleChange} onFocus={() => !addingNewClient && setClientSuggestionsOpen(true)} onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} autoComplete="off" />
                         {clientSuggestionsOpen && (
                         <div className="client-suggestions manual-suggestions is-open">
                           <button type="button" onMouseDown={(event) => { event.preventDefault(); selectNewClient() }}>
