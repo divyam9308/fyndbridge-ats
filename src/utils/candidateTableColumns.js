@@ -21,7 +21,9 @@ export const CANDIDATE_TABLE_COLUMNS = [
   { key: 'comments', label: 'Comments' },
   { key: 'linkedin', label: 'LinkedIn' },
   { key: 'status', label: 'Status' },
-  { key: 'cv', label: 'CV Link' },
+  { key: 'offeredCtc', label: 'Offered CTC' },
+  { key: 'dateOfJoining', label: 'Date of Joining' },
+  { key: 'cv', label: 'CV' },
   { key: 'month', label: 'Month' },
   { key: 'action', label: 'Action' },
 ]

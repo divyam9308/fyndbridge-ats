@@ -3,7 +3,7 @@ const { callAiJson } = require('../services/aiProvider')
 const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
-const PRIORITIES = ['P1', 'P2', 'P3', 'Scrap', 'Completed']
+const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
 
 function logAndSendInternal(res, method, err) {
   console.error(`${method} error:`, err.message || err)
@@ -17,6 +17,13 @@ const nullable = (value) => {
 }
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
 const jobIdNumber = (value) => Number(String(value || '').match(/^JB(\d+)$/i)?.[1] || 0)
+const normalizeMandateStatus = (value) => {
+  const text = clean(value)
+  if (text === 'Completed') return 'Completed'
+  if (text === 'Scrapped' || text === 'Scrap') return 'Scrapped'
+  if (text === 'Ongoing') return 'Ongoing'
+  return text ? '-' : '-'
+}
 
 function todayLocal() {
   const date = new Date()
@@ -31,6 +38,7 @@ function normalizeConsultants(value) {
 
 function formatJob(row) {
   const clientName = row.clients?.client_name || row.clients?.name || 'Unknown Client'
+  const mandateStatus = normalizeMandateStatus(row.mandate_status || row.status || row.priority)
   return {
     ...row,
     job_display_id: row.job_display_id || '',
@@ -40,8 +48,12 @@ function formatJob(row) {
     consultant: Array.isArray(row.consultants) && row.consultants.length ? row.consultants[0] : '-',
     team_lead: row.team_lead || '-',
     allocation_date: row.allocation_date || (row.created_at ? row.created_at.slice(0, 10) : ''),
+    client_display_id: row.clients?.client_display_id || '',
     client: clientName,
     client_name: clientName,
+    mandate_status: mandateStatus,
+    status: mandateStatus,
+    priority: mandateStatus,
     clients: undefined
   }
 }
@@ -81,7 +93,7 @@ function jobFilterValue(row, field) {
     role: row.role,
     location: row.location,
     budget: row.budget,
-    priority: row.priority,
+    mandate_status: row.mandate_status,
     vertical: row.vertical,
     date_of_allocation: row.allocation_date
   }[field]
@@ -90,7 +102,7 @@ function jobFilterValue(row, field) {
 async function listJobs(req, res) {
   try {
     await ensureJobDisplayIds()
-    let query = supabase.from('jobs').select('*, clients(name, client_name)')
+    let query = supabase.from('jobs').select('*, clients(name, client_name, client_display_id)')
     if (req.query.client_id) query = query.eq('client_id', req.query.client_id)
     const { data, error } = await query
     if (error) throw error
@@ -108,7 +120,7 @@ async function listJobs(req, res) {
 
 async function getJob(req, res) {
   try {
-    const { data, error } = await supabase.from('jobs').select('*, clients(name, client_name)').eq('id', req.params.id).maybeSingle()
+    const { data, error } = await supabase.from('jobs').select('*, clients(name, client_name, client_display_id)').eq('id', req.params.id).maybeSingle()
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Mandate not found' })
     return res.json(formatJob(data))
@@ -129,7 +141,11 @@ async function payloadFromBody(body, partial = false) {
   if (!partial || body.consultants !== undefined) payload.consultants = normalizeConsultants(body.consultants)
   if (!partial || body.team_lead !== undefined) payload.team_lead = nullable(body.team_lead)
   if (!partial || body.budget !== undefined) payload.budget = BUDGETS.includes(body.budget) ? body.budget : null
-  if (!partial || body.priority !== undefined) payload.priority = PRIORITIES.includes(body.priority) ? body.priority : null
+  if (!partial || body.mandate_status !== undefined || body.priority !== undefined || body.status !== undefined) {
+    const status = normalizeMandateStatus(body.mandate_status || body.priority || body.status)
+    payload.mandate_status = MANDATE_STATUSES.includes(status) ? status : '-'
+    payload.status = payload.mandate_status
+  }
   if (!partial || body.vertical !== undefined) payload.vertical = nullable(body.vertical)
   if (!partial || body.allocation_date !== undefined) payload.allocation_date = body.allocation_date || todayLocal()
   return payload
@@ -139,7 +155,9 @@ async function createJob(req, res) {
   try {
     const payload = await payloadFromBody(req.body)
     payload.job_display_id = await nextJobDisplayId()
-    const { data, error } = await supabase.from('jobs').insert(payload).select('*, clients(name, client_name)').single()
+    if (!payload.mandate_status) payload.mandate_status = '-'
+    if (!payload.status) payload.status = payload.mandate_status
+    const { data, error } = await supabase.from('jobs').insert(payload).select('*, clients(name, client_name, client_display_id)').single()
     if (error) throw error
     return res.status(201).json(formatJob(data))
   } catch (err) {
@@ -152,7 +170,7 @@ async function updateJob(req, res) {
   try {
     const payload = await payloadFromBody(req.body, true)
     payload.updated_at = new Date().toISOString()
-    const { data, error } = await supabase.from('jobs').update(payload).eq('id', req.params.id).select('*, clients(name, client_name)').maybeSingle()
+    const { data, error } = await supabase.from('jobs').update(payload).eq('id', req.params.id).select('*, clients(name, client_name, client_display_id)').maybeSingle()
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Mandate not found' })
     return res.json(formatJob(data))
@@ -203,7 +221,7 @@ async function buildJobFilters(req, res) {
       temperature: 0
     })
     const filters = validateAiFilters('mandates', parsed, prompt)
-    if (!filters) return res.status(400).json({ error: 'Could not parse Mandate Tracker filter.' })
+    if (!filters) return res.status(400).json({ error: 'Could not parse Mandates filter.' })
     return res.json({ filters })
   } catch (err) {
     return logAndSendInternal(res, 'buildJobFilters', err)

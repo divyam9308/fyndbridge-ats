@@ -38,6 +38,8 @@ create table if not exists public.candidate_associations (
   status text not null default 'Interested',
   current_salary integer,
   expected_salary integer,
+  offered_ctc integer,
+  date_of_joining date,
   notes text,
   created_by uuid,
   updated_by uuid,
@@ -138,7 +140,9 @@ alter table public.candidates
 
 alter table public.candidate_associations
   add column if not exists client_id uuid references public.clients(id) on delete set null,
-  add column if not exists consultant_name text;
+  add column if not exists consultant_name text,
+  add column if not exists offered_ctc integer,
+  add column if not exists date_of_joining date;
 
 do $$
 begin

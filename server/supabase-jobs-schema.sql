@@ -8,10 +8,10 @@ create table if not exists public.jobs (
   consultants text[] not null default '{}',
   team_lead text,
   budget text,
-  priority text,
+  mandate_status text default '-',
   vertical text,
   allocation_date date,
-  status text not null default 'Open',
+  status text not null default '-',
   salary_min integer,
   salary_max integer,
   experience_label text,
@@ -31,9 +31,39 @@ alter table public.jobs
   add column if not exists consultants text[] not null default '{}',
   add column if not exists team_lead text,
   add column if not exists budget text,
-  add column if not exists priority text,
+  add column if not exists mandate_status text default '-',
   add column if not exists vertical text,
   add column if not exists allocation_date date;
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'jobs' and column_name = 'priority'
+  ) then
+    update public.jobs
+    set mandate_status = case
+      when coalesce(mandate_status, priority, status) in ('Completed', 'Closed', 'Filled') then 'Completed'
+      when coalesce(mandate_status, priority, status) in ('Scrapped', 'Scrap') then 'Scrapped'
+      when coalesce(mandate_status, priority, status) in ('Ongoing', 'Open', 'Active', 'P1', 'P2', 'P3') then 'Ongoing'
+      else coalesce(mandate_status, '-')
+    end;
+  else
+    update public.jobs
+    set mandate_status = case
+      when coalesce(mandate_status, status) in ('Completed', 'Closed', 'Filled') then 'Completed'
+      when coalesce(mandate_status, status) in ('Scrapped', 'Scrap') then 'Scrapped'
+      when coalesce(mandate_status, status) in ('Ongoing', 'Open', 'Active', 'P1', 'P2', 'P3') then 'Ongoing'
+      else coalesce(mandate_status, '-')
+    end;
+  end if;
+end $$;
+
+update public.jobs
+set status = case
+  when mandate_status in ('Ongoing', 'Scrapped', 'Completed') then mandate_status
+  else 'Ongoing'
+end;
 
 create index if not exists jobs_client_id_idx
   on public.jobs(client_id);
@@ -44,8 +74,8 @@ create index if not exists jobs_title_idx
 create index if not exists jobs_display_id_idx
   on public.jobs(job_display_id);
 
-create index if not exists jobs_priority_idx
-  on public.jobs(priority);
+create index if not exists jobs_mandate_status_idx
+  on public.jobs(mandate_status);
 
 create index if not exists jobs_allocation_date_idx
   on public.jobs(allocation_date);

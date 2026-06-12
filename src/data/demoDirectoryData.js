@@ -54,7 +54,7 @@ const JOB_TITLES = [
   'Support Engineer'
 ]
 
-const JOB_STATUSES = ['Open', 'Active', 'On Hold', 'Closed', 'Filled']
+const JOB_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
 
 const EXPERIENCE_RANGES = [
   '1-3 years',
@@ -102,7 +102,7 @@ export const DEMO_JOBS = (() => {
       const title = JOB_TITLES[(clientIndex * 3 + offset) % JOB_TITLES.length]
       const [salaryMin, salaryMax] = salaryRangeForIndex(jobId)
       const status = JOB_STATUSES[(clientIndex + offset) % JOB_STATUSES.length]
-      const completion = status === 'Filled' || status === 'Closed' ? 100 : 22 + ((jobId * 9) % 69)
+      const completion = status === 'Completed' ? 100 : 22 + ((jobId * 9) % 69)
       return {
         id: jobId++,
         title,
@@ -114,9 +114,9 @@ export const DEMO_JOBS = (() => {
         salaryMax,
         experience: EXPERIENCE_RANGES[(clientIndex + offset) % EXPERIENCE_RANGES.length],
         completion,
-        successCount: status === 'Filled' ? 1 + ((clientIndex + offset) % 3) : (jobId + clientIndex) % 2,
+        successCount: status === 'Completed' ? 1 + ((clientIndex + offset) % 3) : (jobId + clientIndex) % 2,
         rejectedByClient: (clientIndex + offset) % 5,
-        openPositions: status === 'Filled' || status === 'Closed' ? 0 : 1 + ((clientIndex + offset) % 4),
+        openPositions: status === 'Completed' ? 0 : 1 + ((clientIndex + offset) % 4),
         skills: TITLE_SKILLS[title],
         jd: '',
         notes: `${title} mandate for ${clientName}.`,
@@ -134,7 +134,6 @@ export const DEMO_CLIENTS = CLIENT_SEEDS.map(([name, contact, phone, email, city
   city,
   state,
   status,
-  activeJobs: DEMO_JOBS.filter((job) => job.client === name && (job.status === 'Open' || job.status === 'Active')).length,
+  activeJobs: DEMO_JOBS.filter((job) => job.client === name && job.status === 'Ongoing').length,
   notes: '',
 }))
-

@@ -8,7 +8,7 @@ import './Sidebar.css'
 
 const navItems = [
   { to: '/dashboard',            label: 'Dashboard',  Icon: LayoutDashboard, end: true },
-  { to: '/dashboard/jobs',       label: 'Mandate Tracker', Icon: Briefcase },
+  { to: '/dashboard/jobs',       label: 'Mandates', Icon: Briefcase },
   { to: '/dashboard/clients',    label: 'Clients',    Icon: Building2 },
   { to: '/dashboard/candidates', label: 'Candidates', Icon: Users },
 ]

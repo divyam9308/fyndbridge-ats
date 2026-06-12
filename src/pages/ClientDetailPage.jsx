@@ -6,47 +6,19 @@ import '../styles/Shared.css'
 import './ClientDetailPage.css'
 import { apiCandidateToUi } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
+import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
+import { MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { supabase } from '../services/supabaseClient'
 
-const STATUS_BADGE = {
-  Open: 'badge-open',
-  Active: 'badge-open',
-  'On Hold': 'badge-on-hold',
-  Closed: 'badge-closed',
-  Filled: 'badge-filled',
-}
-
-const STATUS_BADGE_MAP = {
-  Interested: 'badge-interested',
-  'Not Interested': 'badge-not-interested',
-  Interview: 'badge-interview',
-  'Client Submission': 'badge-client-submission',
-  Offered: 'badge-offered',
-  Hired: 'badge-hired',
-  'Rejected by Recruiter': 'badge-rejected-recruiter',
-  'Rejected by Client': 'badge-rejected-client',
-}
-
-const STATUS_COLUMNS = [
-  ['interested', 'Interested'],
-  ['notInterested', 'Not Interested'],
-  ['interview', 'Interview'],
-  ['clientSubmission', 'Client Submission'],
-  ['offered', 'Offered'],
-  ['hired', 'Hired'],
-  ['rejectedByClient', 'Rejected by Client'],
-  ['rejectedByRecruiter', 'Rejected by Recruiter'],
-]
+const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
+const STATUS_COLUMNS = CANDIDATE_STATUSES.map(status => [status, status])
 
 const SORT_OPTIONS = [
   { field: 'candidate_id', label: 'Candidate ID', toggle: true },
   { field: 'candidate_name', label: 'Alphabetic Order', toggle: true },
   { field: 'consultant', label: 'Consultant', toggle: false },
 ]
-const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Interview', 'Client Submission', 'Offered', 'Hired', 'Rejected by Client', 'Rejected by Recruiter']
-const CANDIDATE_STATUS_OPTIONS = ['', ...CANDIDATE_STATUSES]
 const RELOCATE_OPTIONS = ['', 'Yes', 'No']
-const ACTIVE_CANDIDATE_STATUSES = new Set(['Interested', 'Interview', 'Client Submission', 'Offered'])
 
 const pageSize = 50
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
@@ -74,11 +46,10 @@ const getCurrentUser = () => {
 }
 const deriveJobStatus = (jobTitle, candidateRows, jobRows) => {
   const relatedJob = jobRows.find(job => normalizeText(job.title || job.role) === normalizeText(jobTitle))
-  if (relatedJob?.status === 'On Hold') return 'On Hold'
+  if (normalizeMandateStatus(relatedJob?.mandate_status || relatedJob?.status) === 'Scrapped') return 'Scrapped'
   const rows = candidateRows.filter(candidate => normalizeText(getJobText(candidate)) === normalizeText(jobTitle))
-  if (rows.some(candidate => candidate.status === 'Hired')) return 'Closed'
-  if (rows.some(candidate => ACTIVE_CANDIDATE_STATUSES.has(candidate.status))) return 'Active'
-  return 'Open'
+  if (rows.some(candidate => candidate.status === 'Hired')) return 'Completed'
+  return 'Ongoing'
 }
 const candidateToEditForm = (candidate) => ({
   association_id: candidate.associationId,
@@ -105,6 +76,8 @@ const candidateToEditForm = (candidate) => ({
   status: candidate.status || '',
   current_salary: candidate.salary ?? '',
   expected_salary: candidate.expectedSalary ?? '',
+  offered_ctc: candidate.offeredCtc ?? '',
+  date_of_joining: candidate.dateOfJoining || '',
   notes: candidate.notes || '',
 })
 
@@ -254,51 +227,46 @@ export default function ClientDetailPage() {
 
   const jobGroups = useMemo(() => {
     const groups = new Map()
+    clientJobs.forEach((job) => {
+      const title = job.title || job.role || 'Unassigned Mandate'
+      const key = normalizeText(title) || job.id
+      groups.set(key, { title, candidates: [], relatedJob: job })
+    })
     candidates.forEach((candidate) => {
-      const title = getJobText(candidate) || 'Unassigned Mandate'
-      const key = normalizeText(title) || 'unassigned mandate'
-      if (!groups.has(key)) groups.set(key, { title, candidates: [] })
+      const matchedJob = clientJobs.find(job => job.id === candidate.jobId) || clientJobs.find(job => normalizeText(job.title || job.role) === normalizeText(getJobText(candidate)))
+      const title = matchedJob ? matchedJob.title || matchedJob.role : getJobText(candidate) || 'Unassigned Mandate'
+      const key = matchedJob ? normalizeText(matchedJob.title || matchedJob.role) || matchedJob.id : normalizeText(title) || 'unassigned mandate'
+      if (!groups.has(key)) groups.set(key, { title, candidates: [], relatedJob: matchedJob })
       groups.get(key).candidates.push(candidate)
     })
 
     return [...groups.values()].map((group) => {
-      const relatedJob = clientJobs.find(job => normalizeText(job.title || job.role) === normalizeText(group.title))
-      const stats = {
-        total: group.candidates.length,
-        interested: group.candidates.filter(c => c.status === 'Interested').length,
-        notInterested: group.candidates.filter(c => c.status === 'Not Interested').length,
-        interview: group.candidates.filter(c => c.status === 'Interview').length,
-        clientSubmission: group.candidates.filter(c => c.status === 'Client Submission').length,
-        offered: group.candidates.filter(c => c.status === 'Offered').length,
-        hired: group.candidates.filter(c => c.status === 'Hired').length,
-        rejectedByClient: group.candidates.filter(c => c.status === 'Rejected by Client').length,
-        rejectedByRecruiter: group.candidates.filter(c => c.status === 'Rejected by Recruiter').length,
-      }
-      const manualOnHold = relatedJob?.status === 'On Hold'
-      const derivedStatus = manualOnHold
-        ? 'On Hold'
-        : stats.hired > 0
-          ? 'Closed'
-          : group.candidates.some(candidate => ACTIVE_CANDIDATE_STATUSES.has(candidate.status))
-            ? 'Active'
-            : 'Open'
+      const relatedJob = group.relatedJob || clientJobs.find(job => normalizeText(job.title || job.role) === normalizeText(group.title))
+      const stats = CANDIDATE_STATUSES.reduce((acc, status) => {
+        acc[status] = group.candidates.filter(c => c.status === status).length
+        return acc
+      }, { total: group.candidates.length })
+      const savedStatus = normalizeMandateStatus(relatedJob?.mandate_status || relatedJob?.status)
+      const derivedStatus = savedStatus === 'Scrapped'
+        ? 'Scrapped'
+        : stats.Hired > 0
+          ? 'Completed'
+          : savedStatus === '-' ? 'Ongoing' : savedStatus
       return { ...group, relatedJob, status: derivedStatus, stats }
     }).sort((a, b) => compareText(a.title, b.title))
   }, [candidates, clientJobs])
 
   const jobCounts = useMemo(() => ({
-    active: jobGroups.filter(job => job.status === 'Active').length,
-    open: jobGroups.filter(job => job.status === 'Open').length,
-    onHold: jobGroups.filter(job => job.status === 'On Hold').length,
-    closed: jobGroups.filter(job => job.status === 'Closed').length,
+    ongoing: jobGroups.filter(job => job.status === 'Ongoing').length,
+    scrapped: jobGroups.filter(job => job.status === 'Scrapped').length,
+    completed: jobGroups.filter(job => job.status === 'Completed').length,
   }), [jobGroups])
 
   const calculatedClientStatus = useMemo(() => {
-    if (!jobGroups.length) return 'Open'
-    if (jobGroups.some(job => job.status === 'Active')) return 'Active'
-    if (jobGroups.some(job => job.status === 'On Hold')) return 'On Hold'
-    if (jobGroups.some(job => job.status === 'Open')) return 'Open'
-    return 'Closed'
+    if (!jobGroups.length) return 'Ongoing'
+    if (jobGroups.some(job => job.status === 'Ongoing')) return 'Ongoing'
+    if (jobGroups.some(job => job.status === 'Scrapped')) return 'Scrapped'
+    return 'Completed'
   }, [jobGroups])
 
   const selectedCandidates = useMemo(() => {
@@ -377,6 +345,8 @@ export default function ClientDetailPage() {
         open_to_relocate: editForm.open_to_relocate === '' ? null : editForm.open_to_relocate === 'Yes',
         current_salary: editForm.current_salary === '' ? null : Number(editForm.current_salary),
         expected_salary: editForm.expected_salary === '' ? null : Number(editForm.expected_salary),
+        offered_ctc: editForm.status === 'Hired' && editForm.offered_ctc !== '' ? Number(editForm.offered_ctc) : null,
+        date_of_joining: editForm.status === 'Hired' ? editForm.date_of_joining || null : null,
       }
       const response = await fetch(`/api/candidates/${editCandidate.associationId}`, {
         method: 'PATCH',
@@ -393,9 +363,9 @@ export default function ClientDetailPage() {
       const updates = affectedTitles
         .map(title => {
           const job = clientJobs.find(item => normalizeText(item.title || item.role) === normalizeText(title))
-          if (!job || job.status === 'On Hold') return null
+          if (!job || normalizeMandateStatus(job.mandate_status || job.status) === 'Scrapped') return null
           const status = deriveJobStatus(title, nextCandidates, clientJobs)
-          return status !== job.status ? { id: job.id, status } : null
+          return status !== normalizeMandateStatus(job.mandate_status || job.status) ? { id: job.id, status } : null
         })
         .filter(Boolean)
       setCandidates(nextCandidates)
@@ -403,9 +373,9 @@ export default function ClientDetailPage() {
         await Promise.all(updates.map(update => fetch(`/api/jobs/${update.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: update.status }),
+          body: JSON.stringify({ mandate_status: update.status }),
         })))
-        setClientJobs(rows => rows.map(job => updates.find(update => update.id === job.id) ? { ...job, status: updates.find(update => update.id === job.id).status } : job))
+        setClientJobs(rows => rows.map(job => updates.find(update => update.id === job.id) ? { ...job, mandate_status: updates.find(update => update.id === job.id).status, status: updates.find(update => update.id === job.id).status } : job))
       }
       setEditCandidate(null)
       setEditForm(null)
@@ -451,6 +421,8 @@ export default function ClientDetailPage() {
       case 'comments': return <td key={key} className="cell-ellipsis">{c.notes || '-'}</td>
       case 'linkedin': return <td key={key}>{c.linkedinUrl ? <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link">LinkedIn</a> : '-'}</td>
       case 'status': return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status || '-'}</span></td>
+      case 'offeredCtc': return <td key={key}>{c.status === 'Hired' ? fmt(c.offeredCtc) : '-'}</td>
+      case 'dateOfJoining': return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
       case 'cv': return <td key={key}>{c.cvLink ? <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link"><FileText size={12} /> CV</a> : '-'}</td>
       case 'month': return <td key={key}>{formatMonth(c.createdAt)}</td>
       case 'action': return <td key={key}><button className="row-action-btn" type="button" title="Edit Candidate" onClick={() => openEditCandidate(c)}><Pencil size={13} /></button></td>
@@ -481,10 +453,9 @@ export default function ClientDetailPage() {
           <h2 className="client-title-text">{client.name}</h2>
           <div className="client-metrics-grid">
             <div><span>Client Status</span><strong>{calculatedClientStatus}</strong></div>
-            <div><span>Active Mandates</span><strong>{jobCounts.active}</strong></div>
-            <div><span>Open Mandates</span><strong>{jobCounts.open}</strong></div>
-            <div><span>On Hold Mandates</span><strong>{jobCounts.onHold}</strong></div>
-            <div><span>Closed Mandates</span><strong>{jobCounts.closed}</strong></div>
+            <div><span>Ongoing Mandates</span><strong>{jobCounts.ongoing}</strong></div>
+            <div><span>Scrapped Mandates</span><strong>{jobCounts.scrapped}</strong></div>
+            <div><span>Completed Mandates</span><strong>{jobCounts.completed}</strong></div>
           </div>
         </div>
       </div>
@@ -509,7 +480,7 @@ export default function ClientDetailPage() {
                 <tr key={group.title}>
                   <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{group.relatedJob?.job_display_id || '-'}</td>
                   <td><button className="table-link-button" type="button" onClick={() => openGroup(group.title)}>{group.title}</button></td>
-                  <td><span className={`badge ${STATUS_BADGE[group.status] || ''}`}>{group.status}</span></td>
+                  <td><span className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`}>{group.status}</span></td>
                   <td className="align-center"><button className="count-badge-link" type="button" onClick={() => openGroup(group.title)}>{group.stats.total}</button></td>
                   {STATUS_COLUMNS.map(([key, label]) => (
                     <td className="align-center" key={key}>
@@ -590,7 +561,7 @@ export default function ClientDetailPage() {
                   ['expected_salary', 'Expected Salary', 'number'],
                   ['job_title', 'Mandate / Role', 'text'],
                   ['linkedin_url', 'LinkedIn URL', 'text'],
-                  ['cv_link', 'Resume / CV', 'text'],
+                  ['cv_link', 'CV', 'text'],
                 ].map(([field, label, type]) => (
                   <div className="form-group" key={field}>
                     <label className="form-label">{label}</label>
@@ -609,6 +580,18 @@ export default function ClientDetailPage() {
                     {RELOCATE_OPTIONS.map(value => <option key={value || '-'} value={value}>{value || '-'}</option>)}
                   </select>
                 </div>
+                {editForm.status === 'Hired' && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">Offered CTC</label>
+                      <input className="form-control" type="number" value={editForm.offered_ctc ?? ''} onChange={(event) => updateEditField('offered_ctc', event.target.value)} disabled={savingCandidate} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Date of Joining</label>
+                      <input className="form-control" type="date" value={editForm.date_of_joining || ''} onChange={(event) => updateEditField('date_of_joining', event.target.value)} disabled={savingCandidate} />
+                    </div>
+                  </>
+                )}
                 <div className="form-group full">
                   <label className="form-label">Skills</label>
                   <input className="form-control" value={editForm.skills} onChange={(event) => updateEditField('skills', event.target.value)} disabled={savingCandidate} />

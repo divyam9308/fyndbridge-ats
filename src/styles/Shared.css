@@ -830,8 +830,13 @@
 .badge-client-submission  { background: #D1ECF1; color: #0C5460; }
 .badge-offered            { background: #D4EDDA; color: #155724; }
 .badge-hired              { background: var(--navy); color: var(--white); }
+.badge-offer-declined     { background: #F8D7DA; color: #721C24; }
+.badge-dropout            { background: #F8D7DA; color: #721C24; }
 .badge-rejected-recruiter { background: #F8D7DA; color: #721C24; }
 .badge-rejected-client    { background: #F8D7DA; color: #721C24; }
+.badge-mandate-completed  { background: #D4EDDA; color: #155724; }
+.badge-mandate-ongoing    { background: #FFF3CD; color: #856404; }
+.badge-mandate-scrapped   { background: #F8D7DA; color: #721C24; }
 .badge-open               { background: #17A2B8; color: #FFFFFF; }
 .badge-on-hold            { background: #FFF3CD; color: #856404; }
 .badge-closed             { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-200); }

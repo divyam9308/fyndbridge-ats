@@ -12,6 +12,8 @@ const VALID_STATUSES = [
   'Not Interested',
   'Offered',
   'Hired',
+  'Offer Declined',
+  'Dropout',
   'Rejected by Recruiter',
   'Interview',
   'Client Submission',
@@ -47,6 +49,8 @@ const ASSOCIATION_FIELDS = [
   'status',
   'current_salary',
   'expected_salary',
+  'offered_ctc',
+  'date_of_joining',
   'notes',
   'client_id',
   'job_id'
@@ -376,6 +380,8 @@ function flattenAssociation(row) {
     status: row.status || '-',
     current_salary: row.current_salary || null,
     expected_salary: row.expected_salary || null,
+    offered_ctc: row.offered_ctc || null,
+    date_of_joining: row.date_of_joining || null,
     notes: row.notes || null,
     created_at: row.created_at,
     updated_at: row.updated_at
@@ -414,6 +420,8 @@ function flattenCandidateOnly(candidate) {
     status: '-',
     current_salary: null,
     expected_salary: null,
+    offered_ctc: null,
+    date_of_joining: null,
     notes: null,
     created_at: candidate.created_at,
     updated_at: candidate.updated_at
@@ -525,6 +533,33 @@ async function updateAssociation(associationId, payload) {
   return result
 }
 
+async function syncMandateStatusForJob(jobId) {
+  const id = cleanText(jobId)
+  if (!id) return
+  const { data: job, error: jobError } = await supabase
+    .from('jobs')
+    .select('id, mandate_status, status')
+    .eq('id', id)
+    .maybeSingle()
+  if (jobError) throw jobError
+  if (!job || job.mandate_status === 'Scrapped' || job.status === 'Scrapped') return
+
+  const { count, error: countError } = await supabase
+    .from('candidate_associations')
+    .select('id', { count: 'exact', head: true })
+    .eq('job_id', id)
+    .eq('status', 'Hired')
+  if (countError) throw countError
+
+  const nextStatus = count > 0 ? 'Completed' : 'Ongoing'
+  if (job.mandate_status === nextStatus && job.status === nextStatus) return
+  const { error: updateError } = await supabase
+    .from('jobs')
+    .update({ mandate_status: nextStatus, status: nextStatus, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (updateError) throw updateError
+}
+
 async function listCandidates(req, res) {
   try {
     await ensureCandidateDisplayIds()
@@ -535,6 +570,7 @@ async function listCandidates(req, res) {
     const to = from + limit - 1
 
     const hasAssocFilters = req.query.job_title || 
+                            req.query.job_id ||
                             req.query.client_id ||
                             req.query.client_name || 
                             req.query.status || 
@@ -567,6 +603,10 @@ async function listCandidates(req, res) {
 
     if (req.query.job_title) {
       query = query.ilike('candidate_associations.job_title', `%${cleanText(req.query.job_title)}%`)
+    }
+
+    if (req.query.job_id) {
+      query = query.eq('candidate_associations.job_id', cleanText(req.query.job_id))
     }
 
     if (req.query.client_name) {
@@ -860,6 +900,8 @@ async function createCandidate(req, res) {
       throw associationError
     }
 
+    await syncMandateStatusForJob(association.job_id || assocInsert.job_id)
+
     return res.status(201).json(flattenAssociation(association))
   } catch (err) {
     return logAndSendInternal(res, 'createCandidate', err)
@@ -898,7 +940,7 @@ async function updateCandidate(req, res) {
 
     const { data: existingAssoc, error: lookupError } = await supabase
       .from('candidate_associations')
-      .select('id, candidate_id')
+      .select('id, candidate_id, job_id')
       .eq('id', associationId)
       .maybeSingle()
 
@@ -972,6 +1014,10 @@ async function updateCandidate(req, res) {
         if (error) {
           throw error
         }
+        const affectedJobIds = [...new Set([existingAssociation.job_id, assocUpdate.job_id].filter(Boolean))]
+        for (const jobId of affectedJobIds) {
+          await syncMandateStatusForJob(jobId)
+        }
       }
     } else if (hasAssociation) {
       const assocInsert = {
@@ -992,6 +1038,7 @@ async function updateCandidate(req, res) {
       }
 
       newAssociation = inserted
+      await syncMandateStatusForJob(inserted.job_id || assocInsert.job_id)
     }
 
     if (existingAssociation || newAssociation) {
@@ -1048,7 +1095,7 @@ async function updateCandidateStatus(req, res) {
       .from('candidate_associations')
       .update(updatePayload)
       .eq('id', req.params.id)
-      .select('id, status, updated_at')
+      .select('id, status, job_id, updated_at')
       .maybeSingle()
 
     if (error) {
@@ -1058,6 +1105,8 @@ async function updateCandidateStatus(req, res) {
     if (!data) {
       return res.status(404).json({ error: 'Candidate association not found' })
     }
+
+    await syncMandateStatusForJob(data.job_id)
 
     return res.json(data)
   } catch (err) {

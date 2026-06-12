@@ -4,9 +4,9 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, ChevronDown, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
+import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
-const PRIORITIES = ['P1', 'P2', 'P3', 'Scrap', 'Completed']
 const SORT_OPTIONS = [
   { field: 'job_id', label: 'Job ID' },
   { field: 'role', label: 'Alphabetic order' }
@@ -20,7 +20,7 @@ const EMPTY_FORM = {
   role: '',
   location: '',
   budget: '',
-  priority: '',
+  mandate_status: '',
   vertical: '',
   allocation_date: ''
 }
@@ -166,7 +166,7 @@ export default function JobsPage() {
       role: job.role || job.title || '',
       location: job.location || job.city || '',
       budget: job.budget || '',
-      priority: job.priority || '',
+      mandate_status: normalizeMandateStatus(job.mandate_status || job.status || job.priority) === '-' ? '' : normalizeMandateStatus(job.mandate_status || job.status || job.priority),
       vertical: job.vertical || '',
       allocation_date: job.allocation_date || todayLocal()
     })
@@ -207,7 +207,7 @@ export default function JobsPage() {
         role: form.role,
         location: form.location,
         budget: form.budget,
-        priority: form.priority,
+        mandate_status: form.mandate_status || null,
         vertical: form.vertical,
         allocation_date: form.allocation_date
       }
@@ -242,7 +242,7 @@ export default function JobsPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setAiFilters(null)
-        setAiError(data.error || 'Could not parse Mandate Tracker filter.')
+      setAiError(data.error || 'Could not parse Mandates filter.')
         return
       }
       setAiFilters(data.filters)
@@ -325,24 +325,25 @@ export default function JobsPage() {
 
       <div className="table-card">
         {loading ? (
-          <div className="loading-state"><Loader2 size={32} className="spin" color="var(--gold)" /><p>Loading mandate tracker...</p></div>
+          <div className="loading-state"><Loader2 size={32} className="spin" color="var(--gold)" /><p>Loading mandates...</p></div>
         ) : error ? (
           <div className="empty-state"><div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div><div className="empty-state-title">Error loading data</div><div className="empty-state-desc">{error}</div></div>
         ) : jobs.length === 0 ? (
           <div className="empty-state"><div className="empty-state-title">No mandates found</div><div className="empty-state-desc">Create a mandate to get started.</div></div>
         ) : (
           <div className="table-wrapper">
-            <table className="data-table candidates-master-table" aria-label="Mandate Tracker">
+            <table className="data-table candidates-master-table" aria-label="Mandates">
               <thead>
                 <tr>
                   <th>Job ID</th>
                   <th>Consultant</th>
                   <th>Team Lead</th>
+                  <th>Client ID</th>
                   <th>Client Name</th>
                   <th>Role</th>
                   <th>Location</th>
                   <th>Budget</th>
-                  <th>Priority</th>
+                  <th>Mandate Status</th>
                   <th>Vertical</th>
                   <th>Date of Allocation</th>
                   <th>Action</th>
@@ -363,11 +364,12 @@ export default function JobsPage() {
                       )}
                     </td>
                     <td>{dash(job.team_lead)}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{dash(job.client_display_id)}</td>
                     <td>{dash(job.client_name)}</td>
                     <td><Link className="name-text" to={`/dashboard/clients/${job.client_id}/jobs/${job.id}/candidates`}>{dash(job.role)}</Link></td>
                     <td>{dash(job.location)}</td>
                     <td>{dash(job.budget)}</td>
-                    <td>{dash(job.priority)}</td>
+                    <td><span className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`}>{dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}</span></td>
                     <td>{dash(job.vertical)}</td>
                     <td>{dash(job.allocation_date)}</td>
                     <td><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)}><Pencil size={13} /></button></td>
@@ -453,6 +455,10 @@ export default function JobsPage() {
                   {errors.client_id && <span className="form-error">{errors.client_id}</span>}
                 </div>
                 <div className="form-group">
+                  <label className="form-label">Client ID</label>
+                  <input className="form-control" value={clientOptions.find(client => client.id === form.client_id)?.client_display_id || ''} placeholder="Auto-filled after selecting client" disabled readOnly />
+                </div>
+                <div className="form-group">
                   <label className="form-label">Role <span className="req">*</span></label>
                   <input className={`form-control${errors.role ? ' is-error' : ''}`} value={form.role} onChange={e => setForm(current => ({ ...current, role: e.target.value }))} disabled={saving} />
                   {errors.role && <span className="form-error">{errors.role}</span>}
@@ -469,10 +475,10 @@ export default function JobsPage() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Priority</label>
-                  <select className="form-control" value={form.priority} onChange={e => setForm(current => ({ ...current, priority: e.target.value }))} disabled={saving}>
+                  <label className="form-label">Mandate Status</label>
+                  <select className="form-control" value={form.mandate_status} onChange={e => setForm(current => ({ ...current, mandate_status: e.target.value }))} disabled={saving}>
                     <option value="">-</option>
-                    {PRIORITIES.map(value => <option key={value}>{value}</option>)}
+                    {MANDATE_STATUSES.map(value => <option key={value}>{value}</option>)}
                   </select>
                 </div>
                 <div className="form-group">

@@ -4,7 +4,7 @@ import './Topbar.css'
 
 const pageTitles = {
   '/dashboard':            { title: 'Dashboard',   crumb: 'Home / Dashboard' },
-  '/dashboard/jobs':       { title: 'Mandate Tracker', crumb: 'Home / Mandate Tracker' },
+  '/dashboard/jobs':       { title: 'Mandates', crumb: 'Home / Mandates' },
   '/dashboard/clients':    { title: 'Clients',     crumb: 'Home / Clients' },
   '/dashboard/candidates': { title: 'Candidates',  crumb: 'Home / Candidates' },
   '/dashboard/settings':   { title: 'Settings',    crumb: 'Home / Settings' },

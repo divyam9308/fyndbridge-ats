@@ -110,9 +110,9 @@ function buildJobs() {
     return Array.from({ length: count }, (_, offset) => {
       const title = JOB_TITLES[(clientIndex * 3 + offset) % JOB_TITLES.length]
       const [salaryMin, salaryMax] = salaryRangeForIndex(jobId)
-      const statuses = ['Open', 'Active', 'On Hold', 'Closed', 'Filled']
+      const statuses = ['Ongoing', 'Scrapped', 'Completed']
       const status = statuses[(clientIndex + offset) % statuses.length]
-      const completion = status === 'Filled' || status === 'Closed' ? 100 : 22 + ((jobId * 9) % 69)
+      const completion = status === 'Completed' ? 100 : 22 + ((jobId * 9) % 69)
       return {
         id: jobId++,
         title,
@@ -125,9 +125,9 @@ function buildJobs() {
         experienceLabel: ['1-3 years', '2-4 years', '3-5 years', '4-6 years', '5-8 years', '8-12 years'][(clientIndex + offset) % 6],
         experienceMin: [1, 2, 3, 4, 5, 8][(clientIndex + offset) % 6],
         completion,
-        successCount: status === 'Filled' ? 1 + ((clientIndex + offset) % 3) : (jobId + clientIndex) % 2,
+        successCount: status === 'Completed' ? 1 + ((clientIndex + offset) % 3) : (jobId + clientIndex) % 2,
         rejectedByClient: (clientIndex + offset) % 5,
-        openPositions: status === 'Filled' || status === 'Closed' ? 0 : 1 + ((clientIndex + offset) % 4),
+        openPositions: status === 'Completed' ? 0 : 1 + ((clientIndex + offset) % 4),
         notes: `${title} mandate for ${clientName}.`
       }
     })
@@ -313,6 +313,7 @@ async function main() {
     title: j.title,
     city: j.city,
     state: j.state,
+    mandate_status: j.status,
     status: j.status,
     salary_min: j.salaryMin,
     salary_max: j.salaryMax,

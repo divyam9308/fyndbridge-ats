@@ -1,7 +1,7 @@
 const OPERATORS = ['contains', 'equals', 'not_equals', 'starts_with', 'ends_with', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'between', 'before', 'after', 'on', 'is_empty', 'is_not_empty', 'in']
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
-const PRIORITIES = ['P1', 'P2', 'P3', 'Scrap', 'Completed']
+const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
 
 const clean = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
 const lower = (value) => clean(value).toLowerCase()
@@ -32,12 +32,10 @@ function normalizeBudget(value) {
   return BUDGETS.find(item => item.startsWith(`${range[1]}-${range[2]} `)) || `${range[1]}-${range[2]} lac`
 }
 
-function normalizePriority(value) {
+function normalizeMandateStatus(value) {
   const text = lower(value)
-  if (text === 'p1') return 'P1'
-  if (text === 'p2') return 'P2'
-  if (text === 'p3') return 'P3'
-  if (['scrap', 'scrapped'].includes(text)) return 'Scrap'
+  if (['ongoing', 'open', 'active'].includes(text)) return 'Ongoing'
+  if (['scrap', 'scrapped'].includes(text)) return 'Scrapped'
   if (['completed', 'complete', 'closed'].includes(text)) return 'Completed'
   return clean(value)
 }
@@ -58,7 +56,7 @@ const normalizers = {
   enum: clean,
   boolean: normalizeBoolean,
   budget: normalizeBudget,
-  priority: normalizePriority
+  mandate_status: normalizeMandateStatus
 }
 
 const candidateFields = {
@@ -95,7 +93,7 @@ const mandateFields = {
   role: { aliases: ['job role', 'role'], type: 'text' },
   location: { aliases: ['location', 'city'], type: 'text' },
   budget: { aliases: ['budget', 'salary range'], type: 'budget' },
-  priority: { aliases: ['priority'], type: 'priority' },
+  mandate_status: { aliases: ['mandate status', 'status', 'priority'], type: 'mandate_status' },
   vertical: { aliases: ['vertical', 'domain'], type: 'text' },
   date_of_allocation: { aliases: ['allocation date', 'date of allocation', 'date'], type: 'date' }
 }
@@ -186,7 +184,7 @@ function buildAiFilterPrompt(page, prompt) {
     'Use is_empty for blank/null/empty/- and is_not_empty for not blank.',
     'Detect IDs: CA10 -> candidate_id equals CA10; CL5 -> client_id equals CL5; JB10 -> job_id equals JB10.',
     'Normalize budget examples 20-25, 20 to 25, 20-25 lac, 20 lpa to 25 lpa as 20-25 lac.',
-    'Normalize priority: p1/P1, p2/P2, p3/P3, scrapped -> Scrap, completed/closed -> Completed.',
+    'Normalize mandate_status: ongoing/open/active -> Ongoing, scrapped/scrap -> Scrapped, completed/closed -> Completed.',
     'Fields:',
     fields,
     `Request: ${clean(prompt)}`
@@ -200,7 +198,7 @@ function isExactPrompt(prompt) {
 function isPlainMandatePrompt(prompt) {
   const text = lower(prompt)
   if (!text || /\b(JB\d+|P[123])\b/i.test(prompt)) return false
-  if (/[<>=]/.test(text) || /\b(before|after|on|between|budget|priority|date|allocation|team lead|tl|consultant|client|client name|role|job role|location|city|vertical|domain)\b/i.test(text)) return false
+  if (/[<>=]/.test(text) || /\b(before|after|on|between|budget|priority|mandate status|status|date|allocation|team lead|tl|consultant|client|client name|role|job role|location|city|vertical|domain)\b/i.test(text)) return false
   return /^[a-z0-9][\w\s&.-]+$/i.test(clean(prompt))
 }
 
@@ -248,8 +246,8 @@ function parsePrompt(page, prompt) {
     if (id.startsWith('JB') && config.fields.job_id) add('job_id', 'equals', id)
   }
 
-  if (config.fields.priority) PRIORITIES.forEach(priority => {
-    if (new RegExp(`\\b${priority.toLowerCase()}\\b`).test(lower(text)) || (priority === 'Scrap' && /\bscrapped?\b/i.test(text)) || (priority === 'Completed' && /\b(completed|closed)\b/i.test(text))) add('priority', 'equals', priority)
+  if (config.fields.mandate_status) MANDATE_STATUSES.forEach(status => {
+    if (new RegExp(`\\b${status.toLowerCase()}\\b`).test(lower(text)) || (status === 'Scrapped' && /\bscrapped?\b/i.test(text)) || (status === 'Completed' && /\b(completed|closed)\b/i.test(text)) || (status === 'Ongoing' && /\b(ongoing|open|active)\b/i.test(text))) add('mandate_status', 'equals', status)
   })
   if (config.fields.budget) {
     const budget = text.match(/(?:budget|salary range)?\s*(>?\s*\d+\s*(?:-|to)\s*\d+|>\s*\d+)(?:\s*(?:lac|lpa|lakh|lakhs))?/i)
@@ -258,12 +256,12 @@ function parsePrompt(page, prompt) {
 
   const explicit = [
     ['candidate_name', /(?:candidate|candidate name|name)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|consultant|role|location|status|email|mobile|phone|experience|salary|date)\b|$)/i],
-    ['client_name', /(?:client|client name)\s+(?:is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:p1|p2|p3|mandates?|candidate|consultant|team lead|role|location|budget|priority|vertical|date|in)\b|$)/i],
-    ['consultant', /consultant\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|team lead|role|location|budget|priority|vertical|date|in|for)\b|$)/i],
-    ['team_lead', /(?:team lead|tl)\s+(?:is\s+|equals\s+)?(-|[a-z][\w\s.-]*?)(?=\s+(?:client|consultant|role|location|budget|priority|vertical|date|in|for)\b|$)/i],
-    ['role', /(?:role|job role|job)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:client|consultant|team lead|location|budget|priority|vertical|date|in|for)\b|$)/i],
-    ['location', /(?:location|city|current location)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|consultant|team lead|role|budget|priority|vertical|date|for)\b|$)|\bin\s+([a-z][\w\s.-]*?)(?=\s+(?:for|client|consultant|team lead|role|budget|priority|vertical|date)\b|$)/i],
-    ['vertical', /(?:vertical|domain)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:client|consultant|team lead|role|location|budget|priority|date|in|for)\b|$)/i],
+    ['client_name', /(?:client|client name)\s+(?:is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:mandates?|candidate|consultant|team lead|role|location|budget|priority|mandate status|status|vertical|date|in)\b|$)/i],
+    ['consultant', /consultant\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|team lead|role|location|budget|priority|mandate status|status|vertical|date|in|for)\b|$)/i],
+    ['team_lead', /(?:team lead|tl)\s+(?:is\s+|equals\s+)?(-|[a-z][\w\s.-]*?)(?=\s+(?:client|consultant|role|location|budget|priority|mandate status|status|vertical|date|in|for)\b|$)/i],
+    ['role', /(?:role|job role|job)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:client|consultant|team lead|location|budget|priority|mandate status|status|vertical|date|in|for)\b|$)/i],
+    ['location', /(?:location|city|current location)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date|for)\b|$)|\bin\s+([a-z][\w\s.-]*?)(?=\s+(?:for|client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date)\b|$)/i],
+    ['vertical', /(?:vertical|domain)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:client|consultant|team lead|role|location|budget|priority|mandate status|status|date|in|for)\b|$)/i],
     ['designation', /designation\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)$/i],
     ['organisation', /(?:organisation|organization|company)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)$/i],
     ['status', /status\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)$/i]

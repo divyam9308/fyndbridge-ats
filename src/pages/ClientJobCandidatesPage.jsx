@@ -4,26 +4,10 @@ import { ChevronLeft, Users, AlertCircle, Loader2, FileText } from 'lucide-react
 import '../styles/Shared.css'
 import './ClientJobCandidatesPage.css'
 import { apiCandidateToUi } from '../utils/candidateUtils'
+import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUSES } from '../utils/candidateStatuses'
 
-const STATUS_BADGE_MAP = {
-  'Interested':           'badge-interested',
-  'Not Interested':       'badge-not-interested',
-  'Interview':            'badge-interview',
-  'Client Submission':    'badge-client-submission',
-  'Offered':              'badge-offered',
-  'Hired':                'badge-hired',
-  'Rejected by Recruiter':'badge-rejected-recruiter',
-  'Rejected by Client':   'badge-rejected-client',
-}
-
-const ALL_FILTER_STATUSES = [
-  'All',
-  'Interested',
-  'Interview',
-  'Offered',
-  'Hired',
-  'Rejected'
-]
+const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
+const ALL_FILTER_STATUSES = ['All', ...CANDIDATE_STATUSES, 'Rejected']
 
 const fmt = (n) => n ? `Rs. ${Number(n).toLocaleString('en-IN')}` : '-'
 const initials = (name) => name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
@@ -68,8 +52,7 @@ export default function ClientJobCandidatesPage() {
         setClient(clientData)
         setJob(jobData)
 
-        // 2. Fetch candidates matching this client name
-        const candidatesRes = await fetch(`/api/candidates?client_name=${encodeURIComponent(clientData.name)}&limit=100`)
+        const candidatesRes = await fetch(`/api/candidates?client_id=${clientId}&job_id=${jobId}&limit=100`)
         if (!candidatesRes.ok) throw new Error('Failed to fetch candidates.')
         
         const candidatesData = await candidatesRes.json()
@@ -123,11 +106,7 @@ export default function ClientJobCandidatesPage() {
     )
   }
 
-  // Filter candidates assigned to this job title
-  const jobCandidates = candidates.filter(c => c.job === job.title)
-
-  // Apply status filter logic
-  const filteredCandidates = jobCandidates.filter(c => {
+  const filteredCandidates = candidates.filter(c => {
     if (statusFilter === 'All') return true
     if (statusFilter === 'Rejected') {
       return c.status === 'Rejected by Recruiter' || c.status === 'Rejected by Client'

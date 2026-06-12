@@ -6,28 +6,16 @@ import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
+import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 
 /* ====== Static reference data ====== */
-const ALL_STATUSES = [
-  'Interested', 'Not Interested', 'Interview', 'Client Submission',
-  'Offered', 'Hired', 'Rejected by Recruiter', 'Rejected by Client',
-]
-const STATUS_OPTIONS = ['', ...ALL_STATUSES]
+const STATUS_OPTIONS = CANDIDATE_STATUS_OPTIONS
 const RELOCATE_OPTIONS = ['', 'Yes', 'No']
 const MAX_RESUME_FILES = 10
 const MAX_RESUME_SIZE = 10 * 1024 * 1024
 const ACCEPTED_RESUME_EXTENSIONS = ['pdf', 'doc', 'docx']
 
-const STATUS_BADGE_MAP = {
-  'Interested':           'badge-interested',
-  'Not Interested':       'badge-not-interested',
-  'Interview':            'badge-interview',
-  'Client Submission':    'badge-client-submission',
-  'Offered':              'badge-offered',
-  'Hired':                'badge-hired',
-  'Rejected by Recruiter':'badge-rejected-recruiter',
-  'Rejected by Client':   'badge-rejected-client',
-}
+const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
 
 const fmt = (n) => n ? `Rs. ${Number(n).toLocaleString('en-IN')}` : '-'
 const initials = (name) => name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()
@@ -129,6 +117,7 @@ const EMPTY_CAND = {
   name:'', email:'', mobile:'', designation:'', city:'', state:'',
   location:'', currentCompany:'', currentOrganisation:'', exp:'', salary:'', expectedSalary:'', skills:[], education:'',
   noticePeriod:'', openToRelocate:'',
+  offeredCtc:'', dateOfJoining:'',
   client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', clientPhone:'', status:'',
   cvLink:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
 }
@@ -165,6 +154,8 @@ const apiCandidateToUi = (row) => ({
   openToRelocate: row.open_to_relocate === null || row.open_to_relocate === undefined ? '' : (row.open_to_relocate ? 'Yes' : 'No'),
   salary: row.current_salary ?? '',
   expectedSalary: row.expected_salary ?? '',
+  offeredCtc: row.offered_ctc ?? '',
+  dateOfJoining: row.date_of_joining || '',
   skills: row.skills || [],
   education: row.education || '',
   client: row.client_name || '',
@@ -222,6 +213,8 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     status: f.status,
     current_salary: cleanNumberForApi(f.salary),
     expected_salary: cleanNumberForApi(f.expectedSalary),
+    offered_ctc: f.status === 'Hired' ? cleanNumberForApi(f.offeredCtc) : '',
+    date_of_joining: f.status === 'Hired' ? f.dateOfJoining || '' : '',
     cv_link: f.cvLink,
     linkedin_url: f.linkedinUrl,
     notes: f.notes,
@@ -1141,6 +1134,19 @@ export default function CandidatesPage() {
           </select>
         </div>
 
+        {f.status === 'Hired' && (
+          <>
+            <div className="form-group">
+              <label className="form-label">Offered CTC</label>
+              <input name="offeredCtc" type="number" value={f.offeredCtc || ''} onChange={handleLocalChange} className="form-control" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Date of Joining</label>
+              <input name="dateOfJoining" type="date" value={f.dateOfJoining || ''} onChange={handleLocalChange} className="form-control" />
+            </div>
+          </>
+        )}
+
         <div className="form-group full">
           <label className="form-label">Skills</label>
           <div className="tag-input-wrap" onClick={e => e.currentTarget.querySelector('input').focus()}>
@@ -1245,7 +1251,7 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">CV Link
+          <label className="form-label">CV
             {f.cvLink && <span style={{ marginLeft:6, fontSize:10, color:'var(--success)', fontWeight:600, background:'rgba(40,167,69,0.1)', padding:'1px 6px', borderRadius:4 }}>Auto-filled</span>}
           </label>
           <input name="cvLink" value={f.cvLink || ''} onChange={handleLocalChange}
@@ -1386,6 +1392,10 @@ export default function CandidatesPage() {
         )
       case 'status':
         return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span></td>
+      case 'offeredCtc':
+        return <td key={key} style={{ fontWeight:600 }}>{c.status === 'Hired' ? fmt(c.offeredCtc) : '-'}</td>
+      case 'dateOfJoining':
+        return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
       case 'cv':
         return (
           <td key={key}>

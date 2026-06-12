@@ -12,7 +12,7 @@ const stats = [
     trend: '↑ 12 this week',
   },
   {
-    label: 'Open Mandates',
+    label: 'Ongoing Mandates',
     value: '17',
     Icon: Briefcase,
     accent: '#F5A623',
@@ -49,11 +49,11 @@ const candidates = [
 ]
 
 const pipeline = [
-  { title: 'Backend Engineer',    client: 'Zeta FinTech',      status: 'Open',   badge: 'badge-open',   pct: 68 },
-  { title: 'Product Designer',    client: 'Lumino Health',     status: 'Open',   badge: 'badge-open',   pct: 45 },
-  { title: 'Data Analyst',        client: 'Nexara Analytics',  status: 'Open',   badge: 'badge-open',   pct: 30 },
-  { title: 'Senior React Dev',    client: 'CloudBridge Labs',  status: 'Filled', badge: 'badge-filled', pct: 100 },
-  { title: 'DevOps Engineer',     client: 'Infra Systems Co.', status: 'Open',   badge: 'badge-open',   pct: 55 },
+  { title: 'Backend Engineer',    client: 'Zeta FinTech',      status: 'Ongoing',   badge: 'badge-mandate-ongoing',   pct: 68 },
+  { title: 'Product Designer',    client: 'Lumino Health',     status: 'Ongoing',   badge: 'badge-mandate-ongoing',   pct: 45 },
+  { title: 'Data Analyst',        client: 'Nexara Analytics',  status: 'Ongoing',   badge: 'badge-mandate-ongoing',   pct: 30 },
+  { title: 'Senior React Dev',    client: 'CloudBridge Labs',  status: 'Completed', badge: 'badge-mandate-completed', pct: 100 },
+  { title: 'DevOps Engineer',     client: 'Infra Systems Co.', status: 'Ongoing',   badge: 'badge-mandate-ongoing',   pct: 55 },
 ]
 
 const pipelineBarColor = (pct) => {
