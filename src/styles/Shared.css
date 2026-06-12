@@ -595,10 +595,6 @@
   display: block;
 }
 
-.client-search-wrap:focus-within .client-suggestions.manual-suggestions {
-  display: none;
-}
-
 .client-suggestions.manual-suggestions.is-open {
   display: block;
 }
