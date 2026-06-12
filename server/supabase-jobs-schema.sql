@@ -26,6 +26,15 @@ create table if not exists public.jobs (
   updated_at timestamptz not null default now()
 );
 
+alter table public.jobs
+  add column if not exists job_display_id text,
+  add column if not exists consultants text[] not null default '{}',
+  add column if not exists team_lead text,
+  add column if not exists budget text,
+  add column if not exists priority text,
+  add column if not exists vertical text,
+  add column if not exists allocation_date date;
+
 create index if not exists jobs_client_id_idx
   on public.jobs(client_id);
 
@@ -40,15 +49,6 @@ create index if not exists jobs_priority_idx
 
 create index if not exists jobs_allocation_date_idx
   on public.jobs(allocation_date);
-
-alter table public.jobs
-  add column if not exists job_display_id text,
-  add column if not exists consultants text[] not null default '{}',
-  add column if not exists team_lead text,
-  add column if not exists budget text,
-  add column if not exists priority text,
-  add column if not exists vertical text,
-  add column if not exists allocation_date date;
 
 update public.jobs
 set allocation_date = coalesce(allocation_date, created_at::date)

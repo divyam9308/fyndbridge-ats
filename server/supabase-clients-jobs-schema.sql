@@ -42,12 +42,6 @@ create table if not exists public.jobs (
   updated_at timestamptz not null default now()
 );
 
--- Index optimization
-create index if not exists clients_name_idx on public.clients(name);
-create index if not exists jobs_client_id_idx on public.jobs(client_id);
-create index if not exists jobs_title_idx on public.jobs(title);
-create index if not exists jobs_display_id_idx on public.jobs(job_display_id);
-
 alter table public.jobs
   add column if not exists job_display_id text,
   add column if not exists consultants text[] not null default '{}',
@@ -56,6 +50,12 @@ alter table public.jobs
   add column if not exists priority text,
   add column if not exists vertical text,
   add column if not exists allocation_date date;
+
+-- Index optimization
+create index if not exists clients_name_idx on public.clients(name);
+create index if not exists jobs_client_id_idx on public.jobs(client_id);
+create index if not exists jobs_title_idx on public.jobs(title);
+create index if not exists jobs_display_id_idx on public.jobs(job_display_id);
 
 -- Modify candidate_associations to add optional client_id and job_id foreign keys for mapping
 alter table public.candidate_associations
