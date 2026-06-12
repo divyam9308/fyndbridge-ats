@@ -97,6 +97,14 @@ function normalizeDuplicateText(value) {
   return cleanText(value).toLowerCase()
 }
 
+function normalizeDuplicateEmail(value) {
+  return cleanText(value).toLowerCase()
+}
+
+function normalizeDuplicateMobile(value) {
+  return normalizeMobile(value).replace(/\D/g, '')
+}
+
 function isDuplicateValue(value) {
   const text = normalizeDuplicateText(value)
   return Boolean(text && text !== '-' && text !== 'n/a' && text !== 'na')
@@ -178,48 +186,29 @@ async function getNextCandidateDisplayId(req, res) {
   }
 }
 
-async function findCandidateDuplicate(fullName, email) {
-  const name = normalizeDuplicateText(fullName)
-  const normalizedEmail = normalizeDuplicateText(email)
+async function findCandidateAnyDuplicate(email, mobileNumber) {
+  const normalizedEmail = normalizeDuplicateEmail(email)
+  const mobile = normalizeDuplicateMobile(mobileNumber)
 
-  if (!name || !isDuplicateValue(normalizedEmail)) return null
-
-  const { data, error } = await supabase
-    .from('candidates')
-    .select('*')
-    .ilike('email', normalizedEmail)
-
-  if (error) throw error
-
-  return (data || []).find((candidate) => normalizeDuplicateText(candidate.full_name) === name) || null
-}
-
-async function findCandidateDuplicateByNameAndMobile(fullName, mobileNumber) {
-  const name = normalizeDuplicateText(fullName)
-  const mobile = normalizeMobile(mobileNumber)
-
-  if (!name || !isDuplicateValue(mobile)) return null
+  if (!isDuplicateValue(normalizedEmail) && !isDuplicateValue(mobile)) return null
 
   const { data, error } = await supabase
     .from('candidates')
     .select('*')
-    .eq('mobile_number', mobile)
+    .limit(10000)
 
   if (error) throw error
 
-  return (data || []).find((candidate) => normalizeDuplicateText(candidate.full_name) === name) || null
-}
-
-async function findCandidateAnyDuplicate(fullName, email, mobileNumber) {
-  return (
-    await findCandidateDuplicate(fullName, email) ||
-    await findCandidateDuplicateByNameAndMobile(fullName, mobileNumber)
-  )
+  return (data || []).find((candidate) => {
+    const emailMatches = isDuplicateValue(normalizedEmail) && normalizeDuplicateEmail(candidate.email) === normalizedEmail
+    const mobileMatches = isDuplicateValue(mobile) && normalizeDuplicateMobile(candidate.mobile_number) === mobile
+    return emailMatches || mobileMatches
+  }) || null
 }
 
 async function checkCandidateDuplicate(req, res) {
   try {
-    const existing = await findCandidateAnyDuplicate(req.query.name, req.query.email, req.query.mobile)
+    const existing = await findCandidateAnyDuplicate(req.query.email, req.query.mobile)
     return res.json({ duplicate: Boolean(existing), existing })
   } catch (err) {
     return logAndSendInternal(res, 'checkCandidateDuplicate', err)
@@ -426,6 +415,43 @@ function flattenCandidateOnly(candidate) {
     created_at: candidate.created_at,
     updated_at: candidate.updated_at
   }
+}
+
+async function findExactAssociationDuplicate({ email, mobileNumber, clientId, jobId }) {
+  const normalizedEmail = normalizeDuplicateEmail(email)
+  const mobile = normalizeDuplicateMobile(mobileNumber)
+  const cleanClientId = cleanText(clientId)
+  const cleanJobId = cleanText(jobId)
+
+  if (!cleanClientId || !cleanJobId || (!isDuplicateValue(normalizedEmail) && !isDuplicateValue(mobile))) return null
+
+  const { data: candidates, error: candidatesError } = await supabase
+    .from('candidates')
+    .select('id, email, mobile_number')
+    .limit(10000)
+  if (candidatesError) throw candidatesError
+
+  const candidateIds = (candidates || [])
+    .filter((candidate) => {
+      const emailMatches = isDuplicateValue(normalizedEmail) && normalizeDuplicateEmail(candidate.email) === normalizedEmail
+      const mobileMatches = isDuplicateValue(mobile) && normalizeDuplicateMobile(candidate.mobile_number) === mobile
+      return emailMatches || mobileMatches
+    })
+    .map(candidate => candidate.id)
+
+  if (!candidateIds.length) return null
+
+  const { data, error } = await supabase
+    .from('candidate_associations')
+    .select('*, candidates(*)')
+    .in('candidate_id', candidateIds)
+    .eq('client_id', cleanClientId)
+    .eq('job_id', cleanJobId)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  return data ? flattenAssociation(data) : null
 }
 
 function candidateFilterValue(row, field) {
@@ -794,11 +820,7 @@ async function createCandidate(req, res) {
         ? associationPayload.status.trim()
         : "-";
 
-    const duplicate = await findCandidateAnyDuplicate(
-      candidatePayload.full_name,
-      candidatePayload.email,
-      candidatePayload.mobile_number
-    )
+    const duplicate = await findCandidateAnyDuplicate(candidatePayload.email, candidatePayload.mobile_number)
 
     if (duplicate && !['add_duplicate', 'update_current'].includes(duplicateAction)) {
       return res.status(409).json({
@@ -806,6 +828,23 @@ async function createCandidate(req, res) {
         error: 'Duplicate candidate found.',
         existing: duplicate
       })
+    }
+
+    if (duplicateAction === 'add_duplicate') {
+      const exactAssociation = await findExactAssociationDuplicate({
+        email: candidatePayload.email,
+        mobileNumber: candidatePayload.mobile_number,
+        clientId: associationPayload.client_id,
+        jobId: associationPayload.job_id
+      })
+      if (exactAssociation) {
+        return res.status(409).json({
+          duplicate: true,
+          exactAssociation: true,
+          error: 'This candidate has already been added for this client and mandate.',
+          existing: exactAssociation
+        })
+      }
     }
 
     let candidate = duplicateAction === 'update_current'

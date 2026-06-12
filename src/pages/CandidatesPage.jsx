@@ -237,6 +237,8 @@ export default function CandidatesPage() {
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
   const [candidateDuplicate, setCandidateDuplicate] = useState(null)
+  const [duplicateBypass, setDuplicateBypass] = useState(null)
+  const [duplicateMoreOpen, setDuplicateMoreOpen] = useState(false)
   const [page, setPage] = useState(1)
   const [totalCandidates, setTotalCandidates] = useState(0)
   const pageSize = 50
@@ -439,6 +441,7 @@ export default function CandidatesPage() {
     if (response.status === 409 && payload.duplicate) {
       const error = new Error(payload.error || 'Duplicate candidate found.')
       error.duplicate = payload
+      error.exactAssociation = Boolean(payload.exactAssociation)
       throw error
     }
 
@@ -641,6 +644,7 @@ export default function CandidatesPage() {
     setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName, candidateDisplayId: 'Loading...' })
     setEditing(false)
     setErrors({})
+    setDuplicateBypass(null)
     setSkillInput('')
     setAddOpen(true)
     try {
@@ -661,6 +665,7 @@ export default function CandidatesPage() {
         setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName, candidateDisplayId: 'Loading...' })
         setEditing(false)
         setErrors({})
+        setDuplicateBypass(null)
         setSkillInput('')
         setAddOpen(true)
         fetchNextCandidateDisplayId()
@@ -690,6 +695,7 @@ export default function CandidatesPage() {
     setForm(candidateToForm(candidate))
     setEditing(true)
     setErrors({})
+    setDuplicateBypass(null)
     setSkillInput('')
     setSelectedCandidate(null)
     setAddOpen(true)
@@ -770,13 +776,14 @@ export default function CandidatesPage() {
     if (Object.keys(e).length) { setErrors(e); return }
     setSaving(true)
     try {
-      await saveCandidateToApi(form, { update: editing })
+      await saveCandidateToApi(form, { update: editing, duplicateAction: duplicateBypass?.source === 'manual' ? 'add_duplicate' : '' })
+      setDuplicateBypass(null)
       setAddOpen(false)
       setEditing(false)
       await loadCandidates(page, { showLoading: false })
     } catch (err) {
       if (err.duplicate) {
-        setCandidateDuplicate({ source: 'manual', candidate: form, existing: err.duplicate.existing })
+        setCandidateDuplicate({ source: 'manual', candidate: form, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, message: err.message })
         return
       }
       setErrors({ form: err.message })
@@ -919,12 +926,13 @@ export default function CandidatesPage() {
     if (Object.keys(e).length) { setImportError(Object.values(e)[0]); return }
     setSaving(true)
     try {
-      await saveCandidateToApi(candidateToSave)
+      await saveCandidateToApi(candidateToSave, { duplicateAction: duplicateBypass?.source === 'resume' ? 'add_duplicate' : '' })
+      setDuplicateBypass(null)
       await loadCandidates(page, { showLoading: false })
       await advanceResumeReview('Candidate saved.')
     } catch (err) {
       if (err.duplicate) {
-        setCandidateDuplicate({ source: 'resume', candidate: candidateToSave, existing: err.duplicate.existing })
+        setCandidateDuplicate({ source: 'resume', candidate: candidateToSave, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, message: err.message })
         return
       }
       setImportError(err.message)
@@ -944,10 +952,18 @@ export default function CandidatesPage() {
   const resolveCandidateDuplicate = async (duplicateAction) => {
     if (!candidateDuplicate) return
 
+    if (duplicateAction === 'add_duplicate') {
+      setDuplicateBypass({ source: candidateDuplicate.source })
+      setCandidateDuplicate(null)
+      setDuplicateMoreOpen(false)
+      return
+    }
+
     setSaving(true)
     try {
       await saveCandidateToApi(candidateDuplicate.candidate, { duplicateAction })
       setCandidateDuplicate(null)
+      setDuplicateMoreOpen(false)
       await loadCandidates(page, { showLoading: false })
       if (candidateDuplicate.source === 'resume') {
         await advanceResumeReview('Duplicate resolved.')
@@ -961,6 +977,57 @@ export default function CandidatesPage() {
       else setErrors({ form: message })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const openDuplicateExistingForEdit = () => {
+    if (!candidateDuplicate?.existing) return
+    const existing = apiCandidateToUi(candidateDuplicate.existing)
+    setCandidateDuplicate(null)
+    setDuplicateMoreOpen(false)
+    if (candidateDuplicate.source === 'resume') closeImport()
+    openEditCandidate(existing)
+  }
+
+  const duplicateExistingToUi = (existing) => apiCandidateToUi({
+    ...existing,
+    association_id: existing.association_id || existing.id,
+    candidate_id: existing.candidate_id || existing.id,
+    full_name: existing.full_name,
+    client_name: existing.client_name || '',
+    job_title: existing.job_title || '',
+  })
+
+  const duplicateValue = (row, key) => {
+    switch (key) {
+      case 'candidateDisplayId': return row.candidateDisplayId || '-'
+      case 'date': return formatDate(row.createdAt)
+      case 'consultant': return row.consultant || row.consultantName || '-'
+      case 'client': return row.client || '-'
+      case 'clientId': return row.clientDisplayId || row.clientId || '-'
+      case 'jobId': return row.jobDisplayId || row.jobId || '-'
+      case 'job': return row.job || '-'
+      case 'name': return row.name || '-'
+      case 'organisation': return row.currentOrganisation || row.currentCompany || '-'
+      case 'designation': return row.designation || '-'
+      case 'mobile': return row.mobile || '-'
+      case 'email': return row.email || '-'
+      case 'experience': return row.exp ? `${row.exp} yrs` : '-'
+      case 'skills': return Array.isArray(row.skills) && row.skills.length ? row.skills.join(', ') : '-'
+      case 'salary': return fmt(row.salary)
+      case 'location': return row.location || row.city || '-'
+      case 'notice': return row.noticePeriod !== '' && row.noticePeriod !== null ? row.noticePeriod : '-'
+      case 'expectedSalary': return fmt(row.expectedSalary)
+      case 'relocate': return row.openToRelocate || '-'
+      case 'comments': return row.notes || '-'
+      case 'linkedin': return row.linkedinUrl || '-'
+      case 'status': return row.status || '-'
+      case 'offeredCtc': return row.status === 'Hired' ? fmt(row.offeredCtc) : '-'
+      case 'dateOfJoining': return row.status === 'Hired' ? formatDate(row.dateOfJoining) : '-'
+      case 'cv': return row.cvLink || '-'
+      case 'month': return formatMonth(row.createdAt)
+      case 'action': return '-'
+      default: return '-'
     }
   }
 
@@ -1797,7 +1864,7 @@ export default function CandidatesPage() {
             <div className="modal-body">
               <div className="review-banner">
                 <AlertCircle size={16} />
-                A candidate with the same name and email already exists.
+                {candidateDuplicate.message || 'A candidate with the same email or mobile already exists.'}
               </div>
               <div className="duplicate-compare-grid">
                 <div className="duplicate-compare-card">
@@ -1815,12 +1882,56 @@ export default function CandidatesPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => resolveCandidateDuplicate('add_duplicate')} disabled={saving}>Add Duplicate Entry</button>
-              <button className="btn-primary" onClick={() => resolveCandidateDuplicate('update_current')} disabled={saving}>Update Current Entry</button>
+              <button className="btn-secondary" onClick={() => setDuplicateMoreOpen(true)} disabled={saving}>View More</button>
+              <button className="btn-secondary" onClick={() => { setCandidateDuplicate(null); setDuplicateMoreOpen(false) }} disabled={saving}>Cancel</button>
+              {!candidateDuplicate.exactAssociation && (
+                <button className="btn-secondary" onClick={() => resolveCandidateDuplicate('add_duplicate')} disabled={saving}>Add Duplicate</button>
+              )}
+              <button className="btn-primary" onClick={candidateDuplicate.exactAssociation ? openDuplicateExistingForEdit : () => resolveCandidateDuplicate('update_current')} disabled={saving}>Update Existing</button>
             </div>
           </div>
         </div>
       ), document.body)}
+
+      {candidateDuplicate && duplicateMoreOpen && createPortal((() => {
+        const existing = duplicateExistingToUi(candidateDuplicate.existing || {})
+        const incoming = candidateDuplicate.candidate || {}
+        return (
+          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDuplicateMoreOpen(false)}>
+            <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label="Duplicate Candidate Details">
+              <div className="modal-header">
+                <span className="modal-title">Duplicate Candidate Details</span>
+                <button className="modal-close" onClick={() => setDuplicateMoreOpen(false)} aria-label="Close"><X size={16} /></button>
+              </div>
+              <div className="modal-body">
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Column</th>
+                        <th>Existing Candidate</th>
+                        <th>New Candidate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {CANDIDATE_TABLE_COLUMNS.map(column => (
+                        <tr key={column.key}>
+                          <td>{column.label}</td>
+                          <td>{duplicateValue(existing, column.key)}</td>
+                          <td>{duplicateValue(incoming, column.key)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn-secondary" onClick={() => setDuplicateMoreOpen(false)}>Close</button>
+              </div>
+            </div>
+          </div>
+        )
+      })(), document.body)}
     </div>
   )
 }
