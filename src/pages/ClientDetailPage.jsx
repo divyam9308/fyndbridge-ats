@@ -274,7 +274,7 @@ export default function ClientDetailPage() {
 
   const calculatedClientStatus = useMemo(() => {
     if (jobGroups.length && jobGroups.every(job => job.status === 'Scrapped')) return 'Inactive'
-    if (jobGroups.some(job => job.status === 'Completed')) return 'Active'
+    if (jobGroups.some(job => job.status === 'Ongoing' || job.status === 'Completed')) return 'Active'
     return client?.status || '-'
   }, [client?.status, jobGroups])
 

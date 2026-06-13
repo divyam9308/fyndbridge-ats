@@ -134,7 +134,7 @@ async function nextClientDisplayId(clientName = '') {
 
 function deriveClientStatus(row, jobs = []) {
   if (jobs.length && jobs.every((job) => job.status === 'Scrapped' || job.mandate_status === 'Scrapped')) return 'Inactive'
-  if (jobs.some((job) => job.status === 'Completed' || job.mandate_status === 'Completed')) return 'Active'
+  if (jobs.some((job) => ['Ongoing', 'Completed'].includes(job.status) || ['Ongoing', 'Completed'].includes(job.mandate_status))) return 'Active'
   return row.status || ''
 }
 
