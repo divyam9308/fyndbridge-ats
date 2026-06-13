@@ -1,3 +1,4 @@
+const { randomUUID } = require('crypto')
 const supabase = require('../services/supabaseAdmin')
 const { uploadDocument } = require('../services/documentStorage')
 
@@ -13,7 +14,13 @@ const CLIENT_STATUSES = [
 const TERMS_TYPES = ['%', 'Fixed Fee Model', 'Slab %', 'Any Other']
 
 function logAndSendInternal(res, method, err) {
-  console.error(`${method} error:`, err.message || err)
+  console.error(`${method} error:`, {
+    message: err.message,
+    code: err.code,
+    details: err.details,
+    hint: err.hint,
+    stack: err.stack
+  })
   return res.status(500).json({ error: 'Internal server error', detail: err.message })
 }
 
@@ -327,7 +334,7 @@ function missingClientColumn(error) {
 async function insertClient(payload) {
   let next = payload
   let result = null
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 12; i += 1) {
     result = await supabase.from('clients').insert(next).select('*').single()
     const col = missingClientColumn(result.error)
     if (!col) break
@@ -340,7 +347,7 @@ async function insertClient(payload) {
 async function updateClientRow(id, payload) {
   let next = payload
   let result = null
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 12; i += 1) {
     result = await supabase.from('clients').update(next).eq('id', id).select('*').maybeSingle()
     const col = missingClientColumn(result.error)
     if (!col) break
@@ -426,6 +433,10 @@ async function createClient(req, res) {
     }
 
     payload.client_display_id = payload.client_display_id || await nextClientDisplayId(payload.client_name)
+    if (!payload.client_group_id) {
+      payload.id = randomUUID()
+      payload.client_group_id = payload.id
+    }
     const { data, error } = await insertClient(payload)
     if (error) throw error
 
@@ -436,6 +447,10 @@ async function createClient(req, res) {
         .eq('id', data.id)
         .select('*')
         .single()
+      if (missingClientColumn(groupError) === 'client_group_id') {
+        await linkCandidatesToClient(data)
+        return res.status(201).json(normalizeClient(data))
+      }
       if (groupError) throw groupError
       await linkCandidatesToClient(grouped)
       return res.status(201).json(normalizeClient(grouped))

@@ -269,10 +269,23 @@ export default function CandidatesPage() {
   const [dbClients, setDbClients] = useState([])
   const [dbJobs, setDbJobs] = useState([])
 
-  useEffect(() => {
+  const refreshOptionData = useCallback(() => {
     fetch('/api/clients').then(res => res.json()).then(data => setDbClients(data.data || []))
     fetch('/api/jobs').then(res => res.json()).then(data => setDbJobs(data.data || []))
   }, [])
+
+  useEffect(() => {
+    refreshOptionData()
+  }, [refreshOptionData])
+
+  useEffect(() => {
+    window.addEventListener('ats:clients-updated', refreshOptionData)
+    window.addEventListener('ats:jobs-updated', refreshOptionData)
+    return () => {
+      window.removeEventListener('ats:clients-updated', refreshOptionData)
+      window.removeEventListener('ats:jobs-updated', refreshOptionData)
+    }
+  }, [refreshOptionData])
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {

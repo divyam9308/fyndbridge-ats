@@ -358,7 +358,7 @@ export default function ClientsPage() {
   const handleChange = (e) => {
     const { name, value } = e.target
     if (name === 'contract_signed' && value === 'No') setContractFile(null)
-    if (name === 'client_name') setClientSuggestionsOpen(true)
+    if (name === 'client_name') setClientSuggestionsOpen(!addingNewClient)
     setForm((current) => {
       const next = { ...current, [name]: value }
       if (name === 'client_name' && selectedExistingClientId && value !== current.client_name) {
@@ -477,6 +477,7 @@ export default function ClientsPage() {
       throw error
     }
     if (!res.ok) throw new Error(data.error || 'Failed to save client.')
+    window.dispatchEvent(new Event('ats:clients-updated'))
     return data
   }
 
@@ -862,7 +863,7 @@ export default function ClientsPage() {
                           </div>
                         )}
                         <input ref={clientNameInputRef} name={name} type={type} value={form[name]} onChange={handleChange} onFocus={() => !addingNewClient && setClientSuggestionsOpen(true)} onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} autoComplete="off" />
-                        {clientSuggestionsOpen && (
+                        {clientSuggestionsOpen && !addingNewClient && (
                         <div className="client-suggestions manual-suggestions is-open">
                           <button type="button" onMouseDown={(event) => { event.preventDefault(); selectNewClient() }}>
                             <span>Add New Client</span>

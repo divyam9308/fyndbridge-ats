@@ -67,7 +67,11 @@ export default function JobsPage() {
   const [clientSearch, setClientSearch] = useState('')
   const [jdFile, setJdFile] = useState(null)
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
+  const [roleSearch, setRoleSearch] = useState('')
+  const [roleSuggestionsOpen, setRoleSuggestionsOpen] = useState(false)
+  const [addingNewRole, setAddingNewRole] = useState(false)
   const modalRef = useRef(null)
+  const roleInputRef = useRef(null)
   const sortRef = useRef(null)
 
   const fetchData = useCallback(async () => {
@@ -105,6 +109,23 @@ export default function JobsPage() {
     return () => window.clearTimeout(timer)
   }, [fetchData])
 
+  const refreshClientOptions = useCallback(async () => {
+    const res = await fetch('/api/clients')
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) setDbClients(data.data || [])
+  }, [])
+
+  useEffect(() => {
+    const refreshClients = () => refreshClientOptions()
+    const refreshJobs = () => fetchData()
+    window.addEventListener('ats:clients-updated', refreshClients)
+    window.addEventListener('ats:jobs-updated', refreshJobs)
+    return () => {
+      window.removeEventListener('ats:clients-updated', refreshClients)
+      window.removeEventListener('ats:jobs-updated', refreshJobs)
+    }
+  }, [fetchData, refreshClientOptions])
+
   useEffect(() => {
     if (!isOpen) return
     const previous = document.body.style.overflow
@@ -137,16 +158,20 @@ export default function JobsPage() {
     setErrors({})
     setForm({ ...EMPTY_FORM, job_display_id: 'Loading...', allocation_date: todayLocal() })
     setClientSearch('')
+    setRoleSearch('')
+    setAddingNewRole(false)
     setJdFile(null)
     setClientSuggestionsOpen(false)
+    setRoleSuggestionsOpen(false)
     setIsOpen(true)
     try {
+      await refreshClientOptions()
       const nextId = await fetchNextId()
       setForm(current => current.job_display_id === 'Loading...' ? { ...current, job_display_id: nextId } : current)
     } catch {
       setForm(current => ({ ...current, job_display_id: '' }))
     }
-  }, [])
+  }, [refreshClientOptions])
 
   useEffect(() => {
     const action = location.state?.action
@@ -178,7 +203,11 @@ export default function JobsPage() {
     })
     setJdFile(null)
     setClientSearch(job.client_name || '')
+    setRoleSearch(job.role || job.title || '')
+    setAddingNewRole(false)
     setClientSuggestionsOpen(false)
+    setRoleSuggestionsOpen(false)
+    refreshClientOptions()
     setIsOpen(true)
   }
 
@@ -187,6 +216,19 @@ export default function JobsPage() {
   const matchingClients = useMemo(() => clientOptions
     .filter(client => `${clientName(client)} ${client.client_display_id || ''}`.toLowerCase().includes(clientSearch.trim().toLowerCase()))
     .slice(0, 8), [clientOptions, clientSearch])
+  const roleOptions = useMemo(() => {
+    const map = new Map()
+    jobs.forEach(job => {
+      const role = (job.role || job.title || '').trim()
+      if (!role) return
+      const key = role.toLowerCase()
+      if (!map.has(key)) map.set(key, { role, job_display_id: job.job_display_id || job.job_id || '' })
+    })
+    return [...map.values()].sort((a, b) => a.role.localeCompare(b.role))
+  }, [jobs])
+  const matchingRoles = useMemo(() => roleOptions
+    .filter(job => `${job.role} ${job.job_display_id || ''}`.toLowerCase().includes(roleSearch.trim().toLowerCase()))
+    .slice(0, 8), [roleOptions, roleSearch])
   const selectedConsultants = form.consultants || []
   const availableConsultants = userOptions.filter(user => !selectedConsultants.includes(user))
 
@@ -232,6 +274,7 @@ export default function JobsPage() {
       setIsOpen(false)
       setEditingJob(null)
       await fetchData()
+      window.dispatchEvent(new Event('ats:jobs-updated'))
     } catch (err) {
       setErrors({ form: err.message })
     } finally {
@@ -473,7 +516,60 @@ export default function JobsPage() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Role <span className="req">*</span></label>
-                  <input className={`form-control${errors.role ? ' is-error' : ''}`} value={form.role} onChange={e => setForm(current => ({ ...current, role: e.target.value }))} disabled={saving} />
+                  <div className="client-search-wrap">
+                    {addingNewRole && (
+                      <div className="sub-text" style={{ marginBottom: 6 }}>
+                        Adding new role
+                        <button type="button" className="filter-clear" style={{ marginLeft: 8 }} onMouseDown={(event) => {
+                          event.preventDefault()
+                          setAddingNewRole(false)
+                          setRoleSearch('')
+                          setForm(current => ({ ...current, role: '' }))
+                          setRoleSuggestionsOpen(true)
+                        }}>Switch</button>
+                      </div>
+                    )}
+                    <input
+                      ref={roleInputRef}
+                      className={`form-control${errors.role ? ' is-error' : ''}`}
+                      value={roleSearch}
+                      onChange={e => {
+                        setRoleSearch(e.target.value)
+                        setForm(current => ({ ...current, role: e.target.value }))
+                        if (!addingNewRole) setRoleSuggestionsOpen(true)
+                      }}
+                      onFocus={() => !addingNewRole && setRoleSuggestionsOpen(true)}
+                      onBlur={() => window.setTimeout(() => setRoleSuggestionsOpen(false), 120)}
+                      disabled={saving}
+                      autoComplete="off"
+                    />
+                    {roleSuggestionsOpen && !addingNewRole && (
+                      <div className="client-suggestions manual-suggestions is-open">
+                        <button type="button" onMouseDown={(event) => {
+                          event.preventDefault()
+                          setAddingNewRole(true)
+                          setRoleSearch('')
+                          setForm(current => ({ ...current, role: '' }))
+                          setRoleSuggestionsOpen(false)
+                          window.setTimeout(() => roleInputRef.current?.focus(), 0)
+                        }}>
+                          <span>Add New Role</span>
+                        </button>
+                        {matchingRoles.map(job => (
+                          <button type="button" key={`${job.role}-${job.job_display_id}`} onMouseDown={(event) => {
+                            event.preventDefault()
+                            setRoleSearch(job.role)
+                            setForm(current => ({ ...current, role: job.role }))
+                            setAddingNewRole(false)
+                            setRoleSuggestionsOpen(false)
+                          }}>
+                            <span>{job.role}</span>
+                            <small>{job.job_display_id || ''}</small>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   {errors.role && <span className="form-error">{errors.role}</span>}
                 </div>
                 <div className="form-group">
