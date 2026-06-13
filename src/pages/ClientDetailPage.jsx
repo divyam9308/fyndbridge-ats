@@ -64,7 +64,6 @@ const candidateToEditForm = (candidate) => ({
   linkedin_url: candidate.linkedinUrl || '',
   client_id: candidate.clientId || '',
   client_name: candidate.client || '',
-  billing_entity: candidate.billingEntity || '',
   job_title: candidate.job || '',
   consultant_name: candidate.consultantName || candidate.consultant || '',
   status: candidate.status || '',
@@ -354,7 +353,6 @@ export default function ClientDetailPage() {
         expected_salary: editForm.expected_salary === '' ? null : Number(editForm.expected_salary),
         offered_ctc: editForm.status === 'Hired' && editForm.offered_ctc !== '' ? Number(editForm.offered_ctc) : null,
         date_of_joining: editForm.status === 'Hired' ? editForm.date_of_joining || null : null,
-        billing_entity: editForm.billing_entity || null,
       }
       const response = await fetch(`/api/candidates/${editCandidate.associationId}`, {
         method: 'PATCH',
@@ -399,7 +397,6 @@ export default function ClientDetailPage() {
       case 'consultant': return <td key={key}>{c.consultant || '-'}</td>
       case 'client': return <td key={key}>{c.client || '-'}</td>
       case 'clientId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{client?.client_display_id || '-'}</td>
-      case 'billingEntity': return <td key={key}>{client?.contract_signed ? c.billingEntity || '-' : '-'}</td>
       case 'jobId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.jobDisplayId || '-'}</td>
       case 'job': return <td key={key} className="cell-ellipsis">{getJobText(c)}</td>
       case 'name':
@@ -556,7 +553,6 @@ export default function ClientDetailPage() {
                   ['notice_period', 'Notice Period', 'number'],
                   ['current_salary', 'Current Salary', 'number'],
                   ['expected_salary', 'Expected Salary', 'number'],
-                  ...(client?.contract_signed ? [['billing_entity', 'Billing Entity', 'text']] : []),
                   ['job_title', 'Mandate / Role', 'text'],
                   ['linkedin_url', 'LinkedIn URL', 'text'],
                   ['cv_link', 'CV', 'text'],

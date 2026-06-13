@@ -13,6 +13,7 @@ create table if not exists public.clients (
   terms_signed_type text,
   terms_signed_custom text,
   terms_value text,
+  billing_entity text,
   contract_signed boolean default false,
   contract_document text,
   contract_pdf_url text,

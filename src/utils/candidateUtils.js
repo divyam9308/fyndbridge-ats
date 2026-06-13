@@ -8,7 +8,6 @@ export const apiCandidateToUi = (row) => ({
   candidateId: row.candidate_id,
   clientId: row.client_id || '',
   clientDisplayId: row.client_display_id || '',
-  billingEntity: row.billing_entity || '',
   jobId: row.job_id || '',
   jobDisplayId: row.job_display_id || '',
   candidateDisplayId: row.candidate_display_id || '',

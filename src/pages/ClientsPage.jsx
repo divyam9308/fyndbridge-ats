@@ -38,6 +38,7 @@ const EMPTY_FORM = {
   terms_signed_type: '',
   terms_signed_custom: '',
   terms_value: '',
+  billing_entity: '',
   contract_signed: 'No',
   contract_document: '',
   gstin: '',
@@ -71,9 +72,10 @@ const CLIENT_TABLE_COLUMNS = [
   { key: 'comments', label: 'Comments' },
   { key: 'followUpDate', label: 'Follow Up Date' },
   { key: 'status', label: 'Status' },
+  { key: 'contractSigned', label: 'Contract Signed' },
   { key: 'termsSigned', label: 'Terms Signed' },
   { key: 'value', label: 'Value' },
-  { key: 'contractSigned', label: 'Contract Signed' },
+  { key: 'billingEntity', label: 'Billing Entity' },
   { key: 'gstin', label: 'GSTIN' },
   { key: 'pan', label: 'PAN' },
   { key: 'addressOnInvoice', label: 'Address on Invoice' },
@@ -140,6 +142,7 @@ function clientToForm(client) {
     terms_signed_type: client.terms_signed_type || '',
     terms_signed_custom: client.terms_signed_custom || '',
     terms_value: client.terms_value || '',
+    billing_entity: client.billing_entity || '',
     contract_signed: client.contract_signed ? 'Yes' : 'No',
     contract_document: client.contract_document || client.contract_pdf_url || '',
     gstin: client.gstin || '',
@@ -559,6 +562,7 @@ export default function ClientsPage() {
       case 'status': return row.status || '-'
       case 'termsSigned': return row.terms_signed_type === 'Any Other' ? row.terms_signed_custom || '-' : row.terms_signed_type || '-'
       case 'value': return row.terms_value || '-'
+      case 'billingEntity': return row.billing_entity || '-'
       case 'contractSigned': return row.contract_signed === 'Yes' || row.contract_signed === true ? 'Yes' : 'No'
       case 'contractDocument': return row.contract_document || '-'
       case 'gstin': return row.gstin || '-'
@@ -713,6 +717,8 @@ export default function ClientsPage() {
         return <td key={key}>{commercialDash(client, termsLabel(client))}</td>
       case 'value':
         return <td key={key}>{commercialDash(client, client.terms_value)}</td>
+      case 'billingEntity':
+        return <td key={key}>{client.contract_signed ? dash(client.billing_entity) : '-'}</td>
       case 'contractSigned':
         return <td key={key}>{client.contract_signed ? 'Yes' : 'No'}</td>
       case 'contractDocument':
@@ -963,6 +969,7 @@ export default function ClientsPage() {
                     )}
                     {[
                       ['terms_value', 'Value'],
+                      ['billing_entity', 'Billing Entity'],
                       ['gstin', 'GSTIN'],
                       ['pan', 'PAN'],
                       ['address_on_invoice', 'Address on Invoice']

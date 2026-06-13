@@ -19,6 +19,7 @@ alter table public.clients
   add column if not exists terms_signed_type text,
   add column if not exists terms_signed_custom text,
   add column if not exists terms_value text,
+  add column if not exists billing_entity text,
   add column if not exists contract_signed boolean default false,
   add column if not exists contract_document text,
   add column if not exists contract_pdf_url text,
