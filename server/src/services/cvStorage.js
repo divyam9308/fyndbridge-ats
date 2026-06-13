@@ -13,6 +13,24 @@ function normalizeCvLink(value) {
   return cleanText(value)
 }
 
+function normalizeResumeStoragePath(value) {
+  const text = cleanText(value)
+  if (!text) return ''
+  if (/^https?:\/\//i.test(text)) {
+    try {
+      const parsed = new URL(text)
+      const marker = '/storage/v1/object/'
+      const markerIndex = parsed.pathname.indexOf(marker)
+      if (markerIndex === -1) return text
+      const objectPath = decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length))
+      return objectPath.replace(/^public\//, '').replace(/^sign\//, '').replace(/^resumes\//, '')
+    } catch {
+      return text
+    }
+  }
+  return text.replace(/^resumes\//, '').replace(/^public\//, '').replace(/^sign\//, '')
+}
+
 function extensionForFile(file) {
   const ext = path.extname(file.originalname || '').toLowerCase().replace(/[^.a-z0-9]/g, '')
   if (ext) return ext
@@ -85,7 +103,7 @@ async function prepareUploadedCv(file) {
       cv_link: existing.cv_link || existing.resume_url,
       resume_url: existing.resume_url || existing.cv_link,
       cv_file_hash: hash,
-      cv_storage_path: existing.cv_storage_path || '',
+      cv_storage_path: normalizeResumeStoragePath(existing.cv_storage_path || ''),
       duplicate: true
     }
   }
@@ -98,7 +116,7 @@ async function prepareUploadedCv(file) {
   const storageDuplicate = Boolean(error && /already exists|duplicate/i.test(error.message || ''))
   if (error && !storageDuplicate) throw error
   const url = publicUrl(objectPath)
-  return { cv_link: url, resume_url: url, cv_file_hash: hash, cv_storage_path: objectPath, duplicate: storageDuplicate, resume_path: objectPath }
+  return { cv_link: url, resume_url: url, cv_file_hash: hash, cv_storage_path: normalizeResumeStoragePath(objectPath), duplicate: storageDuplicate, resume_path: normalizeResumeStoragePath(objectPath) }
 }
 
 async function checkUploadedCvDuplicate(file) {
@@ -111,7 +129,7 @@ async function checkUploadedCvDuplicate(file) {
     cv_link: existing?.cv_link || existing?.resume_url || '',
     resume_url: existing?.resume_url || existing?.cv_link || '',
     cv_file_hash: hash,
-    cv_storage_path: existing?.cv_storage_path || ''
+    cv_storage_path: normalizeResumeStoragePath(existing?.cv_storage_path || '')
   }
 }
 
@@ -123,7 +141,7 @@ async function checkLinkedCvDuplicate(link) {
     duplicate: Boolean(existing),
     cv_link: existing?.cv_link || existing?.resume_url || normalized,
     resume_url: existing?.resume_url || existing?.cv_link || normalized,
-    cv_storage_path: existing?.cv_storage_path || ''
+    cv_storage_path: normalizeResumeStoragePath(existing?.cv_storage_path || '')
   }
 }
 
@@ -134,7 +152,7 @@ async function prepareLinkedCv(link) {
   return {
     cv_link: existing?.cv_link || existing?.resume_url || normalized,
     resume_url: existing?.resume_url || existing?.cv_link || normalized,
-    cv_storage_path: existing?.cv_storage_path || '',
+    cv_storage_path: normalizeResumeStoragePath(existing?.cv_storage_path || ''),
     duplicate: Boolean(existing)
   }
 }
@@ -142,6 +160,7 @@ async function prepareLinkedCv(link) {
 module.exports = {
   RESUME_BUCKET,
   normalizeCvLink,
+  normalizeResumeStoragePath,
   prepareUploadedCv,
   prepareLinkedCv,
   checkUploadedCvDuplicate,

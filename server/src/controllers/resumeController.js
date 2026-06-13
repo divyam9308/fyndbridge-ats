@@ -2,7 +2,7 @@ const fs = require('fs/promises')
 const { v4: uuidv4 } = require('uuid')
 const { parseResume } = require('../services/resumeParser')
 const supabase = require('../services/supabaseAdmin')
-const { RESUME_BUCKET, prepareUploadedCv } = require('../services/cvStorage')
+const { RESUME_BUCKET, prepareUploadedCv, normalizeResumeStoragePath } = require('../services/cvStorage')
 
 function cleanText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
@@ -116,7 +116,7 @@ async function bulkParseResumes(req, res) {
 
 async function openResume(req, res) {
   try {
-    const storagePath = decodeURIComponent(req.params.encodedPath || '')
+    const storagePath = normalizeResumeStoragePath(decodeURIComponent(req.params.encodedPath || ''))
 
     if (!storagePath) {
       return res.status(400).json({ error: 'Resume path is required' })

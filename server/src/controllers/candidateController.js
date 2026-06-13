@@ -4,7 +4,7 @@ const axios = require('axios')
 const { v4: uuidv4 } = require('uuid')
 const supabase = require('../services/supabaseAdmin')
 const { parseResume } = require('../services/resumeParser')
-const { prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplicate, checkLinkedCvDuplicate } = require('../services/cvStorage')
+const { RESUME_BUCKET, prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplicate, checkLinkedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
 const { callAiJson } = require('../services/aiProvider')
 const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
 
@@ -1262,7 +1262,7 @@ function storagePathFromResumeUrl(resumeUrl) {
 }
 
 async function deleteResumeFromStorage(resumeUrl) {
-  const objectPath = storagePathFromResumeUrl(resumeUrl)
+  const objectPath = normalizeResumeStoragePath(storagePathFromResumeUrl(resumeUrl))
   if (!objectPath) {
     return
   }
@@ -1274,12 +1274,11 @@ async function deleteResumeFromStorage(resumeUrl) {
   if (sharedError) throw sharedError
   if ((sharedRows || []).some(row => row.resume_url === resumeUrl || row.cv_link === resumeUrl)) return
 
-  const [bucket, ...segments] = objectPath.split('/')
-  if (!bucket || !segments.length) {
+  if (!objectPath) {
     return
   }
 
-  const { error } = await supabase.storage.from(bucket).remove([segments.join('/')])
+  const { error } = await supabase.storage.from(RESUME_BUCKET).remove([objectPath])
   if (error) {
     console.error('deleteResumeFromStorage:', error.message)
   }
