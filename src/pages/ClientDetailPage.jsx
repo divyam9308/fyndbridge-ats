@@ -9,6 +9,7 @@ import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateC
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { supabase } from '../services/supabaseClient'
+import TablePopover from '../components/TablePopover'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
 const STATUS_COLUMNS = CANDIDATE_STATUSES.map(status => [status, status])
@@ -95,7 +96,7 @@ export default function ClientDetailPage() {
   const [editForm, setEditForm] = useState(null)
   const [editError, setEditError] = useState('')
   const [savingCandidate, setSavingCandidate] = useState(false)
-  const [statusOpen, setStatusOpen] = useState({})
+  const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
@@ -221,15 +222,6 @@ export default function ClientDetailPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [sortOpen])
 
-  useEffect(() => {
-    if (!Object.values(statusOpen).some(Boolean)) return
-    const close = (event) => {
-      if (!event.target.closest('.mandate-status-control')) setStatusOpen({})
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [statusOpen])
-
   const jobGroups = useMemo(() => {
     const groups = new Map()
     clientJobs.forEach((job) => {
@@ -323,7 +315,7 @@ export default function ClientDetailPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to update mandate status.')
       setClientJobs(rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: status, status } : row))
-      setStatusOpen({})
+      setTablePopover(null)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -508,18 +500,9 @@ export default function ClientDetailPage() {
                   <td><button className="table-link-button" type="button" onClick={() => openGroup(group.title)}>{group.title}</button></td>
                   <td>
                     <div className="candidate-columns-control mandate-status-control">
-                      <button className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`} type="button" onClick={() => setStatusOpen(current => current[group.relatedJob?.id] ? {} : { [group.relatedJob?.id]: true })} disabled={!group.relatedJob?.id || statusSaving[group.relatedJob?.id]}>
+                      <button className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => setTablePopover(current => current?.type === 'status' && current.id === group.relatedJob?.id ? null : { type: 'status', id: group.relatedJob?.id, anchorRect: event.currentTarget.getBoundingClientRect() })} disabled={!group.relatedJob?.id || statusSaving[group.relatedJob?.id]}>
                         {group.status}
                       </button>
-                      {statusOpen[group.relatedJob?.id] && (
-                        <div className="filter-dropdown mandate-status-dropdown">
-                          {MANDATE_STATUSES.map(status => (
-                            <button className="candidate-columns-action" type="button" key={status} onMouseDown={event => { event.preventDefault(); updateMandateStatus(group, status) }}>
-                              {status}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </td>
                   <td className="align-center"><button className="count-badge-link" type="button" onClick={() => openGroup(group.title)}>{group.stats.total}</button></td>
@@ -534,6 +517,20 @@ export default function ClientDetailPage() {
           </table>
         )}
       </div>
+
+      {tablePopover && (() => {
+        const group = jobGroups.find(item => item.relatedJob?.id === tablePopover.id)
+        if (!group) return null
+        return (
+          <TablePopover anchorRect={tablePopover.anchorRect} width={150} onClose={() => setTablePopover(null)}>
+            {MANDATE_STATUSES.map(status => (
+              <button className="candidate-columns-action" type="button" key={status} onClick={() => updateMandateStatus(group, status)}>
+                {status}
+              </button>
+            ))}
+          </TablePopover>
+        )
+      })()}
 
       {selectedGroup && (
         <>

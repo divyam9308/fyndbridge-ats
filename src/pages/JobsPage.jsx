@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
+import TablePopover from '../components/TablePopover'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -64,8 +65,7 @@ export default function JobsPage() {
   const [sortField, setSortField] = useState('')
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
-  const [consultantOpen, setConsultantOpen] = useState({})
-  const [statusOpen, setStatusOpen] = useState({})
+  const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
   const [clientSearch, setClientSearch] = useState('')
   const [jdFile, setJdFile] = useState(null)
@@ -154,24 +154,6 @@ export default function JobsPage() {
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [sortOpen])
-
-  useEffect(() => {
-    if (!Object.values(consultantOpen).some(Boolean)) return
-    const close = (event) => {
-      if (!event.target.closest('.mandate-consultants-control')) setConsultantOpen({})
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [consultantOpen])
-
-  useEffect(() => {
-    if (!Object.values(statusOpen).some(Boolean)) return
-    const close = (event) => {
-      if (!event.target.closest('.mandate-status-control')) setStatusOpen({})
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [statusOpen])
 
   const fetchNextId = async () => {
     const res = await fetch('/api/jobs/next-display-id')
@@ -392,7 +374,7 @@ export default function JobsPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Failed to update mandate status.')
       setJobs(rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: status, status } : row))
-      setStatusOpen({})
+      setTablePopover(null)
     } catch (err) {
       setErrors({ form: err.message })
     } finally {
@@ -474,10 +456,9 @@ export default function JobsPage() {
                     <td>
                       {(job.consultants || []).length <= 1 ? dash(job.consultants?.[0]) : (
                         <div className="candidate-columns-control mandate-consultants-control">
-                          <button className="filter-select compact-select" type="button" onClick={() => setConsultantOpen(current => current[job.id] ? {} : { [job.id]: true })}>
+                          <button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => setTablePopover(current => current?.type === 'consultants' && current.id === job.id ? null : { type: 'consultants', id: job.id, anchorRect: event.currentTarget.getBoundingClientRect() })}>
                             {job.consultants[0]} +{job.consultants.length - 1}
                           </button>
-                          {consultantOpen[job.id] && <div className="filter-dropdown mandate-consultants-dropdown">{job.consultants.map(name => <div className="candidate-column-option" key={name}>{name}</div>)}</div>}
                         </div>
                       )}
                     </td>
@@ -493,18 +474,9 @@ export default function JobsPage() {
                     <td>{dash(job.budget)}</td>
                     <td>
                       <div className="candidate-columns-control mandate-status-control">
-                        <button className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`} type="button" onClick={() => setStatusOpen(current => current[job.id] ? {} : { [job.id]: true })} disabled={statusSaving[job.id]}>
+                        <button className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => setTablePopover(current => current?.type === 'status' && current.id === job.id ? null : { type: 'status', id: job.id, anchorRect: event.currentTarget.getBoundingClientRect() })} disabled={statusSaving[job.id]}>
                           {dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}
                         </button>
-                        {statusOpen[job.id] && (
-                          <div className="filter-dropdown mandate-status-dropdown">
-                            {MANDATE_STATUSES.map(status => (
-                              <button className="candidate-columns-action" type="button" key={status} onMouseDown={event => { event.preventDefault(); updateMandateStatus(job, status) }}>
-                                {status}
-                              </button>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </td>
                     <td>{dash(job.vertical)}</td>
@@ -518,6 +490,24 @@ export default function JobsPage() {
           </div>
         )}
       </div>
+
+      {tablePopover && (() => {
+        const job = jobs.find(item => item.id === tablePopover.id)
+        if (!job) return null
+        return (
+          <TablePopover anchorRect={tablePopover.anchorRect} width={tablePopover.type === 'status' ? 150 : 180} onClose={() => setTablePopover(null)}>
+            {tablePopover.type === 'consultants' ? (
+              job.consultants.map(name => <div className="candidate-column-option" key={name}>{name}</div>)
+            ) : (
+              MANDATE_STATUSES.map(status => (
+                <button className="candidate-columns-action" type="button" key={status} onClick={() => updateMandateStatus(job, status)}>
+                  {status}
+                </button>
+              ))
+            )}
+          </TablePopover>
+        )
+      })()}
 
       {isOpen && createPortal((
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setIsOpen(false)}>
