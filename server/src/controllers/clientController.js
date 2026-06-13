@@ -247,17 +247,17 @@ function clientPayload(body) {
     notes: nullable(body.comments || body.notes),
     follow_up_date: body.follow_up_date || null,
     status: status || '',
-    terms_signed_type: nullable(termsType),
-    terms_signed_custom: termsType === 'Any Other' ? nullable(body.terms_signed_custom) : null,
-    terms_value: nullable(body.terms_value),
+    terms_signed_type: contractSigned ? nullable(termsType) : null,
+    terms_signed_custom: contractSigned && termsType === 'Any Other' ? nullable(body.terms_signed_custom) : null,
+    terms_value: contractSigned ? nullable(body.terms_value) : null,
     billing_entity: contractSigned ? nullable(body.billing_entity) : null,
     contract_signed: contractSigned,
     contract_document: contractSigned ? nullable(body.contract_document) : null,
     contract_pdf_url: contractSigned ? nullable(body.contract_pdf_url || body.contract_document) : null,
     contract_pdf_storage_path: contractSigned ? nullable(body.contract_pdf_storage_path) : null,
-    gstin: nullable(body.gstin),
-    pan: nullable(body.pan),
-    address_on_invoice: nullable(body.address_on_invoice)
+    gstin: contractSigned ? nullable(body.gstin) : null,
+    pan: contractSigned ? nullable(body.pan) : null,
+    address_on_invoice: contractSigned ? nullable(body.address_on_invoice) : null
   }
 }
 

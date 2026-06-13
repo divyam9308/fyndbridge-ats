@@ -18,6 +18,7 @@ const STATUS_BADGE_MAP = {
   "Didn't Pick Up": 'badge-didnt-pick-up'
 }
 const TERMS = ['%', 'Fixed Fee Model', 'Slab %', 'Any Other']
+const BILLING_ENTITIES = ['FCS', 'FCAPL']
 const EMPTY_FORM = {
   client_group_id: '',
   client_display_id: '',
@@ -48,7 +49,7 @@ const EMPTY_FORM = {
 
 const dash = (value) => value || '-'
 const termsLabel = (client) => client.terms_signed_type === 'Any Other' ? client.terms_signed_custom : client.terms_signed_type
-const showCommercialFields = (client) => client.status === 'Converted' || client.contract_signed === true || client.contract_signed === 'Yes'
+const showCommercialFields = (client) => client.contract_signed === true || client.contract_signed === 'Yes'
 const commercialDash = (client, value) => showCommercialFields(client) ? dash(value) : '-'
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
 const todayLocal = () => {
@@ -952,12 +953,12 @@ export default function ClientsPage() {
                     {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
                   </div>
                 )}
-                {(form.status === 'Converted' || form.contract_signed === 'Yes') && (
+                {form.contract_signed === 'Yes' && (
                   <>
                     <div className="form-group">
                       <label className="form-label">Terms Signed</label>
                       <select name="terms_signed_type" value={form.terms_signed_type} onChange={handleChange} className="form-control" disabled={saving}>
-                        <option value="">Select Terms</option>
+                        <option value="">-</option>
                         {TERMS.map((term) => <option key={term} value={term}>{term}</option>)}
                       </select>
                     </div>
@@ -967,9 +968,18 @@ export default function ClientsPage() {
                         <input name="terms_signed_custom" value={form.terms_signed_custom} onChange={handleChange} className="form-control" disabled={saving} />
                       </div>
                     )}
+                    <div className="form-group">
+                      <label className="form-label">Value</label>
+                      <input name="terms_value" value={form.terms_value} onChange={handleChange} className="form-control" disabled={saving} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Billing Entity</label>
+                      <select name="billing_entity" value={form.billing_entity} onChange={handleChange} className="form-control" disabled={saving}>
+                        <option value="">-</option>
+                        {BILLING_ENTITIES.map(entity => <option key={entity} value={entity}>{entity}</option>)}
+                      </select>
+                    </div>
                     {[
-                      ['terms_value', 'Value'],
-                      ['billing_entity', 'Billing Entity'],
                       ['gstin', 'GSTIN'],
                       ['pan', 'PAN'],
                       ['address_on_invoice', 'Address on Invoice']
