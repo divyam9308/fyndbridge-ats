@@ -229,7 +229,7 @@ export default function ClientJobCandidatesPage() {
                     <td>
                       {c.cvLink ? (
                         <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV">
-                          <FileText size={12} strokeWidth={2} /> CV
+                          <FileText size={15} strokeWidth={2} />
                         </a>
                       ) : (
                         <span style={{ color: 'var(--gray-400)', fontSize: 12 }}>—</span>

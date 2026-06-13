@@ -4,6 +4,7 @@ const axios = require('axios')
 const { v4: uuidv4 } = require('uuid')
 const supabase = require('../services/supabaseAdmin')
 const { parseResume } = require('../services/resumeParser')
+const { prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplicate, checkLinkedCvDuplicate } = require('../services/cvStorage')
 const { callAiJson } = require('../services/aiProvider')
 const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
 
@@ -36,6 +37,7 @@ const CANDIDATE_FIELDS = [
   'skills',
   'education',
   'cv_link',
+  'cv_file_hash',
   'linkedin_url',
   'resume_url',
   'source',
@@ -496,6 +498,58 @@ function withoutColumn(payload, column) {
   return next
 }
 
+function missingCandidateColumn(error) {
+  if (error?.code !== 'PGRST204' && error?.code !== '42703') return null
+  const match = String(error.message || '').match(/'([^']+)' column|column "([^"]+)"/)
+  const column = match?.[1] || match?.[2]
+  return CANDIDATE_FIELDS.includes(column) ? column : null
+}
+
+async function insertCandidate(payload) {
+  let insertPayload = payload
+  let result = null
+  for (let i = 0; i <= CANDIDATE_FIELDS.length; i++) {
+    result = await supabase.from('candidates').insert(insertPayload).select('*').single()
+    const missingColumn = missingCandidateColumn(result.error)
+    if (!missingColumn) break
+    insertPayload = withoutColumn(insertPayload, missingColumn)
+  }
+  return result
+}
+
+async function updateCandidateRow(candidateId, payload) {
+  let updatePayload = payload
+  let result = null
+  for (let i = 0; i <= CANDIDATE_FIELDS.length; i++) {
+    result = await supabase.from('candidates').update(updatePayload).eq('id', candidateId)
+    const missingColumn = missingCandidateColumn(result.error)
+    if (!missingColumn) break
+    updatePayload = withoutColumn(updatePayload, missingColumn)
+  }
+  return result
+}
+
+async function applyCvInput(req, candidatePayload) {
+  if (req.file) {
+    const cv = await prepareUploadedCv(req.file)
+    if (cv) {
+      candidatePayload.cv_link = cv.cv_link
+      candidatePayload.resume_url = cv.resume_url
+      candidatePayload.cv_file_hash = cv.cv_file_hash
+      return cv
+    }
+  }
+  if (candidatePayload.cv_link || candidatePayload.resume_url) {
+    const cv = await prepareLinkedCv(candidatePayload.cv_link || candidatePayload.resume_url)
+    if (cv) {
+      candidatePayload.cv_link = cv.cv_link
+      candidatePayload.resume_url = cv.resume_url
+      return cv
+    }
+  }
+  return null
+}
+
 function parseJsonFilter(value) {
   if (!value) {
     return null
@@ -800,11 +854,11 @@ async function getCandidate(req, res) {
 async function createCandidate(req, res) {
   try {
     const incomingStatus = req.body.status || req.body.candidateStatus || req.body.application_status || req.body.association_status;
-    const body = {
+    const body = normalizeRequestBody({
       ...req.body,
       status: incomingStatus !== undefined ? incomingStatus : '',
       source: req.body.source || 'manual'
-    }
+    })
     const errors = validateCandidatePayload(body)
 
     if (Object.keys(errors).length) {
@@ -814,6 +868,7 @@ async function createCandidate(req, res) {
     const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
     const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
     const duplicateAction = cleanText(body.duplicate_action)
+    let cvResult = null
 
     associationPayload.status =
       typeof associationPayload.status === "string" && associationPayload.status.trim()
@@ -847,6 +902,8 @@ async function createCandidate(req, res) {
       }
     }
 
+    cvResult = await applyCvInput(req, candidatePayload)
+
     let candidate = duplicateAction === 'update_current'
       ? duplicate
       : (duplicateAction === 'add_duplicate' ? null : await findCandidateByNameAndMobile(candidatePayload.full_name, candidatePayload.mobile_number))
@@ -860,11 +917,7 @@ async function createCandidate(req, res) {
         insertPayload.created_by = req.user.id
       }
 
-      const { data, error } = await supabase
-        .from('candidates')
-        .insert(insertPayload)
-        .select('*')
-        .single()
+      const { data, error } = await insertCandidate(insertPayload)
 
       if (error) {
         throw error
@@ -892,10 +945,7 @@ async function createCandidate(req, res) {
         updatePayload.updated_by = req.user.id
       }
 
-      const { error: candidateUpdateError } = await supabase
-        .from('candidates')
-        .update(updatePayload)
-        .eq('id', candidate.id)
+      const { error: candidateUpdateError } = await updateCandidateRow(candidate.id, updatePayload)
 
       if (candidateUpdateError) {
         throw candidateUpdateError
@@ -919,7 +969,7 @@ async function createCandidate(req, res) {
     const hasAssociation = hasClient || hasJob;
 
     if (!hasAssociation) {
-      return res.status(201).json(flattenCandidateOnly(candidate))
+      return res.status(201).json({ ...flattenCandidateOnly(candidate), cv_duplicate: Boolean(cvResult?.duplicate) })
     }
 
     const assocInsert = {
@@ -941,18 +991,22 @@ async function createCandidate(req, res) {
 
     await syncMandateStatusForJob(association.job_id || assocInsert.job_id)
 
-    return res.status(201).json(flattenAssociation(association))
+    return res.status(201).json({ ...flattenAssociation(association), cv_duplicate: Boolean(cvResult?.duplicate) })
   } catch (err) {
     return logAndSendInternal(res, 'createCandidate', err)
+  } finally {
+    if (req.file?.path) {
+      try { await fs.unlink(req.file.path) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('createCandidate cleanup:', cleanupError.message) }
+    }
   }
 }
 
 async function updateCandidate(req, res) {
   try {
     const incomingStatus = req.body.status || req.body.candidateStatus || req.body.application_status || req.body.association_status;
-    const body = {
+    const body = normalizeRequestBody({
       ...req.body
-    }
+    })
     if (incomingStatus !== undefined) {
       body.status = incomingStatus;
     }
@@ -966,6 +1020,7 @@ async function updateCandidate(req, res) {
     const associationId = body.association_id || req.params.id
     const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
     const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
+    const cvResult = await applyCvInput(req, candidatePayload)
 
     if (Object.prototype.hasOwnProperty.call(associationPayload, 'status')) {
       associationPayload.status =
@@ -1019,10 +1074,7 @@ async function updateCandidate(req, res) {
         updatePayload.updated_by = req.user.id
       }
 
-      const { error } = await supabase
-        .from('candidates')
-        .update(updatePayload)
-        .eq('id', existingCandidateId)
+      const { error } = await updateCandidateRow(existingCandidateId, updatePayload)
 
       if (error) {
         throw error
@@ -1092,7 +1144,7 @@ async function updateCandidate(req, res) {
         throw error
       }
 
-      return res.json(flattenAssociation(data))
+      return res.json({ ...flattenAssociation(data), cv_duplicate: Boolean(cvResult?.duplicate) })
     } else {
       const { data, error } = await supabase
         .from('candidates')
@@ -1104,10 +1156,14 @@ async function updateCandidate(req, res) {
         throw error
       }
 
-      return res.json(flattenCandidateOnly(data))
+      return res.json({ ...flattenCandidateOnly(data), cv_duplicate: Boolean(cvResult?.duplicate) })
     }
   } catch (err) {
     return logAndSendInternal(res, 'updateCandidate', err)
+  } finally {
+    if (req.file?.path) {
+      try { await fs.unlink(req.file.path) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('updateCandidate cleanup:', cleanupError.message) }
+    }
   }
 }
 
@@ -1207,6 +1263,13 @@ async function deleteResumeFromStorage(resumeUrl) {
     return
   }
 
+  const { data: sharedRows, error: sharedError } = await supabase
+    .from('candidates')
+    .select('id, resume_url, cv_link')
+    .limit(10000)
+  if (sharedError) throw sharedError
+  if ((sharedRows || []).some(row => row.resume_url === resumeUrl || row.cv_link === resumeUrl)) return
+
   const [bucket, ...segments] = objectPath.split('/')
   if (!bucket || !segments.length) {
     return
@@ -1288,6 +1351,42 @@ function isValidUrl(value) {
   }
 }
 
+function normalizeRequestBody(body) {
+  const next = { ...body }
+  if (typeof next.skills === 'string') {
+    try {
+      const parsed = JSON.parse(next.skills)
+      next.skills = Array.isArray(parsed) ? parsed : []
+    } catch {
+      next.skills = next.skills.split(',').map(cleanText).filter(Boolean)
+    }
+  }
+  if (typeof next.open_to_relocate === 'string') {
+    next.open_to_relocate = next.open_to_relocate === '' ? null : next.open_to_relocate === 'true'
+  }
+  return next
+}
+
+async function checkCvDuplicate(req, res) {
+  try {
+    let cv = null
+    if (req.file) cv = await checkUploadedCvDuplicate(req.file)
+    else cv = await checkLinkedCvDuplicate(req.body.cv_link || req.query.cv_link)
+    return res.json({
+      duplicate: Boolean(cv?.duplicate),
+      cv_link: cv?.cv_link || '',
+      resume_url: cv?.resume_url || '',
+      cv_file_hash: cv?.cv_file_hash || ''
+    })
+  } catch (err) {
+    return logAndSendInternal(res, 'checkCvDuplicate', err)
+  } finally {
+    if (req.file?.path) {
+      try { await fs.unlink(req.file.path) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('checkCvDuplicate cleanup:', cleanupError.message) }
+    }
+  }
+}
+
 async function downloadPdfToTmp(resumeUrl) {
   const response = await axios.get(resumeUrl, {
     responseType: 'arraybuffer',
@@ -1353,6 +1452,7 @@ async function parseResumeRoute(req, res) {
 module.exports = {
   VALID_STATUSES,
   checkCandidateDuplicate,
+  checkCvDuplicate,
   getNextCandidateDisplayId,
   listCandidates,
   listCandidateAssociations,

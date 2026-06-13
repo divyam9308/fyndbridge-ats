@@ -8,13 +8,14 @@ router.post('/parse-resume', upload.single('resume'), handleUploadErrors, contro
 router.post('/ai-filter', controller.buildAiCandidateFilters)
 
 router.get('/check-duplicate', controller.checkCandidateDuplicate)
+router.post('/check-cv-duplicate', upload.single('cv_file'), handleUploadErrors, controller.checkCvDuplicate)
 router.get('/next-display-id', controller.getNextCandidateDisplayId)
 router.get('/', controller.listCandidates)
-router.post('/', controller.createCandidate)
+router.post('/', upload.single('cv_file'), handleUploadErrors, controller.createCandidate)
 router.get('/by-candidate/:candidateId/associations', controller.listCandidateAssociations)
 router.get('/:id', controller.getCandidate)
 router.patch('/:id/status', controller.updateCandidateStatus)
-router.patch('/:id', controller.updateCandidate)
+router.patch('/:id', upload.single('cv_file'), handleUploadErrors, controller.updateCandidate)
 router.delete('/:id', controller.deleteCandidate)
 
 module.exports = router

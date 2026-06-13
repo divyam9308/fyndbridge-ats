@@ -2,55 +2,19 @@ const fs = require('fs/promises')
 const { v4: uuidv4 } = require('uuid')
 const { parseResume } = require('../services/resumeParser')
 const supabase = require('../services/supabaseAdmin')
-
-const RESUME_BUCKET = 'resumes'
+const { RESUME_BUCKET, prepareUploadedCv } = require('../services/cvStorage')
 
 function cleanText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
 }
 
-function safeFileName(value) {
-  return cleanText(value)
-    .replace(/[^a-zA-Z0-9._-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '') || 'resume'
-}
-
 async function uploadResumeToStorage(file) {
-  const fileBuffer = file.buffer || await fs.readFile(file.path)
-  const resumePath = `${Date.now()}-${uuidv4()}-${safeFileName(file.originalname)}`
-
-  // Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in server/.env.
-  // Bucket name must be "resumes".
-  const { error: uploadError } = await supabase.storage
-    .from(RESUME_BUCKET)
-    .upload(resumePath, fileBuffer, {
-      contentType: file.mimetype,
-      upsert: false
-    })
-
-  if (uploadError) {
-    throw uploadError
-  }
-
-  const { data: signedData, error: signedError } = await supabase.storage
-    .from(RESUME_BUCKET)
-    .createSignedUrl(resumePath, 60 * 60)
-
-  if (!signedError && signedData?.signedUrl) {
-    return {
-      resume_path: resumePath,
-      resume_url: signedData.signedUrl
-    }
-  }
-
-  const { data: publicData } = supabase.storage
-    .from(RESUME_BUCKET)
-    .getPublicUrl(resumePath)
-
+  const cv = await prepareUploadedCv(file)
   return {
-    resume_path: resumePath,
-    resume_url: publicData?.publicUrl || ''
+    resume_path: cv?.resume_path || '',
+    resume_url: cv?.resume_url || cv?.cv_link || '',
+    cv_file_hash: cv?.cv_file_hash || '',
+    cv_duplicate: Boolean(cv?.duplicate)
   }
 }
 
@@ -79,6 +43,8 @@ function rowFromParsed(file, parsed, error = null, storage = {}, warnings = []) 
     summary: cleanText(ai.summary || extracted.cover_letter?.value),
     resume_path: storage.resume_path || '',
     resume_url: storage.resume_url || '',
+    cv_file_hash: storage.cv_file_hash || '',
+    cv_duplicate: Boolean(storage.cv_duplicate),
     warnings,
     error
   }

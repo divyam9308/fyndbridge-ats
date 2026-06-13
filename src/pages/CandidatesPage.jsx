@@ -119,7 +119,7 @@ const EMPTY_CAND = {
   noticePeriod:'', openToRelocate:'',
   offeredCtc:'', dateOfJoining:'',
   client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', clientPhone:'', status:'',
-  cvLink:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
+  cvLink:'', cvFile:null, cvFileHash:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
 }
 
 /* ====== Client phone lookup ====== */
@@ -216,6 +216,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     offered_ctc: f.status === 'Hired' ? cleanNumberForApi(f.offeredCtc) : '',
     date_of_joining: f.status === 'Hired' ? f.dateOfJoining || '' : '',
     cv_link: f.cvLink,
+    cv_file_hash: f.cvFileHash,
     linkedin_url: f.linkedinUrl,
     notes: f.notes,
     consultant_name: f.consultantName || consultantName || '',
@@ -233,12 +234,14 @@ export default function CandidatesPage() {
   const candidateDetailRef = useRef(null)
   const importModalRef = useRef(null)
   const duplicateModalRef = useRef(null)
+  const cvLinkCheckTimerRef = useRef(null)
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
   const [candidateDuplicate, setCandidateDuplicate] = useState(null)
   const [duplicateBypass, setDuplicateBypass] = useState(null)
   const [duplicateMoreOpen, setDuplicateMoreOpen] = useState(false)
+  const [cvDuplicateNotice, setCvDuplicateNotice] = useState(null)
   const [page, setPage] = useState(1)
   const [totalCandidates, setTotalCandidates] = useState(0)
   const pageSize = 50
@@ -430,11 +433,16 @@ export default function CandidatesPage() {
     const prepared = await ensureCandidateClient(candidate)
     const body = uiCandidateToApi(prepared, activeConsultantName, dbClients, dbJobs)
     if (duplicateAction) body.duplicate_action = duplicateAction
+    const formBody = new FormData()
+    Object.entries(body).forEach(([key, value]) => {
+      if (value === undefined) return
+      formBody.append(key, Array.isArray(value) ? JSON.stringify(value) : value ?? '')
+    })
+    if (candidate.cvFile) formBody.append('cv_file', candidate.cvFile)
 
     const response = await fetch(update ? `/api/candidates/${candidate.associationId}` : '/api/candidates', {
       method: update ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: formBody
     })
     const payload = await response.json().catch(() => ({}))
 
@@ -450,7 +458,9 @@ export default function CandidatesPage() {
       throw new Error(message || 'Unable to save candidate.')
     }
 
-    return apiCandidateToUi(payload)
+    const next = apiCandidateToUi(payload)
+    if (payload.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
+    return next
   }
 
   const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
@@ -792,6 +802,39 @@ export default function CandidatesPage() {
     }
   }
 
+  const checkCvDuplicate = async ({ file, link, setF }) => {
+    try {
+      const body = new FormData()
+      if (file) body.append('cv_file', file)
+      else body.append('cv_link', link || '')
+      const response = await fetch('/api/candidates/check-cv-duplicate', { method: 'POST', body })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) return
+      if (payload.duplicate) {
+        if (payload.cv_link || payload.resume_url) {
+          setF(current => ({ ...current, cvLink: payload.cv_link || payload.resume_url }))
+        }
+        setCvDuplicateNotice('CV already exists in the database.')
+      }
+    } catch {
+      // Non-blocking pre-check; save still performs authoritative dedupe.
+    }
+  }
+
+  const handleCvFileChange = (setF, file) => {
+    setF(current => ({ ...current, cvFile: file || null, cvLink: file ? '' : current.cvLink }))
+    if (file) checkCvDuplicate({ file, setF })
+  }
+
+  const handleCvLinkChange = (setF, value) => {
+    setF(current => ({ ...current, cvLink: value, cvFile: null }))
+    window.clearTimeout(cvLinkCheckTimerRef.current)
+    const link = String(value || '').trim()
+    if (link) {
+      cvLinkCheckTimerRef.current = window.setTimeout(() => checkCvDuplicate({ link, setF }), 450)
+    }
+  }
+
   // ---- Parsed skill input ----
   const addParsedManualSkill = (value = parsedSkillInput) => {
     const s = cleanSkill(value)
@@ -851,6 +894,7 @@ export default function CandidatesPage() {
       clientPhone: matchedClient?.phone || '',
       linkedinUrl: row.linkedin_url || '',
       cvLink: row.resume_url || '',
+      cvFileHash: row.cv_file_hash || '',
       notes: row.summary || row.error || '',
       source: 'resume'
     }
@@ -863,6 +907,7 @@ export default function CandidatesPage() {
     setParsedForm({ ...mapBulkResumeRowToForm(rows[0]), candidateDisplayId })
     setParsed(true)
     setReviewNotice(rows[0]?.error ? `Parsing warning: ${rows[0].error}` : '')
+    if (rows[0]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
   }
 
   const handleBulkResumeFiles = async (files) => {
@@ -918,6 +963,7 @@ export default function CandidatesPage() {
     setParsedForm({ ...mapBulkResumeRowToForm(importQueue[nextIndex]), candidateDisplayId })
     setParsedSkillInput('')
     setReviewNotice(importQueue[nextIndex]?.error ? `Parsing warning: ${importQueue[nextIndex].error}` : notice)
+    if (importQueue[nextIndex]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
   }
 
   const handleSaveParsed = async () => {
@@ -1024,7 +1070,7 @@ export default function CandidatesPage() {
       case 'status': return row.status || '-'
       case 'offeredCtc': return row.status === 'Hired' ? fmt(row.offeredCtc) : '-'
       case 'dateOfJoining': return row.status === 'Hired' ? formatDate(row.dateOfJoining) : '-'
-      case 'cv': return row.cvLink || '-'
+      case 'cv': return row.cvLink ? 'CV' : '-'
       case 'month': return formatMonth(row.createdAt)
       case 'action': return '-'
       default: return '-'
@@ -1321,9 +1367,18 @@ export default function CandidatesPage() {
           <label className="form-label">CV
             {f.cvLink && <span style={{ marginLeft:6, fontSize:10, color:'var(--success)', fontWeight:600, background:'rgba(40,167,69,0.1)', padding:'1px 6px', borderRadius:4 }}>Auto-filled</span>}
           </label>
-          <input name="cvLink" value={f.cvLink || ''} onChange={handleLocalChange}
-            className={`form-control${low('cvLink')}`}
-            />
+          <div style={{ display:'grid', gap:8 }}>
+            <div>
+              <span className="sub-text">Upload CV File</span>
+              <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => handleCvFileChange(setF, event.target.files?.[0] || null)} className="form-control" />
+            </div>
+            <div>
+              <span className="sub-text">Enter CV Link</span>
+              <input name="cvLink" value={f.cvLink || ''} onChange={event => handleCvLinkChange(setF, event.target.value)}
+                className={`form-control${low('cvLink')}`}
+                />
+            </div>
+          </div>
         </div>
 
         <div className="form-group full">
@@ -1468,7 +1523,7 @@ export default function CandidatesPage() {
           <td key={key}>
             {c.cvLink ? (
               <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={event => event.stopPropagation()}>
-                <FileText size={12} strokeWidth={2} /> CV
+                <FileText size={15} strokeWidth={2} />
               </a>
             ) : (
               <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
@@ -1888,6 +1943,25 @@ export default function CandidatesPage() {
                 <button className="btn-secondary" onClick={() => resolveCandidateDuplicate('add_duplicate')} disabled={saving}>Add Duplicate</button>
               )}
               <button className="btn-primary" onClick={candidateDuplicate.exactAssociation ? openDuplicateExistingForEdit : () => resolveCandidateDuplicate('update_current')} disabled={saving}>Update Existing</button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {cvDuplicateNotice && createPortal((
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCvDuplicateNotice(null)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Duplicate CV">
+            <div className="modal-header">
+              <span className="modal-title">Duplicate CV</span>
+            </div>
+            <div className="modal-body">
+              <div className="review-banner">
+                <AlertCircle size={16} />
+                {cvDuplicateNotice}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-primary" onClick={() => setCvDuplicateNotice(null)}>OK</button>
             </div>
           </div>
         </div>

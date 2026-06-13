@@ -423,7 +423,7 @@ export default function ClientDetailPage() {
       case 'status': return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status || '-'}</span></td>
       case 'offeredCtc': return <td key={key}>{c.status === 'Hired' ? fmt(c.offeredCtc) : '-'}</td>
       case 'dateOfJoining': return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
-      case 'cv': return <td key={key}>{c.cvLink ? <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link"><FileText size={12} /> CV</a> : '-'}</td>
+      case 'cv': return <td key={key}>{c.cvLink ? <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV"><FileText size={15} /></a> : '-'}</td>
       case 'month': return <td key={key}>{formatMonth(c.createdAt)}</td>
       case 'action': return <td key={key}><button className="row-action-btn" type="button" title="Edit Candidate" onClick={() => openEditCandidate(c)}><Pencil size={13} /></button></td>
       default: return null

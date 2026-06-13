@@ -6,8 +6,13 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024
   },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype !== 'application/pdf') {
-      const error = new Error('Only PDF files are accepted')
+    const allowedTypes = new Set([
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ])
+    if (!allowedTypes.has(file.mimetype)) {
+      const error = new Error('Only PDF, DOC, and DOCX files are accepted')
       error.statusCode = 400
       return cb(error)
     }
@@ -26,7 +31,7 @@ function handleUploadErrors(err, req, res, next) {
   }
 
   if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({ error: 'PDF file must be 10MB or smaller' })
+    return res.status(400).json({ error: 'CV file must be 10MB or smaller' })
   }
 
   return res.status(400).json({ error: err.message || 'Upload failed' })
