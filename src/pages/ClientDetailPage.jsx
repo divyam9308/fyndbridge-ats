@@ -7,7 +7,7 @@ import './ClientDetailPage.css'
 import { apiCandidateToUi } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
-import { MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
+import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { supabase } from '../services/supabaseClient'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
@@ -95,6 +95,8 @@ export default function ClientDetailPage() {
   const [editForm, setEditForm] = useState(null)
   const [editError, setEditError] = useState('')
   const [savingCandidate, setSavingCandidate] = useState(false)
+  const [statusOpen, setStatusOpen] = useState({})
+  const [statusSaving, setStatusSaving] = useState({})
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
   const editModalRef = useRef(null)
@@ -219,6 +221,15 @@ export default function ClientDetailPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [sortOpen])
 
+  useEffect(() => {
+    if (!Object.values(statusOpen).some(Boolean)) return
+    const close = (event) => {
+      if (!event.target.closest('.mandate-status-control')) setStatusOpen({})
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [statusOpen])
+
   const jobGroups = useMemo(() => {
     const groups = new Map()
     clientJobs.forEach((job) => {
@@ -297,6 +308,27 @@ export default function ClientDetailPage() {
   const openGroup = (jobTitle, status = '') => {
     setSelectedGroup({ jobTitle, status })
     setPage(1)
+  }
+
+  const updateMandateStatus = async (group, status) => {
+    const job = group.relatedJob
+    if (!job?.id) return
+    setStatusSaving(current => ({ ...current, [job.id]: true }))
+    try {
+      const res = await fetch(`/api/jobs/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mandate_status: status }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Unable to update mandate status.')
+      setClientJobs(rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: status, status } : row))
+      setStatusOpen({})
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setStatusSaving(current => ({ ...current, [job.id]: false }))
+    }
   }
   const togglePendingColumn = (key) => setPendingColumns(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key])
   const proceedColumns = () => {
@@ -455,7 +487,7 @@ export default function ClientDetailPage() {
       </div>
 
       <div className="section-title"><Briefcase size={18} /><h3>Mandate Groups ({jobGroups.length})</h3></div>
-      <div className="table-card">
+      <div className="table-card table-card-popovers">
         {jobGroups.length === 0 ? (
           <div className="empty-state"><div className="empty-state-title">No candidate job groups</div><div className="empty-state-desc">No candidates are linked to this client yet.</div></div>
         ) : (
@@ -474,7 +506,22 @@ export default function ClientDetailPage() {
                 <tr key={group.title}>
                   <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{group.relatedJob?.job_display_id || '-'}</td>
                   <td><button className="table-link-button" type="button" onClick={() => openGroup(group.title)}>{group.title}</button></td>
-                  <td><span className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`}>{group.status}</span></td>
+                  <td>
+                    <div className="candidate-columns-control mandate-status-control">
+                      <button className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`} type="button" onClick={() => setStatusOpen(current => current[group.relatedJob?.id] ? {} : { [group.relatedJob?.id]: true })} disabled={!group.relatedJob?.id || statusSaving[group.relatedJob?.id]}>
+                        {group.status}
+                      </button>
+                      {statusOpen[group.relatedJob?.id] && (
+                        <div className="filter-dropdown mandate-status-dropdown">
+                          {MANDATE_STATUSES.map(status => (
+                            <button className="candidate-columns-action" type="button" key={status} onMouseDown={event => { event.preventDefault(); updateMandateStatus(group, status) }}>
+                              {status}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </td>
                   <td className="align-center"><button className="count-badge-link" type="button" onClick={() => openGroup(group.title)}>{group.stats.total}</button></td>
                   {STATUS_COLUMNS.map(([key, label]) => (
                     <td className="align-center" key={key}>

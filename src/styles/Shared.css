@@ -282,9 +282,25 @@
 }
 .mandate-consultants-control {
   width: auto;
+  position: relative;
+  z-index: 20;
 }
 .mandate-consultants-dropdown {
   width: 180px;
+  z-index: 999;
+}
+.mandate-status-control {
+  width: auto;
+  position: relative;
+  z-index: 20;
+}
+.mandate-status-control .badge {
+  border: 0;
+  cursor: pointer;
+}
+.mandate-status-dropdown {
+  width: 150px;
+  z-index: 999;
 }
 .candidate-columns-control {
   position: relative;
@@ -462,6 +478,13 @@
   overflow: hidden;
   position: relative;
   z-index: 1;
+}
+.table-card-popovers {
+  overflow: visible;
+  z-index: 20;
+}
+.table-card-popovers .table-wrapper {
+  overflow: visible;
 }
 .table-wrapper {
   overflow-x: auto;

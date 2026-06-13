@@ -65,6 +65,8 @@ export default function JobsPage() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
   const [consultantOpen, setConsultantOpen] = useState({})
+  const [statusOpen, setStatusOpen] = useState({})
+  const [statusSaving, setStatusSaving] = useState({})
   const [clientSearch, setClientSearch] = useState('')
   const [jdFile, setJdFile] = useState(null)
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
@@ -80,7 +82,6 @@ export default function JobsPage() {
   const modalRef = useRef(null)
   const roleInputRef = useRef(null)
   const sortRef = useRef(null)
-  const consultantsTableRef = useRef(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -157,11 +158,20 @@ export default function JobsPage() {
   useEffect(() => {
     if (!Object.values(consultantOpen).some(Boolean)) return
     const close = (event) => {
-      if (!consultantsTableRef.current?.contains(event.target)) setConsultantOpen({})
+      if (!event.target.closest('.mandate-consultants-control')) setConsultantOpen({})
     }
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [consultantOpen])
+
+  useEffect(() => {
+    if (!Object.values(statusOpen).some(Boolean)) return
+    const close = (event) => {
+      if (!event.target.closest('.mandate-status-control')) setStatusOpen({})
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [statusOpen])
 
   const fetchNextId = async () => {
     const res = await fetch('/api/jobs/next-display-id')
@@ -371,6 +381,25 @@ export default function JobsPage() {
     })
   }
 
+  const updateMandateStatus = async (job, status) => {
+    setStatusSaving(current => ({ ...current, [job.id]: true }))
+    try {
+      const res = await fetch(`/api/jobs/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mandate_status: status }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to update mandate status.')
+      setJobs(rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: status, status } : row))
+      setStatusOpen({})
+    } catch (err) {
+      setErrors({ form: err.message })
+    } finally {
+      setStatusSaving(current => ({ ...current, [job.id]: false }))
+    }
+  }
+
   return (
     <div>
       <div className="candidate-columns-toolbar">
@@ -411,7 +440,7 @@ export default function JobsPage() {
       </div>
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}
 
-      <div className="table-card">
+      <div className="table-card table-card-popovers">
         {loading ? (
           <div className="loading-state"><Loader2 size={32} className="spin" color="var(--gold)" /><p>Loading mandates...</p></div>
         ) : error ? (
@@ -419,7 +448,7 @@ export default function JobsPage() {
         ) : jobs.length === 0 ? (
           <div className="empty-state"><div className="empty-state-title">No mandates found</div><div className="empty-state-desc">Create a mandate to get started.</div></div>
         ) : (
-          <div className="table-wrapper" ref={consultantsTableRef}>
+          <div className="table-wrapper">
             <table className="data-table candidates-master-table" aria-label="Mandates">
               <thead>
                 <tr>
@@ -445,7 +474,7 @@ export default function JobsPage() {
                     <td>
                       {(job.consultants || []).length <= 1 ? dash(job.consultants?.[0]) : (
                         <div className="candidate-columns-control mandate-consultants-control">
-                          <button className="filter-select compact-select" type="button" onClick={() => setConsultantOpen(current => ({ ...current, [job.id]: !current[job.id] }))}>
+                          <button className="filter-select compact-select" type="button" onClick={() => setConsultantOpen(current => current[job.id] ? {} : { [job.id]: true })}>
                             {job.consultants[0]} +{job.consultants.length - 1}
                           </button>
                           {consultantOpen[job.id] && <div className="filter-dropdown mandate-consultants-dropdown">{job.consultants.map(name => <div className="candidate-column-option" key={name}>{name}</div>)}</div>}
@@ -462,7 +491,22 @@ export default function JobsPage() {
                     </td>
                     <td>{dash(job.location)}</td>
                     <td>{dash(job.budget)}</td>
-                    <td><span className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`}>{dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}</span></td>
+                    <td>
+                      <div className="candidate-columns-control mandate-status-control">
+                        <button className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`} type="button" onClick={() => setStatusOpen(current => current[job.id] ? {} : { [job.id]: true })} disabled={statusSaving[job.id]}>
+                          {dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}
+                        </button>
+                        {statusOpen[job.id] && (
+                          <div className="filter-dropdown mandate-status-dropdown">
+                            {MANDATE_STATUSES.map(status => (
+                              <button className="candidate-columns-action" type="button" key={status} onMouseDown={event => { event.preventDefault(); updateMandateStatus(job, status) }}>
+                                {status}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td>{dash(job.vertical)}</td>
                     <td>{dash(job.allocation_date)}</td>
                     <td>{job.jd_url ? <a href={job.jd_url} target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD"><FileText size={15} /></a> : '-'}</td>

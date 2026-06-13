@@ -1,4 +1,4 @@
-export const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
+export const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
 
 export const MANDATE_STATUS_OPTIONS = ['', ...MANDATE_STATUSES]
 
