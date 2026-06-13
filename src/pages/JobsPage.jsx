@@ -42,7 +42,7 @@ const canonicalClients = (clients) => {
     const key = String(client?.client_display_id || clientName(client)).trim().toLowerCase()
     if (key && !map.has(key)) map.set(key, client)
   })
-  return [...map.values()].sort((a, b) => clientName(a).localeCompare(clientName(b)))
+  return [...map.values()].sort((a, b) => clientName(a).localeCompare(clientName(b), undefined, { sensitivity: 'base' }))
 }
 
 export default function JobsPage() {
@@ -236,7 +236,7 @@ export default function JobsPage() {
       const key = role.toLowerCase()
       if (!map.has(key)) map.set(key, { role, job_display_id: job.job_display_id || job.job_id || '' })
     })
-    return [...map.values()].sort((a, b) => a.role.localeCompare(b.role))
+    return [...map.values()].sort((a, b) => a.role.localeCompare(b.role, undefined, { sensitivity: 'base' }))
   }, [jobs])
   const matchingRoles = useMemo(() => roleOptions
     .filter(job => `${job.role} ${job.job_display_id || ''}`.toLowerCase().includes(roleSearch.trim().toLowerCase())), [roleOptions, roleSearch])

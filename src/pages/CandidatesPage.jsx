@@ -184,7 +184,23 @@ const getCanonicalClients = (clients) => {
     if (!key || map.has(key)) return
     map.set(key, client)
   })
-  return [...map.values()].sort((a, b) => (a?.name || a?.client_name || '').localeCompare(b?.name || b?.client_name || ''))
+  return [...map.values()].sort((a, b) => (a?.name || a?.client_name || '').localeCompare(b?.name || b?.client_name || '', undefined, { sensitivity: 'base' }))
+}
+
+const getUniqueSortedJobs = (jobs, clientId = '', search = '') => {
+  const map = new Map()
+  const query = String(search || '').trim().toLowerCase()
+  jobs
+    .filter(job => !clientId || job.client_id === clientId)
+    .forEach(job => {
+      const name = (job?.title || job?.role || '').trim()
+      if (!name) return
+      const text = `${name} ${job.job_display_id || ''}`.toLowerCase()
+      if (query && !text.includes(query)) return
+      const key = name.toLowerCase()
+      if (!map.has(key)) map.set(key, job)
+    })
+  return [...map.values()].sort((a, b) => (a?.title || a?.role || '').localeCompare(b?.title || b?.role || '', undefined, { sensitivity: 'base' }))
 }
 
 const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) => {
@@ -277,7 +293,7 @@ export default function CandidatesPage() {
     const clientsData = await clientsRes.json().catch(() => ({}))
     const jobsData = await jobsRes.json().catch(() => ({}))
     if (clientsRes.ok) setDbClients(clientsData.data || [])
-    if (jobsRes.ok) setDbJobs((jobsData.data || []).sort((a, b) => (a?.title || a?.role || '').localeCompare(b?.title || b?.role || '')))
+    if (jobsRes.ok) setDbJobs((jobsData.data || []).sort((a, b) => (a?.title || a?.role || '').localeCompare(b?.title || b?.role || '', undefined, { sensitivity: 'base' })))
   }, [])
 
   useEffect(() => {
@@ -1121,9 +1137,7 @@ export default function CandidatesPage() {
     const visibleClientValue = f.client || ''
     const matchingClients = canonicalClients
       .filter(client => normalizeText(clientName(client)).includes(normalizeText(visibleClientValue)))
-    const matchingJobs = dbJobs
-      .filter(job => !f.clientId || job.client_id === f.clientId)
-      .filter(job => `${jobName(job)} ${job.job_display_id || ''}`.toLowerCase().includes(String(f.job || '').trim().toLowerCase()))
+    const matchingJobs = getUniqueSortedJobs(dbJobs, f.clientId, f.job)
     const setClientValue = (value) => {
       const matchedClient = findClientByInput(value)
       setF(prev => ({

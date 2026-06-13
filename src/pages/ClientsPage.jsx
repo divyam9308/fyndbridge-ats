@@ -113,7 +113,7 @@ const getCanonicalClients = (clients) => {
     const key = String(client.client_group_id || client.client_display_id || name).trim().toLowerCase()
     if (key && !map.has(key)) map.set(key, client)
   })
-  return [...map.values()]
+  return [...map.values()].sort((a, b) => String(a.client_name || a.name || '').localeCompare(String(b.client_name || b.name || ''), undefined, { sensitivity: 'base' }))
 }
 
 const getConsultantNameFromUser = (user) => {
@@ -351,11 +351,23 @@ export default function ClientsPage() {
     setClientSuggestionsOpen(false)
   }
 
-  const selectNewClient = () => {
+  const selectNewClient = async () => {
+    let rows = clients
+    try {
+      const response = await fetch('/api/clients')
+      const data = await response.json().catch(() => ({}))
+      if (response.ok) {
+        rows = data.data || []
+        setClients(rows)
+      }
+    } catch {
+      rows = clients
+    }
+    const nextDisplayId = nextFreeClientDisplayId(rows)
     setForm(current => ({
       ...current,
       client_group_id: '',
-      client_display_id: nextClientId,
+      client_display_id: nextDisplayId,
       client_name: '',
     }))
     setSelectedExistingClientId(null)

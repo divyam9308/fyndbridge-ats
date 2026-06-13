@@ -93,29 +93,15 @@ async function ensureClientDisplayIds() {
 
   if (error) throw error
 
-  const nameToDisplayId = new Map()
   const usedDisplayIds = new Set((data || []).map((client) => displayIdNumber(client.client_display_id, 'CL')).filter((number) => number < Number.MAX_SAFE_INTEGER))
   let next = displayIdNumber(nextFreeDisplayId(data, 'CL'), 'CL')
 
   for (const client of data || []) {
-    const normalizedName = normalizeDuplicateText(client.client_name || client.name)
-    if (!normalizedName) continue
-    const existing = nameToDisplayId.get(normalizedName)
     const current = clean(client.client_display_id)
-    if (existing && current !== existing) {
-      const { error: updateError } = await supabase.from('clients').update({ client_display_id: existing }).eq('id', client.id)
-      if (isClientDisplayIdUniqueError(updateError)) return
-      if (updateError) throw updateError
-      continue
-    }
-    if (current) {
-      nameToDisplayId.set(normalizedName, current)
-      continue
-    }
+    if (current) continue
     while (usedDisplayIds.has(next)) next += 1
     const displayId = `CL${next++}`
     usedDisplayIds.add(displayIdNumber(displayId, 'CL'))
-    nameToDisplayId.set(normalizedName, displayId)
     const { error: updateError } = await supabase.from('clients').update({ client_display_id: displayId }).eq('id', client.id)
     if (isClientDisplayIdUniqueError(updateError)) return
     if (updateError) throw updateError
@@ -130,6 +116,14 @@ async function nextClientDisplayId(clientName = '') {
   const existing = (data || []).find((client) => normalizeDuplicateText(client.client_name || client.name) === normalizedName)
   if (existing?.client_display_id) return existing.client_display_id
   return nextFreeDisplayId(data, 'CL')
+}
+
+async function isClientDisplayIdAvailable(displayId) {
+  const value = clean(displayId)
+  if (!value) return false
+  const { data, error } = await supabase.from('clients').select('id').eq('client_display_id', value).limit(1)
+  if (error) throw error
+  return !(data || []).length
 }
 
 function deriveClientStatus(row, jobs = []) {
@@ -407,7 +401,11 @@ async function createClient(req, res) {
       return res.json(normalizeClient(data))
     }
 
-    payload.client_display_id = payload.client_display_id || await nextClientDisplayId(payload.client_name)
+    if (!payload.client_display_id) {
+      payload.client_display_id = await nextClientDisplayId(payload.client_name)
+    } else if (!payload.client_group_id && !(await isClientDisplayIdAvailable(payload.client_display_id))) {
+      payload.client_display_id = await nextClientDisplayId(payload.client_name)
+    }
     if (!payload.client_group_id) {
       payload.id = randomUUID()
       payload.client_group_id = payload.id
