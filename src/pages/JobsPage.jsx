@@ -339,7 +339,12 @@ export default function JobsPage() {
 
   const openMandateCandidates = (job) => {
     if (!job?.client_id || !job?.id) return
-    navigate(`/dashboard/clients/${job.client_id}/jobs/${job.id}/candidates`)
+    navigate(`/dashboard/clients/${job.client_id}`, {
+      state: {
+        selectedJobId: job.id,
+        selectedJobTitle: job.role || job.title || ''
+      }
+    })
   }
 
   return (

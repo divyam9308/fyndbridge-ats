@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useParams, Link } from 'react-router-dom'
+import { useLocation, useParams, Link } from 'react-router-dom'
 import { ChevronDown, ChevronLeft, AlertCircle, Loader2, Briefcase, FileText, Pencil, X } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientDetailPage.css'
@@ -83,6 +83,7 @@ const candidateToEditForm = (candidate) => ({
 
 export default function ClientDetailPage() {
   const { clientId } = useParams()
+  const location = useLocation()
   const [client, setClient] = useState(null)
   const [clientJobs, setClientJobs] = useState([])
   const [candidates, setCandidates] = useState([])
@@ -261,6 +262,19 @@ export default function ClientDetailPage() {
     scrapped: jobGroups.filter(job => job.status === 'Scrapped').length,
     completed: jobGroups.filter(job => job.status === 'Completed').length,
   }), [jobGroups])
+
+  useEffect(() => {
+    const selectedJobId = location.state?.selectedJobId
+    const selectedJobTitle = location.state?.selectedJobTitle
+    if (!jobGroups.length || selectedGroup || (!selectedJobId && !selectedJobTitle)) return
+    const group = jobGroups.find(item => item.relatedJob?.id === selectedJobId) || jobGroups.find(item => normalizeText(item.title) === normalizeText(selectedJobTitle))
+    if (!group) return
+    const timer = window.setTimeout(() => {
+      setSelectedGroup({ jobTitle: group.title, status: '' })
+      setPage(1)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [jobGroups, location.state, selectedGroup])
 
   const calculatedClientStatus = useMemo(() => {
     if (!jobGroups.length) return 'Ongoing'
