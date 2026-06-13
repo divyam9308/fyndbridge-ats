@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
@@ -493,6 +493,14 @@ export default function CandidatesPage() {
     return client?.client_display_id || ''
   }
   const jobName = (job) => job?.title || job?.role || ''
+  const uniqueJobFilterOptions = useMemo(() => {
+    const names = new Set()
+    dbJobs.forEach(job => {
+      const name = jobName(job).trim()
+      if (name) names.add(name)
+    })
+    return [...names].sort((a, b) => a.localeCompare(b))
+  }, [dbJobs])
   const jobDisplayIdForForm = (candidate) => {
     const job = dbJobs.find(j => j.id === candidate.jobId) || dbJobs.find(j => jobName(j) === candidate.job && (!candidate.clientId || j.client_id === candidate.clientId))
     return job?.job_display_id || candidate.jobDisplayId || ''
@@ -1636,7 +1644,7 @@ export default function CandidatesPage() {
         <select className="filter-select" value={filterJob}
           onChange={e => { setFilterJob(e.target.value); setPage(1) }} id="filter-candidate-job">
           <option value="All">All Mandates</option>
-          {dbJobs.map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
+          {uniqueJobFilterOptions.map(name => <option key={name} value={name}>{name}</option>)}
         </select>
 
         <div className="filter-divider" />
