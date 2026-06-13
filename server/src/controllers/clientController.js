@@ -126,6 +126,14 @@ async function isClientDisplayIdAvailable(displayId) {
   return !(data || []).length
 }
 
+async function getNextClientDisplayId(req, res) {
+  try {
+    return res.json({ client_display_id: await nextClientDisplayId('') })
+  } catch (err) {
+    return logAndSendInternal(res, 'getNextClientDisplayId', err)
+  }
+}
+
 function deriveClientStatus(row, jobs = []) {
   if (jobs.length && jobs.every((job) => job.status === 'Scrapped' || job.mandate_status === 'Scrapped')) return 'Inactive'
   if (jobs.some((job) => ['Ongoing', 'Completed'].includes(job.status) || ['Ongoing', 'Completed'].includes(job.mandate_status))) return 'Active'
@@ -404,7 +412,7 @@ async function createClient(req, res) {
     if (!payload.client_display_id) {
       payload.client_display_id = await nextClientDisplayId(payload.client_name)
     } else if (!payload.client_group_id && !(await isClientDisplayIdAvailable(payload.client_display_id))) {
-      payload.client_display_id = await nextClientDisplayId(payload.client_name)
+      return res.status(409).json({ error: `Client ID ${payload.client_display_id} is already taken. Please click Add New Client again.` })
     }
     if (!payload.client_group_id) {
       payload.id = randomUUID()
@@ -529,6 +537,7 @@ async function deleteClient(req, res) {
 
 module.exports = {
   checkClientDuplicate,
+  getNextClientDisplayId,
   listClients,
   getClient,
   createClient,

@@ -99,12 +99,6 @@ const getCurrentUser = () => {
 }
 
 const getNumericId = (id) => Number(String(id || '').replace(/\D/g, '')) || 0
-const nextFreeClientDisplayId = (rows) => {
-  const used = new Set(rows.map(client => getNumericId(client.client_display_id)).filter(Boolean))
-  let next = 1
-  while (used.has(next)) next += 1
-  return `CL${next}`
-}
 
 const getCanonicalClients = (clients) => {
   const map = new Map()
@@ -191,6 +185,7 @@ export default function ClientsPage() {
   const statusDropdownRef = useRef(null)
   const clientModalRef = useRef(null)
   const clientNameInputRef = useRef(null)
+  const clientIdRequestRef = useRef(0)
   const followUpModalRef = useRef(null)
   const duplicateModalRef = useRef(null)
 
@@ -327,7 +322,6 @@ export default function ClientsPage() {
 
   const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'designation')
   const canonicalClients = useMemo(() => getCanonicalClients(clients), [clients])
-  const nextClientId = useMemo(() => nextFreeClientDisplayId(clients), [clients])
   const matchingClients = useMemo(() => (
     canonicalClients
       .filter(client => normalizeText(client.client_name || client.name).includes(normalizeText(form.client_name)))
@@ -335,6 +329,7 @@ export default function ClientsPage() {
   const matchingSectors = useMemo(() => SECTOR_OPTIONS.filter(value => value.toLowerCase().includes(sectorSearch.trim().toLowerCase())), [sectorSearch])
 
   const selectExistingClient = (client) => {
+    clientIdRequestRef.current += 1
     setForm(current => ({
       ...current,
       client_group_id: client.client_group_id || client.id,
@@ -352,22 +347,12 @@ export default function ClientsPage() {
   }
 
   const selectNewClient = async () => {
-    let rows = clients
-    try {
-      const response = await fetch('/api/clients')
-      const data = await response.json().catch(() => ({}))
-      if (response.ok) {
-        rows = data.data || []
-        setClients(rows)
-      }
-    } catch {
-      rows = clients
-    }
-    const nextDisplayId = nextFreeClientDisplayId(rows)
+    const requestId = clientIdRequestRef.current + 1
+    clientIdRequestRef.current = requestId
     setForm(current => ({
       ...current,
       client_group_id: '',
-      client_display_id: nextDisplayId,
+      client_display_id: '',
       client_name: '',
     }))
     setSelectedExistingClientId(null)
@@ -375,6 +360,14 @@ export default function ClientsPage() {
     setErrors({})
     setClientSuggestionsOpen(false)
     window.setTimeout(() => clientNameInputRef.current?.focus(), 0)
+    try {
+      const response = await fetch('/api/clients/next-display-id')
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data.client_display_id || clientIdRequestRef.current !== requestId) return
+      setForm(current => current.client_group_id ? current : { ...current, client_display_id: data.client_display_id })
+    } catch {
+      if (clientIdRequestRef.current === requestId) setErrors(current => ({ ...current, client_display_id: 'Unable to load Client ID' }))
+    }
   }
 
   const handleChange = (e) => {
@@ -385,7 +378,7 @@ export default function ClientsPage() {
       const next = { ...current, [name]: value }
       if (name === 'client_name' && selectedExistingClientId && value !== current.client_name) {
         next.client_group_id = ''
-        next.client_display_id = addingNewClient ? current.client_display_id || nextClientId : ''
+        next.client_display_id = addingNewClient ? current.client_display_id : ''
       }
       if (name === 'contract_signed' && value === 'No') next.contract_document = ''
       return next
@@ -408,6 +401,7 @@ export default function ClientsPage() {
 
   const validate = () => {
     const next = {}
+    if (addingNewClient && !form.client_display_id.trim()) next.client_display_id = 'Client ID is loading'
     if (!form.client_name.trim()) next.client_name = 'Client Name is required'
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
     if (form.client_group_id && !form.contact_person.trim()) next.contact_person = 'Contact Person is required'
@@ -870,7 +864,8 @@ export default function ClientsPage() {
                 {(editingClient || addingNewClient) && (
                   <div className="form-group">
                     <label className="form-label">Client ID</label>
-                    <input value={form.client_display_id || ''} className="form-control" disabled readOnly />
+                    <input value={form.client_display_id || ''} placeholder="Loading..." className={`form-control${errors.client_display_id ? ' is-error' : ''}`} disabled readOnly />
+                    {errors.client_display_id && <span className="form-error">{errors.client_display_id}</span>}
                   </div>
                 )}
                 {[
@@ -894,7 +889,7 @@ export default function ClientsPage() {
                         {addingNewClient && (
                           <div className="sub-text" style={{ marginBottom: 6 }}>
                             Adding new client
-                            <button type="button" className="filter-clear" style={{ marginLeft: 8 }} onMouseDown={(event) => { event.preventDefault(); setAddingNewClient(false); setSelectedExistingClientId(null); setForm(current => ({ ...current, client_group_id: '', client_display_id: '', client_name: '' })); setClientSuggestionsOpen(true) }}>Switch</button>
+                            <button type="button" className="filter-clear" style={{ marginLeft: 8 }} onMouseDown={(event) => { event.preventDefault(); clientIdRequestRef.current += 1; setAddingNewClient(false); setSelectedExistingClientId(null); setForm(current => ({ ...current, client_group_id: '', client_display_id: '', client_name: '' })); setClientSuggestionsOpen(true) }}>Switch</button>
                           </div>
                         )}
                         <input ref={clientNameInputRef} name={name} type={type} value={form[name]} onChange={handleChange} onFocus={() => !addingNewClient && setClientSuggestionsOpen(true)} onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} autoComplete="off" />

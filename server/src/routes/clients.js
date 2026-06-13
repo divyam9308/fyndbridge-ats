@@ -6,6 +6,7 @@ const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
 
 router.get('/check-duplicate', controller.checkClientDuplicate)
+router.get('/next-display-id', controller.getNextClientDisplayId)
 router.get('/', controller.listClients)
 router.post('/', upload.single('contract_document_file'), controller.createClient)
 router.get('/:id', controller.getClient)
