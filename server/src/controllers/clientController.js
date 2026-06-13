@@ -49,8 +49,34 @@ function displayIdNumber(value, prefix) {
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
 }
 
-function nextFreeDisplayId(rows, prefix) {
+const CLIENT_DISPLAY_ID_RESERVATION_MS = 10 * 60 * 1000
+const reservedClientDisplayIds = new Map()
+
+function cleanupClientDisplayIdReservations() {
+  const now = Date.now()
+  for (const [displayId, expiresAt] of reservedClientDisplayIds.entries()) {
+    if (expiresAt <= now) reservedClientDisplayIds.delete(displayId)
+  }
+}
+
+function releaseClientDisplayId(displayId) {
+  reservedClientDisplayIds.delete(clean(displayId))
+}
+
+function reserveClientDisplayId(displayId) {
+  const value = clean(displayId)
+  if (value) reservedClientDisplayIds.set(value, Date.now() + CLIENT_DISPLAY_ID_RESERVATION_MS)
+}
+
+function nextFreeDisplayId(rows, prefix, includeReservations = false) {
+  cleanupClientDisplayIdReservations()
   const used = new Set((rows || []).map((row) => displayIdNumber(row.client_display_id, prefix)).filter((number) => number < Number.MAX_SAFE_INTEGER))
+  if (includeReservations) {
+    for (const displayId of reservedClientDisplayIds.keys()) {
+      const number = displayIdNumber(displayId, prefix)
+      if (number < Number.MAX_SAFE_INTEGER) used.add(number)
+    }
+  }
   let next = 1
   while (used.has(next)) next += 1
   return `${prefix}${next}`
@@ -94,7 +120,7 @@ async function ensureClientDisplayIds() {
   if (error) throw error
 
   const usedDisplayIds = new Set((data || []).map((client) => displayIdNumber(client.client_display_id, 'CL')).filter((number) => number < Number.MAX_SAFE_INTEGER))
-  let next = displayIdNumber(nextFreeDisplayId(data, 'CL'), 'CL')
+  let next = displayIdNumber(nextFreeDisplayId(data, 'CL', true), 'CL')
 
   for (const client of data || []) {
     const current = clean(client.client_display_id)
@@ -108,14 +134,11 @@ async function ensureClientDisplayIds() {
   }
 }
 
-async function nextClientDisplayId(clientName = '') {
+async function nextClientDisplayId() {
   await ensureClientDisplayIds()
-  const normalizedName = normalizeDuplicateText(clientName)
   const { data, error } = await supabase.from('clients').select('client_display_id, client_name, name, created_at').order('created_at', { ascending: true })
   if (error) throw error
-  const existing = (data || []).find((client) => normalizeDuplicateText(client.client_name || client.name) === normalizedName)
-  if (existing?.client_display_id) return existing.client_display_id
-  return nextFreeDisplayId(data, 'CL')
+  return nextFreeDisplayId(data, 'CL', true)
 }
 
 async function isClientDisplayIdAvailable(displayId) {
@@ -128,7 +151,9 @@ async function isClientDisplayIdAvailable(displayId) {
 
 async function getNextClientDisplayId(req, res) {
   try {
-    return res.json({ client_display_id: await nextClientDisplayId('') })
+    const clientDisplayId = await nextClientDisplayId()
+    reserveClientDisplayId(clientDisplayId)
+    return res.json({ client_display_id: clientDisplayId })
   } catch (err) {
     return logAndSendInternal(res, 'getNextClientDisplayId', err)
   }
@@ -412,6 +437,7 @@ async function createClient(req, res) {
     if (!payload.client_display_id) {
       payload.client_display_id = await nextClientDisplayId(payload.client_name)
     } else if (!payload.client_group_id && !(await isClientDisplayIdAvailable(payload.client_display_id))) {
+      releaseClientDisplayId(payload.client_display_id)
       return res.status(409).json({ error: `Client ID ${payload.client_display_id} is already taken. Please click Add New Client again.` })
     }
     if (!payload.client_group_id) {
@@ -438,12 +464,15 @@ async function createClient(req, res) {
         .select('*')
         .single()
       if (missingClientColumn(groupError) === 'client_group_id') {
+        releaseClientDisplayId(payload.client_display_id)
         return res.status(201).json(normalizeClient(data))
       }
       if (groupError) throw groupError
+      releaseClientDisplayId(payload.client_display_id)
       return res.status(201).json(normalizeClient(grouped))
     }
 
+    releaseClientDisplayId(payload.client_display_id)
     return res.status(201).json(normalizeClient(data))
   } catch (err) {
     if (err.code === '23505' && /clients_name_key/i.test(err.message || '')) {
