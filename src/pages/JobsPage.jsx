@@ -511,13 +511,6 @@ export default function JobsPage() {
                     />
                     {clientSuggestionsOpen && (
                     <div className="client-suggestions manual-suggestions is-open">
-                      <button type="button" onMouseDown={(event) => {
-                        event.preventDefault()
-                        setClientSuggestionsOpen(false)
-                        navigate('/dashboard/clients', { state: { action: 'add-client' } })
-                      }}>
-                        <span>Add New Client</span>
-                      </button>
                       {matchingClients.map(client => (
                         <button type="button" key={client.id} onMouseDown={(event) => {
                           event.preventDefault()
