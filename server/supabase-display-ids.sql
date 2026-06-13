@@ -4,7 +4,6 @@ alter table public.clients
 alter table public.candidates
   add column if not exists candidate_display_id text;
 
-create sequence if not exists public.client_display_id_seq;
 create sequence if not exists public.candidate_display_id_seq;
 
 drop index if exists public.clients_client_display_id_key;
@@ -58,12 +57,6 @@ from numbered
 where c.id = numbered.id;
 
 select setval(
-  'public.client_display_id_seq',
-  greatest(coalesce((select max((substring(client_display_id from 3))::bigint) from public.clients where client_display_id ~ '^CL[0-9]+$'), 0), 1),
-  coalesce((select max((substring(client_display_id from 3))::bigint) from public.clients where client_display_id ~ '^CL[0-9]+$'), 0) > 0
-);
-
-select setval(
   'public.candidate_display_id_seq',
   greatest(coalesce((select max((substring(candidate_display_id from 3))::bigint) from public.candidates where candidate_display_id ~ '^CA[0-9]+$'), 0), 1),
   coalesce((select max((substring(candidate_display_id from 3))::bigint) from public.candidates where candidate_display_id ~ '^CA[0-9]+$'), 0) > 0
@@ -73,14 +66,35 @@ create or replace function public.assign_client_display_id()
 returns trigger
 language plpgsql
 as $$
+declare
+  next_number bigint;
 begin
   if new.client_display_id is not null and trim(new.client_display_id) <> '' then
     return new;
   end if;
-  new.client_display_id := 'CL' || nextval('public.client_display_id_seq');
+
+  with used_numbers as (
+    select substring(client_display_id from 3)::bigint as number
+    from public.clients
+    where client_display_id ~ '^CL[0-9]+$'
+  ),
+  candidates as (
+    select generate_series(1, greatest(coalesce((select max(number) from used_numbers), 0) + 1, 1)) as number
+  )
+  select candidates.number
+  into next_number
+  from candidates
+  left join used_numbers on used_numbers.number = candidates.number
+  where used_numbers.number is null
+  order by candidates.number
+  limit 1;
+
+  new.client_display_id := 'CL' || next_number;
   return new;
 end;
 $$;
+
+drop sequence if exists public.client_display_id_seq;
 
 create or replace function public.assign_candidate_display_id()
 returns trigger

@@ -138,7 +138,14 @@ async function nextClientDisplayId() {
   await ensureClientDisplayIds()
   const { data, error } = await supabase.from('clients').select('client_display_id, client_name, name, created_at').order('created_at', { ascending: true })
   if (error) throw error
-  return nextFreeDisplayId(data, 'CL', true)
+  const parsedIds = (data || [])
+    .map(row => displayIdNumber(row.client_display_id, 'CL'))
+    .filter(number => number < Number.MAX_SAFE_INTEGER)
+    .sort((a, b) => a - b)
+  const nextId = nextFreeDisplayId(data, 'CL', true)
+  console.log('nextClientDisplayId parsed CL IDs:', parsedIds)
+  console.log('nextClientDisplayId selected:', nextId)
+  return nextId
 }
 
 async function isClientDisplayIdAvailable(displayId) {
@@ -440,6 +447,7 @@ async function createClient(req, res) {
       releaseClientDisplayId(payload.client_display_id)
       return res.status(409).json({ error: `Client ID ${payload.client_display_id} is already taken. Please click Add New Client again.` })
     }
+    console.log('createClient final client_display_id before insert:', payload.client_display_id)
     if (!payload.client_group_id) {
       payload.id = randomUUID()
       payload.client_group_id = payload.id
