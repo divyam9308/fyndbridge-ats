@@ -14,6 +14,7 @@ async function uploadResumeToStorage(file) {
     resume_path: cv?.resume_path || '',
     resume_url: cv?.resume_url || cv?.cv_link || '',
     cv_file_hash: cv?.cv_file_hash || '',
+    cv_storage_path: cv?.cv_storage_path || cv?.resume_path || '',
     cv_duplicate: Boolean(cv?.duplicate)
   }
 }
@@ -44,6 +45,7 @@ function rowFromParsed(file, parsed, error = null, storage = {}, warnings = []) 
     resume_path: storage.resume_path || '',
     resume_url: storage.resume_url || '',
     cv_file_hash: storage.cv_file_hash || '',
+    cv_storage_path: storage.cv_storage_path || storage.resume_path || '',
     cv_duplicate: Boolean(storage.cv_duplicate),
     warnings,
     error

@@ -897,6 +897,10 @@
   left: max(16px, calc(50vw - 450px));
 }
 .modal-card-xl {
+  width: min(95vw, 1180px);
+  max-width: 1180px;
+}
+.modal-card-xl {
   width: min(1100px, calc(100vw - 32px));
   max-width: 1100px;
   left: max(16px, calc(50vw - 550px));
@@ -1064,6 +1068,44 @@
   border-radius: 10px;
   padding: 14px;
   background: var(--gray-50);
+}
+.duplicate-details-scroll {
+  max-height: min(68vh, 680px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.duplicate-details-table {
+  width: 100%;
+  table-layout: fixed;
+}
+.duplicate-details-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--white);
+}
+.duplicate-details-table th:first-child,
+.duplicate-details-table td:first-child {
+  width: 24%;
+}
+.duplicate-details-table th:nth-child(2),
+.duplicate-details-table th:nth-child(3),
+.duplicate-details-table td:nth-child(2),
+.duplicate-details-table td:nth-child(3) {
+  width: 38%;
+}
+.duplicate-details-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.duplicate-details-table .field-name {
+  font-weight: 700;
+  color: var(--navy-darkest);
+}
+.duplicate-details-table tr.is-different .diff-cell {
+  background: rgba(var(--brand-gold-rgb),0.12);
+  box-shadow: inset 3px 0 0 var(--gold);
 }
 
 @media (max-width: 768px) {

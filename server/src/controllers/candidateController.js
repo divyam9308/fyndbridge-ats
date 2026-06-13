@@ -38,6 +38,7 @@ const CANDIDATE_FIELDS = [
   'education',
   'cv_link',
   'cv_file_hash',
+  'cv_storage_path',
   'linkedin_url',
   'resume_url',
   'source',
@@ -536,6 +537,7 @@ async function applyCvInput(req, candidatePayload) {
       candidatePayload.cv_link = cv.cv_link
       candidatePayload.resume_url = cv.resume_url
       candidatePayload.cv_file_hash = cv.cv_file_hash
+      candidatePayload.cv_storage_path = cv.cv_storage_path
       return cv
     }
   }
@@ -544,6 +546,7 @@ async function applyCvInput(req, candidatePayload) {
     if (cv) {
       candidatePayload.cv_link = cv.cv_link
       candidatePayload.resume_url = cv.resume_url
+      if (cv.cv_storage_path) candidatePayload.cv_storage_path = cv.cv_storage_path
       return cv
     }
   }
@@ -1376,7 +1379,8 @@ async function checkCvDuplicate(req, res) {
       duplicate: Boolean(cv?.duplicate),
       cv_link: cv?.cv_link || '',
       resume_url: cv?.resume_url || '',
-      cv_file_hash: cv?.cv_file_hash || ''
+      cv_file_hash: cv?.cv_file_hash || '',
+      cv_storage_path: cv?.cv_storage_path || ''
     })
   } catch (err) {
     return logAndSendInternal(res, 'checkCvDuplicate', err)

@@ -119,7 +119,7 @@ const EMPTY_CAND = {
   noticePeriod:'', openToRelocate:'',
   offeredCtc:'', dateOfJoining:'',
   client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', clientPhone:'', status:'',
-  cvLink:'', cvFile:null, cvFileHash:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
+  cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
 }
 
 /* ====== Client phone lookup ====== */
@@ -216,7 +216,8 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     offered_ctc: f.status === 'Hired' ? cleanNumberForApi(f.offeredCtc) : '',
     date_of_joining: f.status === 'Hired' ? f.dateOfJoining || '' : '',
     cv_link: f.cvLink,
-    cv_file_hash: f.cvFileHash,
+    cv_file_hash: f.cvFileHash || undefined,
+    cv_storage_path: f.cvStoragePath || undefined,
     linkedin_url: f.linkedinUrl,
     notes: f.notes,
     consultant_name: f.consultantName || consultantName || '',
@@ -436,6 +437,7 @@ export default function CandidatesPage() {
     const formBody = new FormData()
     Object.entries(body).forEach(([key, value]) => {
       if (value === undefined) return
+      if (value === '') return
       formBody.append(key, Array.isArray(value) ? JSON.stringify(value) : value ?? '')
     })
     if (candidate.cvFile) formBody.append('cv_file', candidate.cvFile)
@@ -895,6 +897,7 @@ export default function CandidatesPage() {
       linkedinUrl: row.linkedin_url || '',
       cvLink: row.resume_url || '',
       cvFileHash: row.cv_file_hash || '',
+      cvStoragePath: row.resume_path || row.cv_storage_path || '',
       notes: row.summary || row.error || '',
       source: 'resume'
     }
@@ -1004,26 +1007,7 @@ export default function CandidatesPage() {
       setDuplicateMoreOpen(false)
       return
     }
-
-    setSaving(true)
-    try {
-      await saveCandidateToApi(candidateDuplicate.candidate, { duplicateAction })
-      setCandidateDuplicate(null)
-      setDuplicateMoreOpen(false)
-      await loadCandidates(page, { showLoading: false })
-      if (candidateDuplicate.source === 'resume') {
-        await advanceResumeReview('Duplicate resolved.')
-        return
-      }
-      setAddOpen(false)
-      setEditing(false)
-    } catch (err) {
-      const message = err.message || 'Unable to resolve duplicate candidate.'
-      if (candidateDuplicate.source === 'resume') setImportError(message)
-      else setErrors({ form: message })
-    } finally {
-      setSaving(false)
-    }
+    openDuplicateExistingForEdit()
   }
 
   const openDuplicateExistingForEdit = () => {
@@ -1076,6 +1060,10 @@ export default function CandidatesPage() {
       default: return '-'
     }
   }
+  const duplicateValuesDiffer = (existing, incoming, key) => (
+    String(duplicateValue(existing, key) ?? '').replace(/\s+/g, ' ').trim() !==
+    String(duplicateValue(incoming, key) ?? '').replace(/\s+/g, ' ').trim()
+  )
 
   const closeImport = () => {
     setImportOpen(false); setResumeFiles([]); setImportQueue([]); setCurrentImportIndex(0); setImportError(''); setReviewNotice('')
@@ -1972,29 +1960,32 @@ export default function CandidatesPage() {
         const incoming = candidateDuplicate.candidate || {}
         return (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDuplicateMoreOpen(false)}>
-            <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label="Duplicate Candidate Details">
+            <div className="modal-card modal-card-xl" role="dialog" aria-modal="true" aria-label="Duplicate Candidate Details">
               <div className="modal-header">
                 <span className="modal-title">Duplicate Candidate Details</span>
                 <button className="modal-close" onClick={() => setDuplicateMoreOpen(false)} aria-label="Close"><X size={16} /></button>
               </div>
               <div className="modal-body">
-                <div className="table-wrapper">
-                  <table className="data-table">
+                <div className="duplicate-details-scroll">
+                  <table className="data-table duplicate-details-table">
                     <thead>
                       <tr>
-                        <th>Column</th>
+                        <th>Field Name</th>
                         <th>Existing Candidate</th>
                         <th>New Candidate</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {CANDIDATE_TABLE_COLUMNS.map(column => (
-                        <tr key={column.key}>
-                          <td>{column.label}</td>
-                          <td>{duplicateValue(existing, column.key)}</td>
-                          <td>{duplicateValue(incoming, column.key)}</td>
+                      {CANDIDATE_TABLE_COLUMNS.filter(column => column.key !== 'action').map(column => {
+                        const changed = duplicateValuesDiffer(existing, incoming, column.key)
+                        return (
+                        <tr key={column.key} className={changed ? 'is-different' : ''}>
+                          <td className="field-name">{column.label}</td>
+                          <td className={changed ? 'diff-cell' : ''}>{duplicateValue(existing, column.key)}</td>
+                          <td className={changed ? 'diff-cell' : ''}>{duplicateValue(incoming, column.key)}</td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>

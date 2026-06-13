@@ -34,12 +34,12 @@ async function findByHash(hash) {
   if (!hash) return null
   const { data, error } = await supabase
     .from('candidates')
-    .select('id, cv_link, resume_url, cv_file_hash')
+    .select('id, cv_link, resume_url, cv_file_hash, cv_storage_path')
     .eq('cv_file_hash', hash)
     .limit(1)
     .maybeSingle()
   if (error) {
-    if (/cv_file_hash/i.test(error.message || '')) return null
+    if (/cv_file_hash|cv_storage_path/i.test(error.message || '')) return null
     throw error
   }
   return data
@@ -50,11 +50,23 @@ async function findByLink(link) {
   if (!normalized) return null
   const { data, error } = await supabase
     .from('candidates')
-    .select('id, cv_link, resume_url')
+    .select('id, cv_link, resume_url, cv_storage_path')
     .or(`cv_link.eq.${normalized},resume_url.eq.${normalized}`)
     .limit(1)
     .maybeSingle()
-  if (error) throw error
+  if (error) {
+    if (/cv_storage_path/i.test(error.message || '')) {
+      const fallback = await supabase
+        .from('candidates')
+        .select('id, cv_link, resume_url')
+        .or(`cv_link.eq.${normalized},resume_url.eq.${normalized}`)
+        .limit(1)
+        .maybeSingle()
+      if (fallback.error) throw fallback.error
+      return fallback.data
+    }
+    throw error
+  }
   return data
 }
 
@@ -73,6 +85,7 @@ async function prepareUploadedCv(file) {
       cv_link: existing.cv_link || existing.resume_url,
       resume_url: existing.resume_url || existing.cv_link,
       cv_file_hash: hash,
+      cv_storage_path: existing.cv_storage_path || '',
       duplicate: true
     }
   }
@@ -85,7 +98,7 @@ async function prepareUploadedCv(file) {
   const storageDuplicate = Boolean(error && /already exists|duplicate/i.test(error.message || ''))
   if (error && !storageDuplicate) throw error
   const url = publicUrl(objectPath)
-  return { cv_link: url, resume_url: url, cv_file_hash: hash, duplicate: storageDuplicate, resume_path: objectPath }
+  return { cv_link: url, resume_url: url, cv_file_hash: hash, cv_storage_path: objectPath, duplicate: storageDuplicate, resume_path: objectPath }
 }
 
 async function checkUploadedCvDuplicate(file) {
@@ -97,7 +110,8 @@ async function checkUploadedCvDuplicate(file) {
     duplicate: Boolean(existing),
     cv_link: existing?.cv_link || existing?.resume_url || '',
     resume_url: existing?.resume_url || existing?.cv_link || '',
-    cv_file_hash: hash
+    cv_file_hash: hash,
+    cv_storage_path: existing?.cv_storage_path || ''
   }
 }
 
@@ -108,7 +122,8 @@ async function checkLinkedCvDuplicate(link) {
   return {
     duplicate: Boolean(existing),
     cv_link: existing?.cv_link || existing?.resume_url || normalized,
-    resume_url: existing?.resume_url || existing?.cv_link || normalized
+    resume_url: existing?.resume_url || existing?.cv_link || normalized,
+    cv_storage_path: existing?.cv_storage_path || ''
   }
 }
 
@@ -119,6 +134,7 @@ async function prepareLinkedCv(link) {
   return {
     cv_link: existing?.cv_link || existing?.resume_url || normalized,
     resume_url: existing?.resume_url || existing?.cv_link || normalized,
+    cv_storage_path: existing?.cv_storage_path || '',
     duplicate: Boolean(existing)
   }
 }

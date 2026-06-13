@@ -17,6 +17,8 @@ create table if not exists public.candidates (
   skills text[] not null default '{}',
   education text,
   cv_link text,
+  cv_file_hash text,
+  cv_storage_path text,
   linkedin_url text,
   resume_url text,
   source text default 'manual',
