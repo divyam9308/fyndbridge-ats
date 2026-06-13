@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
@@ -337,6 +337,11 @@ export default function JobsPage() {
     })
   }
 
+  const openMandateCandidates = (job) => {
+    if (!job?.client_id || !job?.id) return
+    navigate(`/dashboard/clients/${job.client_id}/jobs/${job.id}/candidates`)
+  }
+
   return (
     <div>
       <div className="candidate-columns-toolbar">
@@ -421,7 +426,11 @@ export default function JobsPage() {
                     <td>{dash(job.team_lead)}</td>
                     <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{dash(job.client_display_id)}</td>
                     <td>{dash(job.client_name)}</td>
-                    <td><Link className="name-text" to={`/dashboard/clients/${job.client_id}/jobs/${job.id}/candidates`}>{dash(job.role)}</Link></td>
+                    <td>
+                      <button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>
+                        {dash(job.role)}
+                      </button>
+                    </td>
                     <td>{dash(job.location)}</td>
                     <td>{dash(job.budget)}</td>
                     <td><span className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`}>{dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}</span></td>

@@ -43,6 +43,10 @@ function formatJob(row) {
   const mandateStatus = normalizeMandateStatus(row.mandate_status || row.status || row.priority)
   return {
     ...row,
+    id: row.id,
+    mandate_id: row.id,
+    client_id: row.client_id,
+    client_primary_id: row.client_id,
     job_display_id: row.job_display_id || '',
     role: row.title || '',
     location: row.city || row.location || '',
