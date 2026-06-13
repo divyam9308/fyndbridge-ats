@@ -398,7 +398,7 @@ export default function JobsPage() {
                   <th>Location</th>
                   <th>Budget</th>
                   <th>Mandate Status</th>
-                  <th>Industry</th>
+                  <th>Sector</th>
                   <th>Date of Allocation</th>
                   <th>JD</th>
                   <th>Action</th>
@@ -601,7 +601,7 @@ export default function JobsPage() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Industry</label>
+                  <label className="form-label">Sector</label>
                   <input className="form-control" value={form.vertical} onChange={e => setForm(current => ({ ...current, vertical: e.target.value }))} disabled={saving} />
                 </div>
                 <div className="form-group">

@@ -204,11 +204,6 @@ function clientPayload(body) {
     err.statusCode = 400
     throw err
   }
-  if (!email) {
-    const err = new Error('Email is required')
-    err.statusCode = 400
-    throw err
-  }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     const err = new Error('Enter a valid email')
     err.statusCode = 400
@@ -235,7 +230,7 @@ function clientPayload(body) {
     designation: nullable(body.designation),
     mobile,
     phone: mobile,
-    email,
+    email: nullable(email),
     linkedin: nullable(body.linkedin),
     sector: nullable(body.sector),
     connected_on_date: body.connected_on_date || null,

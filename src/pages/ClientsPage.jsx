@@ -178,6 +178,7 @@ export default function ClientsPage() {
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
   const [selectedExistingClientId, setSelectedExistingClientId] = useState(null)
   const [addingNewClient, setAddingNewClient] = useState(false)
+  const [addingContactPerson, setAddingContactPerson] = useState(false)
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
   const statusDropdownRef = useRef(null)
@@ -388,8 +389,7 @@ export default function ClientsPage() {
   const validate = () => {
     const next = {}
     if (!form.client_name.trim()) next.client_name = 'Client Name is required'
-    if (!form.email.trim()) next.email = 'Email is required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
     if (form.client_group_id && !form.contact_person.trim()) next.contact_person = 'Contact Person is required'
     if (form.status && !STATUSES.includes(form.status)) next.status = 'Select a valid status'
     if (!['Yes', 'No'].includes(form.contract_signed)) next.contract_signed = 'Select Yes or No'
@@ -403,6 +403,7 @@ export default function ClientsPage() {
     setEditingClient(null)
     setSelectedExistingClientId(null)
     setAddingNewClient(false)
+    setAddingContactPerson(false)
     setClientSuggestionsOpen(false)
     setIsOpen(true)
   }, [])
@@ -424,6 +425,7 @@ export default function ClientsPage() {
     setEditingClient(client)
     setSelectedExistingClientId(null)
     setAddingNewClient(false)
+    setAddingContactPerson(false)
     setClientSuggestionsOpen(false)
     setIsOpen(true)
   }
@@ -458,6 +460,7 @@ export default function ClientsPage() {
     setEditingClient(null)
     setSelectedExistingClientId(client.client_group_id || client.id)
     setAddingNewClient(false)
+    setAddingContactPerson(true)
     setClientSuggestionsOpen(false)
     setIsOpen(true)
   }
@@ -488,7 +491,7 @@ export default function ClientsPage() {
       setErrors(nextErrors)
       return
     }
-    if (!editingClient && selectedExistingClientId && !addingNewClient) {
+    if (!editingClient && selectedExistingClientId && !addingNewClient && !addingContactPerson) {
       setClientAlreadyAdded(true)
       return
     }
@@ -499,6 +502,7 @@ export default function ClientsPage() {
       setIsOpen(false)
       setContractFile(null)
       setEditingClient(null)
+      setAddingContactPerson(false)
       await fetchClients({ showLoading: false })
     } catch (err) {
       if (err.duplicate) {
@@ -850,7 +854,7 @@ export default function ClientsPage() {
                   ['region', 'Region', 'text'],
                   ['contact_person', 'Contact Person', 'text', Boolean(form.client_group_id)],
                   ['mobile', 'Mobile', 'text'],
-                  ['email', 'Email', 'email', true],
+                  ['email', 'Email', 'email'],
                   ['designation', 'Designation', 'text'],
                   ['linkedin', 'LinkedIn', 'text'],
                   ['sector', 'Sector', 'text'],

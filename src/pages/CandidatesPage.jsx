@@ -1174,7 +1174,7 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Email <span className="req">*</span></label>
+          <label className="form-label">Email</label>
           <input name="email" type="email" value={f.email} onChange={handleLocalChange}
             className={`form-control${errs?.email ? ' is-error' : ''}${low('email')}`}
             />
@@ -1515,15 +1515,18 @@ export default function CandidatesPage() {
       case 'comments':
         return <td key={key}>{renderCommentsCell(c)}</td>
       case 'linkedin':
-        return (
+        {
+          const linkedinUrl = String(c.linkedinUrl || '').trim()
+          return (
           <td key={key}>
-            {c.linkedinUrl ? (
-              <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link" onClick={event => event.stopPropagation()}>LinkedIn</a>
+            {linkedinUrl ? (
+              <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link" onClick={event => event.stopPropagation()}>LinkedIn</a>
             ) : (
               <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
             )}
           </td>
-        )
+          )
+        }
       case 'status':
         return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span></td>
       case 'offeredCtc':
