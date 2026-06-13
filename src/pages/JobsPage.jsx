@@ -13,6 +13,22 @@ const SORT_OPTIONS = [
   { field: 'job_id', label: 'Job ID' },
   { field: 'role', label: 'Alphabetic order' }
 ]
+const MANDATE_TABLE_COLUMNS = [
+  { key: 'jobId', label: 'Job ID' },
+  { key: 'consultant', label: 'Consultant' },
+  { key: 'teamLead', label: 'Team Lead' },
+  { key: 'clientId', label: 'Client ID' },
+  { key: 'clientName', label: 'Client Name' },
+  { key: 'role', label: 'Role' },
+  { key: 'location', label: 'Location' },
+  { key: 'budget', label: 'Budget' },
+  { key: 'mandateStatus', label: 'Mandate Status' },
+  { key: 'sector', label: 'Sector' },
+  { key: 'allocationDate', label: 'Date of Allocation' },
+  { key: 'jd', label: 'JD' },
+  { key: 'action', label: 'Action' }
+]
+const DEFAULT_MANDATE_COLUMN_KEYS = MANDATE_TABLE_COLUMNS.map(column => column.key)
 const EMPTY_FORM = {
   id: '',
   job_display_id: '',
@@ -65,6 +81,10 @@ export default function JobsPage() {
   const [sortField, setSortField] = useState('')
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const [visibleColumns, setVisibleColumns] = useState(DEFAULT_MANDATE_COLUMN_KEYS)
+  const [pendingColumns, setPendingColumns] = useState(DEFAULT_MANDATE_COLUMN_KEYS)
+  const [savedColumns, setSavedColumns] = useState(null)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
   const [clientSearch, setClientSearch] = useState('')
@@ -82,6 +102,7 @@ export default function JobsPage() {
   const modalRef = useRef(null)
   const roleInputRef = useRef(null)
   const sortRef = useRef(null)
+  const columnsDropdownRef = useRef(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -117,6 +138,27 @@ export default function JobsPage() {
     const timer = window.setTimeout(fetchData, 0)
     return () => window.clearTimeout(timer)
   }, [fetchData])
+
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      try {
+        const currentUser = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
+        const userId = currentUser?.id || currentUser?.email || 'anonymous'
+        const response = await fetch(`/api/user-preferences/mandates_columns_preference?user_id=${encodeURIComponent(userId)}`)
+        const payload = await response.json().catch(() => ({}))
+        const value = Array.isArray(payload.data?.value) ? payload.data.value.filter(key => DEFAULT_MANDATE_COLUMN_KEYS.includes(key)) : null
+        if (value?.length) {
+          setVisibleColumns(value)
+          setPendingColumns(value)
+          setSavedColumns(value)
+        }
+      } catch {
+        setVisibleColumns(DEFAULT_MANDATE_COLUMN_KEYS)
+        setPendingColumns(DEFAULT_MANDATE_COLUMN_KEYS)
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const refreshClientOptions = useCallback(async () => {
     const res = await fetch('/api/clients')
@@ -154,6 +196,18 @@ export default function JobsPage() {
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [sortOpen])
+
+  useEffect(() => {
+    if (!columnsOpen) return
+    const close = (event) => {
+      if (!columnsDropdownRef.current?.contains(event.target)) {
+        setPendingColumns(visibleColumns)
+        setColumnsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [columnsOpen, visibleColumns])
 
   const fetchNextId = async () => {
     const res = await fetch('/api/jobs/next-display-id')
@@ -244,6 +298,36 @@ export default function JobsPage() {
   const matchingTeamLeads = useMemo(() => sortedUsers.filter(user => user !== '-' && user.toLowerCase().includes(teamLeadSearch.trim().toLowerCase())), [sortedUsers, teamLeadSearch])
   const selectedConsultants = form.consultants || []
   const availableConsultants = userOptions.filter(user => !selectedConsultants.includes(user))
+  const activeColumns = MANDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
+
+  const togglePendingColumn = (key) => {
+    setPendingColumns(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key])
+  }
+
+  const proceedColumns = () => {
+    setVisibleColumns(pendingColumns.length ? pendingColumns : DEFAULT_MANDATE_COLUMN_KEYS)
+    setColumnsOpen(false)
+  }
+
+  const saveColumnPreference = async () => {
+    try {
+      const currentUser = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
+      const userId = currentUser?.id || currentUser?.email || 'anonymous'
+      const value = pendingColumns.length ? pendingColumns : DEFAULT_MANDATE_COLUMN_KEYS
+      const response = await fetch('/api/user-preferences/mandates_columns_preference', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, value })
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
+      }
+      setSavedColumns(value)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
 
   const validate = () => {
     const next = {}
@@ -386,6 +470,39 @@ export default function JobsPage() {
     setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorRect })
   }
 
+  const renderMandateCell = (column, job) => {
+    switch (column.key) {
+      case 'jobId':
+        return <td key={column.key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{dash(job.job_display_id)}</td>
+      case 'consultant':
+        return <td key={column.key}>{(job.consultants || []).length <= 1 ? dash(job.consultants?.[0]) : <div className="candidate-columns-control mandate-consultants-control"><button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('consultants', job.id, event.currentTarget)}>{job.consultants[0]} +{job.consultants.length - 1}</button></div>}</td>
+      case 'teamLead':
+        return <td key={column.key}>{dash(job.team_lead)}</td>
+      case 'clientId':
+        return <td key={column.key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{dash(job.client_display_id)}</td>
+      case 'clientName':
+        return <td key={column.key}>{dash(job.client_name)}</td>
+      case 'role':
+        return <td key={column.key}><button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>{dash(job.role)}</button></td>
+      case 'location':
+        return <td key={column.key}>{dash(job.location)}</td>
+      case 'budget':
+        return <td key={column.key}>{dash(job.budget)}</td>
+      case 'mandateStatus':
+        return <td key={column.key}><div className="candidate-columns-control mandate-status-control"><button className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', job.id, event.currentTarget)} disabled={statusSaving[job.id]}>{dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}</button></div></td>
+      case 'sector':
+        return <td key={column.key}>{dash(job.vertical)}</td>
+      case 'allocationDate':
+        return <td key={column.key}>{dash(job.allocation_date)}</td>
+      case 'jd':
+        return <td key={column.key}>{job.jd_url ? <a href={job.jd_url} target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD"><FileText size={15} /></a> : '-'}</td>
+      case 'action':
+        return <td key={column.key}><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)}><Pencil size={13} /></button></td>
+      default:
+        return null
+    }
+  }
+
   return (
     <div>
       <div className="candidate-columns-toolbar">
@@ -395,6 +512,28 @@ export default function JobsPage() {
           onAddClient={() => navigate('/dashboard/clients', { state: { action: 'add-client' } })}
           onAddJob={openModal}
         />
+        <div className="candidate-columns-control" ref={columnsDropdownRef}>
+          <button className="filter-select candidate-columns-btn" type="button" onClick={() => { setPendingColumns(visibleColumns); setColumnsOpen(open => !open) }}>
+            <span>Columns</span>
+            <ChevronDown size={13} strokeWidth={2} />
+          </button>
+          <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
+          {columnsOpen && (
+            <div className="filter-dropdown candidate-columns-dropdown">
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_MANDATE_COLUMN_KEYS)}>Select All</button>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
+              <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(savedColumns?.length ? savedColumns : DEFAULT_MANDATE_COLUMN_KEYS)}>Reset to Saved Preference</button>
+              <div className="candidate-columns-divider" />
+              {MANDATE_TABLE_COLUMNS.map(column => (
+                <label className="candidate-column-option" key={column.key}>
+                  <input type="checkbox" checked={pendingColumns.includes(column.key)} onChange={() => togglePendingColumn(column.key)} />
+                  {column.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="filter-bar candidates-filter-bar">
@@ -438,55 +577,13 @@ export default function JobsPage() {
             <table className="data-table candidates-master-table" aria-label="Mandates">
               <thead>
                 <tr>
-                  <th>Job ID</th>
-                  <th>Consultant</th>
-                  <th>Team Lead</th>
-                  <th>Client ID</th>
-                  <th>Client Name</th>
-                  <th>Role</th>
-                  <th>Location</th>
-                  <th>Budget</th>
-                  <th>Mandate Status</th>
-                  <th>Sector</th>
-                  <th>Date of Allocation</th>
-                  <th>JD</th>
-                  <th>Action</th>
+                  {activeColumns.map(column => <th key={column.key}>{column.label}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {jobs.map(job => (
                   <tr key={job.id}>
-                    <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{dash(job.job_display_id)}</td>
-                    <td>
-                      {(job.consultants || []).length <= 1 ? dash(job.consultants?.[0]) : (
-                        <div className="candidate-columns-control mandate-consultants-control">
-                          <button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('consultants', job.id, event.currentTarget)}>
-                            {job.consultants[0]} +{job.consultants.length - 1}
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                    <td>{dash(job.team_lead)}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{dash(job.client_display_id)}</td>
-                    <td>{dash(job.client_name)}</td>
-                    <td>
-                      <button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>
-                        {dash(job.role)}
-                      </button>
-                    </td>
-                    <td>{dash(job.location)}</td>
-                    <td>{dash(job.budget)}</td>
-                    <td>
-                      <div className="candidate-columns-control mandate-status-control">
-                        <button className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', job.id, event.currentTarget)} disabled={statusSaving[job.id]}>
-                          {dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}
-                        </button>
-                      </div>
-                    </td>
-                    <td>{dash(job.vertical)}</td>
-                    <td>{dash(job.allocation_date)}</td>
-                    <td>{job.jd_url ? <a href={job.jd_url} target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD"><FileText size={15} /></a> : '-'}</td>
-                    <td><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)}><Pencil size={13} /></button></td>
+                    {activeColumns.map(column => renderMandateCell(column, job))}
                   </tr>
                 ))}
               </tbody>
