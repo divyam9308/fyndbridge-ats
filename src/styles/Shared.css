@@ -698,52 +698,34 @@
   background: inherit;
 }
 
-.candidates-master-table th:nth-child(-n+6),
-.candidates-master-table td:nth-child(-n+6) {
-  position: sticky;
-  z-index: 2;
-  background: inherit;
-}
-
-.candidates-master-table th:nth-child(-n+6) {
-  z-index: 4;
-}
-
 .candidates-master-table th:nth-child(1),
 .candidates-master-table td:nth-child(1) {
-  left: 0;
   min-width: 50px;
 }
 
 .candidates-master-table th:nth-child(2),
 .candidates-master-table td:nth-child(2) {
-  left: 50px;
   min-width: 70px;
 }
 
 .candidates-master-table th:nth-child(3),
 .candidates-master-table td:nth-child(3) {
-  left: 120px;
   min-width: 100px;
 }
 
 .candidates-master-table th:nth-child(4),
 .candidates-master-table td:nth-child(4) {
-  left: 220px;
   min-width: 160px;
 }
 
 .candidates-master-table th:nth-child(5),
 .candidates-master-table td:nth-child(5) {
-  left: 380px;
   min-width: 150px;
 }
 
 .candidates-master-table th:nth-child(6),
 .candidates-master-table td:nth-child(6) {
-  left: 530px;
   min-width: 190px;
-  box-shadow: 2px 0 6px rgba(0,0,0,0.08);
 }
 
 .cell-ellipsis {
@@ -1102,9 +1084,6 @@
   table-layout: fixed;
 }
 .duplicate-details-table th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
   background: var(--white);
 }
 .duplicate-details-table th:first-child,
