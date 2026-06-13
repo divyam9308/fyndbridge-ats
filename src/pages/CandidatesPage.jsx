@@ -5,6 +5,7 @@ import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } f
 import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
+import { resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 
@@ -1553,11 +1554,12 @@ export default function CandidatesPage() {
         return <td key={key} style={{ fontWeight:600 }}>{c.status === 'Hired' ? fmt(c.offeredCtc) : '-'}</td>
       case 'dateOfJoining':
         return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
-      case 'cv':
+      case 'cv': {
+        const cvHref = resolveCandidateCvHref(c)
         return (
           <td key={key}>
-            {c.cvLink ? (
-              <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={event => event.stopPropagation()}>
+            {cvHref ? (
+              <a href={cvHref} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={event => event.stopPropagation()}>
                 <FileText size={15} strokeWidth={2} />
               </a>
             ) : (
@@ -1565,6 +1567,7 @@ export default function CandidatesPage() {
             )}
           </td>
         )
+      }
       case 'month':
         return <td key={key}>{formatMonth(c.createdAt)}</td>
       case 'action':
@@ -1775,8 +1778,8 @@ export default function CandidatesPage() {
 
             <div className="candidate-drawer-actions">
               <button className="btn-primary" onClick={() => openEditCandidate(selectedCandidate)}>Edit</button>
-              {selectedCandidate.cvLink && (
-                <a className="btn-secondary" href={selectedCandidate.cvLink} target="_blank" rel="noopener noreferrer"><FileText size={14} /> CV</a>
+              {resolveCandidateCvHref(selectedCandidate) && (
+                <a className="btn-secondary" href={resolveCandidateCvHref(selectedCandidate)} target="_blank" rel="noopener noreferrer"><FileText size={14} /> CV</a>
               )}
               {selectedCandidate.linkedinUrl && (
                 <a className="btn-secondary" href={selectedCandidate.linkedinUrl} target="_blank" rel="noopener noreferrer">LinkedIn</a>

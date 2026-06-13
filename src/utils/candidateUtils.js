@@ -40,3 +40,12 @@ export const apiCandidateToUi = (row) => ({
   consultantName: row.consultant_name || '',
   createdAt: row.created_at || '',
 })
+
+export const resolveCandidateCvHref = (candidate) => {
+  const direct = String(candidate?.cvLink || '').trim()
+  if (direct) return direct
+  const storagePath = String(candidate?.cvStoragePath || '').trim()
+  if (!storagePath) return ''
+  if (/^https?:\/\//i.test(storagePath)) return storagePath
+  return `/api/resumes/open/${encodeURIComponent(storagePath.replace(/^resumes\//, ''))}`
+}

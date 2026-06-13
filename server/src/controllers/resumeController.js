@@ -2,21 +2,10 @@ const fs = require('fs/promises')
 const { v4: uuidv4 } = require('uuid')
 const { parseResume } = require('../services/resumeParser')
 const supabase = require('../services/supabaseAdmin')
-const { RESUME_BUCKET, prepareUploadedCv, normalizeResumeStoragePath } = require('../services/cvStorage')
+const { RESUME_BUCKET, checkUploadedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
 
 function cleanText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
-}
-
-async function uploadResumeToStorage(file) {
-  const cv = await prepareUploadedCv(file)
-  return {
-    resume_path: cv?.resume_path || '',
-    resume_url: cv?.resume_url || cv?.cv_link || '',
-    cv_file_hash: cv?.cv_file_hash || '',
-    cv_storage_path: cv?.cv_storage_path || cv?.resume_path || '',
-    cv_duplicate: Boolean(cv?.duplicate)
-  }
 }
 
 function rowFromParsed(file, parsed, error = null, storage = {}, warnings = []) {
@@ -53,14 +42,21 @@ function rowFromParsed(file, parsed, error = null, storage = {}, warnings = []) 
 }
 
 async function parseOne(file) {
-  let storage = { resume_path: '', resume_url: '' }
+  let storage = { resume_path: file.path, resume_url: '', cv_file_hash: '', cv_storage_path: file.path, cv_duplicate: false }
   const warnings = []
 
   try {
-    storage = await uploadResumeToStorage(file)
+    const duplicate = await checkUploadedCvDuplicate(file)
+    storage = {
+      resume_path: file.path,
+      resume_url: duplicate?.cv_link || '',
+      cv_file_hash: duplicate?.cv_file_hash || '',
+      cv_storage_path: file.path,
+      cv_duplicate: Boolean(duplicate?.duplicate)
+    }
   } catch (err) {
-    console.error('uploadResumeToStorage:', err.message)
-    warnings.push('Resume file could not be uploaded to storage')
+    console.error('checkUploadedCvDuplicate:', err.message)
+    warnings.push('Resume duplicate check could not be completed')
   }
 
   try {

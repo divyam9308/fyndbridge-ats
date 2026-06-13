@@ -4,7 +4,7 @@ import { useLocation, useParams, Link } from 'react-router-dom'
 import { ChevronDown, ChevronLeft, AlertCircle, Loader2, Briefcase, FileText, Pencil, X } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientDetailPage.css'
-import { apiCandidateToUi } from '../utils/candidateUtils'
+import { apiCandidateToUi, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
@@ -447,7 +447,7 @@ export default function ClientDetailPage() {
       case 'status': return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status || '-'}</span></td>
       case 'offeredCtc': return <td key={key}>{c.status === 'Hired' ? fmt(c.offeredCtc) : '-'}</td>
       case 'dateOfJoining': return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
-      case 'cv': return <td key={key}>{c.cvLink ? <a href={c.cvLink} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV"><FileText size={15} /></a> : '-'}</td>
+      case 'cv': return <td key={key}>{resolveCandidateCvHref(c) ? <a href={resolveCandidateCvHref(c)} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV"><FileText size={15} /></a> : '-'}</td>
       case 'month': return <td key={key}>{formatMonth(c.createdAt)}</td>
       case 'action': return <td key={key}><button className="row-action-btn" type="button" title="Edit Candidate" onClick={() => openEditCandidate(c)}><Pencil size={13} /></button></td>
       default: return null

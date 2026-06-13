@@ -541,6 +541,31 @@ async function applyCvInput(req, candidatePayload) {
       return cv
     }
   }
+  const tempResumePath = normalizeResumeStoragePath(candidatePayload.cv_storage_path || '')
+  if (!req.file && tempResumePath && tempResumePath.startsWith('/tmp/')) {
+    try {
+      await fs.access(tempResumePath)
+      const tempFile = {
+        path: tempResumePath,
+        originalname: path.basename(tempResumePath),
+        mimetype: tempResumePath.toLowerCase().endsWith('.pdf')
+          ? 'application/pdf'
+          : tempResumePath.toLowerCase().endsWith('.docx')
+            ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : 'application/msword'
+      }
+      const cv = await prepareUploadedCv(tempFile)
+      if (cv) {
+        candidatePayload.cv_link = cv.cv_link
+        candidatePayload.resume_url = cv.resume_url
+        candidatePayload.cv_file_hash = cv.cv_file_hash
+        candidatePayload.cv_storage_path = cv.cv_storage_path
+        return cv
+      }
+    } catch (err) {
+      console.error('applyCvInput temp upload error:', err.message)
+    }
+  }
   if (candidatePayload.cv_link || candidatePayload.resume_url) {
     const cv = await prepareLinkedCv(candidatePayload.cv_link || candidatePayload.resume_url)
     if (cv) {
