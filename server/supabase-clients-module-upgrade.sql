@@ -21,6 +21,8 @@ alter table public.clients
   add column if not exists terms_value text,
   add column if not exists contract_signed boolean default false,
   add column if not exists contract_document text,
+  add column if not exists contract_pdf_url text,
+  add column if not exists contract_pdf_storage_path text,
   add column if not exists gstin text,
   add column if not exists pan text,
   add column if not exists address_on_invoice text;

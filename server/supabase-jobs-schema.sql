@@ -22,6 +22,8 @@ create table if not exists public.jobs (
   open_positions integer not null default 1,
   skills text[] not null default '{}',
   notes text,
+  jd_url text,
+  jd_storage_path text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -33,7 +35,9 @@ alter table public.jobs
   add column if not exists budget text,
   add column if not exists mandate_status text default '-',
   add column if not exists vertical text,
-  add column if not exists allocation_date date;
+  add column if not exists allocation_date date,
+  add column if not exists jd_url text,
+  add column if not exists jd_storage_path text;
 
 do $$
 begin

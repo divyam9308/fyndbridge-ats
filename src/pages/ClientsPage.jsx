@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
@@ -45,8 +45,9 @@ const EMPTY_FORM = {
 }
 
 const dash = (value) => value || '-'
-const convertedDash = (client, value) => client.status === 'Converted' ? dash(value) : '-'
 const termsLabel = (client) => client.terms_signed_type === 'Any Other' ? client.terms_signed_custom : client.terms_signed_type
+const showCommercialFields = (client) => client.status === 'Converted' || client.contract_signed === true || client.contract_signed === 'Yes'
+const commercialDash = (client, value) => showCommercialFields(client) ? dash(value) : '-'
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
 const todayLocal = () => {
   const date = new Date()
@@ -72,10 +73,10 @@ const CLIENT_TABLE_COLUMNS = [
   { key: 'termsSigned', label: 'Terms Signed' },
   { key: 'value', label: 'Value' },
   { key: 'contractSigned', label: 'Contract Signed' },
-  { key: 'contractDocument', label: 'Contract Document' },
   { key: 'gstin', label: 'GSTIN' },
   { key: 'pan', label: 'PAN' },
   { key: 'addressOnInvoice', label: 'Address on Invoice' },
+  { key: 'contractPdf', label: 'Contract PDF' },
   { key: 'actions', label: 'Actions' }
 ]
 const DEFAULT_CLIENT_COLUMN_KEYS = CLIENT_TABLE_COLUMNS.map(column => column.key)
@@ -139,7 +140,7 @@ function clientToForm(client) {
     terms_signed_custom: client.terms_signed_custom || '',
     terms_value: client.terms_value || '',
     contract_signed: client.contract_signed ? 'Yes' : 'No',
-    contract_document: client.contract_document || '',
+    contract_document: client.contract_document || client.contract_pdf_url || '',
     gstin: client.gstin || '',
     pan: client.pan || '',
     address_on_invoice: client.address_on_invoice || ''
@@ -363,14 +364,6 @@ export default function ClientsPage() {
       if (name === 'client_name' && selectedExistingClientId && value !== current.client_name) {
         next.client_group_id = ''
         next.client_display_id = addingNewClient ? current.client_display_id || nextClientId : ''
-      }
-      if (name === 'status' && value !== 'Converted') {
-        next.terms_signed_type = ''
-        next.terms_signed_custom = ''
-        next.terms_value = ''
-        next.gstin = ''
-        next.pan = ''
-        next.address_on_invoice = ''
       }
       if (name === 'contract_signed' && value === 'No') next.contract_document = ''
       return next
@@ -699,19 +692,23 @@ export default function ClientsPage() {
       case 'status':
         return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[client.status] || 'badge-not-converted'}`}>{dash(client.status)}</span></td>
       case 'termsSigned':
-        return <td key={key}>{convertedDash(client, termsLabel(client))}</td>
+        return <td key={key}>{commercialDash(client, termsLabel(client))}</td>
       case 'value':
-        return <td key={key}>{convertedDash(client, client.terms_value)}</td>
+        return <td key={key}>{commercialDash(client, client.terms_value)}</td>
       case 'contractSigned':
         return <td key={key}>{client.contract_signed ? 'Yes' : 'No'}</td>
       case 'contractDocument':
-        return <td key={key}>{client.contract_signed ? (client.contract_document ? <a className="cv-table-link" href={client.contract_document} target="_blank" rel="noreferrer">Open PDF</a> : 'Missing') : '-'}</td>
+        return null
       case 'gstin':
-        return <td key={key}>{convertedDash(client, client.gstin)}</td>
+        return <td key={key}>{commercialDash(client, client.gstin)}</td>
       case 'pan':
-        return <td key={key}>{convertedDash(client, client.pan)}</td>
+        return <td key={key}>{commercialDash(client, client.pan)}</td>
       case 'addressOnInvoice':
-        return <td key={key}>{convertedDash(client, client.address_on_invoice)}</td>
+        return <td key={key}>{commercialDash(client, client.address_on_invoice)}</td>
+      case 'contractPdf': {
+        const contractUrl = client.contract_document || client.contract_pdf_url
+        return <td key={key}>{contractUrl ? <a className="cv-table-link" href={contractUrl} target="_blank" rel="noreferrer" title="Open Contract PDF"><FileText size={15} /></a> : '-'}</td>
+      }
       case 'actions':
         return <td key={key}><div className="row-actions"><button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)}><Pencil size={13} strokeWidth={2} /></button></div></td>
       default:
@@ -911,7 +908,7 @@ export default function ClientsPage() {
                     {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
                   </div>
                 )}
-                {form.status === 'Converted' && (
+                {(form.status === 'Converted' || form.contract_signed === 'Yes') && (
                   <>
                     <div className="form-group">
                       <label className="form-label">Terms Signed</label>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { AlertCircle, ChevronDown, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
+import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
@@ -22,7 +22,9 @@ const EMPTY_FORM = {
   budget: '',
   mandate_status: '',
   vertical: '',
-  allocation_date: ''
+  allocation_date: '',
+  jd_url: '',
+  jd_storage_path: ''
 }
 
 const todayLocal = () => {
@@ -63,6 +65,7 @@ export default function JobsPage() {
   const [sortOpen, setSortOpen] = useState(false)
   const [consultantOpen, setConsultantOpen] = useState({})
   const [clientSearch, setClientSearch] = useState('')
+  const [jdFile, setJdFile] = useState(null)
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
   const modalRef = useRef(null)
   const sortRef = useRef(null)
@@ -134,6 +137,7 @@ export default function JobsPage() {
     setErrors({})
     setForm({ ...EMPTY_FORM, job_display_id: 'Loading...', allocation_date: todayLocal() })
     setClientSearch('')
+    setJdFile(null)
     setClientSuggestionsOpen(false)
     setIsOpen(true)
     try {
@@ -168,8 +172,11 @@ export default function JobsPage() {
       budget: job.budget || '',
       mandate_status: normalizeMandateStatus(job.mandate_status || job.status || job.priority) === '-' ? '' : normalizeMandateStatus(job.mandate_status || job.status || job.priority),
       vertical: job.vertical || '',
-      allocation_date: job.allocation_date || todayLocal()
+      allocation_date: job.allocation_date || todayLocal(),
+      jd_url: job.jd_url || '',
+      jd_storage_path: job.jd_storage_path || ''
     })
+    setJdFile(null)
     setClientSearch(job.client_name || '')
     setClientSuggestionsOpen(false)
     setIsOpen(true)
@@ -209,12 +216,16 @@ export default function JobsPage() {
         budget: form.budget,
         mandate_status: form.mandate_status || null,
         vertical: form.vertical,
-        allocation_date: form.allocation_date
+        allocation_date: form.allocation_date,
+        jd_url: form.jd_url || '',
+        jd_storage_path: form.jd_storage_path || ''
       }
+      const body = new FormData()
+      Object.entries(payload).forEach(([key, value]) => body.append(key, Array.isArray(value) ? value.join(',') : value ?? ''))
+      if (jdFile) body.append('jd_file', jdFile)
       const res = await fetch(editingJob ? `/api/jobs/${editingJob.id}` : '/api/jobs', {
         method: editingJob ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Failed to save mandate.')
@@ -346,6 +357,7 @@ export default function JobsPage() {
                   <th>Mandate Status</th>
                   <th>Industry</th>
                   <th>Date of Allocation</th>
+                  <th>JD</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -372,6 +384,7 @@ export default function JobsPage() {
                     <td><span className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`}>{dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}</span></td>
                     <td>{dash(job.vertical)}</td>
                     <td>{dash(job.allocation_date)}</td>
+                    <td>{job.jd_url ? <a href={job.jd_url} target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD"><FileText size={15} /></a> : '-'}</td>
                     <td><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)}><Pencil size={13} /></button></td>
                   </tr>
                 ))}
@@ -484,6 +497,11 @@ export default function JobsPage() {
                 <div className="form-group">
                   <label className="form-label">Industry</label>
                   <input className="form-control" value={form.vertical} onChange={e => setForm(current => ({ ...current, vertical: e.target.value }))} disabled={saving} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">JD File</label>
+                  <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="form-control" onChange={e => setJdFile(e.target.files?.[0] || null)} disabled={saving} />
+                  {form.jd_url && <a className="cv-table-link" href={form.jd_url} target="_blank" rel="noreferrer"><FileText size={13} /> Current JD</a>}
                 </div>
               </div>
             </div>

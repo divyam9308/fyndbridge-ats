@@ -1,5 +1,5 @@
 const supabase = require('../services/supabaseAdmin')
-const { randomUUID } = require('crypto')
+const { uploadDocument } = require('../services/documentStorage')
 
 const CLIENT_STATUSES = [
   'Converted',
@@ -152,7 +152,9 @@ function normalizeClient(row, activeJobs = 0, followUps = []) {
     status: row.status || '',
     terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
     contract_signed: Boolean(row.contract_signed),
-    contract_document: row.contract_document || '',
+    contract_document: row.contract_document || row.contract_pdf_url || '',
+    contract_pdf_url: row.contract_pdf_url || row.contract_document || '',
+    contract_pdf_storage_path: row.contract_pdf_storage_path || '',
     activeJobs,
     follow_ups: followUps
   }
@@ -165,18 +167,7 @@ async function uploadContractPdf(file) {
     err.statusCode = 400
     throw err
   }
-
-  const bucket = 'client-contracts'
-  await supabase.storage.createBucket(bucket, { public: true }).catch(() => {})
-  const safeName = file.originalname.replace(/[^\w.-]+/g, '-')
-  const path = `${new Date().getFullYear()}/${randomUUID()}-${safeName}`
-  const { error } = await supabase.storage.from(bucket).upload(path, file.buffer, {
-    contentType: 'application/pdf',
-    upsert: false
-  })
-  if (error) throw error
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path)
-  return data.publicUrl
+  return uploadDocument(file, 'client-contracts', String(new Date().getFullYear()))
 }
 
 function clientPayload(body) {
@@ -244,14 +235,16 @@ function clientPayload(body) {
     notes: nullable(body.comments || body.notes),
     follow_up_date: body.follow_up_date || null,
     status,
-    terms_signed_type: status === 'Converted' ? nullable(termsType) : null,
-    terms_signed_custom: status === 'Converted' && termsType === 'Any Other' ? nullable(body.terms_signed_custom) : null,
-    terms_value: status === 'Converted' ? nullable(body.terms_value) : null,
+    terms_signed_type: nullable(termsType),
+    terms_signed_custom: termsType === 'Any Other' ? nullable(body.terms_signed_custom) : null,
+    terms_value: nullable(body.terms_value),
     contract_signed: contractSigned,
     contract_document: contractSigned ? nullable(body.contract_document) : null,
-    gstin: status === 'Converted' ? nullable(body.gstin) : null,
-    pan: status === 'Converted' ? nullable(body.pan) : null,
-    address_on_invoice: status === 'Converted' ? nullable(body.address_on_invoice) : null
+    contract_pdf_url: contractSigned ? nullable(body.contract_pdf_url || body.contract_document) : null,
+    contract_pdf_storage_path: contractSigned ? nullable(body.contract_pdf_storage_path) : null,
+    gstin: nullable(body.gstin),
+    pan: nullable(body.pan),
+    address_on_invoice: nullable(body.address_on_invoice)
   }
 }
 
@@ -325,6 +318,38 @@ async function loadFollowUps(clientIds) {
   }, {})
 }
 
+function missingClientColumn(error) {
+  if (error?.code !== 'PGRST204' && error?.code !== '42703') return null
+  const match = String(error.message || '').match(/'([^']+)' column|column "([^"]+)"/)
+  return match?.[1] || match?.[2] || null
+}
+
+async function insertClient(payload) {
+  let next = payload
+  let result = null
+  for (let i = 0; i < 4; i += 1) {
+    result = await supabase.from('clients').insert(next).select('*').single()
+    const col = missingClientColumn(result.error)
+    if (!col) break
+    next = { ...next }
+    delete next[col]
+  }
+  return result
+}
+
+async function updateClientRow(id, payload) {
+  let next = payload
+  let result = null
+  for (let i = 0; i < 4; i += 1) {
+    result = await supabase.from('clients').update(next).eq('id', id).select('*').maybeSingle()
+    const col = missingClientColumn(result.error)
+    if (!col) break
+    next = { ...next }
+    delete next[col]
+  }
+  return result
+}
+
 async function listClients(req, res) {
   try {
     await ensureClientDisplayIds()
@@ -379,7 +404,12 @@ async function getClient(req, res) {
 
 async function createClient(req, res) {
   try {
-    if (req.file) req.body.contract_document = await uploadContractPdf(req.file)
+    if (req.file) {
+      const contract = await uploadContractPdf(req.file)
+      req.body.contract_document = contract.url
+      req.body.contract_pdf_url = contract.url
+      req.body.contract_pdf_storage_path = contract.path
+    }
     const payload = clientPayload(req.body)
     const duplicateAction = req.body.duplicate_action
     const duplicate = await findClientDuplicate(payload.client_name)
@@ -389,19 +419,14 @@ async function createClient(req, res) {
     }
 
     if (duplicate && duplicateAction === 'update_current') {
-      const { data, error } = await supabase
-        .from('clients')
-        .update({ ...payload, client_group_id: duplicate.client_group_id || duplicate.id, updated_at: new Date().toISOString() })
-        .eq('id', duplicate.id)
-        .select('*')
-        .single()
+      const { data, error } = await updateClientRow(duplicate.id, { ...payload, client_group_id: duplicate.client_group_id || duplicate.id, updated_at: new Date().toISOString() })
       if (error) throw error
       await linkCandidatesToClient(data)
       return res.json(normalizeClient(data))
     }
 
     payload.client_display_id = payload.client_display_id || await nextClientDisplayId(payload.client_name)
-    const { data, error } = await supabase.from('clients').insert(payload).select('*').single()
+    const { data, error } = await insertClient(payload)
     if (error) throw error
 
     if (!data.client_group_id) {
@@ -432,19 +457,19 @@ async function createClient(req, res) {
 
 async function updateClient(req, res) {
   try {
-    if (req.file) req.body.contract_document = await uploadContractPdf(req.file)
+    if (req.file) {
+      const contract = await uploadContractPdf(req.file)
+      req.body.contract_document = contract.url
+      req.body.contract_pdf_url = contract.url
+      req.body.contract_pdf_storage_path = contract.path
+    }
     const payload = clientPayload(req.body)
     if (!payload.client_display_id) {
       const { data: existing, error: existingError } = await supabase.from('clients').select('client_display_id').eq('id', req.params.id).maybeSingle()
       if (existingError) throw existingError
       payload.client_display_id = existing?.client_display_id || await nextClientDisplayId(payload.client_name)
     }
-    const { data, error } = await supabase
-      .from('clients')
-      .update({ ...payload, updated_at: new Date().toISOString() })
-      .eq('id', req.params.id)
-      .select('*')
-      .maybeSingle()
+    const { data, error } = await updateClientRow(req.params.id, { ...payload, updated_at: new Date().toISOString() })
 
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Client not found' })

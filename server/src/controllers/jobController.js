@@ -1,4 +1,6 @@
 const supabase = require('../services/supabaseAdmin')
+const { uploadDocument } = require('../services/documentStorage')
+const fs = require('fs/promises')
 const { callAiJson } = require('../services/aiProvider')
 const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
 
@@ -48,6 +50,8 @@ function formatJob(row) {
     consultant: Array.isArray(row.consultants) && row.consultants.length ? row.consultants[0] : '-',
     team_lead: row.team_lead || '-',
     allocation_date: row.allocation_date || (row.created_at ? row.created_at.slice(0, 10) : ''),
+    jd_url: row.jd_url || '',
+    jd_storage_path: row.jd_storage_path || '',
     client_display_id: row.clients?.client_display_id || '',
     client: clientName,
     client_name: clientName,
@@ -148,35 +152,87 @@ async function payloadFromBody(body, partial = false) {
   }
   if (!partial || body.vertical !== undefined) payload.vertical = nullable(body.vertical)
   if (!partial || body.allocation_date !== undefined) payload.allocation_date = body.allocation_date || todayLocal()
+  if (!partial || body.jd_url !== undefined) payload.jd_url = nullable(body.jd_url)
+  if (!partial || body.jd_storage_path !== undefined) payload.jd_storage_path = nullable(body.jd_storage_path)
   return payload
+}
+
+function missingJobColumn(error) {
+  if (error?.code !== 'PGRST204' && error?.code !== '42703') return null
+  const match = String(error.message || '').match(/'([^']+)' column|column "([^"]+)"/)
+  return match?.[1] || match?.[2] || null
+}
+
+async function insertJob(payload) {
+  let next = payload
+  let result = null
+  for (let i = 0; i < 4; i += 1) {
+    result = await supabase.from('jobs').insert(next).select('*, clients(name, client_name, client_display_id)').single()
+    const col = missingJobColumn(result.error)
+    if (!col) break
+    next = { ...next }
+    delete next[col]
+  }
+  return result
+}
+
+async function updateJobRow(id, payload) {
+  let next = payload
+  let result = null
+  for (let i = 0; i < 4; i += 1) {
+    result = await supabase.from('jobs').update(next).eq('id', id).select('*, clients(name, client_name, client_display_id)').maybeSingle()
+    const col = missingJobColumn(result.error)
+    if (!col) break
+    next = { ...next }
+    delete next[col]
+  }
+  return result
 }
 
 async function createJob(req, res) {
   try {
     const payload = await payloadFromBody(req.body)
+    if (req.file) {
+      const jd = await uploadDocument(req.file, 'job-documents', 'jds')
+      payload.jd_url = jd.url
+      payload.jd_storage_path = jd.path
+    }
     payload.job_display_id = await nextJobDisplayId()
     if (!payload.mandate_status) payload.mandate_status = '-'
     if (!payload.status) payload.status = payload.mandate_status
-    const { data, error } = await supabase.from('jobs').insert(payload).select('*, clients(name, client_name, client_display_id)').single()
+    const { data, error } = await insertJob(payload)
     if (error) throw error
     return res.status(201).json(formatJob(data))
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'createJob', err)
+  } finally {
+    if (req.file?.path) {
+      try { await fs.unlink(req.file.path) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('createJob cleanup:', cleanupError.message) }
+    }
   }
 }
 
 async function updateJob(req, res) {
   try {
     const payload = await payloadFromBody(req.body, true)
+    if (req.file) {
+      const jd = await uploadDocument(req.file, 'job-documents', 'jds')
+      payload.jd_url = jd.url
+      payload.jd_storage_path = jd.path
+    }
     payload.updated_at = new Date().toISOString()
-    const { data, error } = await supabase.from('jobs').update(payload).eq('id', req.params.id).select('*, clients(name, client_name, client_display_id)').maybeSingle()
+    const { data, error } = await updateJobRow(req.params.id, payload)
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Mandate not found' })
     return res.json(formatJob(data))
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'updateJob', err)
+  } finally {
+    if (req.file?.path) {
+      try { await fs.unlink(req.file.path) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('updateJob cleanup:', cleanupError.message) }
+    }
   }
 }
 

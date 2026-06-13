@@ -35,6 +35,8 @@ create table if not exists public.jobs (
   completion integer not null default 0,
   success_count integer not null default 0,
   rejected_by_client integer not null default 0,
+  jd_url text,
+  jd_storage_path text,
   open_positions integer not null default 1,
   skills text[] not null default '{}',
   notes text,
@@ -48,6 +50,8 @@ alter table public.jobs
   add column if not exists team_lead text,
   add column if not exists budget text,
   add column if not exists mandate_status text default '-',
+  add column if not exists jd_url text,
+  add column if not exists jd_storage_path text,
   add column if not exists vertical text,
   add column if not exists allocation_date date;
 
