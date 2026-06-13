@@ -119,7 +119,7 @@ const EMPTY_CAND = {
   noticePeriod:'', openToRelocate:'',
   offeredCtc:'', dateOfJoining:'',
   client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', clientPhone:'', status:'',
-  cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
+  billingEntity:'', cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
 }
 
 /* ====== Client phone lookup ====== */
@@ -160,6 +160,7 @@ const apiCandidateToUi = (row) => ({
   education: row.education || '',
   client: row.client_name || '',
   clientPhone: row.client_phone_number || CLIENT_PHONES[row.client_name] || '',
+  billingEntity: row.billing_entity || '',
   job: row.job_title || '',
   status: row.status || '',
   cvLink: row.cv_link || row.resume_url || '',
@@ -207,6 +208,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     skills: f.skills,
     education: f.education,
     client_name: f.client,
+    billing_entity: f.billingEntity,
     job_title: f.job,
     client_id: f.clientId || (matchingClient ? matchingClient.id : undefined),
     job_id: f.jobId || (matchingJob ? matchingJob.id : undefined),
@@ -821,6 +823,10 @@ export default function CandidatesPage() {
       setSaving(false)
     }
   }
+  const clientHasContract = (candidate) => {
+    const client = canonicalClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
+    return client?.contract_signed === true || client?.contract_signed === 'Yes'
+  }
 
   const checkCvDuplicate = async ({ file, link, setF }) => {
     try {
@@ -964,7 +970,7 @@ export default function CandidatesPage() {
   const fillEmptyCandidateFields = (candidate) => {
     // mobile is included so a missing phone number from a CV defaults to '-' rather than ''
     // which avoids 'Mobile is required' blocking the save silently
-    const textFields = ['name', 'email', 'mobile', 'designation', 'city', 'state', 'location', 'currentCompany', 'currentOrganisation', 'education', 'client', 'job', 'clientPhone', 'cvLink', 'linkedinUrl', 'notes', 'consultantName']
+    const textFields = ['name', 'email', 'mobile', 'designation', 'city', 'state', 'location', 'currentCompany', 'currentOrganisation', 'education', 'client', 'job', 'clientPhone', 'billingEntity', 'cvLink', 'linkedinUrl', 'notes', 'consultantName']
     const next = { ...candidate }
     textFields.forEach(field => {
       if (String(next[field] ?? '').trim() === '') next[field] = '-'
@@ -1328,6 +1334,13 @@ export default function CandidatesPage() {
           <input value={clientDisplayIdForForm(f)} placeholder="Auto-filled after selecting client" className="form-control" readOnly />
         </div>
 
+        {clientHasContract(f) && (
+          <div className="form-group">
+            <label className="form-label">Billing Entity</label>
+            <input name="billingEntity" value={f.billingEntity || ''} onChange={handleLocalChange} className="form-control" />
+          </div>
+        )}
+
         <div className="form-group">
           <label className="form-label">Job ID</label>
           <input value={jobDisplayIdForForm(f)} placeholder="Auto-filled after selecting mandate" className="form-control" readOnly />
@@ -1458,6 +1471,8 @@ export default function CandidatesPage() {
         return <td key={key}>{c.client || '-'}</td>
       case 'clientId':
         return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{getReadableClientId(c, dbClients)}</td>
+      case 'billingEntity':
+        return <td key={key}>{clientHasContract(c) ? c.billingEntity || '-' : '-'}</td>
       case 'jobId':
         return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{c.jobDisplayId || jobDisplayIdForForm(c) || '-'}</td>
       case 'job':

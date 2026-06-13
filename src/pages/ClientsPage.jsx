@@ -5,8 +5,9 @@ import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText
 import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
+import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 
-const STATUSES = ['Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
+const STATUSES = ['Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const STATUS_OPTIONS = ['', ...STATUSES]
 const STATUS_BADGE_MAP = {
   Converted: 'badge-converted',
@@ -179,6 +180,8 @@ export default function ClientsPage() {
   const [selectedExistingClientId, setSelectedExistingClientId] = useState(null)
   const [addingNewClient, setAddingNewClient] = useState(false)
   const [addingContactPerson, setAddingContactPerson] = useState(false)
+  const [sectorSearch, setSectorSearch] = useState('')
+  const [sectorOpen, setSectorOpen] = useState(false)
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
   const statusDropdownRef = useRef(null)
@@ -326,6 +329,7 @@ export default function ClientsPage() {
       .filter(client => normalizeText(client.client_name || client.name).includes(normalizeText(form.client_name)))
       .slice(0, 8)
   ), [canonicalClients, form.client_name])
+  const matchingSectors = useMemo(() => SECTOR_OPTIONS.filter(value => value.toLowerCase().includes(sectorSearch.trim().toLowerCase())), [sectorSearch])
 
   const selectExistingClient = (client) => {
     setForm(current => ({
@@ -337,6 +341,7 @@ export default function ClientsPage() {
       region: client.region || client.state || current.region,
       sector: client.sector || current.sector
     }))
+    setSectorSearch(client.sector || '')
     setSelectedExistingClientId(client.client_group_id || client.id)
     setAddingNewClient(false)
     setErrors({})
@@ -404,6 +409,7 @@ export default function ClientsPage() {
     setSelectedExistingClientId(null)
     setAddingNewClient(false)
     setAddingContactPerson(false)
+    setSectorSearch('')
     setClientSuggestionsOpen(false)
     setIsOpen(true)
   }, [])
@@ -426,6 +432,7 @@ export default function ClientsPage() {
     setSelectedExistingClientId(null)
     setAddingNewClient(false)
     setAddingContactPerson(false)
+    setSectorSearch(client.sector || '')
     setClientSuggestionsOpen(false)
     setIsOpen(true)
   }
@@ -461,6 +468,7 @@ export default function ClientsPage() {
     setSelectedExistingClientId(client.client_group_id || client.id)
     setAddingNewClient(false)
     setAddingContactPerson(true)
+    setSectorSearch(client.sector || '')
     setClientSuggestionsOpen(false)
     setIsOpen(true)
   }
@@ -884,6 +892,26 @@ export default function ClientsPage() {
                             </button>
                           ))}
                         </div>
+                        )}
+                      </div>
+                    ) : name === 'sector' ? (
+                      <div className="client-search-wrap">
+                        <input className={`form-control${errors[name] ? ' is-error' : ''}`} value={sectorSearch || form.sector} onChange={e => {
+                          setSectorSearch(e.target.value)
+                          setForm(current => ({ ...current, sector: '' }))
+                          setSectorOpen(true)
+                        }} onFocus={() => setSectorOpen(true)} onBlur={() => window.setTimeout(() => setSectorOpen(false), 120)} disabled={saving} autoComplete="off" />
+                        {sectorOpen && (
+                          <div className="client-suggestions manual-suggestions is-open">
+                            {matchingSectors.length ? matchingSectors.map(value => (
+                              <button type="button" key={value} onMouseDown={event => {
+                                event.preventDefault()
+                                setSectorSearch(value)
+                                setForm(current => ({ ...current, sector: value }))
+                                setSectorOpen(false)
+                              }}><span>{value}</span></button>
+                            )) : <div className="candidate-column-option">No results found</div>}
+                          </div>
                         )}
                       </div>
                     ) : (

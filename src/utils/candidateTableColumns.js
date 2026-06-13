@@ -4,6 +4,7 @@ export const CANDIDATE_TABLE_COLUMNS = [
   { key: 'consultant', label: 'Consultant' },
   { key: 'client', label: 'Client Name' },
   { key: 'clientId', label: 'Client ID' },
+  { key: 'billingEntity', label: 'Billing Entity' },
   { key: 'jobId', label: 'Job ID' },
   { key: 'job', label: 'Role' },
   { key: 'name', label: 'Candidate Name' },

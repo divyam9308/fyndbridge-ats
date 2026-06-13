@@ -1,4 +1,4 @@
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import './Topbar.css'
 
@@ -8,10 +8,12 @@ const pageTitles = {
   '/dashboard/clients':    { title: 'Clients',     crumb: 'Home / Clients' },
   '/dashboard/candidates': { title: 'Candidates',  crumb: 'Home / Candidates' },
   '/dashboard/settings':   { title: 'Settings',    crumb: 'Home / Settings' },
+  '/dashboard/profile':    { title: 'Profile Settings', crumb: 'Home / Profile Settings' },
 }
 
 export default function Topbar() {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const { user } = useAuth()
 
   const getPageInfo = (path) => {
@@ -42,12 +44,12 @@ export default function Topbar() {
 
       <div className="topbar-right">
         <span className="topbar-date">{today}</span>
-        <div className="topbar-user" aria-label={`Logged in as ${displayName}`}>
+        <button className="topbar-user" type="button" onClick={() => navigate('/dashboard/profile')} aria-label={`Open profile settings for ${displayName}`}>
           <div className="topbar-avatar">{initials || 'HR'}</div>
           <div>
             <div className="topbar-user-name">{displayName}</div>
           </div>
-        </div>
+        </button>
       </div>
     </header>
   )

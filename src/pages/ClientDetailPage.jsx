@@ -44,13 +44,6 @@ const getCurrentUser = () => {
     return {}
   }
 }
-const deriveJobStatus = (jobTitle, candidateRows, jobRows) => {
-  const relatedJob = jobRows.find(job => normalizeText(job.title || job.role) === normalizeText(jobTitle))
-  if (normalizeMandateStatus(relatedJob?.mandate_status || relatedJob?.status) === 'Scrapped') return 'Scrapped'
-  const rows = candidateRows.filter(candidate => normalizeText(getJobText(candidate)) === normalizeText(jobTitle))
-  if (rows.some(candidate => candidate.status === 'Hired')) return 'Completed'
-  return 'Ongoing'
-}
 const candidateToEditForm = (candidate) => ({
   association_id: candidate.associationId,
   full_name: candidate.name || '',
@@ -71,6 +64,7 @@ const candidateToEditForm = (candidate) => ({
   linkedin_url: candidate.linkedinUrl || '',
   client_id: candidate.clientId || '',
   client_name: candidate.client || '',
+  billing_entity: candidate.billingEntity || '',
   job_title: candidate.job || '',
   consultant_name: candidate.consultantName || candidate.consultant || '',
   status: candidate.status || '',
@@ -277,11 +271,10 @@ export default function ClientDetailPage() {
   }, [jobGroups, location.state, selectedGroup])
 
   const calculatedClientStatus = useMemo(() => {
-    if (!jobGroups.length) return 'Ongoing'
-    if (jobGroups.some(job => job.status === 'Ongoing')) return 'Ongoing'
-    if (jobGroups.some(job => job.status === 'Scrapped')) return 'Scrapped'
-    return 'Completed'
-  }, [jobGroups])
+    if (jobGroups.length && jobGroups.every(job => job.status === 'Scrapped')) return 'Inactive'
+    if (jobGroups.some(job => job.status === 'Completed')) return 'Active'
+    return client?.status || '-'
+  }, [client?.status, jobGroups])
 
   const selectedCandidates = useMemo(() => {
     if (!selectedGroup) return []
@@ -361,6 +354,7 @@ export default function ClientDetailPage() {
         expected_salary: editForm.expected_salary === '' ? null : Number(editForm.expected_salary),
         offered_ctc: editForm.status === 'Hired' && editForm.offered_ctc !== '' ? Number(editForm.offered_ctc) : null,
         date_of_joining: editForm.status === 'Hired' ? editForm.date_of_joining || null : null,
+        billing_entity: editForm.billing_entity || null,
       }
       const response = await fetch(`/api/candidates/${editCandidate.associationId}`, {
         method: 'PATCH',
@@ -370,26 +364,14 @@ export default function ClientDetailPage() {
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || Object.values(data.errors || {})[0] || 'Unable to update candidate.')
       const updated = apiCandidateToUi(data)
-      const oldJobTitle = getJobText(editCandidate)
       const newJobTitle = getJobText(updated)
-      const affectedTitles = [...new Set([oldJobTitle, newJobTitle])]
       const nextCandidates = candidates.map(candidate => candidate.associationId === updated.associationId ? updated : candidate)
-      const updates = affectedTitles
-        .map(title => {
-          const job = clientJobs.find(item => normalizeText(item.title || item.role) === normalizeText(title))
-          if (!job || normalizeMandateStatus(job.mandate_status || job.status) === 'Scrapped') return null
-          const status = deriveJobStatus(title, nextCandidates, clientJobs)
-          return status !== normalizeMandateStatus(job.mandate_status || job.status) ? { id: job.id, status } : null
-        })
-        .filter(Boolean)
       setCandidates(nextCandidates)
-      if (updates.length) {
-        await Promise.all(updates.map(update => fetch(`/api/jobs/${update.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mandate_status: update.status }),
-        })))
-        setClientJobs(rows => rows.map(job => updates.find(update => update.id === job.id) ? { ...job, mandate_status: updates.find(update => update.id === job.id).status, status: updates.find(update => update.id === job.id).status } : job))
+      if (updated.status === 'Hired') {
+        const job = clientJobs.find(item => normalizeText(item.title || item.role) === normalizeText(newJobTitle))
+        if (job && normalizeMandateStatus(job.mandate_status || job.status) !== 'Scrapped') {
+          setClientJobs(rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: 'Completed', status: 'Completed' } : row))
+        }
       }
       setEditCandidate(null)
       setEditForm(null)
@@ -417,6 +399,7 @@ export default function ClientDetailPage() {
       case 'consultant': return <td key={key}>{c.consultant || '-'}</td>
       case 'client': return <td key={key}>{c.client || '-'}</td>
       case 'clientId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{client?.client_display_id || '-'}</td>
+      case 'billingEntity': return <td key={key}>{client?.contract_signed ? c.billingEntity || '-' : '-'}</td>
       case 'jobId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.jobDisplayId || '-'}</td>
       case 'job': return <td key={key} className="cell-ellipsis">{getJobText(c)}</td>
       case 'name':
@@ -573,6 +556,7 @@ export default function ClientDetailPage() {
                   ['notice_period', 'Notice Period', 'number'],
                   ['current_salary', 'Current Salary', 'number'],
                   ['expected_salary', 'Expected Salary', 'number'],
+                  ...(client?.contract_signed ? [['billing_entity', 'Billing Entity', 'text']] : []),
                   ['job_title', 'Mandate / Role', 'text'],
                   ['linkedin_url', 'LinkedIn URL', 'text'],
                   ['cv_link', 'CV', 'text'],

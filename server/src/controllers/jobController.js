@@ -261,9 +261,14 @@ async function getNextJobDisplayId(req, res) {
 
 async function listJobUsers(req, res) {
   try {
-    const { data, error } = await supabase.from('profiles').select('email, full_name').order('email')
+    let { data, error } = await supabase.from('user_profiles').select('name, email').order('name')
+    if (error) {
+      const fallback = await supabase.from('profiles').select('email, full_name').order('email')
+      data = fallback.data
+      error = fallback.error
+    }
     if (error) throw error
-    const users = [...new Set((data || []).map(row => displayNameFromEmail(row.email || row.full_name)).filter(Boolean))]
+    const users = [...new Set((data || []).map(row => clean(row.name || row.full_name) || displayNameFromEmail(row.email)).filter(Boolean))]
     return res.json({ data: users })
   } catch (err) {
     return logAndSendInternal(res, 'listJobUsers', err)

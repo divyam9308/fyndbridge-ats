@@ -3,6 +3,8 @@ const supabase = require('../services/supabaseAdmin')
 const { uploadDocument } = require('../services/documentStorage')
 
 const CLIENT_STATUSES = [
+  'Active',
+  'Inactive',
   'Converted',
   'Not Converted',
   'Follow Up Required',
@@ -130,7 +132,13 @@ async function nextClientDisplayId(clientName = '') {
   return nextFreeDisplayId(data, 'CL')
 }
 
-function normalizeClient(row, activeJobs = 0, followUps = []) {
+function deriveClientStatus(row, jobs = []) {
+  if (jobs.length && jobs.every((job) => job.status === 'Scrapped' || job.mandate_status === 'Scrapped')) return 'Inactive'
+  if (jobs.some((job) => job.status === 'Completed' || job.mandate_status === 'Completed')) return 'Active'
+  return row.status || ''
+}
+
+function normalizeClient(row, activeJobs = 0, followUps = [], jobs = []) {
   const clientName = row.client_name || row.name || ''
   const contactPerson = row.contact_person || row.contact || ''
   const mobile = row.mobile || row.phone || ''
@@ -157,7 +165,7 @@ function normalizeClient(row, activeJobs = 0, followUps = []) {
     region,
     notes: comments,
     comments,
-    status: row.status || '',
+    status: deriveClientStatus(row, jobs),
     terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
     contract_signed: Boolean(row.contract_signed),
     contract_document: row.contract_document || row.contract_pdf_url || '',
@@ -340,17 +348,20 @@ async function listClients(req, res) {
     if (error) throw error
     const sortedData = sortClientRows(data || [], sort)
 
-    const { data: jobs, error: jobsError } = await supabase.from('jobs').select('client_id, status')
+    const { data: jobs, error: jobsError } = await supabase.from('jobs').select('client_id, status, mandate_status')
     if (jobsError) throw jobsError
 
     const activeJobsMap = {}
+    const jobsByClient = {}
     ;(jobs || []).forEach((job) => {
       if (job.status === 'Open' || job.status === 'Active') activeJobsMap[job.client_id] = (activeJobsMap[job.client_id] || 0) + 1
+      jobsByClient[job.client_id] = jobsByClient[job.client_id] || []
+      jobsByClient[job.client_id].push(job)
     })
 
     const followUpsMap = await loadFollowUps(sortedData.map((client) => client.id))
     return res.json({
-      data: sortedData.map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || []))
+      data: sortedData.map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || [], jobsByClient[client.id] || []))
     })
   } catch (err) {
     return logAndSendInternal(res, 'listClients', err)
@@ -362,8 +373,10 @@ async function getClient(req, res) {
     const { data, error } = await supabase.from('clients').select('*').eq('id', req.params.id).maybeSingle()
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Client not found' })
+    const { data: jobs, error: jobsError } = await supabase.from('jobs').select('status, mandate_status').eq('client_id', req.params.id)
+    if (jobsError) throw jobsError
     const followUpsMap = await loadFollowUps([data.id])
-    return res.json(normalizeClient(data, 0, followUpsMap[data.id] || []))
+    return res.json(normalizeClient(data, 0, followUpsMap[data.id] || [], jobs || []))
   } catch (err) {
     return logAndSendInternal(res, 'getClient', err)
   }

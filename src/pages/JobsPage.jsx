@@ -5,6 +5,7 @@ import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X } 
 import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
+import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const SORT_OPTIONS = [
@@ -70,9 +71,16 @@ export default function JobsPage() {
   const [roleSearch, setRoleSearch] = useState('')
   const [roleSuggestionsOpen, setRoleSuggestionsOpen] = useState(false)
   const [addingNewRole, setAddingNewRole] = useState(false)
+  const [sectorSearch, setSectorSearch] = useState('')
+  const [sectorOpen, setSectorOpen] = useState(false)
+  const [teamLeadSearch, setTeamLeadSearch] = useState('')
+  const [teamLeadOpen, setTeamLeadOpen] = useState(false)
+  const [consultantSearch, setConsultantSearch] = useState({})
+  const [consultantPickerOpen, setConsultantPickerOpen] = useState({})
   const modalRef = useRef(null)
   const roleInputRef = useRef(null)
   const sortRef = useRef(null)
+  const consultantsTableRef = useRef(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -146,6 +154,15 @@ export default function JobsPage() {
     return () => document.removeEventListener('mousedown', close)
   }, [sortOpen])
 
+  useEffect(() => {
+    if (!Object.values(consultantOpen).some(Boolean)) return
+    const close = (event) => {
+      if (!consultantsTableRef.current?.contains(event.target)) setConsultantOpen({})
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [consultantOpen])
+
   const fetchNextId = async () => {
     const res = await fetch('/api/jobs/next-display-id')
     const data = await res.json().catch(() => ({}))
@@ -159,6 +176,8 @@ export default function JobsPage() {
     setForm({ ...EMPTY_FORM, job_display_id: 'Loading...', allocation_date: todayLocal() })
     setClientSearch('')
     setRoleSearch('')
+    setSectorSearch('')
+    setTeamLeadSearch('')
     setAddingNewRole(false)
     setJdFile(null)
     setClientSuggestionsOpen(false)
@@ -204,6 +223,8 @@ export default function JobsPage() {
     setJdFile(null)
     setClientSearch(job.client_name || '')
     setRoleSearch(job.role || job.title || '')
+    setSectorSearch(job.vertical || '')
+    setTeamLeadSearch(job.team_lead === '-' ? '' : job.team_lead || '')
     setAddingNewRole(false)
     setClientSuggestionsOpen(false)
     setRoleSuggestionsOpen(false)
@@ -229,6 +250,8 @@ export default function JobsPage() {
   const matchingRoles = useMemo(() => roleOptions
     .filter(job => `${job.role} ${job.job_display_id || ''}`.toLowerCase().includes(roleSearch.trim().toLowerCase()))
     .slice(0, 8), [roleOptions, roleSearch])
+  const matchingSectors = useMemo(() => SECTOR_OPTIONS.filter(value => value.toLowerCase().includes(sectorSearch.trim().toLowerCase())), [sectorSearch])
+  const matchingTeamLeads = useMemo(() => sortedUsers.filter(user => user !== '-' && user.toLowerCase().includes(teamLeadSearch.trim().toLowerCase())), [sortedUsers, teamLeadSearch])
   const selectedConsultants = form.consultants || []
   const availableConsultants = userOptions.filter(user => !selectedConsultants.includes(user))
 
@@ -336,6 +359,7 @@ export default function JobsPage() {
       return { ...current, consultants: next }
     })
   }
+  const matchingConsultants = (index) => sortedUsers.filter(user => user !== '-' && !selectedConsultants.some((selected, selectedIndex) => selectedIndex !== index && selected === user) && user.toLowerCase().includes(String(consultantSearch[index] || '').trim().toLowerCase()))
 
   const openMandateCandidates = (job) => {
     if (!job?.client_id || !job?.id) return
@@ -395,7 +419,7 @@ export default function JobsPage() {
         ) : jobs.length === 0 ? (
           <div className="empty-state"><div className="empty-state-title">No mandates found</div><div className="empty-state-desc">Create a mandate to get started.</div></div>
         ) : (
-          <div className="table-wrapper">
+          <div className="table-wrapper" ref={consultantsTableRef}>
             <table className="data-table candidates-master-table" aria-label="Mandates">
               <thead>
                 <tr>
@@ -475,9 +499,35 @@ export default function JobsPage() {
                   <div className="consultant-picker-list">
                     {selectedConsultants.length === 0 && <span className="sub-text">-</span>}
                     {selectedConsultants.map((name, index) => (
-                      <select className="form-control" key={`${name}-${index}`} value={name} onChange={e => updateConsultant(index, e.target.value)} disabled={saving}>
-                        {sortedUsers.map(user => <option key={user} value={user === '-' ? '' : user}>{user}</option>)}
-                      </select>
+                      <div className="client-search-wrap" key={`${name}-${index}`}>
+                        <input
+                          className="form-control"
+                          value={consultantSearch[index] ?? name}
+                          onChange={e => {
+                            setConsultantSearch(current => ({ ...current, [index]: e.target.value }))
+                            setConsultantPickerOpen(current => ({ ...current, [index]: true }))
+                          }}
+                          onFocus={() => {
+                            setConsultantSearch(current => ({ ...current, [index]: current[index] ?? name }))
+                            setConsultantPickerOpen(current => ({ ...current, [index]: true }))
+                          }}
+                          onBlur={() => window.setTimeout(() => setConsultantPickerOpen(current => ({ ...current, [index]: false })), 120)}
+                          disabled={saving}
+                          autoComplete="off"
+                        />
+                        {consultantPickerOpen[index] && (
+                          <div className="client-suggestions manual-suggestions is-open">
+                            {matchingConsultants(index).length ? matchingConsultants(index).map(user => (
+                              <button type="button" key={user} onMouseDown={event => {
+                                event.preventDefault()
+                                updateConsultant(index, user)
+                                setConsultantSearch(current => ({ ...current, [index]: user }))
+                                setConsultantPickerOpen(current => ({ ...current, [index]: false }))
+                              }}><span>{user}</span></button>
+                            )) : <div className="candidate-column-option">No results found</div>}
+                          </div>
+                        )}
+                      </div>
                     ))}
                     <button className="row-action-btn" type="button" title="Add Consultant" onClick={addConsultant} disabled={saving || !availableConsultants.length}><Plus size={13} /></button>
                   </div>
@@ -485,9 +535,25 @@ export default function JobsPage() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Team Lead</label>
-                  <select className="form-control" value={form.team_lead} onChange={e => setForm(current => ({ ...current, team_lead: e.target.value }))} disabled={saving}>
-                    {sortedUsers.map(user => <option key={user} value={user === '-' ? '' : user}>{user}</option>)}
-                  </select>
+                  <div className="client-search-wrap">
+                    <input className="form-control" value={teamLeadSearch || form.team_lead} onChange={e => {
+                      setTeamLeadSearch(e.target.value)
+                      setForm(current => ({ ...current, team_lead: '' }))
+                      setTeamLeadOpen(true)
+                    }} onFocus={() => setTeamLeadOpen(true)} onBlur={() => window.setTimeout(() => setTeamLeadOpen(false), 120)} disabled={saving} autoComplete="off" />
+                    {teamLeadOpen && (
+                      <div className="client-suggestions manual-suggestions is-open">
+                        {matchingTeamLeads.length ? matchingTeamLeads.map(user => (
+                          <button type="button" key={user} onMouseDown={event => {
+                            event.preventDefault()
+                            setTeamLeadSearch(user)
+                            setForm(current => ({ ...current, team_lead: user }))
+                            setTeamLeadOpen(false)
+                          }}><span>{user}</span></button>
+                        )) : <div className="candidate-column-option">No results found</div>}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Client Name <span className="req">*</span></label>
@@ -609,7 +675,25 @@ export default function JobsPage() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Sector</label>
-                  <input className="form-control" value={form.vertical} onChange={e => setForm(current => ({ ...current, vertical: e.target.value }))} disabled={saving} />
+                  <div className="client-search-wrap">
+                    <input className="form-control" value={sectorSearch || form.vertical} onChange={e => {
+                      setSectorSearch(e.target.value)
+                      setForm(current => ({ ...current, vertical: '' }))
+                      setSectorOpen(true)
+                    }} onFocus={() => setSectorOpen(true)} onBlur={() => window.setTimeout(() => setSectorOpen(false), 120)} disabled={saving} autoComplete="off" />
+                    {sectorOpen && (
+                      <div className="client-suggestions manual-suggestions is-open">
+                        {matchingSectors.length ? matchingSectors.map(value => (
+                          <button type="button" key={value} onMouseDown={event => {
+                            event.preventDefault()
+                            setSectorSearch(value)
+                            setForm(current => ({ ...current, vertical: value }))
+                            setSectorOpen(false)
+                          }}><span>{value}</span></button>
+                        )) : <div className="candidate-column-option">No results found</div>}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">JD File</label>

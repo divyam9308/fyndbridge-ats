@@ -56,7 +56,8 @@ const ASSOCIATION_FIELDS = [
   'date_of_joining',
   'notes',
   'client_id',
-  'job_id'
+  'job_id',
+  'billing_entity'
 ]
 
 function logAndSendInternal(res, routeName, err) {
@@ -365,6 +366,7 @@ function flattenAssociation(row) {
     resume_url: candidate.resume_url || null,
     client_id: row.client_id || candidate.client_id || null,
     client_name: row.client_name || null,
+    billing_entity: row.billing_entity || null,
     job_id: row.job_id || null,
     job_display_id: row.job_display_id || null,
     job_title: row.job_title || null,
@@ -634,7 +636,8 @@ async function syncMandateStatusForJob(jobId) {
     .eq('status', 'Hired')
   if (countError) throw countError
 
-  const nextStatus = count > 0 ? 'Completed' : 'Ongoing'
+  if (count <= 0) return
+  const nextStatus = 'Completed'
   if (job.mandate_status === nextStatus && job.status === nextStatus) return
   const { error: updateError } = await supabase
     .from('jobs')

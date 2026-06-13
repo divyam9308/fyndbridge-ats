@@ -1,0 +1,20 @@
+export const SECTOR_OPTIONS = [
+  'Education',
+  'Logistics & Supply Chain',
+  'Social Sector',
+  'Technology',
+  'Ecommerce',
+  'Consumer, Retail & Durables',
+  'Power',
+  'Automotive',
+  'Real Estate',
+  'Hospitality',
+  'Manufacturing',
+  'Healthcare',
+  'Agriculture',
+  'Pharmaceuticals',
+  'Financial Services',
+  'Oil & Gas',
+  'Others',
+]
+
