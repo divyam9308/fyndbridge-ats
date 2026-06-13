@@ -1,14 +1,14 @@
 /**
  * FyndbridgeLogo — Official Fyndbridge brand wordmark.
  *
- * Logo mark : two golden squares (#DAB111)
+ * Logo mark : two golden squares
  * Brand name: FYNDBRIDGE — all caps
  * Tagline   : BRIDGING TALENT & SUCCESS — all caps
  *
  * Props:
  *   size        — 'sm' | 'md' | 'lg' | 'xl'
  *   theme       — 'light' | 'dark'
- *                 light → navy #001264 text  (use on white/off-white backgrounds)
+ *                 light → brand blue text     (use on white/off-white backgrounds)
  *                 dark  → white text          (use on navy/dark backgrounds)
  *   showTagline — boolean (default false)
  *   className   — extra class string
@@ -27,10 +27,10 @@ export default function FyndbridgeLogo({
   }
   const c = cfg[size] || cfg.md
 
-  const GOLD  = '#DAB111'
-  const textColor   = theme === 'light' ? '#001264' : '#FFFFFF'
+  const GOLD  = 'var(--brand-gold)'
+  const textColor   = theme === 'light' ? 'var(--brand-blue)' : '#FFFFFF'
   const taglineColor = theme === 'light'
-    ? 'rgba(0,18,100,0.55)'
+    ? 'rgba(var(--brand-blue-rgb),0.55)'
     : 'rgba(255,255,255,0.45)'
 
   /* Two overlapping golden squares — the bridge icon mark */

@@ -18,8 +18,8 @@ function GoogleIcon() {
 function BrandIcon() {
   return (
     <svg width="50" height="50" viewBox="0 0 100 100" fill="none" aria-hidden="true">
-      <path d="M8 10 Q8 8 10 8 L52 8 Q54 8 54 10 L54 18 Q54 20 52 20 L20 20 L20 80 L52 80 Q54 80 54 82 L54 90 Q54 92 52 92 L10 92 Q8 92 8 90 Z" fill="#DAB111" />
-      <path d="M92 10 Q92 8 90 8 L48 8 Q46 8 46 10 L46 18 Q46 20 48 20 L80 20 L80 80 L48 80 Q46 80 46 82 L46 90 Q46 92 48 92 L90 92 Q92 92 92 90 Z" fill="#DAB111" />
+      <path d="M8 10 Q8 8 10 8 L52 8 Q54 8 54 10 L54 18 Q54 20 52 20 L20 20 L20 80 L52 80 Q54 80 54 82 L54 90 Q54 92 52 92 L10 92 Q8 92 8 90 Z" fill="var(--brand-gold)" />
+      <path d="M92 10 Q92 8 90 8 L48 8 Q46 8 46 10 L46 18 Q46 20 48 20 L80 20 L80 80 L48 80 Q46 80 46 82 L46 90 Q46 92 48 92 L90 92 Q92 92 92 90 Z" fill="var(--brand-gold)" />
     </svg>
   )
 }

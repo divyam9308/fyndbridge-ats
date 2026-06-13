@@ -7,9 +7,9 @@
 }
 
 :root {
-  --navy: #001264;
-  --navy-mid: #001a7a;
-  --gold: #dab111;
+  --navy: var(--brand-blue);
+  --navy-mid: var(--brand-blue);
+  --gold: var(--brand-gold);
   --cream: #f7f7f5;
   --text-muted: #6b6b63;
   --text-quiet: #a8a89e;
@@ -34,7 +34,7 @@
 
 .login-panel-left {
   background:
-    radial-gradient(circle at top left, rgba(218, 177, 17, 0.04), transparent 42%),
+    radial-gradient(circle at top left, rgba(var(--brand-gold-rgb), 0.04), transparent 42%),
     var(--cream);
   display: flex;
   flex-direction: column;
@@ -60,7 +60,7 @@
   height: 520px;
   right: -210px;
   bottom: -220px;
-  border: 1px solid rgba(0, 18, 100, 0.055);
+  border: 1px solid rgba(var(--brand-blue-rgb), 0.055);
 }
 
 .login-panel-circle-left-sm {
@@ -68,7 +68,7 @@
   height: 330px;
   right: 20px;
   bottom: -150px;
-  border: 1px solid rgba(0, 18, 100, 0.04);
+  border: 1px solid rgba(var(--brand-blue-rgb), 0.04);
 }
 
 .login-panel-circle-right-lg {
@@ -76,7 +76,7 @@
   height: 520px;
   top: -190px;
   right: -190px;
-  border: 1px solid rgba(218, 177, 17, 0.08);
+  border: 1px solid rgba(var(--brand-gold-rgb), 0.08);
 }
 
 .login-panel-circle-right-sm {
@@ -84,7 +84,7 @@
   height: 380px;
   left: -150px;
   bottom: -150px;
-  border: 1px solid rgba(218, 177, 17, 0.055);
+  border: 1px solid rgba(var(--brand-gold-rgb), 0.055);
 }
 
 .login-brand {
@@ -168,7 +168,7 @@
   position: relative;
   z-index: 2;
   flex: 0 0 auto;
-  border-top: 1px solid rgba(0, 18, 100, 0.08);
+  border-top: 1px solid rgba(var(--brand-blue-rgb), 0.08);
   padding-top: 24px;
   animation: fadeSlideUp 0.6s ease 0.2s both;
 }
@@ -299,7 +299,7 @@
 .btn-spinner {
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(0, 18, 100, 0.2);
+  border: 2px solid rgba(var(--brand-blue-rgb), 0.2);
   border-top-color: var(--navy);
   border-radius: 50%;
   animation: loginSpin 0.7s linear infinite;

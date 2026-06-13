@@ -15,9 +15,9 @@ const stats = [
     label: 'Ongoing Mandates',
     value: '17',
     Icon: Briefcase,
-    accent: '#F5A623',
-    iconBg: 'rgba(245,166,35,0.12)',
-    iconColor: '#E09315',
+    accent: 'var(--brand-gold)',
+    iconBg: 'rgba(var(--brand-gold-rgb),0.12)',
+    iconColor: 'var(--brand-gold)',
     trend: '↑ 3 this week',
   },
   {

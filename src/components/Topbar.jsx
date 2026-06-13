@@ -46,7 +46,6 @@ export default function Topbar() {
           <div className="topbar-avatar">{initials || 'HR'}</div>
           <div>
             <div className="topbar-user-name">{displayName}</div>
-            <div className="topbar-user-role">HR Recruiter</div>
           </div>
         </div>
       </div>

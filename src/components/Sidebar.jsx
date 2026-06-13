@@ -64,7 +64,6 @@ export default function Sidebar() {
           <div className="sidebar-avatar">{initials || 'HR'}</div>
           <div className="sidebar-user-info">
             <div className="sidebar-user-name">{displayName}</div>
-            <div className="sidebar-user-role">HR Recruiter</div>
           </div>
         </div>
         <button className="logout-btn" onClick={handleLogout} id="btn-logout">

@@ -1,18 +1,22 @@
 /* ===================== CSS Variables ===================== */
 :root {
-  --navy: #001264;        /* primary dark — sidebar, topbar text, headings */
-  --gold: #DAB111;        /* accent — active states, buttons, badges, highlights */
-  --gold-soft: rgba(218,177,17,0.12);  /* tinted backgrounds */
+  --brand-blue: #001264;
+  --brand-gold: #DAB111;
+  --brand-blue-rgb: 0,18,100;
+  --brand-gold-rgb: 218,177,17;
+  --navy: var(--brand-blue);
+  --gold: var(--brand-gold);
+  --gold-soft: rgba(var(--brand-gold-rgb),0.12);  /* tinted backgrounds */
   --white: #FFFFFF;
   --off-white: #F7F7F5;   /* page background — warm off-white like the website */
   
   /* Brand Navy/Gold legacy mapping overrides for backward compatibility */
-  --navy-darkest: #001264;
-  --navy-dark: #000c47;
-  --navy-mid: #132540;
-  --navy-light: #1A3355;
-  --gold-light: #ECC738;
-  --gold-pale: #F3DC7B;
+  --navy-darkest: var(--brand-blue);
+  --navy-dark: var(--brand-blue);
+  --navy-mid: var(--brand-blue);
+  --navy-light: var(--brand-blue);
+  --gold-light: var(--brand-gold);
+  --gold-pale: var(--brand-gold);
   
   /* Neutrals */
   --gray-50: #F7F7F5;
@@ -44,9 +48,9 @@
   --transition-slow: 0.4s ease;
 
   /* Shadows */
-  --shadow-card: 0 2px 8px rgba(0,18,100,0.06), 0 8px 24px rgba(0,18,100,0.07);
-  --shadow-card-hover: 0 8px 24px rgba(0,18,100,0.12), 0 2px 8px rgba(0,18,100,0.08);
-  --shadow-modal: 0 24px 64px rgba(0,18,100,0.18);
+  --shadow-card: 0 2px 8px rgba(var(--brand-blue-rgb),0.06), 0 8px 24px rgba(var(--brand-blue-rgb),0.07);
+  --shadow-card-hover: 0 8px 24px rgba(var(--brand-blue-rgb),0.12), 0 2px 8px rgba(var(--brand-blue-rgb),0.08);
+  --shadow-modal: 0 24px 64px rgba(var(--brand-blue-rgb),0.18);
 }
 
 /* ===================== Reset ===================== */
@@ -115,7 +119,7 @@ input, textarea, select {
   padding: 12px 14px;
   color: #7a5c00;
   background: rgba(255,249,224,0.96);
-  border: 1px solid rgba(218,177,17,0.36);
+  border: 1px solid rgba(var(--brand-gold-rgb),0.36);
   border-radius: 10px;
   box-shadow: 0 14px 36px rgba(15,23,42,0.12);
   transform: translateX(-50%);
@@ -153,3 +157,4 @@ input, textarea, select {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--gray-400);
 }
+
