@@ -163,6 +163,7 @@ export default function ClientsPage() {
   const [followUpClient, setFollowUpClient] = useState(null)
   const [followUpForm, setFollowUpForm] = useState({ follow_up_date: '', follow_up_comments: '' })
   const [clientDuplicate, setClientDuplicate] = useState(null)
+  const [clientAlreadyAdded, setClientAlreadyAdded] = useState(false)
   const [duplicateMoreOpen, setDuplicateMoreOpen] = useState(false)
   const [contractFile, setContractFile] = useState(null)
   const [columnsOpen, setColumnsOpen] = useState(false)
@@ -195,11 +196,11 @@ export default function ClientsPage() {
   }, [])
 
   useEffect(() => {
-    if (!isOpen && !followUpClient && !clientDuplicate) return
+    if (!isOpen && !followUpClient && !clientDuplicate && !clientAlreadyAdded) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = previous }
-  }, [isOpen, followUpClient, clientDuplicate])
+  }, [isOpen, followUpClient, clientDuplicate, clientAlreadyAdded])
 
   const fetchClients = useCallback(async ({ showLoading = true } = {}) => {
     try {
@@ -485,6 +486,10 @@ export default function ClientsPage() {
     const nextErrors = validate()
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors)
+      return
+    }
+    if (!editingClient && selectedExistingClientId && !addingNewClient) {
+      setClientAlreadyAdded(true)
       return
     }
 
@@ -942,6 +947,23 @@ export default function ClientsPage() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setIsOpen(false)} disabled={saving}>Cancel</button>
               <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving}>{saving ? 'Saving...' : editingClient ? 'Update Client' : 'Save Client'}</button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {clientAlreadyAdded && createPortal((
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setClientAlreadyAdded(false)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Client Already Added">
+            <div className="modal-header">
+              <span className="modal-title">Client Already Added</span>
+              <button className="modal-close" onClick={() => setClientAlreadyAdded(false)} aria-label="Close"><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="form-error">This client is already added.</div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-primary" onClick={() => setClientAlreadyAdded(false)}>OK</button>
             </div>
           </div>
         </div>

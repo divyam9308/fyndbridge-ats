@@ -40,7 +40,7 @@ const canonicalClients = (clients) => {
     const key = String(client?.client_display_id || clientName(client)).trim().toLowerCase()
     if (key && !map.has(key)) map.set(key, client)
   })
-  return [...map.values()]
+  return [...map.values()].sort((a, b) => clientName(a).localeCompare(clientName(b)))
 }
 
 export default function JobsPage() {
@@ -486,7 +486,10 @@ export default function JobsPage() {
                         setForm(current => ({ ...current, client_id: '' }))
                         setClientSuggestionsOpen(true)
                       }}
-                      onFocus={() => setClientSuggestionsOpen(true)}
+                      onFocus={() => {
+                        setClientSuggestionsOpen(true)
+                        refreshClientOptions()
+                      }}
                       onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)}
                       placeholder={dbClients.length ? 'Search client...' : 'Loading clients...'}
                       disabled={saving}
@@ -494,6 +497,13 @@ export default function JobsPage() {
                     />
                     {clientSuggestionsOpen && (
                     <div className="client-suggestions manual-suggestions is-open">
+                      <button type="button" onMouseDown={(event) => {
+                        event.preventDefault()
+                        setClientSuggestionsOpen(false)
+                        navigate('/dashboard/clients', { state: { action: 'add-client' } })
+                      }}>
+                        <span>Add New Client</span>
+                      </button>
                       {matchingClients.map(client => (
                         <button type="button" key={client.id} onMouseDown={(event) => {
                           event.preventDefault()

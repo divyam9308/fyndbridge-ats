@@ -184,7 +184,7 @@ const getCanonicalClients = (clients) => {
     if (!key || map.has(key)) return
     map.set(key, client)
   })
-  return [...map.values()]
+  return [...map.values()].sort((a, b) => (a?.name || a?.client_name || '').localeCompare(b?.name || b?.client_name || ''))
 }
 
 const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) => {
@@ -269,13 +269,20 @@ export default function CandidatesPage() {
   const [dbClients, setDbClients] = useState([])
   const [dbJobs, setDbJobs] = useState([])
 
-  const refreshOptionData = useCallback(() => {
-    fetch('/api/clients').then(res => res.json()).then(data => setDbClients(data.data || []))
-    fetch('/api/jobs').then(res => res.json()).then(data => setDbJobs(data.data || []))
+  const refreshOptionData = useCallback(async () => {
+    const [clientsRes, jobsRes] = await Promise.all([
+      fetch('/api/clients'),
+      fetch('/api/jobs')
+    ])
+    const clientsData = await clientsRes.json().catch(() => ({}))
+    const jobsData = await jobsRes.json().catch(() => ({}))
+    if (clientsRes.ok) setDbClients(clientsData.data || [])
+    if (jobsRes.ok) setDbJobs((jobsData.data || []).sort((a, b) => (a?.title || a?.role || '').localeCompare(b?.title || b?.role || '')))
   }, [])
 
   useEffect(() => {
-    refreshOptionData()
+    const timer = window.setTimeout(refreshOptionData, 0)
+    return () => window.clearTimeout(timer)
   }, [refreshOptionData])
 
   useEffect(() => {
@@ -1293,7 +1300,10 @@ export default function CandidatesPage() {
               name="client"
               value={visibleClientValue}
               onChange={(event) => setClientValue(event.target.value)}
-              onFocus={() => setClientSuggestionsOpen(true)}
+              onFocus={() => {
+                setClientSuggestionsOpen(true)
+                refreshOptionData()
+              }}
               onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)}
               className={`form-control${errs?.client ? ' is-error' : ''}`}
               placeholder={dbClients.length ? 'Search client...' : 'Loading clients...'}
@@ -1330,7 +1340,10 @@ export default function CandidatesPage() {
               name="job"
               value={f.job || ''}
               onChange={(event) => setJobValue(event.target.value)}
-              onFocus={() => setJobSuggestionsOpen(true)}
+              onFocus={() => {
+                setJobSuggestionsOpen(true)
+                refreshOptionData()
+              }}
               onBlur={() => window.setTimeout(() => setJobSuggestionsOpen(false), 120)}
               className="form-control"
               placeholder={dbJobs.length ? 'Search mandate...' : 'Loading mandates...'}

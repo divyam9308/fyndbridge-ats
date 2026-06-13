@@ -21,7 +21,8 @@ function logAndSendInternal(res, method, err) {
     hint: err.hint,
     stack: err.stack
   })
-  return res.status(500).json({ error: 'Internal server error', detail: err.message })
+  const message = process.env.NODE_ENV === 'production' ? 'Internal server error' : (err.message || 'Internal server error')
+  return res.status(500).json({ error: message, detail: err.message })
 }
 
 function clean(value) {
@@ -241,7 +242,7 @@ function clientPayload(body) {
     comments: nullable(body.comments || body.notes),
     notes: nullable(body.comments || body.notes),
     follow_up_date: body.follow_up_date || null,
-    status,
+    status: status || '',
     terms_signed_type: nullable(termsType),
     terms_signed_custom: termsType === 'Any Other' ? nullable(body.terms_signed_custom) : null,
     terms_value: nullable(body.terms_value),
@@ -298,7 +299,7 @@ function missingClientColumn(error) {
 async function insertClient(payload) {
   let next = payload
   let result = null
-  for (let i = 0; i < 12; i += 1) {
+  for (let i = 0; i < 30; i += 1) {
     result = await supabase.from('clients').insert(next).select('*').single()
     const col = missingClientColumn(result.error)
     if (!col) break
@@ -311,7 +312,7 @@ async function insertClient(payload) {
 async function updateClientRow(id, payload) {
   let next = payload
   let result = null
-  for (let i = 0; i < 12; i += 1) {
+  for (let i = 0; i < 30; i += 1) {
     result = await supabase.from('clients').update(next).eq('id', id).select('*').maybeSingle()
     const col = missingClientColumn(result.error)
     if (!col) break
@@ -375,6 +376,7 @@ async function getClient(req, res) {
 
 async function createClient(req, res) {
   try {
+    console.log('createClient payload:', req.body)
     if (req.file) {
       const contract = await uploadContractPdf(req.file)
       req.body.contract_document = contract.url
@@ -401,7 +403,16 @@ async function createClient(req, res) {
       payload.client_group_id = payload.id
     }
     const { data, error } = await insertClient(payload)
-    if (error) throw error
+    if (error) {
+      console.error('createClient Supabase insert error:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        payload
+      })
+      throw error
+    }
 
     if (!data.client_group_id) {
       const { data: grouped, error: groupError } = await supabase
