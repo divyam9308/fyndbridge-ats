@@ -34,6 +34,7 @@ export const apiCandidateToUi = (row) => ({
   job: row.job_title || '',
   status: row.status || '',
   cvLink: row.cv_link || row.resume_url || '',
+  cvStoragePath: row.cv_storage_path || row.resume_path || '',
   linkedinUrl: row.linkedin_url || '',
   notes: row.notes || '',
   consultant: row.consultant_name || '',
@@ -41,11 +42,95 @@ export const apiCandidateToUi = (row) => ({
   createdAt: row.created_at || '',
 })
 
+export const CV_BUCKET_NAME = 'resumes'
+const LEGACY_CV_BUCKET_NAMES = ['resumes', 'resume', 'cvs', 'cv', 'candidate-cvs', 'candidate_cvs']
+
+export const cleanCandidateCvPath = (value) => {
+  const text = String(value || '').trim()
+  if (!text || text.startsWith('/tmp/')) return ''
+  let path = text
+  if (/^https?:\/\//i.test(text)) {
+    try {
+      const parsed = new URL(text)
+      const marker = '/storage/v1/object/'
+      const index = parsed.pathname.indexOf(marker)
+      if (index === -1) return ''
+      path = decodeURIComponent(parsed.pathname.slice(index + marker.length))
+    } catch {
+      return ''
+    }
+  }
+  path = path.replace(/^public\//, '').replace(/^sign\//, '')
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const bucket of LEGACY_CV_BUCKET_NAMES) {
+      if (path.startsWith(`${bucket}/`)) {
+        path = path.slice(bucket.length + 1)
+        changed = true
+      }
+    }
+  }
+  return path
+}
+
+export const getCandidateCvOpenInfo = (candidate) => {
+  const cvUrl = String(candidate?.cvLink || '').trim()
+  const cvStoragePath = String(candidate?.cvStoragePath || '').trim()
+  const storagePath = cleanCandidateCvPath(cvStoragePath) || cleanCandidateCvPath(cvUrl)
+
+  if (storagePath) {
+    const params = new URLSearchParams({
+      path: storagePath,
+      candidate_id: String(candidate?.candidateId || candidate?.id || '')
+    })
+    return {
+      candidateId: candidate?.candidateId || candidate?.id || '',
+      cvUrl,
+      cvStoragePath,
+      cleanPath: storagePath,
+      bucketName: CV_BUCKET_NAME,
+      sourceType: 'supabase-storage',
+      finalUrl: `/api/resumes/open?${params.toString()}`
+    }
+  }
+
+  if (/^https?:\/\//i.test(cvUrl)) {
+    return {
+      candidateId: candidate?.candidateId || candidate?.id || '',
+      cvUrl,
+      cvStoragePath,
+      cleanPath: '',
+      bucketName: '',
+      sourceType: 'external-link',
+      finalUrl: cvUrl
+    }
+  }
+
+  return {
+    candidateId: candidate?.candidateId || candidate?.id || '',
+    cvUrl,
+    cvStoragePath,
+    cleanPath: '',
+    bucketName: CV_BUCKET_NAME,
+    sourceType: 'missing-cv',
+    finalUrl: ''
+  }
+}
+
 export const resolveCandidateCvHref = (candidate) => {
-  const direct = String(candidate?.cvLink || '').trim()
-  if (direct) return direct
-  const storagePath = String(candidate?.cvStoragePath || '').trim()
-  if (!storagePath) return ''
-  if (/^https?:\/\//i.test(storagePath)) return storagePath
-  return `/api/resumes/open/${encodeURIComponent(storagePath.replace(/^resumes\//, ''))}`
+  return getCandidateCvOpenInfo(candidate).finalUrl
+}
+
+export const logCandidateCvOpen = (candidate) => {
+  const info = getCandidateCvOpenInfo(candidate)
+  console.log('[CV open]', {
+    candidateId: info.candidateId,
+    cv_url: info.cvUrl,
+    cv_storage_path: info.cvStoragePath,
+    finalUrl: info.finalUrl,
+    bucketName: info.bucketName,
+    sourceType: info.sourceType,
+    cleanPath: info.cleanPath
+  })
 }

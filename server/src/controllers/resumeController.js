@@ -1,4 +1,3 @@
-const fs = require('fs/promises')
 const { v4: uuidv4 } = require('uuid')
 const { parseResume } = require('../services/resumeParser')
 const supabase = require('../services/supabaseAdmin')
@@ -64,12 +63,6 @@ async function parseOne(file) {
     return rowFromParsed(file, parsed, null, storage, warnings)
   } catch (err) {
     return rowFromParsed(file, null, err.message || 'Unable to parse resume', storage, warnings)
-  } finally {
-    try {
-      await fs.unlink(file.path)
-    } catch (err) {
-      if (err.code !== 'ENOENT') console.error('bulkParse cleanup:', err.message)
-    }
   }
 }
 
@@ -112,7 +105,8 @@ async function bulkParseResumes(req, res) {
 
 async function openResume(req, res) {
   try {
-    const storagePath = normalizeResumeStoragePath(decodeURIComponent(req.params.encodedPath || ''))
+    const rawPath = req.query.path || req.params.encodedPath || ''
+    const storagePath = normalizeResumeStoragePath(decodeURIComponent(rawPath))
 
     if (!storagePath) {
       return res.status(400).json({ error: 'Resume path is required' })
@@ -121,6 +115,15 @@ async function openResume(req, res) {
     const { data, error } = await supabase.storage
       .from(RESUME_BUCKET)
       .createSignedUrl(storagePath, 60 * 60)
+
+    console.log('[CV open signed URL]', {
+      candidateId: req.query.candidate_id || '',
+      rawPath,
+      cleanPath: storagePath,
+      bucketName: RESUME_BUCKET,
+      signedUrl: data?.signedUrl || '',
+      error: error?.message || ''
+    })
 
     if (error || !data?.signedUrl) {
       return res.status(404).json({ error: 'Resume file could not be opened' })

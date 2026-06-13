@@ -564,6 +564,8 @@ async function applyCvInput(req, candidatePayload) {
       }
     } catch (err) {
       console.error('applyCvInput temp upload error:', err.message)
+    } finally {
+      try { await fs.unlink(tempResumePath) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('applyCvInput temp cleanup:', cleanupError.message) }
     }
   }
   if (candidatePayload.cv_link || candidatePayload.resume_url) {

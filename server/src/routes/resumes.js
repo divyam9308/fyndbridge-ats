@@ -35,6 +35,7 @@ function handleUploadErrors(err, req, res, next) {
 }
 
 router.post('/bulk-parse', upload.array('resumes', 10), handleUploadErrors, controller.bulkParseResumes)
+router.get('/open', controller.openResume)
 router.get('/open/:encodedPath', controller.openResume)
 
 module.exports = router

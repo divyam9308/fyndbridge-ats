@@ -5,7 +5,7 @@ import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } f
 import NewActionDropdown from '../components/NewActionDropdown'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
-import { resolveCandidateCvHref } from '../utils/candidateUtils'
+import { logCandidateCvOpen, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 
@@ -164,6 +164,7 @@ const apiCandidateToUi = (row) => ({
   job: row.job_title || '',
   status: row.status || '',
   cvLink: row.cv_link || row.resume_url || '',
+  cvStoragePath: row.cv_storage_path || row.resume_path || '',
   linkedinUrl: row.linkedin_url || '',
   notes: row.notes || '',
   consultant: row.consultant_name || '',
@@ -1559,7 +1560,7 @@ export default function CandidatesPage() {
         return (
           <td key={key}>
             {cvHref ? (
-              <a href={cvHref} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={event => event.stopPropagation()}>
+              <a href={cvHref} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={event => { event.stopPropagation(); logCandidateCvOpen(c) }}>
                 <FileText size={15} strokeWidth={2} />
               </a>
             ) : (
@@ -1779,7 +1780,7 @@ export default function CandidatesPage() {
             <div className="candidate-drawer-actions">
               <button className="btn-primary" onClick={() => openEditCandidate(selectedCandidate)}>Edit</button>
               {resolveCandidateCvHref(selectedCandidate) && (
-                <a className="btn-secondary" href={resolveCandidateCvHref(selectedCandidate)} target="_blank" rel="noopener noreferrer"><FileText size={14} /> CV</a>
+                <a className="btn-secondary" href={resolveCandidateCvHref(selectedCandidate)} target="_blank" rel="noopener noreferrer" onClick={() => logCandidateCvOpen(selectedCandidate)}><FileText size={14} /> CV</a>
               )}
               {selectedCandidate.linkedinUrl && (
                 <a className="btn-secondary" href={selectedCandidate.linkedinUrl} target="_blank" rel="noopener noreferrer">LinkedIn</a>

@@ -3,7 +3,7 @@ import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, Users, AlertCircle, Loader2, FileText } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientJobCandidatesPage.css'
-import { apiCandidateToUi, resolveCandidateCvHref } from '../utils/candidateUtils'
+import { apiCandidateToUi, logCandidateCvOpen, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUSES } from '../utils/candidateStatuses'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
@@ -228,7 +228,7 @@ export default function ClientJobCandidatesPage() {
                     <td>{c.consultant || '—'}</td>
                     <td>
                       {resolveCandidateCvHref(c) ? (
-                        <a href={resolveCandidateCvHref(c)} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV">
+                        <a href={resolveCandidateCvHref(c)} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={() => logCandidateCvOpen(c)}>
                           <FileText size={15} strokeWidth={2} />
                         </a>
                       ) : (
