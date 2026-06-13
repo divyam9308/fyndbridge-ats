@@ -476,7 +476,7 @@ export default function ClientsPage() {
       error.duplicate = data
       throw error
     }
-    if (!res.ok) throw new Error(data.error || 'Failed to save client.')
+    if (!res.ok) throw new Error(data.detail || data.error || 'Failed to save client.')
     window.dispatchEvent(new Event('ats:clients-updated'))
     return data
   }

@@ -264,42 +264,6 @@ async function findClientDuplicate(name) {
   return (data || []).find((client) => normalizeDuplicateText(client.client_name || client.name) === normalizedName) || null
 }
 
-async function linkCandidatesToClient(client) {
-  const name = clean(client.client_name || client.name)
-  if (!name) return
-  const normalized = normalizeDuplicateText(name)
-
-  const { data: associations, error: assocError } = await supabase
-    .from('candidate_associations')
-    .select('id, client_name')
-    .is('client_id', null)
-    .ilike('client_name', name)
-  if (assocError) throw assocError
-
-  const assocIds = (associations || [])
-    .filter((row) => normalizeDuplicateText(row.client_name) === normalized)
-    .map((row) => row.id)
-  if (assocIds.length) {
-    const { error } = await supabase.from('candidate_associations').update({ client_id: client.id }).in('id', assocIds)
-    if (error) throw error
-  }
-
-  const { data: candidates, error: candidateError } = await supabase
-    .from('candidates')
-    .select('id, current_company, current_organisation')
-    .is('client_id', null)
-    .or(`current_company.ilike.${name},current_organisation.ilike.${name}`)
-  if (candidateError) throw candidateError
-
-  const candidateIds = (candidates || [])
-    .filter((row) => [row.current_company, row.current_organisation].some((value) => normalizeDuplicateText(value) === normalized))
-    .map((row) => row.id)
-  if (candidateIds.length) {
-    const { error } = await supabase.from('candidates').update({ client_id: client.id }).in('id', candidateIds)
-    if (error) throw error
-  }
-}
-
 async function checkClientDuplicate(req, res) {
   try {
     const existing = await findClientDuplicate(req.query.name)
@@ -428,7 +392,6 @@ async function createClient(req, res) {
     if (duplicate && duplicateAction === 'update_current') {
       const { data, error } = await updateClientRow(duplicate.id, { ...payload, client_group_id: duplicate.client_group_id || duplicate.id, updated_at: new Date().toISOString() })
       if (error) throw error
-      await linkCandidatesToClient(data)
       return res.json(normalizeClient(data))
     }
 
@@ -448,15 +411,12 @@ async function createClient(req, res) {
         .select('*')
         .single()
       if (missingClientColumn(groupError) === 'client_group_id') {
-        await linkCandidatesToClient(data)
         return res.status(201).json(normalizeClient(data))
       }
       if (groupError) throw groupError
-      await linkCandidatesToClient(grouped)
       return res.status(201).json(normalizeClient(grouped))
     }
 
-    await linkCandidatesToClient(data)
     return res.status(201).json(normalizeClient(data))
   } catch (err) {
     if (err.code === '23505' && /clients_name_key/i.test(err.message || '')) {
