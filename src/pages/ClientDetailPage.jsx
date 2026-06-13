@@ -322,6 +322,12 @@ export default function ClientDetailPage() {
       setStatusSaving(current => ({ ...current, [job.id]: false }))
     }
   }
+
+  const toggleTablePopover = (type, id, element) => {
+    if (!element || !id) return
+    const anchorRect = element.getBoundingClientRect()
+    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorRect })
+  }
   const togglePendingColumn = (key) => setPendingColumns(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key])
   const proceedColumns = () => {
     setVisibleColumns(pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS)
@@ -500,7 +506,7 @@ export default function ClientDetailPage() {
                   <td><button className="table-link-button" type="button" onClick={() => openGroup(group.title)}>{group.title}</button></td>
                   <td>
                     <div className="candidate-columns-control mandate-status-control">
-                      <button className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => setTablePopover(current => current?.type === 'status' && current.id === group.relatedJob?.id ? null : { type: 'status', id: group.relatedJob?.id, anchorRect: event.currentTarget.getBoundingClientRect() })} disabled={!group.relatedJob?.id || statusSaving[group.relatedJob?.id]}>
+                      <button className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', group.relatedJob?.id, event.currentTarget)} disabled={!group.relatedJob?.id || statusSaving[group.relatedJob?.id]}>
                         {group.status}
                       </button>
                     </div>

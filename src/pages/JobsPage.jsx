@@ -382,6 +382,12 @@ export default function JobsPage() {
     }
   }
 
+  const toggleTablePopover = (type, id, element) => {
+    if (!element) return
+    const anchorRect = element.getBoundingClientRect()
+    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorRect })
+  }
+
   return (
     <div>
       <div className="candidate-columns-toolbar">
@@ -456,7 +462,7 @@ export default function JobsPage() {
                     <td>
                       {(job.consultants || []).length <= 1 ? dash(job.consultants?.[0]) : (
                         <div className="candidate-columns-control mandate-consultants-control">
-                          <button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => setTablePopover(current => current?.type === 'consultants' && current.id === job.id ? null : { type: 'consultants', id: job.id, anchorRect: event.currentTarget.getBoundingClientRect() })}>
+                          <button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('consultants', job.id, event.currentTarget)}>
                             {job.consultants[0]} +{job.consultants.length - 1}
                           </button>
                         </div>
@@ -474,7 +480,7 @@ export default function JobsPage() {
                     <td>{dash(job.budget)}</td>
                     <td>
                       <div className="candidate-columns-control mandate-status-control">
-                        <button className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => setTablePopover(current => current?.type === 'status' && current.id === job.id ? null : { type: 'status', id: job.id, anchorRect: event.currentTarget.getBoundingClientRect() })} disabled={statusSaving[job.id]}>
+                        <button className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', job.id, event.currentTarget)} disabled={statusSaving[job.id]}>
                           {dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}
                         </button>
                       </div>
