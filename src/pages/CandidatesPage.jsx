@@ -1121,11 +1121,9 @@ export default function CandidatesPage() {
     const visibleClientValue = f.client || ''
     const matchingClients = canonicalClients
       .filter(client => normalizeText(clientName(client)).includes(normalizeText(visibleClientValue)))
-      .slice(0, 8)
     const matchingJobs = dbJobs
       .filter(job => !f.clientId || job.client_id === f.clientId)
       .filter(job => `${jobName(job)} ${job.job_display_id || ''}`.toLowerCase().includes(String(f.job || '').trim().toLowerCase()))
-      .slice(0, 8)
     const setClientValue = (value) => {
       const matchedClient = findClientByInput(value)
       setF(prev => ({

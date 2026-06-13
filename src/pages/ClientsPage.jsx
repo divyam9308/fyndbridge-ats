@@ -331,7 +331,6 @@ export default function ClientsPage() {
   const matchingClients = useMemo(() => (
     canonicalClients
       .filter(client => normalizeText(client.client_name || client.name).includes(normalizeText(form.client_name)))
-      .slice(0, 8)
   ), [canonicalClients, form.client_name])
   const matchingSectors = useMemo(() => SECTOR_OPTIONS.filter(value => value.toLowerCase().includes(sectorSearch.trim().toLowerCase())), [sectorSearch])
 

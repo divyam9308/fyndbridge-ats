@@ -227,8 +227,7 @@ export default function JobsPage() {
   const sortedUsers = useMemo(() => ['-', ...userOptions.filter(Boolean)], [userOptions])
   const clientOptions = useMemo(() => canonicalClients(dbClients), [dbClients])
   const matchingClients = useMemo(() => clientOptions
-    .filter(client => `${clientName(client)} ${client.client_display_id || ''}`.toLowerCase().includes(clientSearch.trim().toLowerCase()))
-    .slice(0, 8), [clientOptions, clientSearch])
+    .filter(client => `${clientName(client)} ${client.client_display_id || ''}`.toLowerCase().includes(clientSearch.trim().toLowerCase())), [clientOptions, clientSearch])
   const roleOptions = useMemo(() => {
     const map = new Map()
     jobs.forEach(job => {
@@ -240,8 +239,7 @@ export default function JobsPage() {
     return [...map.values()].sort((a, b) => a.role.localeCompare(b.role))
   }, [jobs])
   const matchingRoles = useMemo(() => roleOptions
-    .filter(job => `${job.role} ${job.job_display_id || ''}`.toLowerCase().includes(roleSearch.trim().toLowerCase()))
-    .slice(0, 8), [roleOptions, roleSearch])
+    .filter(job => `${job.role} ${job.job_display_id || ''}`.toLowerCase().includes(roleSearch.trim().toLowerCase())), [roleOptions, roleSearch])
   const matchingSectors = useMemo(() => SECTOR_OPTIONS.filter(value => value.toLowerCase().includes(sectorSearch.trim().toLowerCase())), [sectorSearch])
   const matchingTeamLeads = useMemo(() => sortedUsers.filter(user => user !== '-' && user.toLowerCase().includes(teamLeadSearch.trim().toLowerCase())), [sortedUsers, teamLeadSearch])
   const selectedConsultants = form.consultants || []
