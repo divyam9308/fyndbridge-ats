@@ -460,9 +460,7 @@ export default function CandidatesPage() {
       throw new Error(message || 'Unable to save candidate.')
     }
 
-    const next = apiCandidateToUi(payload)
-    if (payload.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
-    return next
+    return apiCandidateToUi(payload)
   }
 
   const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
