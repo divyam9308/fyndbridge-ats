@@ -557,12 +557,14 @@ export default function CandidatesPage() {
   const visibleCandidates = []
   Object.entries(mobileGroups).forEach(([mobile, rows]) => {
     const isGroup = rows.length >= 2
-    const visibleRows = isGroup && collapsed[mobile] ? rows.slice(0, 1) : rows
+    const isExpanded = Boolean(collapsed[mobile])
+    const visibleRows = isGroup && !isExpanded ? rows.slice(0, 1) : rows
     visibleRows.forEach((candidate, index) => {
       visibleCandidates.push({
         candidate,
         mobile,
         isGroup,
+        isExpanded,
         groupSize: rows.length,
         groupIndex: index,
         isLastInGroup: index === visibleRows.length - 1,
@@ -1474,7 +1476,7 @@ export default function CandidatesPage() {
     )
   }
   const renderCandidateCell = ({ key }, c, groupMeta) => {
-    const { mobile, isGroup, groupSize, groupIndex } = groupMeta
+    const { mobile, isGroup, isExpanded, groupSize, groupIndex } = groupMeta
     const candidateAvatarStyle = avatarColorsFor(c.name)
     const consultantInitials = initials(c.consultant || '').slice(0, 2) || '-'
     const consultantAvatarStyle = avatarColorsFor(c.consultant || c.name)
@@ -1516,17 +1518,17 @@ export default function CandidatesPage() {
                 <div className="name-text candidate-group-name">
                   <span className="candidate-name-text">{c.name}</span>
                   {isGroup && groupIndex === 0 && (
-                    <span className="candidate-submission-chip">
+                    <button
+                      className="candidate-submission-chip"
+                      type="button"
+                      aria-label={isExpanded ? 'Collapse candidate submissions' : 'Expand candidate submissions'}
+                      onClick={(event) => { event.stopPropagation(); toggleCollapsed(mobile) }}
+                    >
                       <span>{groupSize} submissions</span>
-                      <button
-                        className={`candidate-group-toggle${collapsed[mobile] ? ' collapsed' : ''}`}
-                        type="button"
-                        aria-label={collapsed[mobile] ? 'Expand candidate submissions' : 'Collapse candidate submissions'}
-                        onClick={(event) => { event.stopPropagation(); toggleCollapsed(mobile) }}
-                      >
+                      <span className={`candidate-group-toggle${isExpanded ? '' : ' collapsed'}`}>
                         <ChevronDown size={12} strokeWidth={2.4} />
-                      </button>
-                    </span>
+                      </span>
+                    </button>
                   )}
                 </div>
                 <div className="sub-text candidate-location-text">{c.location || [c.city, c.state].filter(Boolean).join(', ') || '-'}</div>
@@ -1753,13 +1755,13 @@ export default function CandidatesPage() {
                 </tr>
               </thead>
               <tbody>
-                {visibleCandidates.map(({ candidate: c, mobile, isGroup, groupSize, groupIndex, isLastInGroup }) => {
+                {visibleCandidates.map(({ candidate: c, mobile, isGroup, isExpanded, groupSize, groupIndex, isLastInGroup }) => {
                   const rowClass = isGroup
-                    ? `candidate-mobile-group-row${groupIndex === 0 ? ' group-first' : ' group-child'}${isLastInGroup ? ' group-last' : ''}`
+                    ? `candidate-mobile-group-row${groupIndex === 0 ? ' group-first' : ' group-child'}${isLastInGroup ? ' group-last' : ''}${isExpanded && groupIndex === 0 ? ' candidate-group-parent-expanded' : ''}${isExpanded && groupIndex > 0 ? ' candidate-group-child-expanded' : ''}`
                     : ''
                   return (
                     <tr key={c.associationId || c.id} className={rowClass}>
-                      {activeColumns.map(column => renderCandidateCell(column, c, { mobile, isGroup, groupSize, groupIndex }))}
+                      {activeColumns.map(column => renderCandidateCell(column, c, { mobile, isGroup, isExpanded, groupSize, groupIndex }))}
                     </tr>
                   )
                 })}
