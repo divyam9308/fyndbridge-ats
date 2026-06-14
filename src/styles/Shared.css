@@ -533,6 +533,179 @@
 .candidates-master-table {
   min-width: 2500px;
 }
+.candidates-master-table th:nth-child(8),
+.candidates-master-table td:nth-child(8) {
+  min-width: 240px;
+  width: 240px;
+}
+
+.candidates-master-table .name-cell {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.candidates-master-table .name-avatar {
+  width: 28px;
+  height: 28px;
+  font-size: 10px;
+  color: #fff;
+  box-shadow: none;
+}
+
+.candidates-master-table .candidate-name-content {
+  min-width: 0;
+}
+
+.candidates-master-table .candidate-group-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.candidates-master-table .candidate-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.candidates-master-table .candidate-submission-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eaf3ff;
+  color: #2f63da;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.candidates-master-table .candidate-group-toggle {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: transparent;
+  color: #2f63da;
+  flex-shrink: 0;
+}
+
+.candidates-master-table .candidate-group-toggle:hover {
+  background: rgba(47, 99, 218, 0.1);
+  color: #1d4ed8;
+}
+
+.candidates-master-table .candidate-location-text {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #9aa4b2;
+}
+
+.candidates-master-table .candidate-consultant-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  background: #f3f5f9;
+  color: #30415e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.candidates-master-table .candidate-consultant-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.candidates-master-table .candidate-id-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.candidates-master-table .candidate-client-id-chip {
+  background: #eaf8ef;
+  color: #2d9c5a;
+}
+
+.candidates-master-table .candidate-job-id-chip {
+  background: #f1eaff;
+  color: #8b5cf6;
+}
+
+.candidates-master-table .candidate-muted-dash {
+  color: var(--gray-400);
+}
+
+.candidates-master-table .candidate-mobile-group-row {
+  position: relative;
+}
+
+.candidates-master-table .candidate-mobile-group-row.group-child,
+.candidates-master-table .candidate-mobile-group-row.group-last {
+  background: #f6faff;
+}
+
+.candidates-master-table .candidate-mobile-group-row.group-first td,
+.candidates-master-table .candidate-mobile-group-row.group-child td,
+.candidates-master-table .candidate-mobile-group-row.group-last td {
+  position: relative;
+}
+
+.candidates-master-table .candidate-mobile-group-row.group-first td:first-child::before,
+.candidates-master-table .candidate-mobile-group-row.group-child td:first-child::before,
+.candidates-master-table .candidate-mobile-group-row.group-last td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #7ea3ff;
+}
+
+.candidates-master-table .candidate-mobile-group-row.group-child td:first-child::after,
+.candidates-master-table .candidate-mobile-group-row.group-last td:first-child::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid #dbeafe;
+  transform: translateY(-50%);
+}
+
+.candidates-master-table .candidate-mobile-group-row.group-first td:first-child::before {
+  top: 50%;
+}
+
+.candidates-master-table .candidate-mobile-group-row.group-last td:first-child::before {
+  bottom: 50%;
+}
 
 .pagination-bar {
   display: flex;

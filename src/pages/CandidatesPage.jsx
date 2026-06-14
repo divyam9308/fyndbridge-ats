@@ -21,6 +21,16 @@ const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
 
 const fmt = (n) => n ? `Rs. ${Number(n).toLocaleString('en-IN')}` : '-'
 const initials = (name) => name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()
+const avatarPalette = [
+  ['#7c3aed', '#a855f7'],
+  ['#2563eb', '#3b82f6'],
+  ['#059669', '#10b981'],
+  ['#ea580c', '#f97316'],
+  ['#db2777', '#ec4899'],
+  ['#4f46e5', '#6366f1'],
+  ['#65a30d', '#84cc16'],
+  ['#0891b2', '#06b6d4'],
+]
 const normalizeCandidateGroupName = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
 const normalizeCandidateGroupEmail = (value) => String(value || '').trim().toLowerCase()
 const formatDate = (value) => {
@@ -40,6 +50,12 @@ const formatMonth = (value) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
   return date.toLocaleString('en-US', { month: 'short' })
+}
+const avatarColorsFor = (value) => {
+  const text = String(value || '').trim()
+  const hash = [...text].reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  const [start, end] = avatarPalette[hash % avatarPalette.length]
+  return { background: `linear-gradient(135deg, ${start}, ${end})`, color: '#fff' }
 }
 
 const getReadableClientId = (candidate, dbClients) => {
@@ -1459,6 +1475,11 @@ export default function CandidatesPage() {
   }
   const renderCandidateCell = ({ key }, c, groupMeta) => {
     const { mobile, isGroup, groupSize, groupIndex } = groupMeta
+    const candidateAvatarStyle = avatarColorsFor(c.name)
+    const consultantInitials = initials(c.consultant || '').slice(0, 2) || '-'
+    const consultantAvatarStyle = avatarColorsFor(c.consultant || c.name)
+    const clientIdValue = getReadableClientId(c, dbClients)
+    const jobIdValue = c.jobDisplayId || jobDisplayIdForForm(c) || '-'
 
     switch (key) {
       case 'candidateDisplayId':
@@ -1466,26 +1487,37 @@ export default function CandidatesPage() {
       case 'date':
         return <td key={key}>{formatDate(c.createdAt)}</td>
       case 'consultant':
-        return <td key={key}>{c.consultant || '-'}</td>
+        return (
+          <td key={key}>
+            {c.consultant ? (
+              <span className="candidate-consultant-chip">
+                <span className="candidate-consultant-avatar" style={consultantAvatarStyle}>{consultantInitials}</span>
+                <span>{c.consultant}</span>
+              </span>
+            ) : (
+              <span className="candidate-muted-dash">-</span>
+            )}
+          </td>
+        )
       case 'client':
         return <td key={key}>{c.client || '-'}</td>
       case 'clientId':
-        return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{getReadableClientId(c, dbClients)}</td>
+        return <td key={key}>{clientIdValue !== '-' ? <span className="candidate-id-chip candidate-client-id-chip">{clientIdValue}</span> : <span className="candidate-muted-dash">-</span>}</td>
       case 'jobId':
-        return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{c.jobDisplayId || jobDisplayIdForForm(c) || '-'}</td>
+        return <td key={key}>{jobIdValue !== '-' ? <span className="candidate-id-chip candidate-job-id-chip">{jobIdValue}</span> : <span className="candidate-muted-dash">-</span>}</td>
       case 'job':
         return <td key={key} className="cell-ellipsis">{c.job || '-'}</td>
       case 'name':
         return (
           <td key={key}>
             <div className="name-cell">
-              <div className="name-avatar">{initials(c.name)}</div>
-              <div>
+              <div className="name-avatar" style={candidateAvatarStyle}>{initials(c.name)}</div>
+              <div className="candidate-name-content">
                 <div className="name-text candidate-group-name">
-                  <span>{c.name}</span>
+                  <span className="candidate-name-text">{c.name}</span>
                   {isGroup && groupIndex === 0 && (
-                    <>
-                      <span className="candidate-submission-chip">{groupSize} submissions</span>
+                    <span className="candidate-submission-chip">
+                      <span>{groupSize} submissions</span>
                       <button
                         className={`candidate-group-toggle${collapsed[mobile] ? ' collapsed' : ''}`}
                         type="button"
@@ -1494,10 +1526,10 @@ export default function CandidatesPage() {
                       >
                         <ChevronDown size={12} strokeWidth={2.4} />
                       </button>
-                    </>
+                    </span>
                   )}
                 </div>
-                <div className="sub-text">{c.location || [c.city, c.state].filter(Boolean).join(', ')}</div>
+                <div className="sub-text candidate-location-text">{c.location || [c.city, c.state].filter(Boolean).join(', ') || '-'}</div>
               </div>
             </div>
           </td>
