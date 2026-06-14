@@ -104,6 +104,8 @@ const configs = {
 }
 
 const mandateSearchFields = ['client_name', 'role', 'consultant', 'team_lead', 'location', 'vertical']
+const candidateSearchFields = ['consultant', 'client_name', 'role', 'designation', 'mobile', 'email', 'skills']
+const candidateContainsFields = new Set(candidateSearchFields)
 
 Object.values(configs).forEach(config => {
   Object.entries(config.fields).forEach(([field, meta]) => {
@@ -202,11 +204,22 @@ function isPlainMandatePrompt(prompt) {
   return /^[a-z0-9][\w\s&.-]+$/i.test(clean(prompt))
 }
 
+function isPlainCandidatePrompt(prompt) {
+  const text = lower(prompt)
+  if (!text || /\b(CA\d+|CL\d+|JB\d+)\b/i.test(prompt)) return false
+  if (/[<>=]/.test(text) || /\b(before|after|on|between|salary|ctc|experience|notice|date|status|stage|relocate|consultant|client|role|job|designation|mobile|phone|email|skills?)\b/i.test(text)) return false
+  return /^[a-z0-9][\w\s@+&.-]+$/i.test(clean(prompt))
+}
+
 function validateAiFilters(page, data, prompt = '') {
   const config = configs[page]
   if (page === 'mandates' && isPlainMandatePrompt(prompt)) {
     const value = clean(prompt).replace(/^mandates?\s+(?:for\s+)?/i, '').replace(/\bmandates?\b/gi, '').trim()
     if (value) return { mode: 'any', conditions: mandateSearchFields.map(field => ({ field, operator: 'contains', value })) }
+  }
+  if (page === 'candidates' && isPlainCandidatePrompt(prompt)) {
+    const value = clean(prompt).replace(/^(candidate|candidates)\s+/i, '').trim()
+    if (value) return { mode: 'any', conditions: candidateSearchFields.map(field => ({ field, operator: 'contains', value })) }
   }
   const normalized = (Array.isArray(data?.conditions) ? data.conditions : [])
     .map(condition => {
@@ -214,6 +227,10 @@ function validateAiFilters(page, data, prompt = '') {
       if (page === 'mandates') {
         const field = aliasMap(config).get(lower(next.field)) || next.field
         if (mandateSearchFields.includes(field) && !isExactPrompt(prompt)) next.operator = 'contains'
+      }
+      if (page === 'candidates') {
+        const field = aliasMap(config).get(lower(next.field)) || next.field
+        if (candidateContainsFields.has(field)) next.operator = 'contains'
       }
       return normalizeCondition(config, next)
     })
@@ -225,7 +242,7 @@ function validateAiFilters(page, data, prompt = '') {
     seen.add(key)
     return true
   })
-  if (!conditions.length && page === 'mandates' && clean(prompt)) return parsePrompt(page, prompt)
+  if (!conditions.length && clean(prompt)) return parsePrompt(page, prompt)
   return conditions.length ? { conditions } : null
 }
 
@@ -263,6 +280,9 @@ function parsePrompt(page, prompt) {
     ['location', /(?:location|city|current location)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date|for)\b|$)|\bin\s+([a-z][\w\s.-]*?)(?=\s+(?:for|client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date)\b|$)/i],
     ['vertical', /(?:vertical|domain)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:client|consultant|team lead|role|location|budget|priority|mandate status|status|date|in|for)\b|$)/i],
     ['designation', /designation\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)$/i],
+    ['mobile', /(?:mobile|phone|contact number)\s+(?:contains\s+|has\s+|is\s+|equals\s+)?([+\d][\d\s+.-]*?)$/i],
+    ['email', /email\s+(?:contains\s+|has\s+|is\s+|equals\s+)?([a-z0-9@._+-]*?)$/i],
+    ['skills', /skills?\s+(?:contains\s+|has\s+|is\s+|equals\s+)?([a-z0-9+#.\s-]*?)$/i],
     ['organisation', /(?:organisation|organization|company)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)$/i],
     ['status', /status\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)$/i]
   ]

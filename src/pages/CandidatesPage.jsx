@@ -42,11 +42,6 @@ const formatMonth = (value) => {
   return date.toLocaleString('en-US', { month: 'short' })
 }
 
-const formatFilterChip = (condition) => {
-  const value = Array.isArray(condition.value) ? condition.value.join(' - ') : condition.value
-  return `${condition.field} ${condition.operator}${value !== undefined && value !== null ? ` ${value}` : ''}`
-}
-
 const getReadableClientId = (candidate, dbClients) => {
   if (!candidate.client || candidate.client.trim() === '') {
     return 'Unassigned'
@@ -274,7 +269,6 @@ export default function CandidatesPage() {
   const [aiAppliedPrompt, setAiAppliedPrompt] = useState('')
   const [aiFilterLoading, setAiFilterLoading] = useState(false)
   const [aiFilterError, setAiFilterError] = useState('')
-  const [aiFilterCount, setAiFilterCount] = useState(null)
   const [sortField, setSortField] = useState('')
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
@@ -570,7 +564,6 @@ export default function CandidatesPage() {
     setAiFilters(null)
     setAiAppliedPrompt('')
     setAiFilterError('')
-    setAiFilterCount(null)
     setPage(1)
   }
 
@@ -579,7 +572,6 @@ export default function CandidatesPage() {
     setAiFilters(null)
     setAiAppliedPrompt('')
     setAiFilterError('')
-    setAiFilterCount(null)
     setPage(1)
   }
 
@@ -815,14 +807,12 @@ export default function CandidatesPage() {
 
       setAiFilters(payload.filters || null)
       setAiAppliedPrompt(prompt)
-      setAiFilterCount(Number.isFinite(payload.matchedCount) ? payload.matchedCount : null)
       setPage(1)
     } catch (err) {
       notifyAiQuota(err.message)
       setAiFilterError(err.message)
       setAiFilters(null)
       setAiAppliedPrompt('')
-      setAiFilterCount(null)
     } finally {
       setAiFilterLoading(false)
     }
@@ -1708,19 +1698,6 @@ export default function CandidatesPage() {
         </div>
       )}
 
-      {aiFilters && (
-        <div style={{ marginBottom:12, fontSize:12.5, color:'var(--gray-500)' }}>
-          AI filter active{aiFilterCount !== null ? ` · ${aiFilterCount} match${aiFilterCount === 1 ? '' : 'es'}` : ''}
-        </div>
-      )}
-
-      {aiFilters && (
-        <div className="ai-filter-chips">
-          {(aiFilters.conditions || []).map((condition, index) => (
-            <span className="tag-chip" key={`${condition.field}-${index}`}>{formatFilterChip(condition)}</span>
-          ))}
-        </div>
-      )}
 
       {/* Table */}
       <div className="table-card">

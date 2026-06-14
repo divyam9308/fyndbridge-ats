@@ -119,9 +119,9 @@ function applyQueryFilters(query, page, filters, mapping, extras = {}) {
 
   for (const condition of normalized) {
     const definitions = mapping[condition.field] || []
-    if (!definitions.length) continue
     const extraQuery = extras.applyCondition ? extras.applyCondition(query, condition) : query
     query = extraQuery
+    if (!definitions.length) continue
     for (const definition of definitions) {
       query = applySingleCondition(query, definition, condition)
     }

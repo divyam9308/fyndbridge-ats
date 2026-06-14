@@ -462,7 +462,7 @@ const CANDIDATE_FILTER_MAPPING = {
   organisation: [{ column: 'current_organisation', kind: 'text' }],
   experience: [{ column: 'experience_years', kind: 'number' }],
   date: [{ column: 'created_at', kind: 'date' }],
-  skills: [{ column: 'skills', kind: 'array' }],
+  skills: [],
   current_location: [{ column: 'location', kind: 'text' }, { column: 'city', kind: 'text' }],
   notice_period: [{ column: 'notice_period', kind: 'number' }],
   open_to_relocate: [{ column: 'open_to_relocate', kind: 'boolean' }],
@@ -476,6 +476,60 @@ const CANDIDATE_FILTER_MAPPING = {
   expected_ctc: [{ column: 'candidate_associations.expected_salary', kind: 'number' }],
   comments: [{ column: 'candidate_associations.notes', kind: 'text' }],
   status: [{ column: 'candidate_associations.status', kind: 'text' }]
+}
+const ASSOCIATION_FILTER_FIELDS = new Set(['consultant', 'client_name', 'role', 'current_ctc', 'expected_ctc', 'comments', 'status'])
+
+function skillVariants(value) {
+  const text = cleanText(value)
+  if (!text) return []
+  const title = text.toLowerCase().replace(/\b\w/g, char => char.toUpperCase())
+  return [...new Set([text, text.toLowerCase(), text.toUpperCase(), title])]
+}
+
+async function resolveSkillCandidateIds(filters) {
+  const skillConditions = (filters?.conditions || []).filter(condition => String(condition.field || '').toLowerCase() === 'skills')
+  if (!skillConditions.length) return null
+  const ids = new Set()
+  for (const condition of skillConditions) {
+    const values = Array.isArray(condition.value) ? condition.value : [condition.value]
+    for (const value of values) {
+      for (const variant of skillVariants(value)) {
+        const { data, error } = await supabase.from('candidates').select('id').contains('skills', [variant]).limit(10000)
+        if (error) throw error
+        ;(data || []).forEach(row => ids.add(row.id))
+      }
+    }
+  }
+  return [...ids]
+}
+
+async function resolveAssociationCandidateIds(filters) {
+  if (filters?.mode !== 'any') return null
+  const conditions = (filters.conditions || []).filter(condition => ASSOCIATION_FILTER_FIELDS.has(String(condition.field || '').toLowerCase()))
+  if (!conditions.length) return null
+  const clauses = conditions.map(condition => {
+    const value = cleanText(condition.value).replace(/,/g, '\\,').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+    if (!value) return null
+    if (condition.field === 'consultant') return `consultant_name.ilike.*${value}*`
+    if (condition.field === 'client_name') return `client_name.ilike.*${value}*`
+    if (condition.field === 'role') return `job_title.ilike.*${value}*`
+    if (condition.field === 'comments') return `notes.ilike.*${value}*`
+    if (condition.field === 'status') return `status.ilike.*${value}*`
+    return null
+  }).filter(Boolean)
+  if (!clauses.length) return []
+  const { data, error } = await supabase
+    .from('candidate_associations')
+    .select('candidate_id')
+    .or(clauses.join(','))
+    .limit(10000)
+  if (error) throw error
+  return [...new Set((data || []).map(row => row.candidate_id).filter(Boolean))]
+}
+
+function candidateFilterMappingFor(filters) {
+  if (filters?.mode !== 'any') return CANDIDATE_FILTER_MAPPING
+  return Object.fromEntries(Object.entries(CANDIDATE_FILTER_MAPPING).filter(([field]) => !ASSOCIATION_FILTER_FIELDS.has(field)))
 }
 
 function missingAssociationColumn(error) {
@@ -671,6 +725,10 @@ async function listCandidates(req, res) {
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
     const to = from + limit - 1
+    const aiFilters = parseJsonFilter(req.query.ai_filters)
+    const skillCandidateIds = await resolveSkillCandidateIds(aiFilters)
+    const associationCandidateIds = await resolveAssociationCandidateIds(aiFilters)
+    const aiAssociationFilter = aiFilters?.mode !== 'any' && (aiFilters?.conditions || []).some((condition) => ASSOCIATION_FILTER_FIELDS.has(String(condition.field || '').toLowerCase()))
 
     const hasAssocFilters = req.query.job_title || 
                             req.query.job_id ||
@@ -679,13 +737,7 @@ async function listCandidates(req, res) {
                             req.query.status || 
                             req.query.salary_min || 
                             req.query.salary_max || 
-                            (req.query.ai_filters && (
-                              req.query.ai_filters.includes('job') ||
-                              req.query.ai_filters.includes('client') ||
-                              req.query.ai_filters.includes('status') ||
-                              req.query.ai_filters.includes('salary') ||
-                              req.query.ai_filters.includes('consultant')
-                            ));
+                            aiAssociationFilter
 
     let relationSelect = 'candidate_associations(*)'
     if (hasAssocFilters) {
@@ -770,8 +822,30 @@ async function listCandidates(req, res) {
       )
     }
 
-    const aiFilters = parseJsonFilter(req.query.ai_filters)
-    query = applyQueryFilters(query, 'candidates', aiFilters, CANDIDATE_FILTER_MAPPING).query
+    const appliedAi = applyQueryFilters(query, 'candidates', aiFilters, candidateFilterMappingFor(aiFilters), {
+      applyCondition(nextQuery, condition) {
+        if (condition.field !== 'skills') return nextQuery
+        if (!skillCandidateIds?.length) return nextQuery.eq('id', '__no_match__')
+        return nextQuery.in('id', skillCandidateIds)
+      },
+      orClauses(normalized) {
+        const clauses = []
+        if (skillCandidateIds?.length && normalized.some(condition => condition.field === 'skills')) clauses.push(`id.in.(${skillCandidateIds.join(',')})`)
+        if (associationCandidateIds?.length) clauses.push(`id.in.(${associationCandidateIds.join(',')})`)
+        return clauses
+      }
+    })
+    query = appliedAi.query
+    if (aiFilters) {
+      console.log('[candidates ai filter query]', {
+        prompt: req.query.ai_prompt || '',
+        filters: aiFilters,
+        normalized: appliedAi.normalized,
+        skillCandidateIds: skillCandidateIds?.length || 0,
+        associationCandidateIds: associationCandidateIds?.length || 0,
+        relationSelect
+      })
+    }
     const { data, error, count } = await query.range(from, to)
 
     if (error) {
@@ -819,7 +893,7 @@ async function listCandidates(req, res) {
       }
     }
 
-    console.log('[candidates pagination]', { page, limit, returned: flattened.length, total: count || 0 })
+    console.log('[candidates pagination]', { page, limit, returned: flattened.length, total: count || 0, ai: Boolean(aiFilters) })
     return res.json({
       data: flattened,
       total: count || 0,
@@ -1243,11 +1317,14 @@ async function buildAiCandidateFilters(req, res) {
       schemaName: 'candidate_filter',
       temperature: 0
     })
-    const filters = validateAiFilters('candidates', parsed)
+    const filters = validateAiFilters('candidates', parsed, prompt)
     if (!filters) {
-      return res.status(400).json({ error: 'Could not parse Candidates filter.' })
+      const fallback = { mode: 'any', conditions: ['consultant', 'client_name', 'role', 'designation', 'mobile', 'email', 'skills'].map(field => ({ field, operator: 'contains', value: prompt })) }
+      console.log('[candidates ai filter parsed fallback]', { prompt, parsed, filters: fallback })
+      return res.json({ filters: fallback })
     }
 
+    console.log('[candidates ai filter parsed]', { prompt, parsed, filters })
     return res.json({ filters })
   } catch (err) {
     if (err.statusCode) {
