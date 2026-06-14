@@ -6,7 +6,8 @@ const supabase = require('../services/supabaseAdmin')
 const { parseResume } = require('../services/resumeParser')
 const { RESUME_BUCKET, prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplicate, checkLinkedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
 const { callAiJson } = require('../services/aiProvider')
-const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
+const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema } = require('../services/filterEngine')
+const { applyQueryFilters } = require('../services/queryFilters')
 
 const VALID_STATUSES = [
   'Interested',
@@ -116,11 +117,6 @@ function isDuplicateValue(value) {
 function displayIdNumber(value, prefix) {
   const match = String(value || '').match(new RegExp(`^${prefix}(\\d+)$`, 'i'))
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
-}
-
-function candidateDisplayIdNumber(value) {
-  const number = displayIdNumber(value, 'CA')
-  return number < Number.MAX_SAFE_INTEGER ? number : 0
 }
 
 async function ensureCandidateDisplayIds() {
@@ -457,33 +453,29 @@ async function findExactAssociationDuplicate({ email, mobileNumber, clientId, jo
   return data ? flattenAssociation(data) : null
 }
 
-function candidateFilterValue(row, field) {
-  const values = {
-    candidate_id: row.candidate_display_id,
-    candidate_name: row.full_name,
-    consultant: row.consultant_name,
-    email: row.email,
-    mobile: row.mobile_number,
-    designation: row.current_designation,
-    organisation: row.current_organisation || row.current_company,
-    experience: row.experience_years,
-    client_id: row.client_display_id || row.client_id,
-    client_name: row.client_name,
-    role: row.job_title,
-    date: row.created_at,
-    skills: Array.isArray(row.skills) ? row.skills.join(', ') : row.skills,
-    current_ctc: row.current_salary,
-    current_location: row.location || row.city,
-    notice_period: row.notice_period,
-    expected_ctc: row.expected_salary,
-    open_to_relocate: row.open_to_relocate,
-    comments: row.notes,
-    status: row.status,
-    month: row.created_at ? new Date(row.created_at).toLocaleString('en-US', { month: 'long' }) : '',
-    linkedin: row.linkedin_url,
-    cv: row.cv_link || row.resume_url
-  }
-  return values[field]
+const CANDIDATE_FILTER_MAPPING = {
+  candidate_id: [{ column: 'candidate_display_id', kind: 'text' }],
+  candidate_name: [{ column: 'full_name', kind: 'text' }],
+  email: [{ column: 'email', kind: 'text' }],
+  mobile: [{ column: 'mobile_number', kind: 'text' }],
+  designation: [{ column: 'current_designation', kind: 'text' }],
+  organisation: [{ column: 'current_organisation', kind: 'text' }],
+  experience: [{ column: 'experience_years', kind: 'number' }],
+  date: [{ column: 'created_at', kind: 'date' }],
+  skills: [{ column: 'skills', kind: 'array' }],
+  current_location: [{ column: 'location', kind: 'text' }, { column: 'city', kind: 'text' }],
+  notice_period: [{ column: 'notice_period', kind: 'number' }],
+  open_to_relocate: [{ column: 'open_to_relocate', kind: 'boolean' }],
+  education: [{ column: 'education', kind: 'text' }],
+  linkedin: [{ column: 'linkedin_url', kind: 'text' }],
+  cv: [{ column: 'cv_link', kind: 'text' }, { column: 'resume_url', kind: 'text' }],
+  consultant: [{ column: 'candidate_associations.consultant_name', kind: 'text' }],
+  client_name: [{ column: 'candidate_associations.client_name', kind: 'text' }],
+  role: [{ column: 'candidate_associations.job_title', kind: 'text' }],
+  current_ctc: [{ column: 'candidate_associations.current_salary', kind: 'number' }],
+  expected_ctc: [{ column: 'candidate_associations.expected_salary', kind: 'number' }],
+  comments: [{ column: 'candidate_associations.notes', kind: 'text' }],
+  status: [{ column: 'candidate_associations.status', kind: 'text' }]
 }
 
 function missingAssociationColumn(error) {
@@ -705,7 +697,7 @@ async function listCandidates(req, res) {
       .select(`*, ${relationSelect}`, { count: 'exact' })
 
     if (req.query.sortField === 'candidate_id') {
-      query = query.order('created_at', { ascending: false })
+      query = query.order('candidate_display_id', { ascending: req.query.sortDirection !== 'desc' })
     } else if (req.query.sortField === 'candidate_name') {
       query = query.order('full_name', { ascending: req.query.sortDirection !== 'desc' })
     } else {
@@ -779,17 +771,14 @@ async function listCandidates(req, res) {
     }
 
     const aiFilters = parseJsonFilter(req.query.ai_filters)
-    const { data, error, count } = await (aiFilters ? query.limit(10000) : query.range(from, to))
+    query = applyQueryFilters(query, 'candidates', aiFilters, CANDIDATE_FILTER_MAPPING).query
+    const { data, error, count } = await query.range(from, to)
 
     if (error) {
       throw error
     }
 
     const candidates = data || []
-    if (req.query.sortField === 'candidate_id') {
-      const direction = req.query.sortDirection === 'desc' ? -1 : 1
-      candidates.sort((a, b) => direction * (candidateDisplayIdNumber(a.candidate_display_id) - candidateDisplayIdNumber(b.candidate_display_id)))
-    }
 
     let flattened = []
     for (const candidate of candidates) {
@@ -828,13 +817,14 @@ async function listCandidates(req, res) {
         const clientDisplayIds = new Map((clientRows || []).map(client => [client.id, client.client_display_id]))
         flattened = flattened.map(row => ({ ...row, client_display_id: clientDisplayIds.get(row.client_id) || '' }))
       }
-      flattened = applySharedFilters('candidates', flattened, aiFilters, candidateFilterValue)
     }
 
+    console.log('[candidates pagination]', { page, limit, returned: flattened.length, total: count || 0 })
     return res.json({
-      data: aiFilters ? flattened.slice(from, to + 1) : flattened,
-      total: aiFilters ? flattened.length : count || 0,
+      data: flattened,
+      total: count || 0,
       page,
+      totalPages: Math.max(1, Math.ceil((count || 0) / limit)),
       limit
     })
   } catch (err) {

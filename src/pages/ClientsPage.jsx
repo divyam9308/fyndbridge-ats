@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
+import PaginationBar from '../components/PaginationBar'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -98,8 +99,6 @@ const getCurrentUser = () => {
   }
 }
 
-const getNumericId = (id) => Number(String(id || '').replace(/\D/g, '')) || 0
-
 const getCanonicalClients = (clients) => {
   const map = new Map()
   clients.forEach(client => {
@@ -150,6 +149,7 @@ export default function ClientsPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const [clients, setClients] = useState([])
+  const [allClients, setAllClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -173,6 +173,9 @@ export default function ClientsPage() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState('All')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [totalClients, setTotalClients] = useState(0)
   const [statusOpen, setStatusOpen] = useState(false)
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
   const [selectedExistingClientId, setSelectedExistingClientId] = useState(null)
@@ -205,30 +208,46 @@ export default function ClientsPage() {
     return () => { document.body.style.overflow = previous }
   }, [isOpen, followUpClient, clientDuplicate, clientAlreadyAdded])
 
+  const fetchClientOptions = useCallback(async () => {
+    const res = await fetch('/api/clients?all=true')
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) setAllClients(data.data || [])
+  }, [])
+
   const fetchClients = useCallback(async ({ showLoading = true } = {}) => {
     try {
       if (showLoading) setLoading(true)
       const params = new URLSearchParams()
+      params.set('page', String(page))
+      params.set('limit', String(pageSize))
       if (sortField) {
         params.set('sortField', sortField)
         params.set('sortDirection', sortDirection)
       }
+      if (statusFilter !== 'All') params.set('status', statusFilter)
       const res = await fetch(`/api/clients${params.toString() ? `?${params.toString()}` : ''}`)
       if (!res.ok) throw new Error('Failed to fetch clients from server.')
       const data = await res.json()
       setClients(data.data || [])
+      setTotalClients(Number(data.total) || 0)
+      setPage(Number(data.page) || 1)
       setError(null)
     } catch (err) {
       setError(err.message)
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [sortDirection, sortField])
+  }, [page, pageSize, sortDirection, sortField, statusFilter])
 
   useEffect(() => {
     const timer = window.setTimeout(fetchClients, 0)
     return () => window.clearTimeout(timer)
   }, [fetchClients])
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchClientOptions, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchClientOptions])
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {
@@ -285,29 +304,9 @@ export default function ClientsPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [statusOpen])
 
-  const sortedClients = useMemo(() => {
-    const rows = [...clients]
-    if (sortField === 'client_id') {
-      rows.sort((a, b) => {
-        const result = getNumericId(a.client_display_id) - getNumericId(b.client_display_id)
-        return sortDirection === 'asc' ? result : -result
-      })
-    } else if (sortField === 'client_name') {
-      rows.sort((a, b) => {
-        const result = String(a.client_name || a.name || '').localeCompare(String(b.client_name || b.name || ''))
-        return sortDirection === 'asc' ? result : -result
-      })
-    }
-    return rows
-  }, [clients, sortDirection, sortField])
-
-  const filteredClients = useMemo(() => (
-    statusFilter === 'All' ? sortedClients : sortedClients.filter(client => statusFilter === '-' ? !client.status || client.status === '-' : client.status === statusFilter)
-  ), [sortedClients, statusFilter])
-
   const groupedClients = useMemo(() => {
     const groups = new Map()
-    filteredClients.forEach((client) => {
+    clients.forEach((client) => {
       const key = client.client_group_id || client.id
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key).push(client)
@@ -318,10 +317,10 @@ export default function ClientsPage() {
       const selected = contacts.find(contact => contact.id === selectedId) || contacts[0]
       return { ...selected, _contact_group_id: key, _contacts: contacts }
     })
-  }, [filteredClients, selectedContacts])
+  }, [clients, selectedContacts])
 
   const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'designation')
-  const canonicalClients = useMemo(() => getCanonicalClients(clients), [clients])
+  const canonicalClients = useMemo(() => getCanonicalClients(allClients), [allClients])
   const matchingClients = useMemo(() => (
     canonicalClients
       .filter(client => normalizeText(client.client_name || client.name).includes(normalizeText(form.client_name)))
@@ -521,6 +520,7 @@ export default function ClientsPage() {
       setEditingClient(null)
       setAddingContactPerson(false)
       await fetchClients({ showLoading: false })
+      await fetchClientOptions()
     } catch (err) {
       if (err.duplicate) {
         setClientDuplicate({ client: { ...form }, existing: err.duplicate.existing, message: err.message })
@@ -606,6 +606,7 @@ export default function ClientsPage() {
       setFollowUpClient(null)
       setFollowUpForm({ follow_up_date: '', follow_up_comments: '' })
       await fetchClients()
+      await fetchClientOptions()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -655,6 +656,7 @@ export default function ClientsPage() {
       setSortField(field)
       setSortDirection('asc')
     }
+    setPage(1)
     setSortOpen(false)
   }
 
@@ -788,17 +790,17 @@ export default function ClientsPage() {
           </button>
           {statusOpen && (
             <div className="filter-dropdown candidate-sort-dropdown">
-              <button className="candidate-columns-action" type="button" onClick={() => { setStatusFilter('All'); setStatusOpen(false) }}>All Statuses</button>
-              <button className="candidate-columns-action" type="button" onClick={() => { setStatusFilter('-'); setStatusOpen(false) }}>-</button>
+              <button className="candidate-columns-action" type="button" onClick={() => { setStatusFilter('All'); setPage(1); setStatusOpen(false) }}>All Statuses</button>
+              <button className="candidate-columns-action" type="button" onClick={() => { setStatusFilter('-'); setPage(1); setStatusOpen(false) }}>-</button>
               {STATUSES.map(status => (
-                <button className="candidate-columns-action" type="button" key={status} onClick={() => { setStatusFilter(status); setStatusOpen(false) }}>
+                <button className="candidate-columns-action" type="button" key={status} onClick={() => { setStatusFilter(status); setPage(1); setStatusOpen(false) }}>
                   {status}
                 </button>
               ))}
             </div>
           )}
         </div>
-        <button className="filter-clear" type="button" onClick={() => setStatusFilter('All')}>Clear Filter</button>
+        <button className="filter-clear" type="button" onClick={() => { setStatusFilter('All'); setPage(1) }}>Clear Filter</button>
         <div className="filter-divider" />
         <span className="filter-label">Sort By</span>
         <div className="candidate-sort-control" ref={sortDropdownRef}>
@@ -816,7 +818,7 @@ export default function ClientsPage() {
             </div>
           )}
         </div>
-        <button className="filter-clear" type="button" onClick={() => { setSortField(''); setSortDirection('asc') }}>Clear</button>
+        <button className="filter-clear" type="button" onClick={() => { setSortField(''); setSortDirection('asc'); setPage(1) }}>Clear</button>
       </div>
 
       <div className="table-card">
@@ -851,6 +853,15 @@ export default function ClientsPage() {
           </table>
         )}
       </div>
+      <PaginationBar
+        page={page}
+        totalPages={Math.max(1, Math.ceil(totalClients / pageSize))}
+        total={totalClients}
+        pageSize={pageSize}
+        loading={loading}
+        onPageChange={setPage}
+        onPageSizeChange={(value) => { setPageSize(value); setPage(1) }}
+      />
 
       {isOpen && createPortal((
         <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && setIsOpen(false)}>

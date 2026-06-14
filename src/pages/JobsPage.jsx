@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
+import PaginationBar from '../components/PaginationBar'
 import TablePopover from '../components/TablePopover'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
@@ -65,6 +66,7 @@ export default function JobsPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const [jobs, setJobs] = useState([])
+  const [allJobs, setAllJobs] = useState([])
   const [dbClients, setDbClients] = useState([])
   const [userOptions, setUserOptions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -82,6 +84,9 @@ export default function JobsPage() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
   const [columnsOpen, setColumnsOpen] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [totalJobs, setTotalJobs] = useState(0)
   const [visibleColumns, setVisibleColumns] = useState(DEFAULT_MANDATE_COLUMN_KEYS)
   const [pendingColumns, setPendingColumns] = useState(DEFAULT_MANDATE_COLUMN_KEYS)
   const [savedColumns, setSavedColumns] = useState(null)
@@ -108,6 +113,8 @@ export default function JobsPage() {
     try {
       setLoading(true)
       const params = new URLSearchParams()
+      params.set('page', String(page))
+      params.set('limit', String(pageSize))
       if (aiFilters) params.set('ai_filters', JSON.stringify(aiFilters))
       if (sortField) {
         params.set('sortField', sortField)
@@ -115,7 +122,7 @@ export default function JobsPage() {
       }
       const [jobsRes, clientsRes, usersRes] = await Promise.all([
         fetch(`/api/jobs?${params.toString()}`),
-        fetch('/api/clients'),
+        fetch('/api/clients?all=true'),
         fetch('/api/jobs/users/options')
       ])
       if (!jobsRes.ok) throw new Error('Failed to fetch mandates.')
@@ -124,6 +131,8 @@ export default function JobsPage() {
       const clientsData = await clientsRes.json()
       const usersData = usersRes.ok ? await usersRes.json() : { data: [] }
       setJobs(jobsData.data || [])
+      setTotalJobs(Number(jobsData.total) || 0)
+      setPage(Number(jobsData.page) || 1)
       setDbClients(clientsData.data || [])
       setUserOptions(usersData.data || [])
       setError(null)
@@ -132,7 +141,7 @@ export default function JobsPage() {
     } finally {
       setLoading(false)
     }
-  }, [aiFilters, sortDirection, sortField])
+  }, [aiFilters, page, pageSize, sortDirection, sortField])
 
   useEffect(() => {
     const timer = window.setTimeout(fetchData, 0)
@@ -161,10 +170,20 @@ export default function JobsPage() {
   }, [])
 
   const refreshClientOptions = useCallback(async () => {
-    const res = await fetch('/api/clients')
-    const data = await res.json().catch(() => ({}))
-    if (res.ok) setDbClients(data.data || [])
+    const [clientsRes, jobsRes] = await Promise.all([
+      fetch('/api/clients?all=true'),
+      fetch('/api/jobs?all=true')
+    ])
+    const clientsData = await clientsRes.json().catch(() => ({}))
+    const jobsData = await jobsRes.json().catch(() => ({}))
+    if (clientsRes.ok) setDbClients(clientsData.data || [])
+    if (jobsRes.ok) setAllJobs(jobsData.data || [])
   }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(refreshClientOptions, 0)
+    return () => window.clearTimeout(timer)
+  }, [refreshClientOptions])
 
   useEffect(() => {
     const refreshClients = () => refreshClientOptions()
@@ -284,14 +303,14 @@ export default function JobsPage() {
     .filter(client => `${clientName(client)} ${client.client_display_id || ''}`.toLowerCase().includes(clientSearch.trim().toLowerCase())), [clientOptions, clientSearch])
   const roleOptions = useMemo(() => {
     const map = new Map()
-    jobs.forEach(job => {
+    allJobs.forEach(job => {
       const role = (job.role || job.title || '').trim()
       if (!role) return
       const key = role.toLowerCase()
       if (!map.has(key)) map.set(key, { role, job_display_id: job.job_display_id || job.job_id || '' })
     })
     return [...map.values()].sort((a, b) => a.role.localeCompare(b.role, undefined, { sensitivity: 'base' }))
-  }, [jobs])
+  }, [allJobs])
   const matchingRoles = useMemo(() => roleOptions
     .filter(job => `${job.role} ${job.job_display_id || ''}`.toLowerCase().includes(roleSearch.trim().toLowerCase())), [roleOptions, roleSearch])
   const matchingSectors = useMemo(() => SECTOR_OPTIONS.filter(value => value.toLowerCase().includes(sectorSearch.trim().toLowerCase())), [sectorSearch])
@@ -371,6 +390,7 @@ export default function JobsPage() {
       setIsOpen(false)
       setEditingJob(null)
       await fetchData()
+      await refreshClientOptions()
       window.dispatchEvent(new Event('ats:jobs-updated'))
     } catch (err) {
       setErrors({ form: err.message })
@@ -397,6 +417,7 @@ export default function JobsPage() {
         return
       }
       setAiFilters(data.filters)
+      setPage(1)
     } finally {
       setAiLoading(false)
     }
@@ -407,11 +428,13 @@ export default function JobsPage() {
     setAiFilters(null)
     setAiError('')
     setAiLoading(false)
+    setPage(1)
   }
 
   const selectSort = (field) => {
     setSortDirection(current => sortField === field && current === 'asc' ? 'desc' : 'asc')
     setSortField(field)
+    setPage(1)
     setSortOpen(false)
   }
 
@@ -591,6 +614,15 @@ export default function JobsPage() {
           </div>
         )}
       </div>
+      <PaginationBar
+        page={page}
+        totalPages={Math.max(1, Math.ceil(totalJobs / pageSize))}
+        total={totalJobs}
+        pageSize={pageSize}
+        loading={loading}
+        onPageChange={setPage}
+        onPageSizeChange={(value) => { setPageSize(value); setPage(1) }}
+      />
 
       {tablePopover && (() => {
         const job = jobs.find(item => item.id === tablePopover.id)

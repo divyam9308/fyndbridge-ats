@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
+import PaginationBar from '../components/PaginationBar'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { logCandidateCvOpen, resolveCandidateCvHref } from '../utils/candidateUtils'
@@ -262,8 +263,8 @@ export default function CandidatesPage() {
   const [duplicateMoreOpen, setDuplicateMoreOpen] = useState(false)
   const [cvDuplicateNotice, setCvDuplicateNotice] = useState(null)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
   const [totalCandidates, setTotalCandidates] = useState(0)
-  const pageSize = 50
   const activeConsultantName = getConsultantNameFromUser(getCurrentUser())
 
   // Filters
@@ -289,8 +290,8 @@ export default function CandidatesPage() {
 
   const refreshOptionData = useCallback(async () => {
     const [clientsRes, jobsRes] = await Promise.all([
-      fetch('/api/clients'),
-      fetch('/api/jobs')
+      fetch('/api/clients?all=true'),
+      fetch('/api/jobs?all=true')
     ])
     const clientsData = await clientsRes.json().catch(() => ({}))
     const jobsData = await jobsRes.json().catch(() => ({}))
@@ -1759,12 +1760,15 @@ export default function CandidatesPage() {
         )}
       </div>
 
-      <div className="pagination-bar">
-        <button className="btn-secondary" disabled={page <= 1 || loadingCandidates} onClick={() => setPage(p => Math.max(1, p - 1))}>Previous</button>
-        <span>Page {page} of {Math.max(1, Math.ceil(totalCandidates / pageSize))}</span>
-        <span>{totalCandidates.toLocaleString('en-IN')} total</span>
-        <button className="btn-secondary" disabled={page >= Math.max(1, Math.ceil(totalCandidates / pageSize)) || loadingCandidates} onClick={() => setPage(p => p + 1)}>Next</button>
-      </div>
+      <PaginationBar
+        page={page}
+        totalPages={Math.max(1, Math.ceil(totalCandidates / pageSize))}
+        total={totalCandidates}
+        pageSize={pageSize}
+        loading={loadingCandidates}
+        onPageChange={setPage}
+        onPageSizeChange={(value) => { setPageSize(value); setPage(1) }}
+      />
 
       {selectedCandidate && createPortal((
         <div className="candidate-drawer-overlay" onClick={e => e.target === e.currentTarget && setSelectedCandidate(null)}>

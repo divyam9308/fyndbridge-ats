@@ -159,7 +159,7 @@ export default function ClientDetailPage() {
         if (!clientRes.ok) throw new Error('Failed to fetch client details.')
         const clientData = await clientRes.json()
         const [jobsRes, candidateRows] = await Promise.all([
-          fetch(`/api/jobs?client_id=${clientId}`),
+          fetch(`/api/jobs?client_id=${clientId}&all=true`),
           fetchAllCandidates(clientData),
         ])
         if (!jobsRes.ok) throw new Error('Failed to fetch client jobs.')

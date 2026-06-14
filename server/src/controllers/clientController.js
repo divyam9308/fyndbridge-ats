@@ -367,8 +367,13 @@ async function listClients(req, res) {
   try {
     await ensureClientDisplayIds()
     const sort = normalizeSort(req.query)
+    const paginate = String(req.query.all || '').toLowerCase() !== 'true'
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
+    const from = (page - 1) * limit
+    const to = from + limit - 1
 
-    let query = supabase.from('clients').select('*')
+    let query = supabase.from('clients').select('*', { count: paginate ? 'exact' : undefined })
     if (req.query.search) {
       const search = clean(req.query.search)
       query = query.or([
@@ -382,11 +387,24 @@ async function listClients(req, res) {
         `contact.ilike.%${search}%`
       ].join(','))
     }
-    const { data, error } = await query
+    if (req.query.status && req.query.status !== 'All') {
+      if (req.query.status === '-') {
+        query = query.or('status.is.null,status.eq.')
+      } else {
+        query = query.eq('status', clean(req.query.status))
+      }
+    }
+    if (sort.field === 'client_id') query = query.order('client_display_id', { ascending: sort.direction !== 'desc' })
+    else if (sort.field === 'client_name') query = query.order('client_name', { ascending: sort.direction !== 'desc' }).order('name', { ascending: sort.direction !== 'desc' })
+    else query = query.order('created_at', { ascending: false })
+    if (paginate) query = query.range(from, to)
+    const { data, error, count } = await query
     if (error) throw error
-    const sortedData = sortClientRows(data || [], sort)
+    const sortedData = paginate ? (data || []) : sortClientRows(data || [], sort)
 
-    const { data: jobs, error: jobsError } = await supabase.from('jobs').select('client_id, status, mandate_status')
+    const clientIds = sortedData.map((client) => client.id)
+    const jobsQuery = supabase.from('jobs').select('client_id, status, mandate_status')
+    const { data: jobs, error: jobsError } = clientIds.length ? await jobsQuery.in('client_id', clientIds) : { data: [], error: null }
     if (jobsError) throw jobsError
 
     const activeJobsMap = {}
@@ -398,9 +416,11 @@ async function listClients(req, res) {
     })
 
     const followUpsMap = await loadFollowUps(sortedData.map((client) => client.id))
-    return res.json({
-      data: sortedData.map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || [], jobsByClient[client.id] || []))
-    })
+    const rows = sortedData.map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || [], jobsByClient[client.id] || []))
+    const total = paginate ? count || 0 : rows.length
+    const totalPages = paginate ? Math.max(1, Math.ceil(total / limit)) : 1
+    console.log('[clients pagination]', { page, limit, returned: rows.length, total, paginate })
+    return res.json({ data: rows, total, page, totalPages, limit })
   } catch (err) {
     return logAndSendInternal(res, 'listClients', err)
   }

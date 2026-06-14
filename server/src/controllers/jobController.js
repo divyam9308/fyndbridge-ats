@@ -4,6 +4,7 @@ const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../s
 const fs = require('fs/promises')
 const { callAiJson } = require('../services/aiProvider')
 const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
+const { applyQueryFilters } = require('../services/queryFilters')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
@@ -108,20 +109,71 @@ function jobFilterValue(row, field) {
   }[field]
 }
 
+const JOB_FILTER_MAPPING = {
+  job_id: [{ column: 'job_display_id', kind: 'text' }],
+  consultant: [{ column: 'consultants', kind: 'array' }],
+  team_lead: [{ column: 'team_lead', kind: 'text' }],
+  role: [{ column: 'title', kind: 'text' }],
+  location: [{ column: 'city', kind: 'text' }],
+  budget: [{ column: 'budget', kind: 'text' }],
+  mandate_status: [{ column: 'mandate_status', kind: 'text' }],
+  vertical: [{ column: 'vertical', kind: 'text' }],
+  date_of_allocation: [{ column: 'allocation_date', kind: 'date' }]
+}
+
 async function listJobs(req, res) {
   try {
     await ensureJobDisplayIds()
-    let query = supabase.from('jobs').select('*, clients(name, client_name, client_display_id)')
+    const paginate = String(req.query.all || '').toLowerCase() !== 'true'
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
+    const from = (page - 1) * limit
+    const to = from + limit - 1
+    let query = supabase.from('jobs').select('*, clients(name, client_name, client_display_id)', { count: paginate ? 'exact' : undefined })
     if (req.query.client_id) query = query.eq('client_id', req.query.client_id)
-    const { data, error } = await query
+    const aiFilters = req.query.ai_filters ? JSON.parse(req.query.ai_filters) : null
+    const clientNameConditions = (aiFilters?.conditions || []).filter((condition) => ['client_name', 'client'].includes(String(condition.field || '').toLowerCase()))
+    let matchedClientIds = null
+    if (clientNameConditions.length) {
+      const clientQuery = supabase.from('clients').select('id')
+      for (const condition of clientNameConditions) {
+        const value = clean(condition.value)
+        if (!value) continue
+        if (condition.operator === 'equals') clientQuery.or(`client_name.ilike.${value},name.ilike.${value}`)
+        else clientQuery.or(`client_name.ilike.%${value}%,name.ilike.%${value}%`)
+      }
+      const { data: clientRows, error: clientError } = await clientQuery
+      if (clientError) throw clientError
+      matchedClientIds = [...new Set((clientRows || []).map((row) => row.id))]
+      if (!matchedClientIds.length && aiFilters?.mode !== 'any') {
+        console.log('[jobs pagination]', { page, limit, returned: 0, total: 0, paginate })
+        return res.json({ data: [], total: 0, page, totalPages: 1, limit })
+      }
+    }
+    const filtered = applyQueryFilters(query, 'mandates', aiFilters, JOB_FILTER_MAPPING, {
+      applyCondition(nextQuery, condition) {
+        if (condition.field !== 'client_name') return nextQuery
+        if (!matchedClientIds?.length) return nextQuery.eq('client_id', '__no_match__')
+        return nextQuery.in('client_id', matchedClientIds)
+      },
+      orClauses(normalized) {
+        if (!matchedClientIds?.length) return []
+        return normalized.some((condition) => condition.field === 'client_name') ? [`client_id.in.(${matchedClientIds.join(',')})`] : []
+      }
+    })
+    query = filtered.query
+    if (req.query.sortField === 'job_id') query = query.order('job_display_id', { ascending: req.query.sortDirection !== 'desc' })
+    else if (req.query.sortField === 'role') query = query.order('title', { ascending: req.query.sortDirection !== 'desc' })
+    else query = query.order('created_at', { ascending: false })
+    if (paginate) query = query.range(from, to)
+    const { data, error, count } = await query
     if (error) throw error
     let rows = (data || []).map(formatJob)
-    rows = applySharedFilters('mandates', rows, req.query.ai_filters ? JSON.parse(req.query.ai_filters) : null, jobFilterValue)
-    const direction = req.query.sortDirection === 'desc' ? -1 : 1
-    if (req.query.sortField === 'job_id') rows.sort((a, b) => direction * (jobIdNumber(a.job_display_id) - jobIdNumber(b.job_display_id)))
-    else if (req.query.sortField === 'role') rows.sort((a, b) => direction * String(a.role || '').localeCompare(String(b.role || '')))
-    else rows.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
-    return res.json({ data: rows })
+    if (!paginate) rows = applySharedFilters('mandates', rows, aiFilters, jobFilterValue)
+    const total = paginate ? count || 0 : rows.length
+    const totalPages = paginate ? Math.max(1, Math.ceil(total / limit)) : 1
+    console.log('[jobs pagination]', { page, limit, returned: rows.length, total, paginate })
+    return res.json({ data: rows, total, page, totalPages, limit })
   } catch (err) {
     return logAndSendInternal(res, 'listJobs', err)
   }

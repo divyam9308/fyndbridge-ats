@@ -539,9 +539,23 @@
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
+  flex-wrap: wrap;
   margin-top: 14px;
   font-size: 13px;
   color: var(--gray-500);
+}
+
+.pagination-size,
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-page-btn.is-active {
+  background: var(--brand-blue);
+  color: var(--white);
+  border-color: var(--brand-blue);
 }
 
 .candidate-drawer-overlay {
