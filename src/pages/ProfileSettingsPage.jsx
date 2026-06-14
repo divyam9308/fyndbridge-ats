@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/useAuth'
+import { supabase } from '../services/supabaseClient'
 import '../styles/Shared.css'
 
 const EMPTY_PROFILE = {
@@ -27,8 +28,11 @@ export default function ProfileSettingsPage() {
       setForm(current => ({ ...current, user_id: userId, email: current.email || email }))
       if (!userId && !email) return
       try {
+        const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : ''
         const params = new URLSearchParams({ user_id: userId, email })
-        const res = await fetch(`/api/user-profiles?${params.toString()}`)
+        const res = await fetch(`/api/user-profiles?${params.toString()}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
         const data = await res.json().catch(() => ({}))
         if (res.ok) setForm({ ...EMPTY_PROFILE, user_id: userId, email, ...(data.data || {}) })
       } catch (err) {
@@ -50,10 +54,11 @@ export default function ProfileSettingsPage() {
     setMessage('')
     setError('')
     try {
+      const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : ''
       const res = await fetch('/api/user-profiles', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ ...form, user_id: user?.id || form.user_id }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to save profile.')
@@ -94,4 +99,3 @@ export default function ProfileSettingsPage() {
     </div>
   )
 }
-

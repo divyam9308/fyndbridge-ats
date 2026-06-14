@@ -1,6 +1,7 @@
 const fs = require('fs/promises')
 const { randomUUID } = require('crypto')
 const supabase = require('./supabaseAdmin')
+const { normalizeStoragePath } = require('./storageBuckets')
 
 function safeFileName(value) {
   return String(value || 'document').replace(/[^\w.-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'document'
@@ -16,8 +17,7 @@ async function uploadDocument(file, bucket, folder = '') {
     upsert: false
   })
   if (error) throw error
-  const { data } = supabase.storage.from(bucket).getPublicUrl(objectPath)
-  return { url: data?.publicUrl || '', path: objectPath }
+  return { url: '', path: normalizeStoragePath(objectPath, bucket) }
 }
 
 module.exports = { uploadDocument }

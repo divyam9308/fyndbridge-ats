@@ -2,9 +2,9 @@ const fs = require('fs/promises')
 const crypto = require('crypto')
 const path = require('path')
 const supabase = require('./supabaseAdmin')
+const { STORAGE_BUCKETS, normalizeStoragePath } = require('./storageBuckets')
 
-const RESUME_BUCKET = 'resumes'
-const LEGACY_CV_BUCKET_NAMES = ['resumes', 'resume', 'cvs', 'cv', 'candidate-cvs', 'candidate_cvs']
+const RESUME_BUCKET = STORAGE_BUCKETS.CV
 
 function cleanText(value) {
   return String(value || '').trim()
@@ -15,32 +15,7 @@ function normalizeCvLink(value) {
 }
 
 function normalizeResumeStoragePath(value) {
-  const text = cleanText(value)
-  if (!text) return ''
-  let path = text
-  if (/^https?:\/\//i.test(text)) {
-    try {
-      const parsed = new URL(text)
-      const marker = '/storage/v1/object/'
-      const markerIndex = parsed.pathname.indexOf(marker)
-      if (markerIndex === -1) return text
-      path = decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length))
-    } catch {
-      return text
-    }
-  }
-  path = path.replace(/^public\//, '').replace(/^sign\//, '')
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const bucket of LEGACY_CV_BUCKET_NAMES) {
-      if (path.startsWith(`${bucket}/`)) {
-        path = path.slice(bucket.length + 1)
-        changed = true
-      }
-    }
-  }
-  return path
+  return normalizeStoragePath(value, RESUME_BUCKET)
 }
 
 function extensionForFile(file) {

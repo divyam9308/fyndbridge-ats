@@ -1,5 +1,6 @@
 const supabase = require('../services/supabaseAdmin')
 const { uploadDocument } = require('../services/documentStorage')
+const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
 const fs = require('fs/promises')
 const { callAiJson } = require('../services/aiProvider')
 const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
@@ -54,8 +55,8 @@ function formatJob(row) {
     consultant: Array.isArray(row.consultants) && row.consultants.length ? row.consultants[0] : '-',
     team_lead: row.team_lead || '-',
     allocation_date: row.allocation_date || (row.created_at ? row.created_at.slice(0, 10) : ''),
-    jd_url: row.jd_url || '',
-    jd_storage_path: row.jd_storage_path || '',
+    jd_url: documentOpenUrl('jd', row.jd_storage_path || row.jd_url),
+    jd_storage_path: normalizeStoragePath(row.jd_storage_path || row.jd_url, STORAGE_BUCKETS.JD),
     client_display_id: row.clients?.client_display_id || '',
     client: clientName,
     client_name: clientName,
@@ -156,8 +157,8 @@ async function payloadFromBody(body, partial = false) {
   }
   if (!partial || body.vertical !== undefined) payload.vertical = nullable(body.vertical)
   if (!partial || body.allocation_date !== undefined) payload.allocation_date = body.allocation_date || todayLocal()
-  if (!partial || body.jd_url !== undefined) payload.jd_url = nullable(body.jd_url)
-  if (!partial || body.jd_storage_path !== undefined) payload.jd_storage_path = nullable(body.jd_storage_path)
+  if (!partial || body.jd_url !== undefined) payload.jd_url = nullable(normalizeStoragePath(body.jd_storage_path || body.jd_url, STORAGE_BUCKETS.JD))
+  if (!partial || body.jd_storage_path !== undefined) payload.jd_storage_path = nullable(normalizeStoragePath(body.jd_storage_path || body.jd_url, STORAGE_BUCKETS.JD))
   return payload
 }
 
@@ -197,8 +198,8 @@ async function createJob(req, res) {
   try {
     const payload = await payloadFromBody(req.body)
     if (req.file) {
-      const jd = await uploadDocument(req.file, 'job-documents', 'jds')
-      payload.jd_url = jd.url
+      const jd = await uploadDocument(req.file, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
+      payload.jd_url = jd.path
       payload.jd_storage_path = jd.path
     }
     payload.job_display_id = await nextJobDisplayId()
@@ -221,8 +222,8 @@ async function updateJob(req, res) {
   try {
     const payload = await payloadFromBody(req.body, true)
     if (req.file) {
-      const jd = await uploadDocument(req.file, 'job-documents', 'jds')
-      payload.jd_url = jd.url
+      const jd = await uploadDocument(req.file, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
+      payload.jd_url = jd.path
       payload.jd_storage_path = jd.path
     }
     payload.updated_at = new Date().toISOString()

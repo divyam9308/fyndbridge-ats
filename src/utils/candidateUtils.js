@@ -42,7 +42,7 @@ export const apiCandidateToUi = (row) => ({
   createdAt: row.created_at || '',
 })
 
-export const CV_BUCKET_NAME = 'resumes'
+export const CV_BUCKET_NAME = STORAGE_BUCKETS.CV
 const LEGACY_CV_BUCKET_NAMES = ['resumes', 'resume', 'cvs', 'cv', 'candidate-cvs', 'candidate_cvs']
 
 export const cleanCandidateCvPath = (value) => {
@@ -134,3 +134,4 @@ export const logCandidateCvOpen = (candidate) => {
     cleanPath: info.cleanPath
   })
 }
+import { STORAGE_BUCKETS } from './storageBuckets'

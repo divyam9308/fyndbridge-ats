@@ -27,20 +27,6 @@ function syncSessionStorage(user) {
   }
 }
 
-async function upsertUserProfile(user) {
-  if (!supabase || !user?.email) return
-
-  const { error } = await supabase.from('profiles').upsert({
-    id: user.id,
-    email: user.email,
-    full_name: user.user_metadata?.full_name || user.email.split('@')[0],
-  }, { onConflict: 'id' })
-
-  if (error) {
-    console.error('upsertUserProfile:', error.message)
-  }
-}
-
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [user, setUser] = useState(null)
@@ -72,7 +58,6 @@ export function AuthProvider({ children }) {
       setSession(nextSession)
       setUser(nextSession.user)
       syncSessionStorage(nextSession.user)
-      await upsertUserProfile(nextSession.user)
       return true
     }
 

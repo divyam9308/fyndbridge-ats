@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto')
 const supabase = require('../services/supabaseAdmin')
 const { uploadDocument } = require('../services/documentStorage')
+const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
 
 const CLIENT_STATUSES = [
   'Active',
@@ -203,9 +204,9 @@ function normalizeClient(row, activeJobs = 0, followUps = [], jobs = []) {
     terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
     billing_entity: row.billing_entity || '',
     contract_signed: Boolean(row.contract_signed),
-    contract_document: row.contract_document || row.contract_pdf_url || '',
-    contract_pdf_url: row.contract_pdf_url || row.contract_document || '',
-    contract_pdf_storage_path: row.contract_pdf_storage_path || '',
+    contract_document: documentOpenUrl('contract', row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document),
+    contract_pdf_url: documentOpenUrl('contract', row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document),
+    contract_pdf_storage_path: normalizeStoragePath(row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document, STORAGE_BUCKETS.CONTRACT),
     activeJobs,
     follow_ups: followUps
   }
@@ -218,7 +219,7 @@ async function uploadContractPdf(file) {
     err.statusCode = 400
     throw err
   }
-  return uploadDocument(file, 'client-contracts', String(new Date().getFullYear()))
+  return uploadDocument(file, STORAGE_BUCKETS.CONTRACT, String(new Date().getFullYear()))
 }
 
 function clientPayload(body) {
@@ -241,6 +242,7 @@ function clientPayload(body) {
   const email = clean(body.email)
   const contactPerson = clean(body.contact_person || body.contact)
   const contractSigned = normalizeBoolean(body.contract_signed)
+  const contractPath = normalizeStoragePath(body.contract_pdf_storage_path || body.contract_pdf_url || body.contract_document, STORAGE_BUCKETS.CONTRACT)
 
   if (!clientName) {
     const err = new Error('Client Name is required')
@@ -286,9 +288,9 @@ function clientPayload(body) {
     terms_value: contractSigned ? nullable(body.terms_value) : null,
     billing_entity: contractSigned ? nullable(body.billing_entity) : null,
     contract_signed: contractSigned,
-    contract_document: contractSigned ? nullable(body.contract_document) : null,
-    contract_pdf_url: contractSigned ? nullable(body.contract_pdf_url || body.contract_document) : null,
-    contract_pdf_storage_path: contractSigned ? nullable(body.contract_pdf_storage_path) : null,
+    contract_document: contractSigned ? nullable(contractPath) : null,
+    contract_pdf_url: contractSigned ? nullable(contractPath) : null,
+    contract_pdf_storage_path: contractSigned ? nullable(contractPath) : null,
     gstin: contractSigned ? nullable(body.gstin) : null,
     pan: contractSigned ? nullable(body.pan) : null,
     address_on_invoice: contractSigned ? nullable(body.address_on_invoice) : null
@@ -423,8 +425,8 @@ async function createClient(req, res) {
     console.log('createClient payload:', req.body)
     if (req.file) {
       const contract = await uploadContractPdf(req.file)
-      req.body.contract_document = contract.url
-      req.body.contract_pdf_url = contract.url
+      req.body.contract_document = contract.path
+      req.body.contract_pdf_url = contract.path
       req.body.contract_pdf_storage_path = contract.path
     }
     const payload = clientPayload(req.body)
@@ -498,8 +500,8 @@ async function updateClient(req, res) {
   try {
     if (req.file) {
       const contract = await uploadContractPdf(req.file)
-      req.body.contract_document = contract.url
-      req.body.contract_pdf_url = contract.url
+      req.body.contract_document = contract.path
+      req.body.contract_pdf_url = contract.path
       req.body.contract_pdf_storage_path = contract.path
     }
     const payload = clientPayload(req.body)

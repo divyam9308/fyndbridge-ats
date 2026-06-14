@@ -21,8 +21,8 @@ function normalize(row) {
 
 async function getProfile(req, res) {
   try {
-    const userId = clean(req.query.user_id || req.user?.id)
-    const email = clean(req.query.email || req.user?.email)
+    const userId = clean(req.user?.id || req.query.user_id)
+    const email = clean(req.user?.email || req.query.email)
     if (!userId && !email) return res.status(400).json({ error: 'user_id or email is required' })
 
     let query = supabase.from('user_profiles').select('*')
@@ -38,9 +38,12 @@ async function getProfile(req, res) {
 
 async function saveProfile(req, res) {
   try {
-    const userId = clean(req.body.user_id || req.user?.id)
+    const userId = clean(req.user?.id || req.body.user_id)
     const email = clean(req.body.email || req.user?.email)
     if (!userId && !email) return res.status(400).json({ error: 'user_id or email is required' })
+    if (req.user?.id && clean(req.body.user_id) && clean(req.body.user_id) !== req.user.id) {
+      return res.status(403).json({ error: 'Cannot save another user profile' })
+    }
 
     const payload = {
       user_id: userId || email,
@@ -80,4 +83,3 @@ async function listProfileOptions(req, res) {
 }
 
 module.exports = { getProfile, saveProfile, listProfileOptions }
-
