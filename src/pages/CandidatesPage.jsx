@@ -57,6 +57,24 @@ const avatarColorsFor = (value) => {
   const [start, end] = avatarPalette[hash % avatarPalette.length]
   return { background: `linear-gradient(135deg, ${start}, ${end})`, color: '#fff' }
 }
+const formatCandidateCtc = (value) => {
+  const text = String(value ?? '').trim()
+  if (!text || text === '-') return '-'
+  const hasRupee = text.includes('₹')
+  const hasLpa = /lpa/i.test(text)
+  const base = hasRupee ? text : `₹${text}`
+  return hasLpa ? base : `${base} LPA`
+}
+const getNoticeMeta = (value) => {
+  const text = String(value ?? '').trim()
+  if (!text || text === '-') return null
+  const numeric = Number(text)
+  const label = /days/i.test(text) ? text : `${text} Days`
+  if (!Number.isFinite(numeric)) return { label, tone: 'mid' }
+  if (numeric <= 30) return { label, tone: 'low' }
+  if (numeric <= 60) return { label, tone: 'mid' }
+  return { label, tone: 'high' }
+}
 
 const getReadableClientId = (candidate, dbClients) => {
   if (!candidate.client || candidate.client.trim() === '') {
@@ -1482,6 +1500,7 @@ export default function CandidatesPage() {
     const consultantAvatarStyle = avatarColorsFor(c.consultant || c.name)
     const clientIdValue = getReadableClientId(c, dbClients)
     const jobIdValue = c.jobDisplayId || jobDisplayIdForForm(c) || '-'
+    const noticeMeta = getNoticeMeta(c.noticePeriod)
 
     switch (key) {
       case 'candidateDisplayId':
@@ -1550,15 +1569,15 @@ export default function CandidatesPage() {
         return <td key={key}>{renderSkillsCell(c)}</td>
       }
       case 'salary':
-        return <td key={key} style={{ fontWeight:600 }}>{fmt(c.salary)}</td>
+        return <td key={key}>{c.salary ? <span className="candidate-money-value">{formatCandidateCtc(c.salary)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'location':
         return <td key={key}>{c.location || c.city || '-'}</td>
       case 'notice':
-        return <td key={key}>{c.noticePeriod !== '' && c.noticePeriod !== null ? c.noticePeriod : '-'}</td>
+        return <td key={key}>{noticeMeta ? <span className={`candidate-notice-pill candidate-notice-pill-${noticeMeta.tone}`}>{noticeMeta.label}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'expectedSalary':
-        return <td key={key} style={{ fontWeight:600 }}>{fmt(c.expectedSalary)}</td>
+        return <td key={key}>{c.expectedSalary ? <span className="candidate-money-value">{formatCandidateCtc(c.expectedSalary)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'relocate':
-        return <td key={key}>{c.openToRelocate || '-'}</td>
+        return <td key={key}>{c.openToRelocate ? <span className={`candidate-relocate-pill${c.openToRelocate === 'Yes' ? ' is-yes' : ' is-no'}`}>{c.openToRelocate}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'comments':
         return <td key={key}>{renderCommentsCell(c)}</td>
       case 'linkedin':
@@ -1567,9 +1586,9 @@ export default function CandidatesPage() {
           return (
           <td key={key}>
             {linkedinUrl ? (
-              <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link" onClick={event => event.stopPropagation()}>LinkedIn</a>
+              <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" className="candidate-linkedin-link" onClick={event => event.stopPropagation()}>LinkedIn ↗</a>
             ) : (
-              <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
+              <span className="candidate-empty-value">-</span>
             )}
           </td>
           )
@@ -1577,7 +1596,7 @@ export default function CandidatesPage() {
       case 'status':
         return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span></td>
       case 'offeredCtc':
-        return <td key={key} style={{ fontWeight:600 }}>{c.status === 'Hired' ? fmt(c.offeredCtc) : '-'}</td>
+        return <td key={key}>{c.status === 'Hired' && c.offeredCtc ? <span className="candidate-money-value">{formatCandidateCtc(c.offeredCtc)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'dateOfJoining':
         return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
       case 'cv': {
@@ -1585,11 +1604,11 @@ export default function CandidatesPage() {
         return (
           <td key={key}>
             {cvHref ? (
-              <a href={cvHref} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={event => { event.stopPropagation(); logCandidateCvOpen(c) }}>
+              <a href={cvHref} target="_blank" rel="noopener noreferrer" className="cv-table-link candidate-cv-link" title="Open CV" onClick={event => { event.stopPropagation(); logCandidateCvOpen(c) }}>
                 <FileText size={15} strokeWidth={2} />
               </a>
             ) : (
-              <span style={{ color:'var(--gray-400)', fontSize:12 }}>-</span>
+              <span className="candidate-empty-value">-</span>
             )}
           </td>
         )

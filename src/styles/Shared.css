@@ -533,6 +533,21 @@
 .candidates-master-table {
   min-width: 2500px;
 }
+.candidates-master-table thead tr {
+  background: #001264;
+}
+
+.candidates-master-table th {
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.candidates-master-table td {
+  color: #1f2937;
+  font-weight: 500;
+}
+
 .candidates-master-table th:nth-child(8),
 .candidates-master-table td:nth-child(8) {
   min-width: 240px;
@@ -659,6 +674,73 @@
 
 .candidates-master-table .candidate-muted-dash {
   color: var(--gray-400);
+}
+
+.candidates-master-table .candidate-empty-value {
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.candidates-master-table .candidate-money-value {
+  color: #111827;
+  font-weight: 700;
+}
+
+.candidates-master-table .candidate-notice-pill,
+.candidates-master-table .candidate-relocate-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.candidates-master-table .candidate-notice-pill-low {
+  background: #eaf8ef;
+  color: #1f8f4d;
+}
+
+.candidates-master-table .candidate-notice-pill-mid {
+  background: #fff4db;
+  color: #b7791f;
+}
+
+.candidates-master-table .candidate-notice-pill-high {
+  background: #feebe6;
+  color: #c05621;
+}
+
+.candidates-master-table .candidate-relocate-pill.is-yes {
+  background: #eaf8ef;
+  color: #1f8f4d;
+}
+
+.candidates-master-table .candidate-relocate-pill.is-no {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.candidates-master-table .candidate-linkedin-link {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.candidates-master-table .candidate-linkedin-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.candidates-master-table .candidate-cv-link {
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  background: rgba(23,162,184,0.08);
 }
 
 .candidates-master-table .candidate-mobile-group-row {
