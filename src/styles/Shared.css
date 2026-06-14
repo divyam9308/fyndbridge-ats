@@ -682,8 +682,10 @@
 }
 
 .candidates-master-table .candidate-money-value {
-  color: #111827;
-  font-weight: 700;
+  color: #1f2937;
+  font-weight: 500;
+  font-size: inherit;
+  font-family: inherit;
 }
 
 .candidates-master-table .candidate-notice-pill,
@@ -704,13 +706,13 @@
 }
 
 .candidates-master-table .candidate-notice-pill-mid {
-  background: #fff4db;
+  background: #fff3cd;
   color: #b7791f;
 }
 
 .candidates-master-table .candidate-notice-pill-high {
-  background: #feebe6;
-  color: #c05621;
+  background: #fee2e2;
+  color: #b45309;
 }
 
 .candidates-master-table .candidate-relocate-pill.is-yes {
@@ -728,6 +730,10 @@
   font-size: 12px;
   font-weight: 700;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .candidates-master-table .candidate-linkedin-link:hover {

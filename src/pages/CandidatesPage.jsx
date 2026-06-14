@@ -68,11 +68,11 @@ const formatCandidateCtc = (value) => {
 const getNoticeMeta = (value) => {
   const text = String(value ?? '').trim()
   if (!text || text === '-') return null
-  const numeric = Number(text)
+  const numeric = Number(text.replace(/[^\d.]/g, ''))
   const label = /days/i.test(text) ? text : `${text} Days`
   if (!Number.isFinite(numeric)) return { label, tone: 'mid' }
   if (numeric <= 30) return { label, tone: 'low' }
-  if (numeric <= 60) return { label, tone: 'mid' }
+  if (numeric < 60) return { label, tone: 'mid' }
   return { label, tone: 'high' }
 }
 
