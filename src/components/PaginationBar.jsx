@@ -3,14 +3,9 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 function buildPageItems(page, totalPages) {
   if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1)
-  const items = [1]
-  if (page > 3) items.push('start-ellipsis')
-  const start = Math.max(2, page - 1)
-  const end = Math.min(totalPages - 1, page + 1)
-  for (let value = start; value <= end; value += 1) items.push(value)
-  if (page < totalPages - 2) items.push('end-ellipsis')
-  items.push(totalPages)
-  return items
+  if (page <= 3) return [1, 2, 3, 4, 5, 'end-ellipsis', totalPages]
+  if (page >= totalPages - 1) return [1, 'start-ellipsis', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+  return [1, 'start-ellipsis', page - 2, page - 1, page, page + 1, page + 2, 'end-ellipsis', totalPages]
 }
 
 export default function PaginationBar({

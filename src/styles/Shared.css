@@ -227,9 +227,14 @@
   gap: 8px;
   margin: 0 0 8px 0;
   padding-left: 0;
+  position: relative;
+  z-index: 10020;
+  overflow: visible;
 }
 .new-action-control {
   position: relative;
+  z-index: 10020;
+  overflow: visible;
 }
 .new-action-btn {
   height: 34px;
@@ -248,6 +253,7 @@
 .new-action-dropdown {
   left: 0;
   min-width: 178px;
+  z-index: 10050;
 }
 .new-action-item {
   display: flex;
@@ -310,6 +316,8 @@
   display: flex;
   gap: 6px;
   width: 176px;
+  z-index: 10020;
+  overflow: visible;
 }
 .candidate-columns-btn {
   width: 90px;
@@ -362,6 +370,7 @@
   width: 176px;
   max-height: 360px;
   overflow-y: auto;
+  z-index: 10050;
 }
 .candidate-columns-action {
   display: block;
