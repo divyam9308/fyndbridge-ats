@@ -22,7 +22,6 @@ const MANDATE_TABLE_COLUMNS = [
   { key: 'clientId', label: 'Client ID' },
   { key: 'clientName', label: 'Client Name' },
   { key: 'role', label: 'Role' },
-  { key: 'location', label: 'Location' },
   { key: 'budget', label: 'Budget' },
   { key: 'mandateStatus', label: 'Mandate Status' },
   { key: 'sector', label: 'Sector' },
@@ -31,6 +30,7 @@ const MANDATE_TABLE_COLUMNS = [
   { key: 'action', label: 'Action' }
 ]
 const DEFAULT_MANDATE_COLUMN_KEYS = MANDATE_TABLE_COLUMNS.map(column => column.key)
+const REMOVED_MANDATE_COLUMN_KEYS = new Set(['location'])
 const EMPTY_FORM = {
   id: '',
   job_display_id: '',
@@ -63,6 +63,7 @@ const canonicalClients = (clients) => {
   })
   return [...map.values()].sort((a, b) => clientName(a).localeCompare(clientName(b), undefined, { sensitivity: 'base' }))
 }
+const formatLocationText = (location) => String(location || '').trim()
 
 export default function JobsPage() {
   const location = useLocation()
@@ -159,7 +160,9 @@ export default function JobsPage() {
         const userId = currentUser?.id || currentUser?.email || 'anonymous'
         const response = await fetch(`/api/user-preferences/mandates_columns_preference?user_id=${encodeURIComponent(userId)}`)
         const payload = await response.json().catch(() => ({}))
-        const value = Array.isArray(payload.data?.value) ? payload.data.value.filter(key => DEFAULT_MANDATE_COLUMN_KEYS.includes(key)) : null
+        const value = Array.isArray(payload.data?.value)
+          ? payload.data.value.filter(key => !REMOVED_MANDATE_COLUMN_KEYS.has(key) && DEFAULT_MANDATE_COLUMN_KEYS.includes(key))
+          : null
         if (value?.length) {
           setVisibleColumns(value)
           setPendingColumns(value)
@@ -489,9 +492,14 @@ export default function JobsPage() {
       case 'clientName':
         return <td key={column.key}>{dash(job.client_name)}</td>
       case 'role':
-        return <td key={column.key}><button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>{dash(job.role)}</button></td>
-      case 'location':
-        return <td key={column.key}>{dash(job.location)}</td>
+        return (
+          <td key={column.key}>
+            <div>
+              <button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>{dash(job.role)}</button>
+              <div className="sub-text candidate-location-text">{formatLocationText(job.location) || '-'}</div>
+            </div>
+          </td>
+        )
       case 'budget':
         return <td key={column.key}>{dash(job.budget)}</td>
       case 'mandateStatus':

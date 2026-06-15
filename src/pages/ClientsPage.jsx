@@ -64,8 +64,6 @@ const CLIENT_TABLE_COLUMNS = [
   { key: 'clientId', label: 'Client ID' },
   { key: 'clientName', label: 'Client Name' },
   { key: 'consultant', label: 'Consultant' },
-  { key: 'location', label: 'Location' },
-  { key: 'region', label: 'Region' },
   { key: 'contactPerson', label: 'Contact Person' },
   { key: 'mobile', label: 'Mobile' },
   { key: 'email', label: 'Email' },
@@ -87,6 +85,7 @@ const CLIENT_TABLE_COLUMNS = [
   { key: 'actions', label: 'Actions' }
 ]
 const DEFAULT_CLIENT_COLUMN_KEYS = CLIENT_TABLE_COLUMNS.map(column => column.key)
+const REMOVED_CLIENT_COLUMN_KEYS = new Set(['location', 'region'])
 const SORT_OPTIONS = [
   { field: 'client_id', label: 'Client ID' },
   { field: 'client_name', label: 'Alphabetical Order' }
@@ -115,6 +114,10 @@ const getConsultantNameFromUser = (user) => {
   const email = String(user?.email || user?.id || '').trim()
   const prefix = email.includes('@') ? email.split('@')[0] : ''
   return prefix || user?.name || 'hr'
+}
+const formatLocationRegion = (location, region) => {
+  const parts = [location, region].map(value => String(value || '').trim()).filter(Boolean)
+  return parts.join(', ')
 }
 
 function clientToForm(client) {
@@ -261,7 +264,9 @@ export default function ClientsPage() {
         const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
         const response = await fetch(`/api/user-preferences/client_columns?user_id=${encodeURIComponent(userId)}`)
         const payload = await response.json().catch(() => ({}))
-        const value = Array.isArray(payload.data?.value) ? payload.data.value.filter(key => DEFAULT_CLIENT_COLUMN_KEYS.includes(key)) : null
+        const value = Array.isArray(payload.data?.value)
+          ? payload.data.value.filter(key => !REMOVED_CLIENT_COLUMN_KEYS.has(key) && DEFAULT_CLIENT_COLUMN_KEYS.includes(key))
+          : null
 
         if (value?.length) {
           const nextValue = value.includes('designation') ? value : [...value, 'designation']
@@ -652,11 +657,14 @@ export default function ClientsPage() {
       case 'consultant':
         return <td key={key}>{dash(client.consultant_name || client.consultant)}</td>
       case 'clientName':
-        return <td key={key}><Link className="name-text" to={`/dashboard/clients/${client.id}`}>{client.client_name}</Link></td>
-      case 'location':
-        return <td key={key}>{dash(client.location)}</td>
-      case 'region':
-        return <td key={key}>{dash(client.region)}</td>
+        return (
+          <td key={key}>
+            <div>
+              <Link className="name-text" to={`/dashboard/clients/${client.id}`}>{client.client_name}</Link>
+              <div className="sub-text candidate-location-text">{formatLocationRegion(client.location, client.region) || '-'}</div>
+            </div>
+          </td>
+        )
       case 'contactPerson':
         return (
           <td key={key}>

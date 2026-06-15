@@ -77,6 +77,10 @@ const getNoticeMeta = (value) => {
   if (numeric < 60) return { label, tone: 'mid' }
   return { label, tone: 'high' }
 }
+const formatLocationRegion = (location, region) => {
+  const parts = [location, region].map(value => String(value || '').trim()).filter(Boolean)
+  return parts.join(', ')
+}
 
 const getReadableClientId = (candidate, dbClients) => {
   if (!candidate.client || candidate.client.trim() === '') {
@@ -1507,7 +1511,7 @@ export default function CandidatesPage() {
                     </button>
                   )}
                 </div>
-                <div className="sub-text candidate-location-text">{c.location || [c.city, c.state].filter(Boolean).join(', ') || '-'}</div>
+                <div className="sub-text candidate-location-text">{formatLocationRegion(c.location || c.city, c.state) || '-'}</div>
               </div>
             </div>
           </td>
@@ -1527,8 +1531,6 @@ export default function CandidatesPage() {
       }
       case 'salary':
         return <td key={key}>{c.salary ? <span className="candidate-money-value">{formatCandidateCtc(c.salary)}</span> : <span className="candidate-empty-value">-</span>}</td>
-      case 'location':
-        return <td key={key}>{c.location || c.city || '-'}</td>
       case 'notice':
         return <td key={key}>{noticeMeta ? <span className={`candidate-notice-pill candidate-notice-pill-${noticeMeta.tone}`}>{noticeMeta.label}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'expectedSalary':

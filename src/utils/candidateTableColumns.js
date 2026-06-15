@@ -14,7 +14,6 @@ export const CANDIDATE_TABLE_COLUMNS = [
   { key: 'experience', label: 'Experience' },
   { key: 'skills', label: 'Skills' },
   { key: 'salary', label: 'Current CTC' },
-  { key: 'location', label: 'Current Location' },
   { key: 'notice', label: 'Notice Period' },
   { key: 'expectedSalary', label: 'Expected CTC' },
   { key: 'relocate', label: 'Open to Relocate' },
@@ -29,9 +28,12 @@ export const CANDIDATE_TABLE_COLUMNS = [
 ]
 
 export const DEFAULT_CANDIDATE_COLUMN_KEYS = CANDIDATE_TABLE_COLUMNS.map(column => column.key)
+const REMOVED_CANDIDATE_COLUMN_KEYS = new Set(['location', 'region'])
 
 export const mergeCandidateColumnPreference = (value) => {
-  const saved = Array.isArray(value) ? value.filter(key => DEFAULT_CANDIDATE_COLUMN_KEYS.includes(key)) : []
+  const saved = Array.isArray(value)
+    ? value.filter(key => !REMOVED_CANDIDATE_COLUMN_KEYS.has(key) && DEFAULT_CANDIDATE_COLUMN_KEYS.includes(key))
+    : []
   if (!saved.length) return null
   return [...saved, ...DEFAULT_CANDIDATE_COLUMN_KEYS.filter(key => !saved.includes(key))]
 }
