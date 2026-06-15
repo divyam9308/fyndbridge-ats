@@ -21,6 +21,7 @@ const nullable = (value) => {
 }
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
 const jobIdNumber = (value) => Number(String(value || '').match(/^JB(\d+)$/i)?.[1] || 0)
+const preferredUserName = (primaryName, secondaryName, email) => clean(primaryName) || clean(secondaryName) || displayNameFromEmail(email)
 const compareDisplayIds = (a, b, prefix) => {
   const aText = clean(a)
   const bText = clean(b)
@@ -331,14 +332,31 @@ async function getNextJobDisplayId(req, res) {
 
 async function listJobUsers(req, res) {
   try {
-    let { data, error } = await supabase.from('user_profiles').select('name, email').order('name')
-    if (error) {
-      const fallback = await supabase.from('profiles').select('email, full_name').order('email')
-      data = fallback.data
-      error = fallback.error
+    const [{ data: userProfiles, error: userProfilesError }, { data: profiles, error: profilesError }] = await Promise.all([
+      supabase.from('user_profiles').select('user_id, email, name').order('name'),
+      supabase.from('profiles').select('id, email, full_name').order('full_name')
+    ])
+    if (userProfilesError && profilesError) throw userProfilesError
+    const profileById = new Map((profiles || []).map(row => [row.id, row]))
+    const profileByEmail = new Map((profiles || []).map(row => [clean(row.email).toLowerCase(), row]))
+    const seen = new Set()
+    const users = []
+
+    for (const row of userProfiles || []) {
+      const profile = profileById.get(row.user_id) || profileByEmail.get(clean(row.email).toLowerCase())
+      const name = preferredUserName(row.name, profile?.full_name, row.email || profile?.email)
+      if (!name || seen.has(name.toLowerCase())) continue
+      seen.add(name.toLowerCase())
+      users.push(name)
     }
-    if (error) throw error
-    const users = [...new Set((data || []).map(row => clean(row.name || row.full_name) || displayNameFromEmail(row.email)).filter(Boolean))]
+
+    for (const row of profiles || []) {
+      const name = preferredUserName('', row.full_name, row.email)
+      if (!name || seen.has(name.toLowerCase())) continue
+      seen.add(name.toLowerCase())
+      users.push(name)
+    }
+
     return res.json({ data: users })
   } catch (err) {
     return logAndSendInternal(res, 'listJobUsers', err)

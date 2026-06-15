@@ -63,6 +63,11 @@ export default function ProfileSettingsPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to save profile.')
       setForm({ ...EMPTY_PROFILE, ...(data.data || {}) })
+      try {
+        const current = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
+        window.sessionStorage.setItem('fb_user', JSON.stringify({ ...current, name: data.data?.name || current.name || '' }))
+      } catch {}
+      window.dispatchEvent(new CustomEvent('fb:profile-name-updated', { detail: data.data?.name || '' }))
       setMessage('Profile saved.')
     } catch (err) {
       setError(err.message)

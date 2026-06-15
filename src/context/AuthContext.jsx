@@ -4,15 +4,21 @@ import { supabase } from '../services/supabaseClient'
 import { AuthContext } from './authStore'
 import { useAuth } from './useAuth'
 
+function fallbackDisplayName(user) {
+  const profileName = String(user?.profile_name || '').trim()
+  const metadataName = String(user?.user_metadata?.full_name || user?.user_metadata?.name || '').trim()
+  const email = String(user?.email || '').trim()
+  const prefix = email.includes('@') ? email.split('@')[0] : email
+  return profileName || metadataName || prefix || 'Recruiter'
+}
+
 function userToSessionUser(user) {
   if (!user) return null
-
-  const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Recruiter'
 
   return {
     id: user.id,
     email: user.email,
-    name: fullName,
+    name: fallbackDisplayName(user),
     role: 'HR Recruiter',
   }
 }
@@ -55,9 +61,23 @@ export function AuthProvider({ children }) {
         return false
       }
 
+      let nextUser = nextSession.user
+      try {
+        const token = nextSession?.access_token || ''
+        const params = new URLSearchParams({ user_id: nextUser.id || '', email })
+        const response = await fetch(`/api/user-profiles?${params.toString()}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+        const payload = await response.json().catch(() => ({}))
+        const profileName = String(payload.data?.name || '').trim()
+        if (profileName) nextUser = { ...nextUser, profile_name: profileName }
+      } catch {
+        nextUser = { ...nextUser }
+      }
+
       setSession(nextSession)
-      setUser(nextSession.user)
-      syncSessionStorage(nextSession.user)
+      setUser(nextUser)
+      syncSessionStorage(nextUser)
       return true
     }
 
@@ -103,6 +123,21 @@ export function AuthProvider({ children }) {
       listener.subscription.unsubscribe()
     }
   }, [navigate])
+
+  useEffect(() => {
+    const handleProfileNameUpdate = (event) => {
+      const nextName = String(event.detail || '').trim()
+      if (!nextName) return
+      setUser(current => {
+        if (!current) return current
+        const nextUser = { ...current, profile_name: nextName }
+        syncSessionStorage(nextUser)
+        return nextUser
+      })
+    }
+    window.addEventListener('fb:profile-name-updated', handleProfileNameUpdate)
+    return () => window.removeEventListener('fb:profile-name-updated', handleProfileNameUpdate)
+  }, [])
 
   const value = useMemo(() => ({
     session,

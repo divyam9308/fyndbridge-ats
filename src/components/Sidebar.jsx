@@ -15,7 +15,7 @@ const navItems = [
 
 export default function Sidebar() {
   const { user, signOut } = useAuth()
-  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Recruiter'
+  const displayName = user?.profile_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Recruiter'
   const initials = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 
   const handleLogout = () => signOut()

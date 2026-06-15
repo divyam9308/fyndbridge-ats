@@ -112,9 +112,13 @@ const getCanonicalClients = (clients) => {
 }
 
 const getConsultantNameFromUser = (user) => {
+  const profileName = String(user?.name || user?.profile_name || '').trim()
+  if (profileName) return profileName
+  const metadataName = String(user?.full_name || user?.user_metadata?.full_name || user?.user_metadata?.name || '').trim()
+  if (metadataName) return metadataName
   const email = String(user?.email || user?.id || '').trim()
   const prefix = email.includes('@') ? email.split('@')[0] : ''
-  return prefix || user?.name || 'hr'
+  return prefix || 'hr'
 }
 const formatLocationRegion = (location, region) => {
   const parts = [location, region].map(value => String(value || '').trim()).filter(Boolean)
