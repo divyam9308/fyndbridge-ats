@@ -6,6 +6,7 @@ import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
+import CompactPagination from '../components/CompactPagination'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -533,7 +534,7 @@ export default function JobsPage() {
           </button>
           <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
           {columnsOpen && (
-            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
+            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_MANDATE_COLUMN_KEYS)}>Select All</button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
@@ -567,7 +568,7 @@ export default function JobsPage() {
             <span>{sortLabel()}</span><ChevronDown size={13} />
           </button>
           {sortOpen && (
-            <FloatingDropdown anchorRect={sortAnchor?.rect} ignoreElement={sortAnchor?.element} className="candidate-sort-dropdown" minWidth={180} onClose={() => setSortOpen(false)}>
+            <FloatingDropdown anchorRect={sortAnchor?.rect} ignoreElement={sortRef.current} className="candidate-sort-dropdown" minWidth={180} onClose={() => setSortOpen(false)}>
               {SORT_OPTIONS.map(option => (
                 <button className="candidate-columns-action" type="button" key={option.field} onClick={() => selectSort(option.field)}>
                   {`${option.label} ${sortField === option.field && sortDirection === 'desc' ? '↑' : '↓'}`}
@@ -576,6 +577,8 @@ export default function JobsPage() {
             </FloatingDropdown>
           )}
         </div>
+        <div className="filter-divider" />
+        <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalJobs / pageSize))} onPageChange={setPage} loading={loading} />
       </div>
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}
 

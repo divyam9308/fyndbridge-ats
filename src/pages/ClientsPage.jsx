@@ -5,6 +5,7 @@ import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
+import CompactPagination from '../components/CompactPagination'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -755,7 +756,7 @@ export default function ClientsPage() {
           </button>
           <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
           {columnsOpen && (
-            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
+            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CLIENT_COLUMN_KEYS)}>Select All</button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
@@ -800,7 +801,7 @@ export default function ClientsPage() {
             <ChevronDown size={13} strokeWidth={2} />
           </button>
           {sortOpen && (
-            <FloatingDropdown anchorRect={sortAnchor?.rect} ignoreElement={sortAnchor?.element} className="candidate-sort-dropdown" minWidth={180} onClose={() => setSortOpen(false)}>
+            <FloatingDropdown anchorRect={sortAnchor?.rect} ignoreElement={sortDropdownRef.current} className="candidate-sort-dropdown" minWidth={180} onClose={() => setSortOpen(false)}>
               {SORT_OPTIONS.map(option => (
                 <button className="candidate-columns-action" type="button" key={option.field} onClick={() => selectSort(option.field)}>
                   {`${option.label} ${sortField === option.field && sortDirection === 'desc' ? '↑' : '↓'}`}
@@ -810,6 +811,8 @@ export default function ClientsPage() {
           )}
         </div>
         <button className="filter-clear" type="button" onClick={() => { setSortField(''); setSortDirection('asc'); setPage(1) }}>Clear</button>
+        <div className="filter-divider" />
+        <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalClients / pageSize))} onPageChange={setPage} loading={loading} />
       </div>
 
       <div className="table-card">
