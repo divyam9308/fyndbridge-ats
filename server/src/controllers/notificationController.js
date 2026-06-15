@@ -62,7 +62,12 @@ async function markNotificationRead(req, res) {
       .single()
     if (error) throw error
 
-    if (notification.sender_user_id && notification.sender_user_id !== req.user.id && notification.role_type !== 'system') {
+    if (
+      notification.sender_user_id &&
+      notification.sender_user_id !== req.user.id &&
+      notification.sender_user_id !== notification.recipient_user_id &&
+      notification.role_type !== 'system'
+    ) {
       const [{ data: job }, { data: client }, profiles] = await Promise.all([
         supabase.from('jobs').select('title').eq('id', notification.mandate_id).maybeSingle(),
         notification.client_id ? supabase.from('clients').select('name, client_name').eq('id', notification.client_id).maybeSingle() : Promise.resolve({ data: null }),

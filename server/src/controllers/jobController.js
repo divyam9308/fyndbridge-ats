@@ -90,7 +90,7 @@ async function resolveAssignmentUsers(names = [], ids = []) {
 }
 
 async function createAssignmentNotifications({ job, senderId, consultantIds, teamLeadId, previousConsultants = [], previousTeamLead = '' }) {
-  if (!job?.id || !senderId) return
+  if (!job?.id || !isUuid(senderId)) return
   const clientName = job.client_name || job.clients?.client_name || job.clients?.name || 'Client'
   const role = job.role || job.title || 'Mandate'
   const consultantUsers = await resolveAssignmentUsers(job.consultants || [], consultantIds)
@@ -131,8 +131,9 @@ async function createAssignmentNotifications({ job, senderId, consultantIds, tea
     })
   }
 
-  if (rows.length) {
-    const { error } = await supabase.from('notifications').upsert(rows, { onConflict: 'mandate_id,recipient_user_id,role_type', ignoreDuplicates: true })
+  const safeRows = rows.filter(row => row.recipient_user_id && row.sender_user_id && row.recipient_user_id !== row.sender_user_id)
+  if (safeRows.length) {
+    const { error } = await supabase.from('notifications').upsert(safeRows, { onConflict: 'mandate_id,recipient_user_id,role_type', ignoreDuplicates: true })
     if (error && error.code !== '42P01') throw error
   }
 }
