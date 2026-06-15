@@ -101,4 +101,21 @@ async function markNotificationRead(req, res) {
   }
 }
 
-module.exports = { listNotifications, markNotificationRead }
+async function clearReadNotifications(req, res) {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' })
+    const { data, error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('recipient_user_id', req.user.id)
+      .eq('status', 'read')
+      .select('id')
+    if (error) throw error
+    return res.json({ success: true, cleared: (data || []).length })
+  } catch (err) {
+    console.error('clearReadNotifications error:', err.message || err)
+    return res.status(500).json({ error: err.message || 'Internal server error' })
+  }
+}
+
+module.exports = { listNotifications, markNotificationRead, clearReadNotifications }

@@ -36,6 +36,7 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState([])
   const [toast, setToast] = useState(null)
   const [toastPaused, setToastPaused] = useState(false)
+  const [clearingRead, setClearingRead] = useState(false)
   const rootRef = useRef(null)
 
   const loadNotifications = useCallback(async () => {
@@ -98,7 +99,28 @@ export default function NotificationBell() {
     if (toast?.id === notification.id) setToast(null)
   }
 
+  const clearRead = async () => {
+    if (clearingRead) return
+    const hasRead = notifications.some(item => item.status === 'read')
+    if (!hasRead) return
+    setClearingRead(true)
+    try {
+      const res = await fetch('/api/notifications/read', {
+        method: 'DELETE',
+        headers: await authHeaders()
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Unable to clear notifications.')
+      setNotifications(current => current.filter(item => item.status !== 'read'))
+    } catch {
+      // Keep panel stable on failure.
+    } finally {
+      setClearingRead(false)
+    }
+  }
+
   const pendingCount = notifications.filter(item => item.status === 'pending').length
+  const hasReadNotifications = notifications.some(item => item.status === 'read')
 
   return (
     <div className="notification-root" ref={rootRef}>
@@ -109,7 +131,12 @@ export default function NotificationBell() {
 
       {open && (
         <div className="notification-dropdown">
-          <div className="notification-dropdown-title">Notifications</div>
+          <div className="notification-dropdown-header">
+            <div className="notification-dropdown-title">Notifications</div>
+            <button className="notification-clear-btn" type="button" onClick={clearRead} disabled={!hasReadNotifications || clearingRead}>
+              Clear All
+            </button>
+          </div>
           {notifications.length ? notifications.map(item => (
             <div className={`notification-item ${item.status === 'read' ? 'is-read' : ''}`} key={item.id}>
               <div className="notification-item-title">{item.title || 'Notification'}</div>
