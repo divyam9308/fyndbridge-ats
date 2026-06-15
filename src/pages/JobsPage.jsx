@@ -36,7 +36,7 @@ const REMOVED_MANDATE_COLUMN_KEYS = new Set(['location'])
 const EMPTY_FORM = {
   id: '',
   job_display_id: '',
-  consultants: [],
+  consultants: ['-'],
   consultant_user_ids: [],
   team_lead: '',
   team_lead_user_id: '',
@@ -78,6 +78,19 @@ const normalizeSelectedUsers = (values) => {
   const labels = (Array.isArray(values) ? values : [values]).map(displayUserLabel).filter(Boolean)
   if (!labels.length || labels.includes('-')) return ['-']
   return [...new Set(labels)]
+}
+const normalizeConsultantFields = (values) => {
+  const labels = (Array.isArray(values) ? values : [values]).map(displayUserLabel).filter(Boolean)
+  const real = []
+  const seen = new Set()
+  labels.forEach((label) => {
+    if (label === '-') return
+    const key = label.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    real.push(label)
+  })
+  return real.length ? real : ['-']
 }
 
 export default function JobsPage() {
@@ -269,14 +282,16 @@ export default function JobsPage() {
   }, [location.pathname, location.state, navigate, openModal])
 
   const editJob = (job) => {
+    const consultantFields = normalizeConsultantFields(Array.isArray(job.consultants) ? job.consultants : [])
+    const teamLeadValue = displayUserLabel(job.team_lead) || '-'
     setEditingJob(job)
     setErrors({})
     setForm({
       id: job.id,
       job_display_id: job.job_display_id || '',
-      consultants: normalizeSelectedUsers(Array.isArray(job.consultants) ? job.consultants : []),
+      consultants: consultantFields,
       consultant_user_ids: [],
-      team_lead: displayUserLabel(job.team_lead) || '-',
+      team_lead: teamLeadValue,
       team_lead_user_id: '',
       client_id: job.client_id || '',
       role: job.role || job.title || '',
@@ -292,7 +307,9 @@ export default function JobsPage() {
     setClientSearch(job.client_name || '')
     setRoleSearch(job.role || job.title || '')
     setSectorSearch(job.vertical || '')
-    setTeamLeadSearch(displayUserLabel(job.team_lead) || '-')
+    setConsultantSearch({})
+    setConsultantPickerOpen({})
+    setTeamLeadSearch(teamLeadValue)
     setAddingNewRole(false)
     setClientSuggestionsOpen(false)
     setRoleSuggestionsOpen(false)
@@ -330,8 +347,10 @@ export default function JobsPage() {
     const query = teamLeadSearch.trim().toLowerCase()
     return sortedUsers.filter(user => user === '-' || user.toLowerCase().includes(query))
   }, [sortedUsers, teamLeadSearch])
-  const selectedConsultants = normalizeSelectedUsers(form.consultants || [])
-  const availableConsultants = sortedUsers.filter(user => user === '-' || !selectedConsultants.includes(user))
+  const consultantFields = Array.isArray(form.consultants) && form.consultants.length
+    ? form.consultants.map(item => displayUserLabel(item) || '-')
+    : ['-']
+  const selectedConsultants = normalizeConsultantFields(consultantFields)
   const activeColumns = MANDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
 
   const togglePendingColumn = (key) => {
@@ -381,9 +400,11 @@ export default function JobsPage() {
     }
     setSaving(true)
     try {
+      const normalizedConsultants = normalizeConsultantFields(selectedConsultants).filter(name => name !== '-')
+      const normalizedConsultantIds = [...new Set(normalizedConsultants.map(name => userByName.get(name)?.id || '').filter(Boolean))]
       const payload = {
-        consultants: selectedConsultants.filter(name => name !== '-'),
-        consultant_user_ids: selectedConsultants.filter(name => name !== '-').map(name => userByName.get(name)?.id || '').filter(Boolean),
+        consultants: normalizedConsultants,
+        consultant_user_ids: normalizedConsultantIds,
         team_lead: form.team_lead && form.team_lead !== '-' ? form.team_lead : null,
         team_lead_user_id: form.team_lead && form.team_lead !== '-' ? userByName.get(form.team_lead)?.id || '' : '',
         client_id: form.client_id,
@@ -464,38 +485,49 @@ export default function JobsPage() {
   }
 
   const addConsultant = () => {
-    if (!availableConsultants.length) return
     setForm(current => {
-      const existing = normalizeSelectedUsers(current.consultants)
-      const nextLabel = existing.includes('-')
-        ? '-'
-        : availableConsultants.find(user => user !== '-') || '-'
-      if (nextLabel === '-') return { ...current, consultants: ['-'], consultant_user_ids: [] }
-      const nextConsultants = [...existing.filter(name => name !== '-'), nextLabel]
-      return {
-        ...current,
-        consultants: nextConsultants,
-        consultant_user_ids: nextConsultants.map(name => userByName.get(name)?.id || '').filter(Boolean)
-      }
+      const nextConsultants = normalizeConsultantFields(current.consultants)
+      return { ...current, consultants: [...nextConsultants, '-'] }
     })
   }
 
   const updateConsultant = (index, value) => {
     setForm(current => {
       const label = displayUserLabel(value) || '-'
-      if (label === '-') return { ...current, consultants: ['-'], consultant_user_ids: [] }
-      const base = normalizeSelectedUsers(current.consultants).filter(name => name !== '-')
-      const next = [...base]
-      if (!label) next.splice(index, 1)
-      else if (!next.includes(label)) next[index] = label
+      const currentFields = Array.isArray(current.consultants) && current.consultants.length
+        ? current.consultants.map(item => displayUserLabel(item) || '-')
+        : ['-']
+      const next = [...currentFields]
+      if (label === '-') {
+        if (next.length > 1) next.splice(index, 1)
+        else next[0] = '-'
+      } else {
+        const duplicateIndex = next.findIndex((item, itemIndex) => item === label && itemIndex !== index)
+        if (duplicateIndex !== -1) {
+          setErrors(currentErrors => ({ ...currentErrors, consultants: 'This consultant is already selected.' }))
+          return current
+        }
+        setErrors(currentErrors => {
+          if (!currentErrors.consultants) return currentErrors
+          const nextErrors = { ...currentErrors }
+          delete nextErrors.consultants
+          return nextErrors
+        })
+        next[index] = label
+      }
       const normalized = next.filter(Boolean)
-      const ids = normalized.map(name => userByName.get(name)?.id || '').filter(Boolean)
-      return { ...current, consultants: normalized.length ? normalized : ['-'], consultant_user_ids: ids }
+      const real = normalized.filter(name => name !== '-')
+      return {
+        ...current,
+        consultants: normalized.length ? normalized : ['-'],
+        consultant_user_ids: [...new Set(real.map(name => userByName.get(name)?.id || '').filter(Boolean))]
+      }
     })
   }
   const matchingConsultants = (index) => {
     const query = String(consultantSearch[index] || '').trim().toLowerCase()
-    return sortedUsers.filter(user => user === '-' || (!selectedConsultants.some((selected, selectedIndex) => selectedIndex !== index && selected === user) && user.toLowerCase().includes(query)))
+    const currentFields = Array.isArray(form.consultants) && form.consultants.length ? form.consultants.map(item => displayUserLabel(item) || '-') : ['-']
+    return sortedUsers.filter(user => user === '-' || (!currentFields.some((selected, selectedIndex) => selectedIndex !== index && selected === user) && user.toLowerCase().includes(query)))
   }
 
   const openMandateCandidates = (job) => {
@@ -711,8 +743,7 @@ export default function JobsPage() {
                 <div className="form-group full">
                   <label className="form-label">Consultant</label>
                   <div className="consultant-picker-list">
-                    {selectedConsultants.length === 0 && <span className="sub-text">-</span>}
-                    {selectedConsultants.map((name, index) => (
+                    {consultantFields.map((name, index) => (
                       <div className="client-search-wrap" key={`${name}-${index}`}>
                         <input
                           className="form-control"
@@ -743,7 +774,7 @@ export default function JobsPage() {
                         )}
                       </div>
                     ))}
-                    <button className="row-action-btn" type="button" title="Add Consultant" onClick={addConsultant} disabled={saving || !availableConsultants.length}><Plus size={13} /></button>
+                    <button className="row-action-btn" type="button" title="Add Consultant" onClick={addConsultant} disabled={saving}><Plus size={13} /></button>
                   </div>
                   {errors.consultants && <span className="form-error">{errors.consultants}</span>}
                 </div>
