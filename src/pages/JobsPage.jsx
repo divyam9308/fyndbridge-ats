@@ -513,7 +513,7 @@ export default function JobsPage() {
       case 'budget':
         return <td key={column.key}>{dash(job.budget)}</td>
       case 'mandateStatus':
-        return <td key={column.key}><div className="candidate-columns-control mandate-status-control"><button className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', job.id, event.currentTarget)} disabled={statusSaving[job.id]}>{dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}</button></div></td>
+        return <td key={column.key}><span className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`}>{dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}</span></td>
       case 'sector':
         return <td key={column.key}>{dash(job.vertical)}</td>
       case 'allocationDate':
