@@ -187,6 +187,7 @@
 .candidate-sort-control {
   position: relative;
   flex: 0 0 auto;
+  z-index: 30;
 }
 .candidate-sort-btn {
   display: flex;
