@@ -68,6 +68,17 @@ const canonicalClients = (clients) => {
   return [...map.values()].sort((a, b) => clientName(a).localeCompare(clientName(b), undefined, { sensitivity: 'base' }))
 }
 const formatLocationText = (location) => String(location || '').trim()
+const displayUserLabel = (value) => {
+  if (typeof value === 'string') return value.trim()
+  if (!value || typeof value !== 'object') return ''
+  return String(value.name || value.full_name || value.display_name || value.email || '').trim()
+}
+const isDashOption = (value) => displayUserLabel(value) === '-'
+const normalizeSelectedUsers = (values) => {
+  const labels = (Array.isArray(values) ? values : [values]).map(displayUserLabel).filter(Boolean)
+  if (!labels.length || labels.includes('-')) return ['-']
+  return [...new Set(labels)]
+}
 
 export default function JobsPage() {
   const location = useLocation()
@@ -263,9 +274,9 @@ export default function JobsPage() {
     setForm({
       id: job.id,
       job_display_id: job.job_display_id || '',
-      consultants: Array.isArray(job.consultants) ? job.consultants : [],
+      consultants: normalizeSelectedUsers(Array.isArray(job.consultants) ? job.consultants : []),
       consultant_user_ids: [],
-      team_lead: job.team_lead === '-' ? '' : job.team_lead || '',
+      team_lead: displayUserLabel(job.team_lead) || '-',
       team_lead_user_id: '',
       client_id: job.client_id || '',
       role: job.role || job.title || '',
@@ -281,7 +292,7 @@ export default function JobsPage() {
     setClientSearch(job.client_name || '')
     setRoleSearch(job.role || job.title || '')
     setSectorSearch(job.vertical || '')
-    setTeamLeadSearch(job.team_lead === '-' ? '' : job.team_lead || '')
+    setTeamLeadSearch(displayUserLabel(job.team_lead) || '-')
     setAddingNewRole(false)
     setClientSuggestionsOpen(false)
     setRoleSuggestionsOpen(false)
@@ -289,7 +300,14 @@ export default function JobsPage() {
     setIsOpen(true)
   }
 
-  const userList = useMemo(() => userOptions.map(user => typeof user === 'string' ? { id: '', name: user, email: '' } : user).filter(user => user?.name), [userOptions])
+  const userList = useMemo(() => userOptions
+    .map(user => {
+      if (typeof user === 'string') return { id: '', name: user.trim(), email: '' }
+      if (!user || typeof user !== 'object') return null
+      const name = displayUserLabel(user)
+      return name ? { ...user, name } : null
+    })
+    .filter(Boolean), [userOptions])
   const sortedUsers = useMemo(() => ['-', ...userList.map(user => user.name)], [userList])
   const userByName = useMemo(() => new Map(userList.map(user => [user.name, user])), [userList])
   const clientOptions = useMemo(() => canonicalClients(dbClients), [dbClients])
@@ -308,9 +326,12 @@ export default function JobsPage() {
   const matchingRoles = useMemo(() => roleOptions
     .filter(job => `${job.role} ${job.job_display_id || ''}`.toLowerCase().includes(roleSearch.trim().toLowerCase())), [roleOptions, roleSearch])
   const matchingSectors = useMemo(() => SECTOR_OPTIONS.filter(value => value.toLowerCase().includes(sectorSearch.trim().toLowerCase())), [sectorSearch])
-  const matchingTeamLeads = useMemo(() => sortedUsers.filter(user => user !== '-' && user.toLowerCase().includes(teamLeadSearch.trim().toLowerCase())), [sortedUsers, teamLeadSearch])
-  const selectedConsultants = form.consultants || []
-  const availableConsultants = userOptions.filter(user => !selectedConsultants.includes(user))
+  const matchingTeamLeads = useMemo(() => {
+    const query = teamLeadSearch.trim().toLowerCase()
+    return sortedUsers.filter(user => user === '-' || user.toLowerCase().includes(query))
+  }, [sortedUsers, teamLeadSearch])
+  const selectedConsultants = normalizeSelectedUsers(form.consultants || [])
+  const availableConsultants = sortedUsers.filter(user => user === '-' || !selectedConsultants.includes(user))
   const activeColumns = MANDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
 
   const togglePendingColumn = (key) => {
@@ -347,7 +368,8 @@ export default function JobsPage() {
     if (!form.job_display_id) next.job_display_id = 'Job ID is required'
     if (!form.client_id) next.client_id = 'Client Name is required'
     if (!form.role.trim()) next.role = 'Role is required'
-    if (new Set(selectedConsultants).size !== selectedConsultants.length) next.consultants = 'Consultants cannot be duplicated'
+    const realConsultants = selectedConsultants.filter(name => name !== '-')
+    if (new Set(realConsultants).size !== realConsultants.length) next.consultants = 'Consultants cannot be duplicated'
     return next
   }
 
@@ -360,10 +382,10 @@ export default function JobsPage() {
     setSaving(true)
     try {
       const payload = {
-        consultants: selectedConsultants,
-        consultant_user_ids: selectedConsultants.map(name => userByName.get(name)?.id || '').filter(Boolean),
-        team_lead: form.team_lead || null,
-        team_lead_user_id: form.team_lead ? userByName.get(form.team_lead)?.id || '' : '',
+        consultants: selectedConsultants.filter(name => name !== '-'),
+        consultant_user_ids: selectedConsultants.filter(name => name !== '-').map(name => userByName.get(name)?.id || '').filter(Boolean),
+        team_lead: form.team_lead && form.team_lead !== '-' ? form.team_lead : null,
+        team_lead_user_id: form.team_lead && form.team_lead !== '-' ? userByName.get(form.team_lead)?.id || '' : '',
         client_id: form.client_id,
         role: form.role,
         location: form.location,
@@ -443,20 +465,38 @@ export default function JobsPage() {
 
   const addConsultant = () => {
     if (!availableConsultants.length) return
-    const user = userByName.get(availableConsultants[0])
-    setForm(current => ({ ...current, consultants: [...current.consultants, availableConsultants[0]], consultant_user_ids: [...(current.consultant_user_ids || []), user?.id || ''] }))
+    setForm(current => {
+      const existing = normalizeSelectedUsers(current.consultants)
+      const nextLabel = existing.includes('-')
+        ? '-'
+        : availableConsultants.find(user => user !== '-') || '-'
+      if (nextLabel === '-') return { ...current, consultants: ['-'], consultant_user_ids: [] }
+      const nextConsultants = [...existing.filter(name => name !== '-'), nextLabel]
+      return {
+        ...current,
+        consultants: nextConsultants,
+        consultant_user_ids: nextConsultants.map(name => userByName.get(name)?.id || '').filter(Boolean)
+      }
+    })
   }
 
   const updateConsultant = (index, value) => {
     setForm(current => {
-      const next = [...current.consultants]
-      if (!value || value === '-') next.splice(index, 1)
-      else if (!next.includes(value)) next[index] = value
-      const ids = next.map(name => userByName.get(name)?.id || '')
-      return { ...current, consultants: next, consultant_user_ids: ids }
+      const label = displayUserLabel(value) || '-'
+      if (label === '-') return { ...current, consultants: ['-'], consultant_user_ids: [] }
+      const base = normalizeSelectedUsers(current.consultants).filter(name => name !== '-')
+      const next = [...base]
+      if (!label) next.splice(index, 1)
+      else if (!next.includes(label)) next[index] = label
+      const normalized = next.filter(Boolean)
+      const ids = normalized.map(name => userByName.get(name)?.id || '').filter(Boolean)
+      return { ...current, consultants: normalized.length ? normalized : ['-'], consultant_user_ids: ids }
     })
   }
-  const matchingConsultants = (index) => sortedUsers.filter(user => user !== '-' && !selectedConsultants.some((selected, selectedIndex) => selectedIndex !== index && selected === user) && user.toLowerCase().includes(String(consultantSearch[index] || '').trim().toLowerCase()))
+  const matchingConsultants = (index) => {
+    const query = String(consultantSearch[index] || '').trim().toLowerCase()
+    return sortedUsers.filter(user => user === '-' || (!selectedConsultants.some((selected, selectedIndex) => selectedIndex !== index && selected === user) && user.toLowerCase().includes(query)))
+  }
 
   const openMandateCandidates = (job) => {
     if (!job?.client_id || !job?.id) return

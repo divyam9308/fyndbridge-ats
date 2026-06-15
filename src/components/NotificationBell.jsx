@@ -115,10 +115,13 @@ export default function NotificationBell() {
               <div className="notification-item-title">{item.title || 'Notification'}</div>
               <div className="notification-message">{item.message}</div>
               <div className="notification-meta">{item.sender_name || 'System'} • {formatDateTime(item.created_at)}</div>
+              <div className={`notification-status ${item.status === 'read' ? 'is-read' : 'is-pending'}`}>
+                Status: {item.status === 'read' ? 'Read' : 'Pending'}
+              </div>
               {item.status === 'pending' ? (
                 <button className="notification-read-btn" type="button" onClick={() => markRead(item)}>Mark as Read</button>
               ) : (
-                <div className="notification-read-state">Status: Read {formatDateTime(item.read_at)}</div>
+                <div className="notification-read-state">{formatDateTime(item.read_at)}</div>
               )}
             </div>
           )) : (
