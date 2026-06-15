@@ -21,6 +21,15 @@ const nullable = (value) => {
 }
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
 const jobIdNumber = (value) => Number(String(value || '').match(/^JB(\d+)$/i)?.[1] || 0)
+const compareDisplayIds = (a, b, prefix) => {
+  const aText = clean(a)
+  const bText = clean(b)
+  const pattern = new RegExp(`^${prefix}\\s*(\\d+)$`, 'i')
+  const aNumber = Number(aText.match(pattern)?.[1] || 0)
+  const bNumber = Number(bText.match(pattern)?.[1] || 0)
+  if (aNumber !== bNumber) return aNumber - bNumber
+  return aText.localeCompare(bText, undefined, { sensitivity: 'base' })
+}
 const normalizeMandateStatus = (value) => {
   const text = clean(value)
   if (text === 'Completed') return 'Completed'
@@ -129,6 +138,9 @@ async function listJobs(req, res) {
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
     const to = from + limit - 1
+    const sortField = clean(req.query.sortField)
+    const sortDirection = clean(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
+    const paginateById = paginate && sortField === 'job_id'
     let query = supabase.from('jobs').select('*, clients(name, client_name, client_display_id)', { count: paginate ? 'exact' : undefined })
     if (req.query.client_id) query = query.eq('client_id', req.query.client_id)
     const aiFilters = req.query.ai_filters ? JSON.parse(req.query.ai_filters) : null
@@ -162,14 +174,19 @@ async function listJobs(req, res) {
       }
     })
     query = filtered.query
-    if (req.query.sortField === 'job_id') query = query.order('job_display_id', { ascending: req.query.sortDirection !== 'desc' })
+    if (sortField === 'job_id') query = query.order('created_at', { ascending: false })
     else if (req.query.sortField === 'role') query = query.order('title', { ascending: req.query.sortDirection !== 'desc' })
     else query = query.order('created_at', { ascending: false })
-    if (paginate) query = query.range(from, to)
+    if (paginate && !paginateById) query = query.range(from, to)
     const { data, error, count } = await query
     if (error) throw error
     let rows = (data || []).map(formatJob)
     if (!paginate) rows = applySharedFilters('mandates', rows, aiFilters, jobFilterValue)
+    if (paginateById) {
+      const direction = sortDirection === 'desc' ? -1 : 1
+      rows = [...rows].sort((a, b) => compareDisplayIds(a.job_display_id, b.job_display_id, 'JB') * direction)
+      rows = rows.slice(from, to + 1)
+    }
     const total = paginate ? count || 0 : rows.length
     const totalPages = paginate ? Math.max(1, Math.ceil(total / limit)) : 1
     console.log('[jobs pagination]', { page, limit, returned: rows.length, total, paginate })

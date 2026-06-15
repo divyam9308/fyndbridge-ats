@@ -115,8 +115,17 @@ function isDuplicateValue(value) {
 }
 
 function displayIdNumber(value, prefix) {
-  const match = String(value || '').match(new RegExp(`^${prefix}(\\d+)$`, 'i'))
+  const match = String(value || '').match(new RegExp(`^${prefix}\\s*(\\d+)$`, 'i'))
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
+}
+
+function compareDisplayIds(a, b, prefix) {
+  const aText = cleanText(a)
+  const bText = cleanText(b)
+  const aNumber = displayIdNumber(aText, prefix)
+  const bNumber = displayIdNumber(bText, prefix)
+  if (aNumber !== bNumber) return aNumber - bNumber
+  return aText.localeCompare(bText, undefined, { sensitivity: 'base' })
 }
 
 async function ensureCandidateDisplayIds() {
@@ -725,6 +734,9 @@ async function listCandidates(req, res) {
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
     const to = from + limit - 1
+    const sortField = cleanText(req.query.sortField)
+    const sortDirection = cleanText(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
+    const paginateById = sortField === 'candidate_id'
     const aiFilters = parseJsonFilter(req.query.ai_filters)
     const skillCandidateIds = await resolveSkillCandidateIds(aiFilters)
     const associationCandidateIds = await resolveAssociationCandidateIds(aiFilters)
@@ -748,8 +760,8 @@ async function listCandidates(req, res) {
       .from('candidates')
       .select(`*, ${relationSelect}`, { count: 'exact' })
 
-    if (req.query.sortField === 'candidate_id') {
-      query = query.order('candidate_display_id', { ascending: req.query.sortDirection !== 'desc' })
+    if (sortField === 'candidate_id') {
+      query = query.order('created_at', { ascending: false })
     } else if (req.query.sortField === 'candidate_name') {
       query = query.order('full_name', { ascending: req.query.sortDirection !== 'desc' })
     } else {
@@ -846,7 +858,8 @@ async function listCandidates(req, res) {
         relationSelect
       })
     }
-    const { data, error, count } = await query.range(from, to)
+    if (!paginateById) query = query.range(from, to)
+    const { data, error, count } = await query
 
     if (error) {
       throw error
@@ -893,12 +906,20 @@ async function listCandidates(req, res) {
       }
     }
 
-    console.log('[candidates pagination]', { page, limit, returned: flattened.length, total: count || 0, ai: Boolean(aiFilters) })
+    if (paginateById) {
+      const direction = sortDirection === 'desc' ? -1 : 1
+      flattened = [...flattened].sort((a, b) => compareDisplayIds(a.candidate_display_id, b.candidate_display_id, 'CA') * direction)
+    }
+
+    const total = count || 0
+    const paged = paginateById ? flattened.slice(from, to + 1) : flattened
+
+    console.log('[candidates pagination]', { page, limit, returned: paged.length, total, ai: Boolean(aiFilters) })
     return res.json({
-      data: flattened,
-      total: count || 0,
+      data: paged,
+      total,
       page,
-      totalPages: Math.max(1, Math.ceil((count || 0) / limit)),
+      totalPages: Math.max(1, Math.ceil(total / limit)),
       limit
     })
   } catch (err) {

@@ -46,8 +46,17 @@ function normalizeDuplicateText(value) {
 }
 
 function displayIdNumber(value, prefix) {
-  const match = String(value || '').match(new RegExp(`^${prefix}(\\d+)$`, 'i'))
+  const match = String(value || '').match(new RegExp(`^${prefix}\\s*(\\d+)$`, 'i'))
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
+}
+
+function compareDisplayIds(a, b, prefix) {
+  const aText = clean(a)
+  const bText = clean(b)
+  const aNumber = displayIdNumber(aText, prefix)
+  const bNumber = displayIdNumber(bText, prefix)
+  if (aNumber !== bNumber) return aNumber - bNumber
+  return aText.localeCompare(bText, undefined, { sensitivity: 'base' })
 }
 
 const CLIENT_DISPLAY_ID_RESERVATION_MS = 10 * 60 * 1000
@@ -106,7 +115,7 @@ function sortClientRows(rows, sort) {
   const direction = sort.direction === 'desc' ? -1 : 1
   return [...rows].sort((a, b) => {
     if (sort.field === 'client_id') {
-      return (displayIdNumber(a.client_display_id, 'CL') - displayIdNumber(b.client_display_id, 'CL')) * direction
+      return compareDisplayIds(a.client_display_id, b.client_display_id, 'CL') * direction
     }
     return compareText(a.client_name || a.name, b.client_name || b.name) * direction
   })
@@ -372,6 +381,7 @@ async function listClients(req, res) {
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
     const to = from + limit - 1
+    const paginateById = paginate && sort.field === 'client_id'
 
     let query = supabase.from('clients').select('*', { count: paginate ? 'exact' : undefined })
     if (req.query.search) {
@@ -394,15 +404,16 @@ async function listClients(req, res) {
         query = query.eq('status', clean(req.query.status))
       }
     }
-    if (sort.field === 'client_id') query = query.order('client_display_id', { ascending: sort.direction !== 'desc' })
+    if (sort.field === 'client_id') query = query.order('created_at', { ascending: false })
     else if (sort.field === 'client_name') query = query.order('client_name', { ascending: sort.direction !== 'desc' }).order('name', { ascending: sort.direction !== 'desc' })
     else query = query.order('created_at', { ascending: false })
-    if (paginate) query = query.range(from, to)
+    if (paginate && !paginateById) query = query.range(from, to)
     const { data, error, count } = await query
     if (error) throw error
-    const sortedData = paginate ? (data || []) : sortClientRows(data || [], sort)
+    const sortedData = paginateById || !paginate ? sortClientRows(data || [], sort) : (data || [])
+    const pagedData = paginateById ? sortedData.slice(from, to + 1) : sortedData
 
-    const clientIds = sortedData.map((client) => client.id)
+    const clientIds = pagedData.map((client) => client.id)
     const jobsQuery = supabase.from('jobs').select('client_id, status, mandate_status')
     const { data: jobs, error: jobsError } = clientIds.length ? await jobsQuery.in('client_id', clientIds) : { data: [], error: null }
     if (jobsError) throw jobsError
@@ -415,8 +426,8 @@ async function listClients(req, res) {
       jobsByClient[job.client_id].push(job)
     })
 
-    const followUpsMap = await loadFollowUps(sortedData.map((client) => client.id))
-    const rows = sortedData.map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || [], jobsByClient[client.id] || []))
+    const followUpsMap = await loadFollowUps(pagedData.map((client) => client.id))
+    const rows = pagedData.map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || [], jobsByClient[client.id] || []))
     const total = paginate ? count || 0 : rows.length
     const totalPages = paginate ? Math.max(1, Math.ceil(total / limit)) : 1
     console.log('[clients pagination]', { page, limit, returned: rows.length, total, paginate })
