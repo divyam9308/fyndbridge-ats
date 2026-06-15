@@ -180,22 +180,6 @@ function formatJob(row) {
   }
 }
 
-async function ensureJobDisplayIds() {
-  const { data, error } = await supabase.from('jobs').select('id, job_display_id, created_at').order('created_at', { ascending: true }).limit(10000)
-  if (error) throw error
-  const rows = data || []
-  const used = new Set(rows.map(row => row.job_display_id).filter(Boolean))
-  let next = Math.max(0, ...rows.map(row => jobIdNumber(row.job_display_id))) + 1
-  for (const row of rows.filter(item => !clean(item.job_display_id))) {
-    while (used.has(`JB${next}`)) next += 1
-    const id = `JB${next}`
-    used.add(id)
-    next += 1
-    const { error: updateError } = await supabase.from('jobs').update({ job_display_id: id }).eq('id', row.id)
-    if (updateError) throw updateError
-  }
-}
-
 async function nextJobDisplayId() {
   return allocateNextDisplayId({ supabase, table: 'jobs', column: 'job_display_id', prefix: 'JB' })
 }

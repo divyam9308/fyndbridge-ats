@@ -708,8 +708,6 @@ async function insertAssociation(payload) {
       ? nextPayload.status.trim()
       : '-';
 
-  console.log('[insertAssociation] Final payload before insert:', JSON.stringify(nextPayload))
-
   let insertPayload = nextPayload
   let result = null
   for (let i = 0; i <= ASSOCIATION_FIELDS.length; i++) {
@@ -735,7 +733,7 @@ async function updateAssociation(associationId, payload) {
         : '-';
   }
 
-  console.log('[updateAssociation] Final payload before update:', JSON.stringify(nextPayload))
+ 
 
   let updatePayload = nextPayload
   let result = null
@@ -782,8 +780,6 @@ async function syncMandateStatusForJob(jobId) {
 
 async function listCandidates(req, res) {
   try {
-    await ensureCandidateDisplayIds()
-
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
@@ -902,16 +898,6 @@ async function listCandidates(req, res) {
       }
     })
     query = appliedAi.query
-    if (aiFilters) {
-      console.log('[candidates ai filter query]', {
-        prompt: req.query.ai_prompt || '',
-        filters: aiFilters,
-        normalized: appliedAi.normalized,
-        skillCandidateIds: skillCandidateIds?.length || 0,
-        associationCandidateIds: associationCandidateIds?.length || 0,
-        relationSelect
-      })
-    }
     if (!paginateById) query = query.range(from, to)
     const { data, error, count } = await query
 
@@ -946,7 +932,6 @@ async function listCandidates(req, res) {
     const total = count || 0
     const paged = paginateById ? flattened.slice(from, to + 1) : flattened
 
-    console.log('[candidates pagination]', { page, limit, returned: paged.length, total, ai: Boolean(aiFilters) })
     return res.json({
       data: paged,
       total,
