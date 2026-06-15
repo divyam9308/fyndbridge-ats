@@ -36,6 +36,19 @@ const avatarPalette = [
 ]
 const normalizeCandidateGroupName = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
 const normalizeCandidateGroupEmail = (value) => String(value || '').trim().toLowerCase()
+const normalizeCandidateGroupMobile = (value) => String(value || '').replace(/\D/g, '').trim()
+const isMeaningfulDuplicateValue = (value) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
+  return Boolean(text && text !== '-' && text !== 'na' && text !== 'n/a' && text !== 'none')
+}
+const duplicateIdentityTokens = (candidate) => {
+  const tokens = []
+  const mobile = normalizeCandidateGroupMobile(candidate.mobile)
+  const email = normalizeCandidateGroupEmail(candidate.email)
+  if (isMeaningfulDuplicateValue(mobile)) tokens.push(`m:${mobile}`)
+  if (isMeaningfulDuplicateValue(email)) tokens.push(`e:${email}`)
+  return tokens
+}
 const formatDate = (value) => {
   if (!value) return '-'
   const date = new Date(value)
@@ -165,6 +178,7 @@ const apiCandidateToUi = (row) => ({
   candidateId: row.candidate_id,
   candidateDisplayId: row.candidate_display_id || '',
   clientId: row.client_id || '',
+  clientDisplayId: row.client_display_id || '',
   jobId: row.job_id || '',
   jobDisplayId: row.job_display_id || '',
   name: row.full_name || '',
@@ -534,14 +548,37 @@ export default function CandidatesPage() {
   const filtered = candidates
 
   const mobileGroups = {}
-  filtered.forEach(c => {
-    const name = normalizeCandidateGroupName(c.name)
-    const email = normalizeCandidateGroupEmail(c.email)
-    const key = sortField
-      ? c.associationId || c.id
-      : (name && email ? `${name}|${email}` : c.associationId || c.id)
+  const parents = filtered.map((_, index) => index)
+  const firstTokenIndex = new Map()
+  const find = (index) => {
+    let root = index
+    while (parents[root] !== root) root = parents[root]
+    while (parents[index] !== index) {
+      const next = parents[index]
+      parents[index] = root
+      index = next
+    }
+    return root
+  }
+  const union = (a, b) => {
+    const rootA = find(a)
+    const rootB = find(b)
+    if (rootA !== rootB) parents[rootB] = rootA
+  }
+
+  filtered.forEach((candidate, index) => {
+    const tokens = duplicateIdentityTokens(candidate)
+    tokens.forEach((token) => {
+      if (firstTokenIndex.has(token)) union(index, firstTokenIndex.get(token))
+      else firstTokenIndex.set(token, index)
+    })
+  })
+
+  filtered.forEach((candidate, index) => {
+    const tokens = duplicateIdentityTokens(candidate)
+    const key = tokens.length ? `group-${find(index)}` : `single-${candidate.associationId || candidate.id || index}`
     if (!mobileGroups[key]) mobileGroups[key] = []
-    mobileGroups[key].push(c)
+    mobileGroups[key].push(candidate)
   })
 
   const visibleCandidates = []
@@ -837,7 +874,7 @@ export default function CandidatesPage() {
       await loadCandidates(page, { showLoading: false })
     } catch (err) {
       if (err.duplicate) {
-        setCandidateDuplicate({ source: 'manual', candidate: form, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, message: err.message })
+        setCandidateDuplicate({ source: 'manual', candidate: form, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, allowAddDuplicate: err.duplicate.allowAddDuplicate !== false, message: err.message })
         return
       }
       setErrors({ form: err.message })
@@ -1022,7 +1059,7 @@ export default function CandidatesPage() {
       await advanceResumeReview('Candidate saved.')
     } catch (err) {
       if (err.duplicate) {
-        setCandidateDuplicate({ source: 'resume', candidate: candidateToSave, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, message: err.message })
+        setCandidateDuplicate({ source: 'resume', candidate: candidateToSave, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, allowAddDuplicate: err.duplicate.allowAddDuplicate !== false, message: err.message })
         return
       }
       setImportError(err.message)
@@ -1459,7 +1496,7 @@ export default function CandidatesPage() {
     const candidateAvatarStyle = avatarColorsFor(c.name)
     const consultantInitials = initials(c.consultant || '').slice(0, 2) || '-'
     const consultantAvatarStyle = avatarColorsFor(c.consultant || c.name)
-    const clientIdValue = getReadableClientId(c, dbClients)
+    const clientIdValue = c.clientDisplayId || getReadableClientId(c, dbClients)
     const jobIdValue = c.jobDisplayId || jobDisplayIdForForm(c) || '-'
     const noticeMeta = getNoticeMeta(c.noticePeriod)
 
@@ -1973,7 +2010,7 @@ export default function CandidatesPage() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setDuplicateMoreOpen(true)} disabled={saving}>View More</button>
               <button className="btn-secondary" onClick={() => { setCandidateDuplicate(null); setDuplicateMoreOpen(false) }} disabled={saving}>Cancel</button>
-              {!candidateDuplicate.exactAssociation && (
+              {!candidateDuplicate.exactAssociation && candidateDuplicate.allowAddDuplicate !== false && (
                 <button className="btn-secondary" onClick={() => resolveCandidateDuplicate('add_duplicate')} disabled={saving}>Add Duplicate</button>
               )}
               <button className="btn-primary" onClick={candidateDuplicate.exactAssociation ? openDuplicateExistingForEdit : () => resolveCandidateDuplicate('update_current')} disabled={saving}>Update Existing</button>
