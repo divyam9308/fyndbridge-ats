@@ -135,3 +135,4 @@ export const logCandidateCvOpen = (candidate) => {
   })
 }
 import { STORAGE_BUCKETS } from './storageBuckets'
+export { openProtectedUrl } from '../services/apiClient'

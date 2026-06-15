@@ -8,6 +8,7 @@ import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
+import { openProtectedUrl } from '../services/apiClient'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 
 const STATUSES = ['Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
@@ -734,7 +735,7 @@ export default function ClientsPage() {
         return <td key={key}>{commercialDash(client, client.address_on_invoice)}</td>
       case 'contractPdf': {
         const contractUrl = client.contract_document || client.contract_pdf_url
-        return <td key={key}>{contractUrl ? <a className="cv-table-link" href={contractUrl} target="_blank" rel="noreferrer" title="Open Contract PDF"><FileText size={15} /></a> : '-'}</td>
+        return <td key={key}>{contractUrl ? <a className="cv-table-link" href={contractUrl} target="_blank" rel="noreferrer" title="Open Contract PDF" onClick={(event) => { event.preventDefault(); openProtectedUrl(contractUrl) }}><FileText size={15} /></a> : '-'}</td>
       }
       case 'actions':
         return <td key={key}><div className="row-actions"><button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)}><Pencil size={13} strokeWidth={2} /></button></div></td>
@@ -965,7 +966,7 @@ export default function ClientsPage() {
                   <div className="form-group">
                     <label className="form-label">Contract PDF</label>
                     <input type="file" accept="application/pdf" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving} />
-                    {form.contract_document && <a className="cv-table-link" href={form.contract_document} target="_blank" rel="noreferrer">Current Contract</a>}
+                    {form.contract_document && <a className="cv-table-link" href={form.contract_document} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); openProtectedUrl(form.contract_document) }}>Current Contract</a>}
                     {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
                   </div>
                 )}

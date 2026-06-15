@@ -8,13 +8,15 @@ async function openDocument(req, res) {
     if (!bucket || !path) return res.status(400).json({ error: 'Document bucket and path are required' })
 
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600)
-    console.log('[document open signed URL]', {
-      type: req.params.type,
-      bucket,
-      path,
-      signedUrl: data?.signedUrl || '',
-      error: error?.message || ''
+    if (process.env.NODE_ENV !== 'production') {
+  console.log('[document open]', {
+    type: req.params.type,
+    bucket,
+    path,
+    success: Boolean(data?.signedUrl),
+    error: error?.message || ''
     })
+  }
     if (error || !data?.signedUrl) return res.status(404).json({ error: 'Document file could not be opened' })
     return res.redirect(data.signedUrl)
   } catch (err) {

@@ -1,6 +1,7 @@
 const express = require('express')
 const cors = require('cors')
 const attachUser = require('./middleware/authMiddleware')
+const requireAuth = require('./middleware/requireAuth')
 
 const app = express()
 
@@ -27,16 +28,16 @@ app.use(cors({
 app.use(express.json())
 app.use(attachUser)
 
-app.use('/api/candidates', require('./routes/candidates'))
-app.use('/api/resumes', require('./routes/resumes'))
-app.use('/api/documents', require('./routes/documents'))
-app.use('/api/clients', require('./routes/clients'))
-app.use('/api/jobs', require('./routes/jobs'))
-app.use('/api/notifications', require('./routes/notifications'))
+app.use('/api/candidates', requireAuth, require('./routes/candidates'))
+app.use('/api/resumes', requireAuth, require('./routes/resumes'))
+app.use('/api/documents', requireAuth, require('./routes/documents'))
+app.use('/api/clients', requireAuth, require('./routes/clients'))
+app.use('/api/jobs', requireAuth, require('./routes/jobs'))
+app.use('/api/notifications', requireAuth, require('./routes/notifications'))
 app.use('/api/auth', require('./routes/auth'))
-app.use('/api/user-preferences', require('./routes/userPreferences'))
-app.use('/api/user-profiles', require('./routes/userProfiles'))
-app.use('/api/ai', require('./routes/ai'))
+app.use('/api/user-preferences', requireAuth, require('./routes/userPreferences'))
+app.use('/api/user-profiles', requireAuth, require('./routes/userProfiles'))
+app.use('/api/ai', requireAuth, require('./routes/ai'))
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }))
 

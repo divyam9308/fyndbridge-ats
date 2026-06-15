@@ -8,6 +8,7 @@ import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import { supabase } from '../services/supabaseClient'
+import { openProtectedUrl } from '../services/apiClient'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -595,7 +596,7 @@ export default function JobsPage() {
       case 'allocationDate':
         return <td key={column.key}>{dash(job.allocation_date)}</td>
       case 'jd':
-        return <td key={column.key}>{job.jd_url ? <a href={job.jd_url} target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD"><FileText size={15} /></a> : '-'}</td>
+        return <td key={column.key}>{job.jd_url ? <a href={job.jd_url} target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD" onClick={(event) => { event.preventDefault(); openProtectedUrl(job.jd_url) }}><FileText size={15} /></a> : '-'}</td>
       case 'action':
         return <td key={column.key}><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)}><Pencil size={13} /></button></td>
       default:
@@ -943,7 +944,7 @@ export default function JobsPage() {
                 <div className="form-group">
                   <label className="form-label">JD File</label>
                   <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="form-control" onChange={e => setJdFile(e.target.files?.[0] || null)} disabled={saving} />
-                  {form.jd_url && <a className="cv-table-link" href={form.jd_url} target="_blank" rel="noreferrer"><FileText size={13} /> Current JD</a>}
+                  {form.jd_url && <a className="cv-table-link" href={form.jd_url} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); openProtectedUrl(form.jd_url) }}><FileText size={13} /> Current JD</a>}
                 </div>
               </div>
             </div>

@@ -8,7 +8,7 @@ import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
-import { logCandidateCvOpen, resolveCandidateCvHref } from '../utils/candidateUtils'
+import { logCandidateCvOpen, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
@@ -1600,7 +1600,7 @@ export default function CandidatesPage() {
         return (
           <td key={key}>
             {cvHref ? (
-              <a href={cvHref} target="_blank" rel="noopener noreferrer" className="cv-table-link candidate-cv-link" title="Open CV" onClick={event => { event.stopPropagation(); logCandidateCvOpen(c) }}>
+              <a href={cvHref} target="_blank" rel="noopener noreferrer" className="cv-table-link candidate-cv-link" title="Open CV" onClick={event => { event.preventDefault(); event.stopPropagation(); logCandidateCvOpen(c); openProtectedUrl(cvHref) }}>
                 <FileText size={15} strokeWidth={2} />
               </a>
             ) : (
@@ -1812,7 +1812,7 @@ export default function CandidatesPage() {
             <div className="candidate-drawer-actions">
               <button className="btn-primary" onClick={() => openEditCandidate(selectedCandidate)}>Edit</button>
               {resolveCandidateCvHref(selectedCandidate) && (
-                <a className="btn-secondary" href={resolveCandidateCvHref(selectedCandidate)} target="_blank" rel="noopener noreferrer" onClick={() => logCandidateCvOpen(selectedCandidate)}><FileText size={14} /> CV</a>
+                <a className="btn-secondary" href={resolveCandidateCvHref(selectedCandidate)} target="_blank" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); logCandidateCvOpen(selectedCandidate); openProtectedUrl(resolveCandidateCvHref(selectedCandidate)) }}><FileText size={14} /> CV</a>
               )}
               {selectedCandidate.linkedinUrl && (
                 <a className="btn-secondary" href={selectedCandidate.linkedinUrl} target="_blank" rel="noopener noreferrer">LinkedIn</a>

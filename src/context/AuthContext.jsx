@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
+import { API_UNAUTHORIZED_EVENT } from '../services/apiClient'
 import { AuthContext } from './authStore'
 import { useAuth } from './useAuth'
 
@@ -138,6 +139,18 @@ export function AuthProvider({ children }) {
     window.addEventListener('fb:profile-name-updated', handleProfileNameUpdate)
     return () => window.removeEventListener('fb:profile-name-updated', handleProfileNameUpdate)
   }, [])
+
+  useEffect(() => {
+    const handleUnauthorized = async () => {
+      if (supabase) await supabase.auth.signOut()
+      syncSessionStorage(null)
+      setSession(null)
+      setUser(null)
+      navigate('/login?error=session', { replace: true })
+    }
+    window.addEventListener(API_UNAUTHORIZED_EVENT, handleUnauthorized)
+    return () => window.removeEventListener(API_UNAUTHORIZED_EVENT, handleUnauthorized)
+  }, [navigate])
 
   const value = useMemo(() => ({
     session,

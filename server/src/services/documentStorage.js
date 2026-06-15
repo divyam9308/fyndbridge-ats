@@ -9,7 +9,7 @@ function safeFileName(value) {
 
 async function uploadDocument(file, bucket, folder = '') {
   if (!file) return null
-  await supabase.storage.createBucket(bucket, { public: true }).catch(() => {})
+  await supabase.storage.createBucket(bucket, { public: false }).catch(() => {})
   const buffer = file.buffer || await fs.readFile(file.path)
   const objectPath = [folder, `${randomUUID()}-${safeFileName(file.originalname)}`].filter(Boolean).join('/')
   const { error } = await supabase.storage.from(bucket).upload(objectPath, buffer, {
