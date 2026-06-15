@@ -112,7 +112,7 @@ async function createAssignmentNotifications({ job, senderId, consultantIds, tea
       title: 'New Mandate Assignment',
       message: `You are assigned as Consultant for ${role} - ${clientName}`,
       status: 'pending',
-      action_type: 'mark_read'
+      action_type: 'mark_read_assignment'
     })
   }
 
@@ -127,14 +127,16 @@ async function createAssignmentNotifications({ job, senderId, consultantIds, tea
       title: 'New Mandate Assignment',
       message: `You are assigned as Team Lead for ${role} - ${clientName}`,
       status: 'pending',
-      action_type: 'mark_read'
+      action_type: 'mark_read_assignment'
     })
   }
 
   const safeRows = rows.filter(row => row.recipient_user_id && row.sender_user_id && row.recipient_user_id !== row.sender_user_id)
   if (safeRows.length) {
-    const { error } = await supabase.from('notifications').upsert(safeRows, { onConflict: 'mandate_id,recipient_user_id,role_type', ignoreDuplicates: true })
-    if (error && error.code !== '42P01') throw error
+    for (const row of safeRows) {
+      const { error } = await supabase.from('notifications').insert(row)
+      if (error && error.code !== '23505' && error.code !== '42P01') throw error
+    }
   }
 }
 

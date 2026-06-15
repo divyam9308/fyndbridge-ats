@@ -13,13 +13,31 @@ create table if not exists public.notifications (
   created_at timestamptz default now()
 );
 
+alter table public.notifications
+  add column if not exists action_type text default 'mark_read';
+
+update public.notifications
+set action_type = case
+  when role_type in ('consultant', 'team_lead') then 'mark_read_assignment'
+  when role_type = 'system' then 'assignment_read_confirmation'
+  else coalesce(action_type, 'mark_read')
+end
+where action_type is null or action_type = 'mark_read';
+
 create index if not exists notifications_recipient_user_id_idx on public.notifications(recipient_user_id);
 create index if not exists notifications_sender_user_id_idx on public.notifications(sender_user_id);
 create index if not exists notifications_mandate_id_idx on public.notifications(mandate_id);
 create index if not exists notifications_status_idx on public.notifications(status);
 create index if not exists notifications_created_at_idx on public.notifications(created_at);
+drop index if exists notifications_assignment_unique_idx;
+
 create unique index if not exists notifications_assignment_unique_idx
-  on public.notifications(mandate_id, recipient_user_id, role_type);
+  on public.notifications(mandate_id, recipient_user_id, role_type, action_type)
+  where action_type = 'mark_read_assignment';
+
+create unique index if not exists notifications_read_confirmation_unique_idx
+  on public.notifications(mandate_id, recipient_user_id, sender_user_id, action_type)
+  where action_type = 'assignment_read_confirmation';
 
 alter table public.notifications enable row level security;
 

@@ -52,15 +52,19 @@ async function markNotificationRead(req, res) {
     if (fetchError) throw fetchError
     if (!notification) return res.status(404).json({ error: 'Notification not found' })
 
-    const readAt = new Date().toISOString()
-    const { data, error } = await supabase
-      .from('notifications')
-      .update({ status: 'read', read_at: readAt })
-      .eq('id', notification.id)
-      .eq('recipient_user_id', req.user.id)
-      .select('*')
-      .single()
-    if (error) throw error
+    let data = notification
+    if (notification.status !== 'read') {
+      const readAt = new Date().toISOString()
+      const { data: updated, error } = await supabase
+        .from('notifications')
+        .update({ status: 'read', read_at: readAt })
+        .eq('id', notification.id)
+        .eq('recipient_user_id', req.user.id)
+        .select('*')
+        .single()
+      if (error) throw error
+      data = updated
+    }
 
     if (
       notification.sender_user_id &&
@@ -76,7 +80,7 @@ async function markNotificationRead(req, res) {
       const recipientName = preferredName(profiles.get(req.user.id), req.user.email)
       const role = clean(job?.title) || 'Mandate'
       const clientName = clean(client?.client_name || client?.name) || 'Client'
-      await supabase.from('notifications').insert({
+      const { error: insertError } = await supabase.from('notifications').insert({
         recipient_user_id: notification.sender_user_id,
         sender_user_id: req.user.id,
         mandate_id: notification.mandate_id,
@@ -85,8 +89,9 @@ async function markNotificationRead(req, res) {
         title: 'Notification Read',
         message: `${recipientName} has read the mandate assignment notification for ${role} - ${clientName}.`,
         status: 'pending',
-        action_type: 'mark_read'
+        action_type: 'assignment_read_confirmation'
       })
+      if (insertError && insertError.code !== '23505' && insertError.code !== '42P01') throw insertError
     }
 
     return res.json({ data })
