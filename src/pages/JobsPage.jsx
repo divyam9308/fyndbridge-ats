@@ -577,7 +577,7 @@ export default function JobsPage() {
             </FloatingDropdown>
           )}
         </div>
-        <div className="filter-divider" />
+        <div className="filter-bar-spacer" />
         <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalJobs / pageSize))} onPageChange={setPage} loading={loading} />
       </div>
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}

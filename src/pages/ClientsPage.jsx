@@ -270,10 +270,9 @@ export default function ClientsPage() {
           : null
 
         if (value?.length) {
-          const nextValue = value.includes('designation') ? value : [...value, 'designation']
-          setVisibleColumns(nextValue)
-          setPendingColumns(nextValue)
-          setSavedColumns(nextValue)
+          setVisibleColumns(value)
+          setPendingColumns(value)
+          setSavedColumns(value)
         }
       } catch {
         setVisibleColumns(DEFAULT_CLIENT_COLUMN_KEYS)
@@ -308,7 +307,7 @@ export default function ClientsPage() {
     })
   }, [clients, selectedContacts])
 
-  const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'designation')
+  const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
   const canonicalClients = useMemo(() => getCanonicalClients(allClients), [allClients])
   const matchingClients = useMemo(() => (
     canonicalClients
@@ -811,7 +810,7 @@ export default function ClientsPage() {
           )}
         </div>
         <button className="filter-clear" type="button" onClick={() => { setSortField(''); setSortDirection('asc'); setPage(1) }}>Clear</button>
-        <div className="filter-divider" />
+        <div className="filter-bar-spacer" />
         <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalClients / pageSize))} onPageChange={setPage} loading={loading} />
       </div>
 

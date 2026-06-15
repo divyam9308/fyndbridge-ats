@@ -172,6 +172,10 @@
   flex-wrap: nowrap;
   overflow: visible;
 }
+.filter-bar-spacer {
+  flex: 1 1 auto;
+  min-width: 16px;
+}
 .candidate-ai-filter-form {
   display: flex;
   align-items: center;
@@ -207,6 +211,8 @@
   gap: 6px;
   flex: 0 0 auto;
   flex-wrap: wrap;
+  margin-left: auto;
+  justify-content: flex-end;
 }
 .compact-pagination-btn {
   width: 30px;
@@ -242,6 +248,21 @@
   font-size: 14px;
   line-height: 1;
   padding: 0 1px;
+}
+@media (max-width: 1180px) {
+  .candidates-filter-bar {
+    flex-wrap: wrap;
+  }
+
+  .filter-bar-spacer {
+    display: none;
+  }
+
+  .compact-pagination {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
 }
 .filter-dropdown {
   position: absolute;

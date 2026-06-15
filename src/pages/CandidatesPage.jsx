@@ -1703,7 +1703,7 @@ export default function CandidatesPage() {
           )}
         </div>
         <button className="filter-clear" type="button" onClick={() => { setSortField(''); setSortDirection('asc'); setPage(1) }}>Clear</button>
-        <div className="filter-divider" />
+        <div className="filter-bar-spacer" />
         <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalCandidates / pageSize))} onPageChange={setPage} loading={loadingCandidates} />
       </div>
 
