@@ -7,6 +7,7 @@ import PaginationBar from '../components/PaginationBar'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
+import { supabase } from '../services/supabaseClient'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -36,7 +37,9 @@ const EMPTY_FORM = {
   id: '',
   job_display_id: '',
   consultants: [],
+  consultant_user_ids: [],
   team_lead: '',
+  team_lead_user_id: '',
   client_id: '',
   role: '',
   location: '',
@@ -261,7 +264,9 @@ export default function JobsPage() {
       id: job.id,
       job_display_id: job.job_display_id || '',
       consultants: Array.isArray(job.consultants) ? job.consultants : [],
+      consultant_user_ids: [],
       team_lead: job.team_lead === '-' ? '' : job.team_lead || '',
+      team_lead_user_id: '',
       client_id: job.client_id || '',
       role: job.role || job.title || '',
       location: job.location || job.city || '',
@@ -284,7 +289,9 @@ export default function JobsPage() {
     setIsOpen(true)
   }
 
-  const sortedUsers = useMemo(() => ['-', ...userOptions.filter(Boolean)], [userOptions])
+  const userList = useMemo(() => userOptions.map(user => typeof user === 'string' ? { id: '', name: user, email: '' } : user).filter(user => user?.name), [userOptions])
+  const sortedUsers = useMemo(() => ['-', ...userList.map(user => user.name)], [userList])
+  const userByName = useMemo(() => new Map(userList.map(user => [user.name, user])), [userList])
   const clientOptions = useMemo(() => canonicalClients(dbClients), [dbClients])
   const matchingClients = useMemo(() => clientOptions
     .filter(client => `${clientName(client)} ${client.client_display_id || ''}`.toLowerCase().includes(clientSearch.trim().toLowerCase())), [clientOptions, clientSearch])
@@ -354,7 +361,9 @@ export default function JobsPage() {
     try {
       const payload = {
         consultants: selectedConsultants,
+        consultant_user_ids: selectedConsultants.map(name => userByName.get(name)?.id || '').filter(Boolean),
         team_lead: form.team_lead || null,
+        team_lead_user_id: form.team_lead ? userByName.get(form.team_lead)?.id || '' : '',
         client_id: form.client_id,
         role: form.role,
         location: form.location,
@@ -368,8 +377,10 @@ export default function JobsPage() {
       const body = new FormData()
       Object.entries(payload).forEach(([key, value]) => body.append(key, Array.isArray(value) ? value.join(',') : value ?? ''))
       if (jdFile) body.append('jd_file', jdFile)
+      const session = supabase ? (await supabase.auth.getSession()).data.session : null
       const res = await fetch(editingJob ? `/api/jobs/${editingJob.id}` : '/api/jobs', {
         method: editingJob ? 'PATCH' : 'POST',
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
         body
       })
       const data = await res.json().catch(() => ({}))
@@ -432,7 +443,8 @@ export default function JobsPage() {
 
   const addConsultant = () => {
     if (!availableConsultants.length) return
-    setForm(current => ({ ...current, consultants: [...current.consultants, availableConsultants[0]] }))
+    const user = userByName.get(availableConsultants[0])
+    setForm(current => ({ ...current, consultants: [...current.consultants, availableConsultants[0]], consultant_user_ids: [...(current.consultant_user_ids || []), user?.id || ''] }))
   }
 
   const updateConsultant = (index, value) => {
@@ -440,7 +452,8 @@ export default function JobsPage() {
       const next = [...current.consultants]
       if (!value || value === '-') next.splice(index, 1)
       else if (!next.includes(value)) next[index] = value
-      return { ...current, consultants: next }
+      const ids = next.map(name => userByName.get(name)?.id || '')
+      return { ...current, consultants: next, consultant_user_ids: ids }
     })
   }
   const matchingConsultants = (index) => sortedUsers.filter(user => user !== '-' && !selectedConsultants.some((selected, selectedIndex) => selectedIndex !== index && selected === user) && user.toLowerCase().includes(String(consultantSearch[index] || '').trim().toLowerCase()))
@@ -699,7 +712,7 @@ export default function JobsPage() {
                   <div className="client-search-wrap">
                     <input className="form-control" value={teamLeadSearch || form.team_lead} onChange={e => {
                       setTeamLeadSearch(e.target.value)
-                      setForm(current => ({ ...current, team_lead: '' }))
+                      setForm(current => ({ ...current, team_lead: '', team_lead_user_id: '' }))
                       setTeamLeadOpen(true)
                     }} onFocus={() => setTeamLeadOpen(true)} onBlur={() => window.setTimeout(() => setTeamLeadOpen(false), 120)} disabled={saving} autoComplete="off" />
                     {teamLeadOpen && (
@@ -708,7 +721,7 @@ export default function JobsPage() {
                           <button type="button" key={user} onMouseDown={event => {
                             event.preventDefault()
                             setTeamLeadSearch(user)
-                            setForm(current => ({ ...current, team_lead: user }))
+                            setForm(current => ({ ...current, team_lead: user, team_lead_user_id: userByName.get(user)?.id || '' }))
                             setTeamLeadOpen(false)
                           }}><span>{user}</span></button>
                         )) : <div className="candidate-column-option">No results found</div>}

@@ -22,6 +22,7 @@ const nullable = (value) => {
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
 const jobIdNumber = (value) => Number(String(value || '').match(/^JB(\d+)$/i)?.[1] || 0)
 const preferredUserName = (primaryName, secondaryName, email) => clean(primaryName) || clean(secondaryName) || displayNameFromEmail(email)
+const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clean(value))
 const compareDisplayIds = (a, b, prefix) => {
   const aText = clean(a)
   const bText = clean(b)
@@ -37,6 +38,103 @@ const normalizeMandateStatus = (value) => {
   if (text === 'Scrapped' || text === 'Scrap') return 'Scrapped'
   if (text === 'Ongoing') return 'Ongoing'
   return text ? '-' : '-'
+}
+
+function parseList(value) {
+  if (Array.isArray(value)) return value.map(clean).filter(Boolean)
+  return String(value || '').split(',').map(clean).filter(Boolean)
+}
+
+function userNameMatches(name, user) {
+  const target = clean(name).toLowerCase()
+  return Boolean(target && [user.name, user.email, displayNameFromEmail(user.email)].map(item => clean(item).toLowerCase()).includes(target))
+}
+
+async function resolveAssignmentUsers(names = [], ids = []) {
+  const cleanIds = parseList(ids)
+  const cleanNames = parseList(names)
+  if (!cleanIds.length && !cleanNames.length) return []
+  const [{ data: userProfiles }, { data: profiles }] = await Promise.all([
+    supabase.from('user_profiles').select('user_id, email, name'),
+    supabase.from('profiles').select('id, email, full_name')
+  ])
+  const profileById = new Map((profiles || []).map(row => [row.id, row]))
+  const users = []
+  const seen = new Set()
+  for (const row of userProfiles || []) {
+    const profile = profileById.get(row.user_id)
+    const user = {
+      id: row.user_id,
+      email: row.email || profile?.email || '',
+      name: preferredUserName(row.name, profile?.full_name, row.email || profile?.email)
+    }
+    if (isUuid(user.id) && !seen.has(user.id)) {
+      seen.add(user.id)
+      users.push(user)
+    }
+  }
+  for (const row of profiles || []) {
+    const user = { id: row.id, email: row.email || '', name: preferredUserName('', row.full_name, row.email) }
+    if (isUuid(user.id) && !seen.has(user.id)) {
+      seen.add(user.id)
+      users.push(user)
+    }
+  }
+  const byId = new Map(users.map(user => [user.id, user]))
+  const resolved = cleanIds.map(id => byId.get(id)).filter(Boolean)
+  for (const name of cleanNames) {
+    const user = users.find(item => userNameMatches(name, item))
+    if (user && !resolved.some(item => item.id === user.id)) resolved.push(user)
+  }
+  return resolved
+}
+
+async function createAssignmentNotifications({ job, senderId, consultantIds, teamLeadId, previousConsultants = [], previousTeamLead = '' }) {
+  if (!job?.id || !senderId) return
+  const clientName = job.client_name || job.clients?.client_name || job.clients?.name || 'Client'
+  const role = job.role || job.title || 'Mandate'
+  const consultantUsers = await resolveAssignmentUsers(job.consultants || [], consultantIds)
+  const teamLeadUsers = await resolveAssignmentUsers(job.team_lead && job.team_lead !== '-' ? [job.team_lead] : [], teamLeadId ? [teamLeadId] : [])
+  const previousConsultantUsers = await resolveAssignmentUsers(previousConsultants)
+  const previousTeamLeadUsers = await resolveAssignmentUsers(previousTeamLead && previousTeamLead !== '-' ? [previousTeamLead] : [])
+  const previousConsultantIds = new Set(previousConsultantUsers.map(user => user.id))
+  const previousTeamLeadIds = new Set(previousTeamLeadUsers.map(user => user.id))
+  const rows = []
+
+  for (const user of consultantUsers) {
+    if (!user.id || user.id === senderId || previousConsultantIds.has(user.id)) continue
+    rows.push({
+      recipient_user_id: user.id,
+      sender_user_id: senderId,
+      mandate_id: job.id,
+      client_id: job.client_id,
+      role_type: 'consultant',
+      title: 'New Mandate Assignment',
+      message: `You are assigned as Consultant for ${role} - ${clientName}`,
+      status: 'pending',
+      action_type: 'mark_read'
+    })
+  }
+
+  for (const user of teamLeadUsers) {
+    if (!user.id || user.id === senderId || previousTeamLeadIds.has(user.id)) continue
+    rows.push({
+      recipient_user_id: user.id,
+      sender_user_id: senderId,
+      mandate_id: job.id,
+      client_id: job.client_id,
+      role_type: 'team_lead',
+      title: 'New Mandate Assignment',
+      message: `You are assigned as Team Lead for ${role} - ${clientName}`,
+      status: 'pending',
+      action_type: 'mark_read'
+    })
+  }
+
+  if (rows.length) {
+    const { error } = await supabase.from('notifications').upsert(rows, { onConflict: 'mandate_id,recipient_user_id,role_type', ignoreDuplicates: true })
+    if (error && error.code !== '42P01') throw error
+  }
 }
 
 function todayLocal() {
@@ -277,7 +375,14 @@ async function createJob(req, res) {
     if (!payload.status) payload.status = payload.mandate_status
     const { data, error } = await insertJob(payload)
     if (error) throw error
-    return res.status(201).json(formatJob(data))
+    const job = formatJob(data)
+    await createAssignmentNotifications({
+      job,
+      senderId: req.user?.id,
+      consultantIds: req.body.consultant_user_ids,
+      teamLeadId: req.body.team_lead_user_id
+    })
+    return res.status(201).json(job)
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'createJob', err)
@@ -297,10 +402,20 @@ async function updateJob(req, res) {
       payload.jd_storage_path = jd.path
     }
     payload.updated_at = new Date().toISOString()
+    const { data: previousJob } = await supabase.from('jobs').select('consultants, team_lead').eq('id', req.params.id).maybeSingle()
     const { data, error } = await updateJobRow(req.params.id, payload)
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Mandate not found' })
-    return res.json(formatJob(data))
+    const job = formatJob(data)
+    await createAssignmentNotifications({
+      job,
+      senderId: req.user?.id,
+      consultantIds: req.body.consultant_user_ids,
+      teamLeadId: req.body.team_lead_user_id,
+      previousConsultants: previousJob?.consultants || [],
+      previousTeamLead: previousJob?.team_lead || ''
+    })
+    return res.json(job)
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'updateJob', err)
@@ -347,14 +462,14 @@ async function listJobUsers(req, res) {
       const name = preferredUserName(row.name, profile?.full_name, row.email || profile?.email)
       if (!name || seen.has(name.toLowerCase())) continue
       seen.add(name.toLowerCase())
-      users.push(name)
+      users.push({ id: row.user_id, name, email: row.email || profile?.email || '' })
     }
 
     for (const row of profiles || []) {
       const name = preferredUserName('', row.full_name, row.email)
       if (!name || seen.has(name.toLowerCase())) continue
       seen.add(name.toLowerCase())
-      users.push(name)
+      users.push({ id: row.id, name, email: row.email || '' })
     }
 
     return res.json({ data: users })

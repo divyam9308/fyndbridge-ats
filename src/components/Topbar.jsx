@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
+import NotificationBell from './NotificationBell'
 import './Topbar.css'
 
 const pageTitles = {
@@ -43,6 +44,7 @@ export default function Topbar() {
       </div>
 
       <div className="topbar-right">
+        <NotificationBell />
         <span className="topbar-date">{today}</span>
         <button className="topbar-user" type="button" onClick={() => navigate('/dashboard/profile')} aria-label={`Open profile settings for ${displayName}`}>
           <div className="topbar-avatar">{initials || 'HR'}</div>
