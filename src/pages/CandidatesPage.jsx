@@ -1511,7 +1511,7 @@ export default function CandidatesPage() {
                     </button>
                   )}
                 </div>
-                <div className="sub-text candidate-location-text">{formatLocationRegion(c.location || c.city, c.state) || '-'}</div>
+                <div className="sub-text candidate-location-text">{String(c.location || '').trim() || '-'}</div>
               </div>
             </div>
           </td>
