@@ -326,7 +326,8 @@ export default function ClientDetailPage() {
 
   const toggleTablePopover = (type, id, element) => {
     if (!element || !id) return
-    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorEl: element })
+    const anchorRect = element.getBoundingClientRect()
+    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorRect })
   }
   const togglePendingColumn = (key) => setPendingColumns(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key])
   const proceedColumns = () => {
@@ -529,7 +530,7 @@ export default function ClientDetailPage() {
         const group = jobGroups.find(item => item.relatedJob?.id === tablePopover.id)
         if (!group) return null
         return (
-          <TablePopover anchorEl={tablePopover.anchorEl} width={150} onClose={() => setTablePopover(null)}>
+          <TablePopover anchorRect={tablePopover.anchorRect} width={150} onClose={() => setTablePopover(null)}>
             {MANDATE_STATUSES.map(status => (
               <button className="candidate-columns-action" type="button" key={status} onClick={() => updateMandateStatus(group, status)}>
                 {status}

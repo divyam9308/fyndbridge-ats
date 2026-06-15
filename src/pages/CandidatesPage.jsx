@@ -1389,7 +1389,7 @@ export default function CandidatesPage() {
             <div className="client-suggestions manual-suggestions is-open">
               {matchingJobs.map(job => (
                 <button type="button" key={job.id} onMouseDown={(event) => { event.preventDefault(); setJobValue(job.id); setJobSuggestionsOpen(false) }}>
-                  <span>{`${jobName(job)} — ${job.job_display_id || '-'}`}</span>
+                  <span>{jobName(job)}</span>
                   <small>{job.job_display_id || ''}</small>
                 </button>
               ))}
@@ -2066,3 +2066,4 @@ export default function CandidatesPage() {
     </div>
   )
 }
+

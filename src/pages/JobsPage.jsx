@@ -490,7 +490,8 @@ export default function JobsPage() {
 
   const toggleTablePopover = (type, id, element) => {
     if (!element) return
-    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorEl: element })
+    const anchorRect = element.getBoundingClientRect()
+    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorRect })
   }
 
   const renderMandateCell = (column, job) => {
@@ -628,7 +629,7 @@ export default function JobsPage() {
         const job = jobs.find(item => item.id === tablePopover.id)
         if (!job) return null
         return (
-          <TablePopover anchorEl={tablePopover.anchorEl} width={tablePopover.type === 'status' ? 150 : 180} onClose={() => setTablePopover(null)}>
+          <TablePopover anchorRect={tablePopover.anchorRect} width={tablePopover.type === 'status' ? 150 : 180} onClose={() => setTablePopover(null)}>
             {tablePopover.type === 'consultants' ? (
               job.consultants.map(name => <div className="candidate-column-option" key={name}>{name}</div>)
             ) : (
