@@ -92,3 +92,4 @@ module.exports = {
   documentOpenUrl,
   normalizeStoragePath
 }
+

@@ -7,3 +7,4 @@ router.get('/:key', controller.getPreference)
 router.put('/:key', controller.savePreference)
 
 module.exports = router
+

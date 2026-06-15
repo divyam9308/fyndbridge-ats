@@ -211,3 +211,4 @@ async function parseResume(filePath) {
 module.exports = {
   parseResume
 }
+

@@ -238,8 +238,7 @@ async function listJobs(req, res) {
       if (clientError) throw clientError
       matchedClientIds = [...new Set((clientRows || []).map((row) => row.id))]
       if (!matchedClientIds.length && aiFilters?.mode !== 'any') {
-        console.log('[jobs pagination]', { page, limit, returned: 0, total: 0, paginate })
-        return res.json({ data: [], total: 0, page, totalPages: 1, limit })
+return res.json({ data: [], total: 0, page, totalPages: 1, limit })
       }
     }
     const filtered = applyQueryFilters(query, 'mandates', aiFilters, JOB_FILTER_MAPPING, {
@@ -269,8 +268,7 @@ async function listJobs(req, res) {
     }
     const total = paginate ? count || 0 : rows.length
     const totalPages = paginate ? Math.max(1, Math.ceil(total / limit)) : 1
-    console.log('[jobs pagination]', { page, limit, returned: rows.length, total, paginate })
-    return res.json({ data: rows, total, page, totalPages, limit })
+return res.json({ data: rows, total, page, totalPages, limit })
   } catch (err) {
     return logAndSendInternal(res, 'listJobs', err)
   }
@@ -489,3 +487,4 @@ async function buildJobFilters(req, res) {
 }
 
 module.exports = { listJobs, getJob, createJob, updateJob, deleteJob, getNextJobDisplayId, listJobUsers, buildJobFilters }
+

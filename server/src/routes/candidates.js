@@ -19,3 +19,4 @@ router.patch('/:id', upload.single('cv_file'), handleUploadErrors, controller.up
 router.delete('/:id', controller.deleteCandidate)
 
 module.exports = router
+

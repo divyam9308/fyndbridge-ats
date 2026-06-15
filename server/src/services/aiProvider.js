@@ -91,8 +91,7 @@ async function withTimeout(promise) {
 }
 
 async function requestProvider(providerName, fullPrompt, temperature, started) {
-  console.log(`[Gemini] Provider: ${providerName}`)
-  const result = await withTimeout(providers[providerName].generateContent({
+const result = await withTimeout(providers[providerName].generateContent({
     contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
     generationConfig: {
       temperature,
@@ -102,13 +101,7 @@ async function requestProvider(providerName, fullPrompt, temperature, started) {
 
   const text = result.response.text().trim()
   const usage = result.response.usageMetadata
-  console.log('aiProvider success:', {
-    provider: providerName,
-    model: GEMINI_MODEL,
-    durationMs: Date.now() - started,
-    tokens: usage?.totalTokenCount || null
-  })
-  if (!text) throw new Error('Gemini returned an empty response')
+if (!text) throw new Error('Gemini returned an empty response')
   return text
 }
 
@@ -198,3 +191,4 @@ module.exports = {
   validateAiConfig,
   GEMINI_MODEL
 }
+

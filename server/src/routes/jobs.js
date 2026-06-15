@@ -14,3 +14,4 @@ router.patch('/:id', upload.single('jd_file'), handleUploadErrors, controller.up
 router.delete('/:id', controller.deleteJob)
 
 module.exports = router
+

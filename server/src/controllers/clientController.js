@@ -420,8 +420,7 @@ async function listClients(req, res) {
     const rows = pagedData.map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || [], jobsByClient[client.id] || []))
     const total = paginate ? count || 0 : rows.length
     const totalPages = paginate ? Math.max(1, Math.ceil(total / limit)) : 1
-    console.log('[clients pagination]', { page, limit, returned: rows.length, total, paginate })
-    return res.json({ data: rows, total, page, totalPages, limit })
+return res.json({ data: rows, total, page, totalPages, limit })
   } catch (err) {
     return logAndSendInternal(res, 'listClients', err)
   }
@@ -443,8 +442,7 @@ async function getClient(req, res) {
 
 async function createClient(req, res) {
   try {
-    console.log('createClient payload:', req.body)
-    if (req.file) {
+if (req.file) {
       const contract = await uploadContractPdf(req.file)
       req.body.contract_document = contract.path
       req.body.contract_pdf_url = contract.path
@@ -487,8 +485,7 @@ async function createClient(req, res) {
         insertPayload.id = randomUUID()
         insertPayload.client_group_id = insertPayload.id
       }
-      console.log('createClient final client_display_id before insert:', insertPayload.client_display_id)
-      const result = await insertClient(insertPayload)
+const result = await insertClient(insertPayload)
       data = result.data
       error = result.error
       if (!error) {
@@ -626,3 +623,4 @@ module.exports = {
   addFollowUp,
   deleteClient
 }
+

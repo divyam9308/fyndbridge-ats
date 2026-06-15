@@ -42,3 +42,4 @@ app.use('/api/ai', requireAuth, require('./routes/ai'))
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }))
 
 module.exports = app
+

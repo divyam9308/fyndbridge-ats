@@ -8,3 +8,4 @@ router.delete('/read', controller.clearReadNotifications)
 router.patch('/:id/read', controller.markNotificationRead)
 
 module.exports = router
+

@@ -119,3 +119,4 @@ async function clearReadNotifications(req, res) {
 }
 
 module.exports = { listNotifications, markNotificationRead, clearReadNotifications }
+

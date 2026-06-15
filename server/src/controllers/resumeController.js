@@ -115,17 +115,7 @@ async function openResume(req, res) {
     const { data, error } = await supabase.storage
       .from(RESUME_BUCKET)
       .createSignedUrl(storagePath, 60 * 60)
-
-    console.log('[CV open signed URL]', {
-      candidateId: req.query.candidate_id || '',
-      rawPath,
-      cleanPath: storagePath,
-      bucketName: RESUME_BUCKET,
-      signedUrl: data?.signedUrl || '',
-      error: error?.message || ''
-    })
-
-    if (error || !data?.signedUrl) {
+if (error || !data?.signedUrl) {
       return res.status(404).json({ error: 'Resume file could not be opened' })
     }
 
@@ -140,3 +130,4 @@ module.exports = {
   bulkParseResumes,
   openResume
 }
+

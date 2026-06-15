@@ -15,3 +15,4 @@ router.post('/:id/follow-ups', controller.addFollowUp)
 router.delete('/:id', controller.deleteClient)
 
 module.exports = router
+

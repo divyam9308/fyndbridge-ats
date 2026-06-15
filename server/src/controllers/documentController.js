@@ -9,14 +9,7 @@ async function openDocument(req, res) {
 
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600)
     if (process.env.NODE_ENV !== 'production') {
-  console.log('[document open]', {
-    type: req.params.type,
-    bucket,
-    path,
-    success: Boolean(data?.signedUrl),
-    error: error?.message || ''
-    })
-  }
+}
     if (error || !data?.signedUrl) return res.status(404).json({ error: 'Document file could not be opened' })
     return res.redirect(data.signedUrl)
   } catch (err) {
@@ -26,3 +19,4 @@ async function openDocument(req, res) {
 }
 
 module.exports = { openDocument }
+

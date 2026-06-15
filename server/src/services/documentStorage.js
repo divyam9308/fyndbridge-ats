@@ -21,3 +21,4 @@ async function uploadDocument(file, bucket, folder = '') {
 }
 
 module.exports = { uploadDocument }
+

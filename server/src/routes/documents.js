@@ -6,3 +6,4 @@ const router = express.Router()
 router.get('/open/:type', controller.openDocument)
 
 module.exports = router
+

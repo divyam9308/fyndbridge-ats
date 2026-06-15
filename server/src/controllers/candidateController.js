@@ -1123,10 +1123,7 @@ async function createCandidate(req, res) {
     if (req.user?.id) {
       assocInsert.created_by = req.user.id
     }
-
-    console.log('[createCandidate] Final candidate_associations insert payload:', JSON.stringify(assocInsert))
-
-    const { data: association, error: associationError } = await insertAssociation(assocInsert)
+const { data: association, error: associationError } = await insertAssociation(assocInsert)
 
     if (associationError) {
       throw associationError
@@ -1243,10 +1240,7 @@ async function updateCandidate(req, res) {
         if (req.user?.id) {
           assocUpdate.updated_by = req.user.id
         }
-
-        console.log('[updateCandidate] Final candidate_associations update payload:', JSON.stringify(assocUpdate))
-
-        const { error } = await updateAssociation(existingAssociation.id, assocUpdate)
+const { error } = await updateAssociation(existingAssociation.id, assocUpdate)
 
         if (error) {
           throw error
@@ -1265,10 +1259,7 @@ async function updateCandidate(req, res) {
       if (req.user?.id) {
         assocInsert.created_by = req.user.id
       }
-
-      console.log('[updateCandidate] Creating new candidate_associations row:', JSON.stringify(assocInsert))
-
-      const { data: inserted, error: insertError } = await insertAssociation(assocInsert)
+const { data: inserted, error: insertError } = await insertAssociation(assocInsert)
 
       if (insertError) {
         throw insertError
@@ -1371,12 +1362,9 @@ async function buildAiCandidateFilters(req, res) {
     const filters = validateAiFilters('candidates', parsed, prompt)
     if (!filters) {
       const fallback = { mode: 'any', conditions: ['consultant', 'client_name', 'role', 'designation', 'mobile', 'email', 'skills'].map(field => ({ field, operator: 'contains', value: prompt })) }
-      console.log('[candidates ai filter parsed fallback]', { prompt, parsed, filters: fallback })
-      return res.json({ filters: fallback })
+return res.json({ filters: fallback })
     }
-
-    console.log('[candidates ai filter parsed]', { prompt, parsed, filters })
-    return res.json({ filters })
+return res.json({ filters })
   } catch (err) {
     if (err.statusCode) {
       return res.status(err.statusCode).json({ error: err.message })
@@ -1613,3 +1601,4 @@ module.exports = {
   deleteCandidate,
   parseResumeRoute
 }
+

@@ -39,3 +39,4 @@ router.get('/open', controller.openResume)
 router.get('/open/:encodedPath', controller.openResume)
 
 module.exports = router
+

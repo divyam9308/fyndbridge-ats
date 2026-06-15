@@ -131,3 +131,4 @@ function applyQueryFilters(query, page, filters, mapping, extras = {}) {
 }
 
 module.exports = { applyQueryFilters, normalizeFilters }
+

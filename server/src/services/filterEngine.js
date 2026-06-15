@@ -375,3 +375,4 @@ function applyFilters(page, rows, filters, valueGetter) {
 }
 
 module.exports = { configs, parsePrompt, applyFilters, normalizeCondition, buildAiFilterPrompt, validateAiFilters, aiFilterSchema, OPERATORS }
+
