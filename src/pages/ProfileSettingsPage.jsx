@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/useAuth'
-import { supabase } from '../services/supabaseClient'
+import { apiFetch } from '../services/apiClient'
 import '../styles/Shared.css'
 
 const EMPTY_PROFILE = {
@@ -17,26 +17,52 @@ const EMPTY_PROFILE = {
 export default function ProfileSettingsPage() {
   const { user } = useAuth()
   const [form, setForm] = useState(EMPTY_PROFILE)
+  const [originalProfile, setOriginalProfile] = useState(EMPTY_PROFILE)
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
+    const userId = user?.id || ''
+    const email = user?.email || ''
+    const fallbackName = user?.profile_name || user?.user_metadata?.full_name || user?.user_metadata?.name || ''
+    const baseProfile = {
+      ...EMPTY_PROFILE,
+      user_id: userId,
+      email,
+      name: fallbackName
+    }
+    setForm(current => ({ ...baseProfile, ...current, user_id: userId, email, name: current.name || fallbackName }))
+    setOriginalProfile(current => current.user_id || current.email || current.name ? current : baseProfile)
+  }, [user])
+
+  useEffect(() => {
     const timer = window.setTimeout(async () => {
-      const userId = user?.id || ''
-      const email = user?.email || ''
-      setForm(current => ({ ...current, user_id: userId, email: current.email || email }))
-      if (!userId && !email) return
+      if (!user?.id) {
+        setLoading(false)
+        return
+      }
+      setLoading(true)
       try {
-        const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : ''
-        const params = new URLSearchParams({ user_id: userId, email })
-        const res = await fetch(`/api/user-profiles?${params.toString()}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        })
+        const res = await apiFetch('/api/user-profiles')
         const data = await res.json().catch(() => ({}))
-        if (res.ok) setForm({ ...EMPTY_PROFILE, user_id: userId, email, ...(data.data || {}) })
+        if (!res.ok) throw new Error(data.error || 'Unable to load profile.')
+        const nextProfile = {
+          ...EMPTY_PROFILE,
+          user_id: user.id || '',
+          email: user.email || '',
+          name: user.profile_name || user.user_metadata?.full_name || user.user_metadata?.name || '',
+          ...(data.data || {}),
+          user_id: user.id || '',
+          email: user.email || ''
+        }
+        setForm(nextProfile)
+        setOriginalProfile(nextProfile)
       } catch (err) {
         setError(err.message)
+      } finally {
+        setLoading(false)
       }
     }, 0)
     return () => window.clearTimeout(timer)
@@ -54,15 +80,17 @@ export default function ProfileSettingsPage() {
     setMessage('')
     setError('')
     try {
-      const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : ''
-      const res = await fetch('/api/user-profiles', {
+      const payload = { ...form, user_id: user?.id || form.user_id, email: user?.email || form.email }
+      const res = await apiFetch('/api/user-profiles', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ ...form, user_id: user?.id || form.user_id }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to save profile.')
-      setForm({ ...EMPTY_PROFILE, ...(data.data || {}) })
+      const nextProfile = { ...EMPTY_PROFILE, ...(data.data || {}), user_id: user?.id || form.user_id, email: user?.email || form.email }
+      setForm(nextProfile)
+      setOriginalProfile(nextProfile)
       try {
         const current = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
         window.sessionStorage.setItem('fb_user', JSON.stringify({ ...current, name: data.data?.name || current.name || '' }))
@@ -75,6 +103,9 @@ export default function ProfileSettingsPage() {
       setSaving(false)
     }
   }
+
+  const isDirty = ['name', 'gender', 'blood_group', 'pan', 'emergency_mobile_number', 'mobile_number']
+    .some((key) => String(form[key] || '') !== String(originalProfile[key] || ''))
 
   return (
     <div className="table-card" style={{ maxWidth: 920 }}>
@@ -93,13 +124,13 @@ export default function ProfileSettingsPage() {
           ].map(([name, label, type]) => (
             <div className="form-group" key={name}>
               <label className="form-label">{label}</label>
-              <input className="form-control" type={type} name={name} value={form[name] || ''} onChange={update} disabled={saving} />
+              <input className="form-control" type={type} name={name} value={form[name] || ''} onChange={update} disabled={saving || (name === 'email')} readOnly={name === 'email'} placeholder={loading && name !== 'email' ? 'Loading...' : ''} />
             </div>
           ))}
         </div>
       </div>
       <div className="modal-footer">
-        <button className="btn-primary" type="button" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save Profile'}</button>
+        <button className="btn-primary" type="button" onClick={save} disabled={saving || !isDirty}>{saving ? 'Saving...' : 'Save Profile'}</button>
       </div>
     </div>
   )

@@ -21,13 +21,15 @@ function normalize(row) {
 
 async function getProfile(req, res) {
   try {
-    const userId = clean(req.user?.id || req.query.user_id)
-    const email = clean(req.user?.email || req.query.email)
-    if (!userId && !email) return res.status(400).json({ error: 'user_id or email is required' })
+    const userId = clean(req.user?.id)
+    const email = clean(req.user?.email)
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
-    let query = supabase.from('user_profiles').select('*')
-    query = userId ? query.eq('user_id', userId) : query.eq('email', email)
-    const { data, error } = await query.maybeSingle()
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
     if (error) throw error
     return res.json({ data: data ? normalize(data) : { user_id: userId, email } })
   } catch (err) {
@@ -38,15 +40,18 @@ async function getProfile(req, res) {
 
 async function saveProfile(req, res) {
   try {
-    const userId = clean(req.user?.id || req.body.user_id)
-    const email = clean(req.body.email || req.user?.email)
-    if (!userId && !email) return res.status(400).json({ error: 'user_id or email is required' })
-    if (req.user?.id && clean(req.body.user_id) && clean(req.body.user_id) !== req.user.id) {
+    const userId = clean(req.user?.id)
+    const email = clean(req.user?.email)
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (clean(req.body.user_id) && clean(req.body.user_id) !== userId) {
       return res.status(403).json({ error: 'Cannot save another user profile' })
+    }
+    if (clean(req.body.email) && clean(req.body.email).toLowerCase() !== email.toLowerCase()) {
+      req.body.email = email
     }
 
     const payload = {
-      user_id: userId || email,
+      user_id: userId,
       name: nullable(req.body.name),
       email,
       gender: nullable(req.body.gender),

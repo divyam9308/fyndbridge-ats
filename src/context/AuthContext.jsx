@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
-import { API_UNAUTHORIZED_EVENT } from '../services/apiClient'
+import { API_UNAUTHORIZED_EVENT, apiFetch } from '../services/apiClient'
 import { AuthContext } from './authStore'
 import { useAuth } from './useAuth'
 
@@ -63,22 +63,22 @@ export function AuthProvider({ children }) {
       }
 
       let nextUser = nextSession.user
-      try {
-        const token = nextSession?.access_token || ''
-        const params = new URLSearchParams({ user_id: nextUser.id || '', email })
-        const response = await fetch(`/api/user-profiles?${params.toString()}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        })
-        const payload = await response.json().catch(() => ({}))
-        const profileName = String(payload.data?.name || '').trim()
-        if (profileName) nextUser = { ...nextUser, profile_name: profileName }
-      } catch {
-        nextUser = { ...nextUser }
-      }
-
       setSession(nextSession)
       setUser(nextUser)
       syncSessionStorage(nextUser)
+
+      try {
+        const response = await apiFetch('/api/user-profiles')
+        const payload = await response.json().catch(() => ({}))
+        const profileName = String(payload.data?.name || '').trim()
+        if (profileName) {
+          nextUser = { ...nextUser, profile_name: profileName }
+          setUser(nextUser)
+          syncSessionStorage(nextUser)
+        }
+      } catch {
+        nextUser = { ...nextUser }
+      }
       return true
     }
 
