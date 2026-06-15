@@ -8,6 +8,7 @@ const { RESUME_BUCKET, prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplic
 const { callAiJson } = require('../services/aiProvider')
 const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema } = require('../services/filterEngine')
 const { applyQueryFilters } = require('../services/queryFilters')
+const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 
 const VALID_STATUSES = [
   'Interested',
@@ -169,21 +170,7 @@ async function ensureCandidateDisplayIds() {
 }
 
 async function nextCandidateDisplayId() {
-  await ensureCandidateDisplayIds()
-  const { data, error } = await supabase.from('candidates').select('candidate_display_id')
-  if (error) throw error
-  
-  const existingIds = new Set(
-    (data || [])
-      .map((candidate) => candidate.candidate_display_id)
-      .filter(Boolean)
-  )
-
-  let nextNum = 1
-  while (existingIds.has(`CA${nextNum}`)) {
-    nextNum++
-  }
-  return `CA${nextNum}`
+  return allocateNextDisplayId({ supabase, table: 'candidates', column: 'candidate_display_id', prefix: 'CA' })
 }
 
 async function getNextCandidateDisplayId(req, res) {
@@ -893,17 +880,15 @@ async function listCandidates(req, res) {
       flattened = flattened.map(row => ({ ...row, job_display_id: row.job_display_id || jobDisplayIds.get(row.job_id) || '' }))
     }
 
-    if (aiFilters) {
-      const clientIds = [...new Set(flattened.map(row => row.client_id).filter(Boolean))]
-      if (clientIds.length) {
-        const { data: clientRows, error: clientsError } = await supabase
-          .from('clients')
-          .select('id, client_display_id')
-          .in('id', clientIds)
-        if (clientsError) throw clientsError
-        const clientDisplayIds = new Map((clientRows || []).map(client => [client.id, client.client_display_id]))
-        flattened = flattened.map(row => ({ ...row, client_display_id: clientDisplayIds.get(row.client_id) || '' }))
-      }
+    const clientIds = [...new Set(flattened.map(row => row.client_id).filter(Boolean))]
+    if (clientIds.length) {
+      const { data: clientRows, error: clientsError } = await supabase
+        .from('clients')
+        .select('id, client_display_id')
+        .in('id', clientIds)
+      if (clientsError) throw clientsError
+      const clientDisplayIds = new Map((clientRows || []).map(client => [client.id, client.client_display_id]))
+      flattened = flattened.map(row => ({ ...row, client_display_id: row.client_display_id || clientDisplayIds.get(row.client_id) || '' }))
     }
 
     if (paginateById) {
@@ -1025,32 +1010,30 @@ async function createCandidate(req, res) {
       : (duplicateAction === 'add_duplicate' ? null : await findCandidateByNameAndMobile(candidatePayload.full_name, candidatePayload.mobile_number))
 
     if (!candidate) {
-      const insertPayload = {
-        ...candidatePayload
+      let insertedCandidate = null
+      let insertError = null
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const insertPayload = {
+          ...candidatePayload,
+          candidate_display_id: await nextCandidateDisplayId()
+        }
+
+        if (req.user?.id) {
+          insertPayload.created_by = req.user.id
+        }
+
+        const result = await insertCandidate(insertPayload)
+        insertedCandidate = result.data
+        insertError = result.error
+        if (!insertError) break
+        if (!isDisplayIdUniqueError(insertError, 'candidate_display_id')) break
       }
 
-      if (req.user?.id) {
-        insertPayload.created_by = req.user.id
+      if (insertError) {
+        throw insertError
       }
 
-      const { data, error } = await insertCandidate(insertPayload)
-
-      if (error) {
-        throw error
-      }
-
-      candidate = data
-
-      const correctDisplayId = await nextCandidateDisplayId()
-      const { error: updateError } = await supabase
-        .from('candidates')
-        .update({ candidate_display_id: correctDisplayId })
-        .eq('id', candidate.id)
-
-      if (updateError) {
-        throw updateError
-      }
-      candidate.candidate_display_id = correctDisplayId
+      candidate = insertedCandidate
     } else {
       const updatePayload = {
         ...candidatePayload,
@@ -1109,6 +1092,9 @@ async function createCandidate(req, res) {
 
     return res.status(201).json({ ...flattenAssociation(association), cv_duplicate: Boolean(cvResult?.duplicate) })
   } catch (err) {
+    if (isDisplayIdUniqueError(err, 'candidate_display_id')) {
+      return res.status(400).json({ error: 'Could not allocate unique Candidate ID. Please try again.' })
+    }
     return logAndSendInternal(res, 'createCandidate', err)
   } finally {
     if (req.file?.path) {

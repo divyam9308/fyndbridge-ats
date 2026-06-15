@@ -2,6 +2,7 @@ const { randomUUID } = require('crypto')
 const supabase = require('../services/supabaseAdmin')
 const { uploadDocument } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
+const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 
 const CLIENT_STATUSES = [
   'Active',
@@ -107,7 +108,7 @@ function compareText(a, b) {
 }
 
 function isClientDisplayIdUniqueError(err) {
-  return err?.code === '23505' && /client_display_id|clients_client_display_id/i.test(err.message || '')
+  return isDisplayIdUniqueError(err, 'client_display_id') || /clients_client_display_id/i.test(err?.message || '')
 }
 
 function sortClientRows(rows, sort) {
@@ -145,17 +146,7 @@ async function ensureClientDisplayIds() {
 }
 
 async function nextClientDisplayId() {
-  await ensureClientDisplayIds()
-  const { data, error } = await supabase.from('clients').select('client_display_id, client_name, name, created_at').order('created_at', { ascending: true })
-  if (error) throw error
-  const parsedIds = (data || [])
-    .map(row => displayIdNumber(row.client_display_id, 'CL'))
-    .filter(number => number < Number.MAX_SAFE_INTEGER)
-    .sort((a, b) => a - b)
-  const nextId = nextFreeDisplayId(data, 'CL', true)
-  console.log('nextClientDisplayId parsed CL IDs:', parsedIds)
-  console.log('nextClientDisplayId selected:', nextId)
-  return nextId
+  return allocateNextDisplayId({ supabase, table: 'clients', column: 'client_display_id', prefix: 'CL' })
 }
 
 async function isClientDisplayIdAvailable(displayId) {
@@ -374,7 +365,6 @@ async function updateClientRow(id, payload) {
 
 async function listClients(req, res) {
   try {
-    await ensureClientDisplayIds()
     const sort = normalizeSort(req.query)
     const paginate = String(req.query.all || '').toLowerCase() !== 'true'
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
@@ -474,18 +464,39 @@ async function createClient(req, res) {
       return res.json(normalizeClient(data))
     }
 
-    if (!payload.client_display_id) {
-      payload.client_display_id = await nextClientDisplayId(payload.client_name)
-    } else if (!payload.client_group_id && !(await isClientDisplayIdAvailable(payload.client_display_id))) {
-      releaseClientDisplayId(payload.client_display_id)
-      return res.status(409).json({ error: `Client ID ${payload.client_display_id} is already taken. Please click Add New Client again.` })
+    if (payload.client_group_id) {
+      if (!payload.client_display_id) {
+        const { data: parent, error: parentError } = await supabase
+          .from('clients')
+          .select('client_display_id')
+          .eq('client_group_id', payload.client_group_id)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        if (parentError) throw parentError
+        payload.client_display_id = parent?.client_display_id || null
+      }
     }
-    console.log('createClient final client_display_id before insert:', payload.client_display_id)
-    if (!payload.client_group_id) {
-      payload.id = randomUUID()
-      payload.client_group_id = payload.id
+
+    let data = null
+    let error = null
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const insertPayload = { ...payload }
+      if (!insertPayload.client_group_id) {
+        insertPayload.client_display_id = await nextClientDisplayId()
+        insertPayload.id = randomUUID()
+        insertPayload.client_group_id = insertPayload.id
+      }
+      console.log('createClient final client_display_id before insert:', insertPayload.client_display_id)
+      const result = await insertClient(insertPayload)
+      data = result.data
+      error = result.error
+      if (!error) {
+        payload.client_display_id = insertPayload.client_display_id
+        break
+      }
+      if (!insertPayload.client_group_id || !isClientDisplayIdUniqueError(error)) break
     }
-    const { data, error } = await insertClient(payload)
     if (error) {
       console.error('createClient Supabase insert error:', {
         message: error.message,
@@ -520,7 +531,7 @@ async function createClient(req, res) {
       return res.status(400).json({ error: 'Client name is still unique in Supabase. Run server/supabase-clients-module-upgrade.sql once.' })
     }
     if (isClientDisplayIdUniqueError(err)) {
-      return res.status(400).json({ error: 'Client ID is still unique in Supabase. Run server/supabase-client-shared-display-ids.sql once.' })
+      return res.status(400).json({ error: 'Could not allocate unique Client ID. Please try again.' })
     }
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'createClient', err)
@@ -548,7 +559,7 @@ async function updateClient(req, res) {
     return res.json(normalizeClient(data))
   } catch (err) {
     if (isClientDisplayIdUniqueError(err)) {
-      return res.status(400).json({ error: 'Client ID is still unique in Supabase. Run server/supabase-client-shared-display-ids.sql once.' })
+      return res.status(400).json({ error: 'Could not allocate unique Client ID. Please try again.' })
     }
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'updateClient', err)

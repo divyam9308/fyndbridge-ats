@@ -5,6 +5,7 @@ const fs = require('fs/promises')
 const { callAiJson } = require('../services/aiProvider')
 const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { applyQueryFilters } = require('../services/queryFilters')
+const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
@@ -196,13 +197,7 @@ async function ensureJobDisplayIds() {
 }
 
 async function nextJobDisplayId() {
-  await ensureJobDisplayIds()
-  const { data, error } = await supabase.from('jobs').select('job_display_id')
-  if (error) throw error
-  const used = new Set((data || []).map(row => row.job_display_id).filter(Boolean))
-  let next = 1
-  while (used.has(`JB${next}`)) next += 1
-  return `JB${next}`
+  return allocateNextDisplayId({ supabase, table: 'jobs', column: 'job_display_id', prefix: 'JB' })
 }
 
 function jobFilterValue(row, field) {
@@ -234,7 +229,6 @@ const JOB_FILTER_MAPPING = {
 
 async function listJobs(req, res) {
   try {
-    await ensureJobDisplayIds()
     const paginate = String(req.query.all || '').toLowerCase() !== 'true'
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
@@ -373,10 +367,18 @@ async function createJob(req, res) {
       payload.jd_url = jd.path
       payload.jd_storage_path = jd.path
     }
-    payload.job_display_id = await nextJobDisplayId()
     if (!payload.mandate_status) payload.mandate_status = '-'
     if (!payload.status) payload.status = payload.mandate_status
-    const { data, error } = await insertJob(payload)
+    let data = null
+    let error = null
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const insertPayload = { ...payload, job_display_id: await nextJobDisplayId() }
+      const result = await insertJob(insertPayload)
+      data = result.data
+      error = result.error
+      if (!error) break
+      if (!isDisplayIdUniqueError(error, 'job_display_id')) break
+    }
     if (error) throw error
     const job = formatJob(data)
     await createAssignmentNotifications({
@@ -387,6 +389,9 @@ async function createJob(req, res) {
     })
     return res.status(201).json(job)
   } catch (err) {
+    if (isDisplayIdUniqueError(err, 'job_display_id')) {
+      return res.status(400).json({ error: 'Could not allocate unique Job ID. Please try again.' })
+    }
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'createJob', err)
   } finally {
