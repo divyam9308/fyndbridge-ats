@@ -166,7 +166,7 @@
   flex-wrap: wrap;
   box-shadow: var(--shadow-card);
   position: relative;
-  z-index: 20;
+  z-index: 10020;
 }
 .candidates-filter-bar {
   flex-wrap: nowrap;
@@ -187,7 +187,8 @@
 .candidate-sort-control {
   position: relative;
   flex: 0 0 auto;
-  z-index: 30;
+  z-index: 10020;
+  overflow: visible;
 }
 .candidate-sort-btn {
   display: flex;
@@ -198,6 +199,7 @@
 }
 .candidate-sort-dropdown {
   min-width: 180px;
+  z-index: 10050;
 }
 .filter-dropdown {
   position: absolute;
