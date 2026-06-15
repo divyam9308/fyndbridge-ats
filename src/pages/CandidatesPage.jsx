@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
+import FloatingDropdown from '../components/FloatingDropdown'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { logCandidateCvOpen, resolveCandidateCvHref } from '../utils/candidateUtils'
@@ -299,6 +300,8 @@ export default function CandidatesPage() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
   const [columnsOpen, setColumnsOpen] = useState(false)
+  const [columnsAnchor, setColumnsAnchor] = useState(null)
+  const [sortAnchor, setSortAnchor] = useState(null)
   const [visibleColumns, setVisibleColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const [pendingColumns, setPendingColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const [savedColumns, setSavedColumns] = useState(null)
@@ -355,33 +358,6 @@ export default function CandidatesPage() {
 
     return () => window.clearTimeout(timer)
   }, [])
-
-  useEffect(() => {
-    if (!columnsOpen) return
-
-    const handleClickOutside = (event) => {
-      if (!columnsDropdownRef.current?.contains(event.target)) {
-        setPendingColumns(visibleColumns)
-        setColumnsOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [columnsOpen, visibleColumns])
-
-  useEffect(() => {
-    if (!sortOpen) return
-
-    const handleClickOutside = (event) => {
-      if (!sortDropdownRef.current?.contains(event.target)) {
-        setSortOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [sortOpen])
 
   // Add Candidate Modal
   const [addOpen, setAddOpen]   = useState(false)
@@ -1641,7 +1617,7 @@ export default function CandidatesPage() {
           <button
             className="filter-select candidate-columns-btn"
             type="button"
-            onClick={() => { setPendingColumns(visibleColumns); setColumnsOpen(open => !open) }}
+            onClick={(event) => { setPendingColumns(visibleColumns); setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setColumnsOpen(open => !open) }}
           >
             <span>Columns</span>
             <ChevronDown size={13} strokeWidth={2} />
@@ -1650,7 +1626,7 @@ export default function CandidatesPage() {
             Proceed
           </button>
           {columnsOpen && (
-            <div className="filter-dropdown candidate-columns-dropdown">
+            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)}>
                 Select All
               </button>
@@ -1674,7 +1650,7 @@ export default function CandidatesPage() {
                   {column.label}
                 </label>
               ))}
-            </div>
+            </FloatingDropdown>
           )}
         </div>
       </div>
@@ -1709,18 +1685,18 @@ export default function CandidatesPage() {
 
         <span className="filter-label">Sort By</span>
         <div className="candidate-sort-control" ref={sortDropdownRef}>
-          <button className="filter-select candidate-sort-btn" type="button" onClick={() => setSortOpen(open => !open)}>
+          <button className="filter-select candidate-sort-btn" type="button" onClick={(event) => { setSortAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setSortOpen(open => !open) }}>
             <span>{sortLabel()}</span>
             <ChevronDown size={13} strokeWidth={2} />
           </button>
           {sortOpen && (
-            <div className="filter-dropdown candidate-sort-dropdown">
+            <FloatingDropdown anchorRect={sortAnchor?.rect} ignoreElement={sortAnchor?.element} className="candidate-sort-dropdown" minWidth={180} onClose={() => setSortOpen(false)}>
               {SORT_OPTIONS.map(option => (
                 <button className="candidate-columns-action" type="button" key={option.field} onClick={() => selectSort(option.field)}>
                   {option.toggle ? `${option.label} ${sortField === option.field && sortDirection === 'desc' ? '↑' : '↓'}` : option.label}
                 </button>
               ))}
-            </div>
+            </FloatingDropdown>
           )}
         </div>
         <button className="filter-clear" type="button" onClick={() => { setSortField(''); setSortDirection('asc'); setPage(1) }}>Clear</button>

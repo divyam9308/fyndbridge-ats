@@ -5,6 +5,7 @@ import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X } 
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import TablePopover from '../components/TablePopover'
+import FloatingDropdown from '../components/FloatingDropdown'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -84,7 +85,9 @@ export default function JobsPage() {
   const [sortField, setSortField] = useState('')
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
+  const [sortAnchor, setSortAnchor] = useState(null)
   const [columnsOpen, setColumnsOpen] = useState(false)
+  const [columnsAnchor, setColumnsAnchor] = useState(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [totalJobs, setTotalJobs] = useState(0)
@@ -207,27 +210,6 @@ export default function JobsPage() {
     })
     return () => { document.body.style.overflow = previous }
   }, [isOpen])
-
-  useEffect(() => {
-    if (!sortOpen) return
-    const close = (event) => {
-      if (!sortRef.current?.contains(event.target)) setSortOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [sortOpen])
-
-  useEffect(() => {
-    if (!columnsOpen) return
-    const close = (event) => {
-      if (!columnsDropdownRef.current?.contains(event.target)) {
-        setPendingColumns(visibleColumns)
-        setColumnsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [columnsOpen, visibleColumns])
 
   const fetchNextId = async () => {
     const res = await fetch('/api/jobs/next-display-id')
@@ -537,13 +519,13 @@ export default function JobsPage() {
           onAddJob={openModal}
         />
         <div className="candidate-columns-control" ref={columnsDropdownRef}>
-          <button className="filter-select candidate-columns-btn" type="button" onClick={() => { setPendingColumns(visibleColumns); setColumnsOpen(open => !open) }}>
+          <button className="filter-select candidate-columns-btn" type="button" onClick={(event) => { setPendingColumns(visibleColumns); setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setColumnsOpen(open => !open) }}>
             <span>Columns</span>
             <ChevronDown size={13} strokeWidth={2} />
           </button>
           <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
           {columnsOpen && (
-            <div className="filter-dropdown candidate-columns-dropdown">
+            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_MANDATE_COLUMN_KEYS)}>Select All</button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
@@ -555,7 +537,7 @@ export default function JobsPage() {
                   {column.label}
                 </label>
               ))}
-            </div>
+            </FloatingDropdown>
           )}
         </div>
       </div>
@@ -573,17 +555,17 @@ export default function JobsPage() {
         <div className="filter-divider" />
         <span className="filter-label">Sort By</span>
         <div className="candidate-sort-control" ref={sortRef}>
-          <button className="filter-select candidate-sort-btn" type="button" onClick={() => setSortOpen(open => !open)}>
+          <button className="filter-select candidate-sort-btn" type="button" onClick={(event) => { setSortAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setSortOpen(open => !open) }}>
             <span>{sortLabel()}</span><ChevronDown size={13} />
           </button>
           {sortOpen && (
-            <div className="filter-dropdown candidate-sort-dropdown">
+            <FloatingDropdown anchorRect={sortAnchor?.rect} ignoreElement={sortAnchor?.element} className="candidate-sort-dropdown" minWidth={180} onClose={() => setSortOpen(false)}>
               {SORT_OPTIONS.map(option => (
                 <button className="candidate-columns-action" type="button" key={option.field} onClick={() => selectSort(option.field)}>
                   {`${option.label} ${sortField === option.field && sortDirection === 'desc' ? '↑' : '↓'}`}
                 </button>
               ))}
-            </div>
+            </FloatingDropdown>
           )}
         </div>
       </div>

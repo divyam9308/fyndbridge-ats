@@ -1,18 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Briefcase, Building2, Plus, Upload, UserPlus } from 'lucide-react'
+import FloatingDropdown from './FloatingDropdown'
 
 export default function NewActionDropdown({ onUploadResumes, onAddCandidate, onAddClient, onAddJob }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-
-  useEffect(() => {
-    if (!open) return
-    const close = (event) => {
-      if (!ref.current?.contains(event.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
+  const [anchorRect, setAnchorRect] = useState(null)
+  const [anchorEl, setAnchorEl] = useState(null)
 
   const item = (label, Icon, action) => (
     <button
@@ -29,18 +22,18 @@ export default function NewActionDropdown({ onUploadResumes, onAddCandidate, onA
   )
 
   return (
-    <div className="new-action-control" ref={ref}>
-      <button className="btn-primary new-action-btn" type="button" onClick={() => setOpen(value => !value)}>
+    <div className="new-action-control">
+      <button className="btn-primary new-action-btn" type="button" onClick={(event) => { setAnchorRect(event.currentTarget.getBoundingClientRect()); setAnchorEl(event.currentTarget); setOpen(value => !value) }}>
         <span>New</span>
         <Plus size={15} className={open ? 'new-action-plus is-open' : 'new-action-plus'} />
       </button>
       {open && (
-        <div className="filter-dropdown new-action-dropdown">
+        <FloatingDropdown anchorRect={anchorRect} ignoreElement={anchorEl} className="new-action-dropdown" minWidth={178} onClose={() => setOpen(false)}>
           {item('Upload resumes', Upload, onUploadResumes)}
           {item('Add candidate', UserPlus, onAddCandidate)}
           {item('Add client', Building2, onAddClient)}
           {item('Add mandate', Briefcase, onAddJob)}
-        </div>
+        </FloatingDropdown>
       )}
     </div>
   )
