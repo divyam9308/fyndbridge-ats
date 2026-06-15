@@ -533,19 +533,22 @@
 .candidates-master-table {
   min-width: 2500px;
 }
+.fb-theme-table thead tr,
 .candidates-master-table thead tr {
   background: #001264;
 }
 
+.fb-theme-table th,
 .candidates-master-table th {
   color: #ffffff;
   font-weight: 800;
   letter-spacing: 0.1em;
 }
 
+.fb-theme-table td,
 .candidates-master-table td {
   color: #1f2937;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .candidates-master-table th:nth-child(8),
@@ -650,6 +653,7 @@
   flex-shrink: 0;
 }
 
+.data-table .table-id-chip,
 .candidates-master-table .candidate-id-chip {
   display: inline-flex;
   align-items: center;
@@ -662,16 +666,19 @@
   line-height: 1;
 }
 
+.data-table .table-client-id-chip,
 .candidates-master-table .candidate-client-id-chip {
   background: #eaf8ef;
   color: #2d9c5a;
 }
 
+.data-table .table-job-id-chip,
 .candidates-master-table .candidate-job-id-chip {
   background: #f1eaff;
   color: #8b5cf6;
 }
 
+.data-table .table-muted-dash,
 .candidates-master-table .candidate-muted-dash {
   color: var(--gray-400);
 }

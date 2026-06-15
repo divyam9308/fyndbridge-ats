@@ -49,6 +49,7 @@ const EMPTY_FORM = {
 }
 
 const dash = (value) => value || '-'
+const mutedDash = <span className="table-muted-dash">-</span>
 const termsLabel = (client) => client.terms_signed_type === 'Any Other' ? client.terms_signed_custom : client.terms_signed_type
 const showCommercialFields = (client) => client.contract_signed === true || client.contract_signed === 'Yes'
 const commercialDash = (client, value) => showCommercialFields(client) ? dash(value) : '-'
@@ -665,7 +666,7 @@ export default function ClientsPage() {
     const contact = selectedContact(client)
     switch (key) {
       case 'clientId':
-        return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(client.client_display_id)}</td>
+        return <td key={key}>{client.client_display_id ? <span className="table-id-chip table-client-id-chip">{client.client_display_id}</span> : mutedDash}</td>
       case 'consultant':
         return <td key={key}>{dash(client.consultant_name || client.consultant)}</td>
       case 'clientName':
@@ -696,7 +697,7 @@ export default function ClientsPage() {
       case 'designation':
         return <td key={key}>{dash(contact.designation)}</td>
       case 'linkedin':
-        return <td key={key}>{contact.linkedin ? <a className="cv-table-link" href={contact.linkedin.startsWith('http') ? contact.linkedin : `https://${contact.linkedin}`} target="_blank" rel="noreferrer">LinkedIn</a> : '-'}</td>
+        return <td key={key}>{contact.linkedin ? <a className="cv-table-link" href={contact.linkedin.startsWith('http') ? contact.linkedin : `https://${contact.linkedin}`} target="_blank" rel="noreferrer">LinkedIn</a> : mutedDash}</td>
       case 'sector':
         return <td key={key}>{dash(client.sector)}</td>
       case 'connectedOnDate':
@@ -837,7 +838,8 @@ export default function ClientsPage() {
             <div className="empty-state-desc">Add your first client to get started.</div>
           </div>
         ) : (
-          <table className="data-table" aria-label="Clients">
+          <div className="table-wrapper">
+          <table className="data-table fb-theme-table" aria-label="Clients">
             <thead>
               <tr>
                 {activeColumns.map(column => <th key={column.key}>{column.label}</th>)}
@@ -851,6 +853,7 @@ export default function ClientsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
       <PaginationBar

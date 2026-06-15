@@ -52,6 +52,7 @@ const todayLocal = () => {
   return date.toISOString().slice(0, 10)
 }
 const dash = (value) => value || '-'
+const mutedDash = <span className="table-muted-dash">-</span>
 const clientName = (client) => client?.name || client?.client_name || ''
 const canonicalClients = (clients) => {
   const map = new Map()
@@ -489,20 +490,19 @@ export default function JobsPage() {
 
   const toggleTablePopover = (type, id, element) => {
     if (!element) return
-    const anchorRect = element.getBoundingClientRect()
-    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorRect })
+    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorEl: element })
   }
 
   const renderMandateCell = (column, job) => {
     switch (column.key) {
       case 'jobId':
-        return <td key={column.key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{dash(job.job_display_id)}</td>
+        return <td key={column.key}>{job.job_display_id ? <span className="table-id-chip table-job-id-chip">{job.job_display_id}</span> : mutedDash}</td>
       case 'consultant':
         return <td key={column.key}>{(job.consultants || []).length <= 1 ? dash(job.consultants?.[0]) : <div className="candidate-columns-control mandate-consultants-control"><button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('consultants', job.id, event.currentTarget)}>{job.consultants[0]} +{job.consultants.length - 1}</button></div>}</td>
       case 'teamLead':
         return <td key={column.key}>{dash(job.team_lead)}</td>
       case 'clientId':
-        return <td key={column.key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{dash(job.client_display_id)}</td>
+        return <td key={column.key}>{job.client_display_id ? <span className="table-id-chip table-client-id-chip">{job.client_display_id}</span> : mutedDash}</td>
       case 'clientName':
         return <td key={column.key}>{dash(job.client_name)}</td>
       case 'role':
@@ -597,7 +597,7 @@ export default function JobsPage() {
           <div className="empty-state"><div className="empty-state-title">No mandates found</div><div className="empty-state-desc">Create a mandate to get started.</div></div>
         ) : (
           <div className="table-wrapper">
-            <table className="data-table candidates-master-table" aria-label="Mandates">
+            <table className="data-table fb-theme-table candidates-master-table" aria-label="Mandates">
               <thead>
                 <tr>
                   {activeColumns.map(column => <th key={column.key}>{column.label}</th>)}
@@ -628,7 +628,7 @@ export default function JobsPage() {
         const job = jobs.find(item => item.id === tablePopover.id)
         if (!job) return null
         return (
-          <TablePopover anchorRect={tablePopover.anchorRect} width={tablePopover.type === 'status' ? 150 : 180} onClose={() => setTablePopover(null)}>
+          <TablePopover anchorEl={tablePopover.anchorEl} width={tablePopover.type === 'status' ? 150 : 180} onClose={() => setTablePopover(null)}>
             {tablePopover.type === 'consultants' ? (
               job.consultants.map(name => <div className="candidate-column-option" key={name}>{name}</div>)
             ) : (

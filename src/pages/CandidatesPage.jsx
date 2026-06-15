@@ -9,6 +9,7 @@ import { supabase } from '../services/supabaseClient'
 import { logCandidateCvOpen, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
+import { normalizeMandateStatus } from '../utils/mandateStatuses'
 
 /* ====== Static reference data ====== */
 const STATUS_OPTIONS = CANDIDATE_STATUS_OPTIONS
@@ -149,18 +150,8 @@ const EMPTY_CAND = {
   location:'', currentCompany:'', currentOrganisation:'', exp:'', salary:'', expectedSalary:'', skills:[], education:'',
   noticePeriod:'', openToRelocate:'',
   offeredCtc:'', dateOfJoining:'',
-  client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', clientPhone:'', status:'',
+  client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', status:'',
   cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
-}
-
-/* ====== Client phone lookup ====== */
-const CLIENT_PHONES = {
-  'Zeta FinTech':     '+91 98765 43210',
-  'Nexus Tech':       '+91 98234 56789',
-  'Bright Minds Ltd': '+91 99012 34567',
-  'Acme Corp':        '+91 97654 32109',
-  'CloudBridge Labs':  '+91 91234 56780',
-  'Lumino Health':    '+91 94567 89012',
 }
 
 const apiCandidateToUi = (row) => ({
@@ -190,7 +181,6 @@ const apiCandidateToUi = (row) => ({
   skills: row.skills || [],
   education: row.education || '',
   client: row.client_name || '',
-  clientPhone: row.client_phone_number || CLIENT_PHONES[row.client_name] || '',
   job: row.job_title || '',
   status: row.status || '',
   cvLink: row.cv_link || row.resume_url || '',
@@ -220,19 +210,21 @@ const getCanonicalClients = (clients) => {
 }
 
 const getUniqueSortedJobs = (jobs, clientId = '', search = '') => {
-  const map = new Map()
   const query = String(search || '').trim().toLowerCase()
-  jobs
+  return jobs
     .filter(job => !clientId || job.client_id === clientId)
-    .forEach(job => {
+    .filter(job => normalizeMandateStatus(job.mandate_status || job.status || job.priority) !== 'Completed')
+    .filter(job => {
       const name = (job?.title || job?.role || '').trim()
-      if (!name) return
+      if (!name) return false
       const text = `${name} ${job.job_display_id || ''}`.toLowerCase()
-      if (query && !text.includes(query)) return
-      const key = name.toLowerCase()
-      if (!map.has(key)) map.set(key, job)
+      return !query || text.includes(query)
     })
-  return [...map.values()].sort((a, b) => (a?.title || a?.role || '').localeCompare(b?.title || b?.role || '', undefined, { sensitivity: 'base' }))
+    .sort((a, b) => {
+      const byName = (a?.title || a?.role || '').localeCompare(b?.title || b?.role || '', undefined, { sensitivity: 'base' })
+      if (byName !== 0) return byName
+      return String(a?.job_display_id || '').localeCompare(String(b?.job_display_id || ''), undefined, { sensitivity: 'base' })
+    })
 }
 
 const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) => {
@@ -683,7 +675,6 @@ export default function CandidatesPage() {
         ...f,
         client: matchingClient ? clientName(matchingClient) : value,
         clientId: matchingClient?.id || '',
-        clientPhone: matchingClient?.phone || CLIENT_PHONES[clientName(matchingClient)] || '',
         job: ''
       }))
     } else {
@@ -964,7 +955,6 @@ export default function CandidatesPage() {
       client: matchedClient ? clientName(matchedClient) : '',
       clientId: matchedClient?.id || '',
       newClientName: '',
-      clientPhone: matchedClient?.phone || '',
       linkedinUrl: row.linkedin_url || '',
       cvLink: row.resume_url || '',
       cvFileHash: row.cv_file_hash || '',
@@ -1017,7 +1007,7 @@ export default function CandidatesPage() {
   const fillEmptyCandidateFields = (candidate) => {
     // mobile is included so a missing phone number from a CV defaults to '-' rather than ''
     // which avoids 'Mobile is required' blocking the save silently
-    const textFields = ['name', 'email', 'mobile', 'designation', 'city', 'state', 'location', 'currentCompany', 'currentOrganisation', 'education', 'client', 'job', 'clientPhone', 'cvLink', 'linkedinUrl', 'notes', 'consultantName']
+    const textFields = ['name', 'email', 'mobile', 'designation', 'city', 'state', 'location', 'currentCompany', 'currentOrganisation', 'education', 'client', 'job', 'cvLink', 'linkedinUrl', 'notes', 'consultantName']
     const next = { ...candidate }
     textFields.forEach(field => {
       if (String(next[field] ?? '').trim() === '') next[field] = '-'
@@ -1152,7 +1142,6 @@ export default function CandidatesPage() {
         ...f,
         client: matchingClient ? clientName(matchingClient) : value,
         clientId: matchingClient?.id || '',
-        clientPhone: matchingClient?.phone || CLIENT_PHONES[clientName(matchingClient)] || '',
         job: ''
       }))
     } else {
@@ -1173,7 +1162,6 @@ export default function CandidatesPage() {
         ...prev,
         client: matchedClient ? clientName(matchedClient) : value,
         clientId: matchedClient?.id || '',
-        clientPhone: matchedClient?.phone || CLIENT_PHONES[clientName(matchedClient)] || '',
         job: '',
         jobId: '',
         jobDisplayId: ''
@@ -1196,13 +1184,12 @@ export default function CandidatesPage() {
       if (name === 'client') {
         const matchedClient = findClientByInput(value)
         setF(prev => ({
-          ...prev,
-          client: matchedClient ? clientName(matchedClient) : value,
-          clientId: matchedClient?.id || '',
-          clientPhone: matchedClient?.phone || CLIENT_PHONES[clientName(matchedClient)] || '',
-          job: '',
-          jobId: '',
-          jobDisplayId: ''
+        ...prev,
+        client: matchedClient ? clientName(matchedClient) : value,
+        clientId: matchedClient?.id || '',
+        job: '',
+        jobId: '',
+        jobDisplayId: ''
         }))
       } else {
         setF(prev => ({ ...prev, [name]: nextValue }))
@@ -1402,19 +1389,13 @@ export default function CandidatesPage() {
             <div className="client-suggestions manual-suggestions is-open">
               {matchingJobs.map(job => (
                 <button type="button" key={job.id} onMouseDown={(event) => { event.preventDefault(); setJobValue(job.id); setJobSuggestionsOpen(false) }}>
-                  <span>{jobName(job)}</span>
+                  <span>{`${jobName(job)} — ${job.job_display_id || '-'}`}</span>
                   <small>{job.job_display_id || ''}</small>
                 </button>
               ))}
             </div>
             )}
           </div>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Client Phone</label>
-          <input name="clientPhone" value={f.clientPhone} onChange={handleLocalChange}
-            className="form-control" />
         </div>
 
         <div className="form-group">

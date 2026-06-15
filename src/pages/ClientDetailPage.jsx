@@ -28,6 +28,7 @@ const displayIdNumber = (value, prefix) => Number(String(value || '').replace(ne
 const compareText = (a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' })
 const fmt = (n) => n ? `Rs. ${Number(n).toLocaleString('en-IN')}` : '-'
 const initials = (name) => String(name || '').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+const mutedDash = <span className="table-muted-dash">-</span>
 const formatDate = (value) => {
   if (!value) return '-'
   const date = new Date(value)
@@ -226,14 +227,14 @@ export default function ClientDetailPage() {
     const groups = new Map()
     clientJobs.forEach((job) => {
       const title = job.title || job.role || 'Unassigned Mandate'
-      const key = normalizeText(title) || job.id
-      groups.set(key, { title, candidates: [], relatedJob: job })
+      const key = job.id || normalizeText(`${title}-${job.job_display_id || ''}`)
+      groups.set(key, { key, title, candidates: [], relatedJob: job })
     })
     candidates.forEach((candidate) => {
-      const matchedJob = clientJobs.find(job => job.id === candidate.jobId) || clientJobs.find(job => normalizeText(job.title || job.role) === normalizeText(getJobText(candidate)))
+      const matchedJob = clientJobs.find(job => job.id === candidate.jobId) || clientJobs.find(job => (job.job_display_id || '') === (candidate.jobDisplayId || '') && normalizeText(job.title || job.role) === normalizeText(getJobText(candidate)))
       const title = matchedJob ? matchedJob.title || matchedJob.role : getJobText(candidate) || 'Unassigned Mandate'
-      const key = matchedJob ? normalizeText(matchedJob.title || matchedJob.role) || matchedJob.id : normalizeText(title) || 'unassigned mandate'
-      if (!groups.has(key)) groups.set(key, { title, candidates: [], relatedJob: matchedJob })
+      const key = matchedJob?.id || candidate.jobId || candidate.jobDisplayId || normalizeText(`${title}-${candidate.associationId || candidate.id}`)
+      if (!groups.has(key)) groups.set(key, { key, title, candidates: [], relatedJob: matchedJob })
       groups.get(key).candidates.push(candidate)
     })
 
@@ -250,7 +251,7 @@ export default function ClientDetailPage() {
           ? 'Completed'
           : savedStatus === '-' ? 'Ongoing' : savedStatus
       return { ...group, relatedJob, status: derivedStatus, stats }
-    }).sort((a, b) => compareText(a.title, b.title))
+    }).sort((a, b) => compareText(`${a.title} ${a.relatedJob?.job_display_id || ''}`, `${b.title} ${b.relatedJob?.job_display_id || ''}`))
   }, [candidates, clientJobs])
 
   const jobCounts = useMemo(() => ({
@@ -266,7 +267,7 @@ export default function ClientDetailPage() {
     const group = jobGroups.find(item => item.relatedJob?.id === selectedJobId) || jobGroups.find(item => normalizeText(item.title) === normalizeText(selectedJobTitle))
     if (!group) return
     const timer = window.setTimeout(() => {
-      setSelectedGroup({ jobTitle: group.title, status: '' })
+      setSelectedGroup({ groupKey: group.key, jobTitle: group.title, status: '' })
       setPage(1)
     }, 0)
     return () => window.clearTimeout(timer)
@@ -280,7 +281,7 @@ export default function ClientDetailPage() {
 
   const selectedCandidates = useMemo(() => {
     if (!selectedGroup) return []
-    const group = jobGroups.find(item => normalizeText(item.title) === normalizeText(selectedGroup.jobTitle))
+    const group = jobGroups.find(item => item.key === selectedGroup.groupKey)
     const rows = group?.candidates || []
     return selectedGroup.status ? rows.filter(candidate => candidate.status === selectedGroup.status) : rows
   }, [jobGroups, selectedGroup])
@@ -297,8 +298,8 @@ export default function ClientDetailPage() {
   const pagedCandidates = sortedCandidates.slice((page - 1) * pageSize, page * pageSize)
   const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'jobId')
 
-  const openGroup = (jobTitle, status = '') => {
-    setSelectedGroup({ jobTitle, status })
+  const openGroup = (groupKey, jobTitle, status = '') => {
+    setSelectedGroup({ groupKey, jobTitle, status })
     setPage(1)
   }
 
@@ -325,8 +326,7 @@ export default function ClientDetailPage() {
 
   const toggleTablePopover = (type, id, element) => {
     if (!element || !id) return
-    const anchorRect = element.getBoundingClientRect()
-    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorRect })
+    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorEl: element })
   }
   const togglePendingColumn = (key) => setPendingColumns(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key])
   const proceedColumns = () => {
@@ -392,11 +392,10 @@ export default function ClientDetailPage() {
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || Object.values(data.errors || {})[0] || 'Unable to update candidate.')
       const updated = apiCandidateToUi(data)
-      const newJobTitle = getJobText(updated)
       const nextCandidates = candidates.map(candidate => candidate.associationId === updated.associationId ? updated : candidate)
       setCandidates(nextCandidates)
       if (updated.status === 'Hired') {
-        const job = clientJobs.find(item => normalizeText(item.title || item.role) === normalizeText(newJobTitle))
+        const job = clientJobs.find(item => item.id === updated.jobId) || clientJobs.find(item => (item.job_display_id || '') === (updated.jobDisplayId || ''))
         if (job && normalizeMandateStatus(job.mandate_status || job.status) !== 'Scrapped') {
           setClientJobs(rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: 'Completed', status: 'Completed' } : row))
         }
@@ -426,8 +425,8 @@ export default function ClientDetailPage() {
       case 'date': return <td key={key}>{formatDate(c.createdAt)}</td>
       case 'consultant': return <td key={key}>{c.consultant || '-'}</td>
       case 'client': return <td key={key}>{c.client || '-'}</td>
-      case 'clientId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{client?.client_display_id || '-'}</td>
-      case 'jobId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.jobDisplayId || '-'}</td>
+      case 'clientId': return <td key={key}>{client?.client_display_id ? <span className="table-id-chip table-client-id-chip">{client.client_display_id}</span> : mutedDash}</td>
+      case 'jobId': return <td key={key}>{c.jobDisplayId ? <span className="table-id-chip table-job-id-chip">{c.jobDisplayId}</span> : mutedDash}</td>
       case 'job': return <td key={key} className="cell-ellipsis">{getJobText(c)}</td>
       case 'name':
         return <td key={key}><div className="name-cell"><div className="name-avatar">{initials(c.name)}</div><div><div className="name-text">{c.name}</div><div className="sub-text">{c.location || [c.city, c.state].filter(Boolean).join(', ')}</div></div></div></td>
@@ -489,7 +488,8 @@ export default function ClientDetailPage() {
         {jobGroups.length === 0 ? (
           <div className="empty-state"><div className="empty-state-title">No candidate job groups</div><div className="empty-state-desc">No candidates are linked to this client yet.</div></div>
         ) : (
-          <table className="data-table" aria-label="Client Mandate Groups">
+          <div className="table-wrapper">
+          <table className="data-table fb-theme-table" aria-label="Client Mandate Groups">
             <thead>
               <tr>
                 <th>Job ID</th>
@@ -501,9 +501,9 @@ export default function ClientDetailPage() {
             </thead>
             <tbody>
               {jobGroups.map(group => (
-                <tr key={group.title}>
-                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{group.relatedJob?.job_display_id || '-'}</td>
-                  <td><button className="table-link-button" type="button" onClick={() => openGroup(group.title)}>{group.title}</button></td>
+                <tr key={group.key}>
+                  <td>{group.relatedJob?.job_display_id ? <span className="table-id-chip table-job-id-chip">{group.relatedJob.job_display_id}</span> : mutedDash}</td>
+                  <td><button className="table-link-button" type="button" onClick={() => openGroup(group.key, group.title)}>{group.title}</button></td>
                   <td>
                     <div className="candidate-columns-control mandate-status-control">
                       <button className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', group.relatedJob?.id, event.currentTarget)} disabled={!group.relatedJob?.id || statusSaving[group.relatedJob?.id]}>
@@ -511,16 +511,17 @@ export default function ClientDetailPage() {
                       </button>
                     </div>
                   </td>
-                  <td className="align-center"><button className="count-badge-link" type="button" onClick={() => openGroup(group.title)}>{group.stats.total}</button></td>
+                  <td className="align-center"><button className="count-badge-link" type="button" onClick={() => openGroup(group.key, group.title)}>{group.stats.total}</button></td>
                   {STATUS_COLUMNS.map(([key, label]) => (
                     <td className="align-center" key={key}>
-                      {group.stats[key] ? <button className="count-badge-link" type="button" onClick={() => openGroup(group.title, label)}>{group.stats[key]}</button> : <span className="count-zero">0</span>}
+                      {group.stats[key] ? <button className="count-badge-link" type="button" onClick={() => openGroup(group.key, group.title, label)}>{group.stats[key]}</button> : <span className="count-zero">0</span>}
                     </td>
                   ))}
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -528,7 +529,7 @@ export default function ClientDetailPage() {
         const group = jobGroups.find(item => item.relatedJob?.id === tablePopover.id)
         if (!group) return null
         return (
-          <TablePopover anchorRect={tablePopover.anchorRect} width={150} onClose={() => setTablePopover(null)}>
+          <TablePopover anchorEl={tablePopover.anchorEl} width={150} onClose={() => setTablePopover(null)}>
             {MANDATE_STATUSES.map(status => (
               <button className="candidate-columns-action" type="button" key={status} onClick={() => updateMandateStatus(group, status)}>
                 {status}
@@ -567,7 +568,7 @@ export default function ClientDetailPage() {
           </div>
           <div className="table-card">
             <div className="table-wrapper">
-              <table className="data-table candidates-master-table" aria-label="Client Mandate Candidates">
+              <table className="data-table fb-theme-table candidates-master-table" aria-label="Client Mandate Candidates">
                 <thead><tr>{activeColumns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead>
                 <tbody>{pagedCandidates.map((candidate, index) => <tr key={candidate.associationId || candidate.id}>{activeColumns.map(column => renderCandidateCell(column, candidate, index))}</tr>)}</tbody>
               </table>

@@ -1,11 +1,30 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-export default function TablePopover({ anchorRect, onClose, width = 180, children }) {
+export default function TablePopover({ anchorRect, anchorEl, onClose, width = 180, children }) {
   const ref = useRef(null)
   const [style, setStyle] = useState({ visibility: 'hidden' })
   const canUseDom = typeof document !== 'undefined' && Boolean(document.body)
-  const validRect = anchorRect && Number.isFinite(anchorRect.left) && Number.isFinite(anchorRect.top)
+  const getRect = useCallback(() => anchorEl?.isConnected ? anchorEl.getBoundingClientRect() : anchorRect, [anchorEl, anchorRect])
+  const validRect = (() => {
+    const rect = getRect()
+    return rect && Number.isFinite(rect.left) && Number.isFinite(rect.top)
+  })()
+
+  const updatePosition = useCallback(() => {
+    if (!canUseDom || !ref.current) return
+    const rect = getRect()
+    if (!rect || !Number.isFinite(rect.left) || !Number.isFinite(rect.top)) return
+    const gap = 6
+    const margin = 8
+    const height = ref.current.offsetHeight
+    const maxLeft = window.innerWidth - width - margin
+    const left = Math.max(margin, Math.min(rect.left, maxLeft))
+    const below = rect.bottom + gap
+    const above = rect.top - height - gap
+    const top = window.innerHeight - rect.bottom < height + margin && above > margin ? above : below
+    setStyle({ position: 'fixed', top, left, width, zIndex: 10000, visibility: 'visible' })
+  }, [canUseDom, getRect, width])
 
   useEffect(() => {
     if (!canUseDom) return undefined
@@ -18,17 +37,19 @@ export default function TablePopover({ anchorRect, onClose, width = 180, childre
   }, [canUseDom, onClose])
 
   useLayoutEffect(() => {
-    if (!canUseDom || !validRect || !ref.current) return
-    const gap = 6
-    const margin = 8
-    const height = ref.current.offsetHeight
-    const maxLeft = window.innerWidth - width - margin
-    const left = Math.max(margin, Math.min(anchorRect.left, maxLeft))
-    const below = anchorRect.bottom + gap
-    const above = anchorRect.top - height - gap
-    const top = window.innerHeight - anchorRect.bottom < height + margin && above > margin ? above : below
-    setStyle({ position: 'fixed', top, left, width, zIndex: 10000, visibility: 'visible' })
-  }, [anchorRect, canUseDom, validRect, width])
+    if (!validRect) return
+    updatePosition()
+  }, [updatePosition, validRect])
+
+  useEffect(() => {
+    if (!canUseDom || !validRect) return undefined
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [canUseDom, updatePosition, validRect])
 
   if (!canUseDom || !validRect) return null
 
