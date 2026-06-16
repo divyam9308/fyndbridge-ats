@@ -270,7 +270,7 @@ function isPlainMandatePrompt(prompt) {
 function isPlainCandidatePrompt(prompt) {
   const text = lower(prompt)
   if (!text || /\b(CA\d+|CL\d+|JB\d+)\b/i.test(prompt)) return false
-  if (/[<>=]/.test(text) || /\b(before|after|on|between|salary|ctc|experience|notice|date|status|stage|relocate|consultant|client|role|job|designation|mobile|phone|email|skills?)\b/i.test(text)) return false
+  if (/[<>=]/.test(text) || /\b(before|after|on|between|salary|ctc|experience|notice|date|status|stage|relocate|consultant|client|role|job|designation|location|city|mobile|phone|email|skills?)\b/i.test(text)) return false
   return /^[a-z0-9][\w\s@+&.-]+$/i.test(clean(prompt))
 }
 
@@ -347,16 +347,21 @@ function validateAiFilters(page, data, prompt = '') {
     mergedSeen.add(key)
     return true
   })
-  return unique.length ? { conditions: unique } : null
+  return unique.length ? { ...(deterministic?.mode ? { mode: deterministic.mode } : {}), conditions: unique } : null
 }
 
 function parsePrompt(page, prompt) {
   const config = configs[page]
   const text = clean(prompt)
   const conditions = []
+  let mode = ''
   const add = (field, operator, value) => {
     const condition = normalizeCondition(config, { field, operator, value })
     if (condition) conditions.push(condition)
+  }
+  const addAny = (field, operator, values) => {
+    values.forEach(value => add(field, operator, value))
+    if (values.length > 1) mode = 'any'
   }
 
   const idMatch = text.match(/\b(CA\d+|CL\d+|JB\d+)\b/i)
@@ -388,6 +393,7 @@ function parsePrompt(page, prompt) {
     ['consultant', /consultant\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|team lead|role|location|budget|priority|mandate status|status|vertical|date|in|for)\b|$)/i],
     ['team_lead', /(?:team lead|tl)\s+(?:is\s+|equals\s+)?(-|[a-z][\w\s.-]*?)(?=\s+(?:client|consultant|role|location|budget|priority|mandate status|status|vertical|date|in|for)\b|$)/i],
     ['role', /(?:role|job role|job)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:client|consultant|team lead|location|budget|priority|mandate status|status|vertical|date|in|for)\b|$)/i],
+    ['current_location', /(?:location|city|current location)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date|for)\b|$)|\bin\s+([a-z][\w\s.-]*?)(?=\s+(?:for|client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date)\b|$)/i],
     ['location', /(?:location|city|current location)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date|for)\b|$)|\bin\s+([a-z][\w\s.-]*?)(?=\s+(?:for|client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date)\b|$)/i],
     ['vertical', /(?:vertical|domain)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:client|consultant|team lead|role|location|budget|priority|mandate status|status|date|in|for)\b|$)/i],
     ['designation', /designation\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)$/i],
@@ -434,6 +440,8 @@ function parsePrompt(page, prompt) {
   if (config.fields.contract_signed) {
     const contractMatch = text.match(/contract signed\s+(yes|no|true|false)/i)
     if (contractMatch) add('contract_signed', 'equals', contractMatch[1])
+    const contractOr = text.match(/contract signed\s+(yes|no|true|false)\s+or\s+(yes|no|true|false)/i)
+    if (contractOr) addAny('contract_signed', 'equals', [contractOr[1], contractOr[2]])
   }
   if (config.fields.gstin) {
     const gstMatch = text.match(/(?:gstin|gst)\s+(?:starts with|starts)\s+([a-z0-9]+)/i)
@@ -450,6 +458,16 @@ function parsePrompt(page, prompt) {
     if (!config.fields[field]) return
     const match = text.match(regex)
     if (match) add(field, 'contains', match[1])
+  })
+  ;[
+    ['consultant', /consultant\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)\s+or\s+([a-z][\w\s.-]*?)$/i],
+    ['contact_person', /(?:contact person|contact)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)\s+or\s+([a-z][\w\s.-]*?)$/i],
+    ['location', /(?:location|city)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)\s+or\s+([a-z][\w\s.-]*?)$/i],
+    ['sector', /sector\s+(?:is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)\s+or\s+([a-z0-9][\w\s&.-]*?)$/i]
+  ].forEach(([field, regex]) => {
+    if (!config.fields[field]) return
+    const match = text.match(regex)
+    if (match) addAny(field, 'contains', [match[1], match[2]])
   })
 
   const dateMatch = text.match(/(?:date|allocation date|date of allocation|connected(?: on)?|follow up)\s+(after|before|on)\s+(.+)$/i)
@@ -476,7 +494,7 @@ function parsePrompt(page, prompt) {
       unique.push(condition)
     }
   })
-  return unique.length ? { conditions: unique } : null
+  return unique.length ? { ...(mode ? { mode } : {}), conditions: unique } : null
 }
 
 function compareValue(actual, operator, expected, type) {
