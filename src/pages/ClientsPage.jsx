@@ -109,6 +109,7 @@ const SORT_OPTIONS = [
   { field: 'client_id', label: 'Client ID' },
   { field: 'client_name', label: 'Alphabetical Order' }
 ]
+const CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY = 'clientsTableColumns'
 const CLIENT_AI_SEARCH_FIELDS = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
 
 const getCurrentUser = () => {
@@ -305,7 +306,7 @@ export default function ClientsPage() {
         const session = supabase ? (await supabase.auth.getSession()).data.session : null
         const currentUser = getCurrentUser()
         const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
-        const response = await fetch(`/api/user-preferences/client_columns?user_id=${encodeURIComponent(userId)}`)
+        const response = await fetch(`/api/user-preferences/${CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY}?user_id=${encodeURIComponent(userId)}`)
         const payload = await response.json().catch(() => ({}))
         const value = Array.isArray(payload.data?.value)
           ? payload.data.value.filter(key => !REMOVED_CLIENT_COLUMN_KEYS.has(key) && DEFAULT_CLIENT_COLUMN_KEYS.includes(key))
@@ -667,7 +668,7 @@ export default function ClientsPage() {
       const currentUser = getCurrentUser()
       const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
       const value = pendingColumns.length ? pendingColumns : DEFAULT_CLIENT_COLUMN_KEYS
-      const response = await fetch('/api/user-preferences/client_columns', {
+      const response = await fetch(`/api/user-preferences/${CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, value })
@@ -676,10 +677,7 @@ export default function ClientsPage() {
         const payload = await response.json().catch(() => ({}))
         throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
       }
-      setVisibleColumns(value)
-      setPendingColumns(value)
       setSavedColumns(value)
-      setColumnsOpen(false)
     } catch (err) {
       setError(err.message)
     }
@@ -820,7 +818,7 @@ export default function ClientsPage() {
       case 'linkedin':
         {
           const linkedInUrl = normalizeExternalUrl(contact.linkedin)
-          return <td key={key}>{linkedInUrl ? <a className="cv-table-link" href={linkedInUrl} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openExternalUrl(linkedInUrl) }}>LinkedIn</a> : mutedDash}</td>
+          return <td key={key}>{linkedInUrl ? <a className="candidate-linkedin-link" href={linkedInUrl} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openExternalUrl(linkedInUrl) }}>LinkedIn ↗</a> : mutedDash}</td>
         }
       case 'sector':
         return <td key={key}>{highlightText(dash(client.sector), aiFilters)}</td>
@@ -892,13 +890,13 @@ export default function ClientsPage() {
           onAddJob={() => navigate('/dashboard/jobs', { state: { action: 'add-job' } })}
         />
         <div className="candidate-columns-control" ref={columnsDropdownRef}>
-          <button className="filter-select candidate-columns-btn" type="button" onClick={(event) => { setPendingColumns(visibleColumns); setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setColumnsOpen(open => !open) }}>
+          <button className="filter-select candidate-columns-btn" type="button" onClick={(event) => { setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setColumnsOpen(open => !open) }}>
             <span>Columns</span>
             <ChevronDown size={13} strokeWidth={2} />
           </button>
           <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
           {columnsOpen && (
-            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
+            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CLIENT_COLUMN_KEYS)}>Select All</button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>

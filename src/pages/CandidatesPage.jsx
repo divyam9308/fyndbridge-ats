@@ -23,6 +23,7 @@ const MAX_RESUME_SIZE = 10 * 1024 * 1024
 const ACCEPTED_RESUME_EXTENSIONS = ['pdf', 'doc', 'docx']
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
+const CANDIDATES_TABLE_COLUMNS_PREFERENCE_KEY = 'candidatesTableColumns'
 
 const fmt = (n) => n ? `Rs. ${Number(n).toLocaleString('en-IN')}` : '-'
 const initials = (name) => name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()
@@ -210,8 +211,9 @@ const apiCandidateToUi = (row) => ({
 const cleanNumberForApi = (value) => {
   const text = String(value ?? '').trim()
   if (!text || text === '-') return ''
-  return value
+  return text.replace(/^rs\.?\s*/i, '').replace(/^₹\s*/i, '').replace(/\s*lpa$/i, '').trim()
 }
+const normalizeCtcInputValue = (value) => cleanNumberForApi(value)
 
 const getCanonicalClients = (clients) => {
   const map = new Map()
@@ -358,7 +360,7 @@ export default function CandidatesPage() {
       try {
         const session = supabase ? (await supabase.auth.getSession()).data.session : null
         const userId = session?.user?.id || getCurrentUser()?.id || getCurrentUser()?.email || 'anonymous'
-        const response = await fetch(`/api/user-preferences/candidate_columns?user_id=${encodeURIComponent(userId)}`)
+        const response = await fetch(`/api/user-preferences/${CANDIDATES_TABLE_COLUMNS_PREFERENCE_KEY}?user_id=${encodeURIComponent(userId)}`)
         const payload = await response.json().catch(() => ({}))
         const value = mergeCandidateColumnPreference(payload.data?.value)
 
@@ -494,6 +496,12 @@ export default function CandidatesPage() {
     } finally {
       setOpeningDocument('')
     }
+  }, [])
+
+  const scrollImportToTop = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      importModalRef.current?.querySelector('.modal-body')?.scrollTo({ top: 0, behavior: 'auto' })
+    })
   }, [])
 
   useEffect(() => {
@@ -664,7 +672,7 @@ export default function CandidatesPage() {
       const currentUser = getCurrentUser()
       const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
       const value = pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS
-      const response = await fetch('/api/user-preferences/candidate_columns', {
+      const response = await fetch(`/api/user-preferences/${CANDIDATES_TABLE_COLUMNS_PREFERENCE_KEY}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, value })
@@ -674,11 +682,7 @@ export default function CandidatesPage() {
         const payload = await response.json().catch(() => ({}))
         throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
       }
-
-      setVisibleColumns(value)
-      setPendingColumns(value)
       setSavedColumns(value)
-      setColumnsOpen(false)
     } catch (err) {
       setApiError(err.message)
     }
@@ -1034,6 +1038,7 @@ export default function CandidatesPage() {
     setParsed(true)
     setReviewNotice(rows[0]?.error ? `Parsing warning: ${rows[0].error}` : '')
     if (rows[0]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
+    scrollImportToTop()
   }
 
   const handleBulkResumeFiles = async (files) => {
@@ -1091,6 +1096,7 @@ export default function CandidatesPage() {
     setParsedSkillInput('')
     setReviewNotice(importQueue[nextIndex]?.error ? `Parsing warning: ${importQueue[nextIndex].error}` : notice)
     if (importQueue[nextIndex]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
+    scrollImportToTop()
   }
 
   const handleSaveParsed = async () => {
@@ -1244,7 +1250,8 @@ export default function CandidatesPage() {
     }
     const handleLocalChange = onChange || ((e) => {
       const { name, value, type, checked } = e.target
-      const nextValue = type === 'checkbox' ? checked : value
+      const rawValue = type === 'checkbox' ? checked : value
+      const nextValue = ['salary', 'expectedSalary', 'offeredCtc'].includes(name) ? normalizeCtcInputValue(rawValue) : rawValue
       if (name === 'client') {
         const matchedClient = findClientByInput(value)
         setF(prev => ({
@@ -1259,6 +1266,7 @@ export default function CandidatesPage() {
         setF(prev => ({ ...prev, [name]: nextValue }))
       }
     })
+    const cvHref = resolveCandidateCvHref(f)
     return (
       <div className="form-grid-2">
         <div className="form-group">
@@ -1334,16 +1342,24 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Current Salary (Rs.)</label>
-          <input name="salary" type="number" value={f.salary} onChange={handleLocalChange}
-            className={`form-control${low('salary')}`}
+          <label className="form-label">Current CTC</label>
+          <div className="input-with-adornment">
+            <span className="input-adornment">₹</span>
+            <input name="salary" type="text" inputMode="decimal" value={normalizeCtcInputValue(f.salary)} onChange={handleLocalChange}
+              className={`form-control${low('salary')}`}
             />
+            <span className="input-adornment input-adornment-end">LPA</span>
+          </div>
         </div>
 
         <div className="form-group">
-          <label className="form-label">Expected Salary (Rs.)</label>
-          <input name="expectedSalary" type="number" value={f.expectedSalary} onChange={handleLocalChange}
-            className="form-control" />
+          <label className="form-label">Expected CTC</label>
+          <div className="input-with-adornment">
+            <span className="input-adornment">₹</span>
+            <input name="expectedSalary" type="text" inputMode="decimal" value={normalizeCtcInputValue(f.expectedSalary)} onChange={handleLocalChange}
+              className="form-control" />
+            <span className="input-adornment input-adornment-end">LPA</span>
+          </div>
         </div>
 
         <div className="form-group">
@@ -1357,7 +1373,11 @@ export default function CandidatesPage() {
           <>
             <div className="form-group">
               <label className="form-label">Offered CTC</label>
-              <input name="offeredCtc" type="number" value={f.offeredCtc || ''} onChange={handleLocalChange} className="form-control" />
+              <div className="input-with-adornment">
+                <span className="input-adornment">₹</span>
+                <input name="offeredCtc" type="text" inputMode="decimal" value={normalizeCtcInputValue(f.offeredCtc || '')} onChange={handleLocalChange} className="form-control" />
+                <span className="input-adornment input-adornment-end">LPA</span>
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Date of Joining</label>
@@ -1365,24 +1385,6 @@ export default function CandidatesPage() {
             </div>
           </>
         )}
-
-        <div className="form-group full">
-          <label className="form-label">Skills</label>
-          <div className="tag-input-wrap" onClick={e => e.currentTarget.querySelector('input').focus()}>
-            {f.skills.map(s => (
-              <span className="tag-chip" key={s}>
-                {s}
-                <button className="tag-chip-remove" type="button" onClick={() => rmSkill(s)}><X size={10} /></button>
-              </span>
-            ))}
-            <input className="tag-input-field" value={sInput}
-              onChange={e => onSkillInputChange(e.target.value)} onKeyDown={onSkillKey}
-              aria-label="Add skill" />
-            <button className="tag-add-btn" type="button" onClick={() => onAddSkill()} disabled={!sInput.trim()}>
-              <Plus size={12} strokeWidth={2.4} /> Add
-            </button>
-          </div>
-        </div>
 
         <div className="form-group full">
           <label className="form-label">Education</label>
@@ -1429,12 +1431,7 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Job ID</label>
-          <input value={jobDisplayIdForForm(f)} placeholder="Auto-filled after selecting mandate" className="form-control" readOnly />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Mandate / Role</label>
+          <label className="form-label">Role Name</label>
           <div className="client-search-wrap">
             <input
               name="job"
@@ -1463,6 +1460,11 @@ export default function CandidatesPage() {
         </div>
 
         <div className="form-group">
+          <label className="form-label">Role ID</label>
+          <input value={jobDisplayIdForForm(f)} placeholder="Auto-filled after selecting mandate" className="form-control" readOnly />
+        </div>
+
+        <div className="form-group">
           <label className="form-label">LinkedIn URL</label>
           <input name="linkedinUrl" value={f.linkedinUrl || ''} onChange={handleLocalChange}
             className="form-control"
@@ -1475,15 +1477,38 @@ export default function CandidatesPage() {
           </label>
           <div style={{ display:'grid', gap:8 }}>
             <div>
-              <span className="sub-text">Upload CV File</span>
+              <span className="sub-text">{f.cvOriginalName ? `Resume: ${f.cvOriginalName}` : 'Choose File'}</span>
               <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => handleCvFileChange(setF, event.target.files?.[0] || null)} className="form-control" />
             </div>
+            {cvHref && (
+              <button className="btn-secondary" type="button" onClick={(event) => { event.preventDefault(); openDocument(`cv-form-${f.associationId || f.candidateId || f.candidateDisplayId || 'new'}`, cvHref) }}>
+                View Parsed Resume
+              </button>
+            )}
             <div>
               <span className="sub-text">Enter CV Link</span>
               <input name="cvLink" value={f.cvLink || ''} onChange={event => handleCvLinkChange(setF, event.target.value)}
                 className={`form-control${low('cvLink')}`}
                 />
             </div>
+          </div>
+        </div>
+
+        <div className="form-group full">
+          <label className="form-label">Skills</label>
+          <div className="tag-input-wrap" onClick={e => e.currentTarget.querySelector('input').focus()}>
+            {f.skills.map(s => (
+              <span className="tag-chip" key={s}>
+                {s}
+                <button className="tag-chip-remove" type="button" onClick={() => rmSkill(s)}><X size={10} /></button>
+              </span>
+            ))}
+            <input className="tag-input-field" value={sInput}
+              onChange={e => onSkillInputChange(e.target.value)} onKeyDown={onSkillKey}
+              aria-label="Add skill" />
+            <button className="tag-add-btn" type="button" onClick={() => onAddSkill()} disabled={!sInput.trim()}>
+              <Plus size={12} strokeWidth={2.4} /> Add
+            </button>
           </div>
         </div>
 
@@ -1705,7 +1730,7 @@ export default function CandidatesPage() {
           <button
             className="filter-select candidate-columns-btn"
             type="button"
-            onClick={(event) => { setPendingColumns(visibleColumns); setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setColumnsOpen(open => !open) }}
+            onClick={(event) => { setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setColumnsOpen(open => !open) }}
           >
             <span>Columns</span>
             <ChevronDown size={13} strokeWidth={2} />
@@ -1714,7 +1739,7 @@ export default function CandidatesPage() {
             Proceed
           </button>
           {columnsOpen && (
-            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
+            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)}>
                 Select All
               </button>

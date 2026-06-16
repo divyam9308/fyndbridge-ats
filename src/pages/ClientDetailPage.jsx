@@ -64,6 +64,13 @@ const getCurrentUser = () => {
     return {}
   }
 }
+const formatClientDetailCtc = (value) => {
+  const text = String(value ?? '').trim()
+  if (!text || text === '-') return '-'
+  if (/\u20B9/.test(text) && /lpa/i.test(text)) return text
+  const normalized = text.replace(/^rs\.?\s*/i, '').replace(/^\u20B9\s*/i, '').replace(/\s*lpa$/i, '').trim()
+  return `\u20B9${normalized} LPA`
+}
 const formatCandidateCtc = (value) => {
   const text = String(value ?? '').trim()
   if (!text || text === '-') return '-'
@@ -428,16 +435,12 @@ export default function ClientDetailPage() {
         const payload = await response.json().catch(() => ({}))
         throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
       }
-      setVisibleColumns(value)
-      setPendingColumns(value)
       setSavedColumns(value)
-      setColumnsOpen(false)
       setError(null)
     } catch (err) {
       setError(err.message)
     }
   }
-  const resetColumnsToDefault = () => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const sortLabel = () => {
     const option = SORT_OPTIONS.find(item => item.field === sortField)
     return option ? `${option.label} ${sortDirection === 'asc' ? '↓' : '↑'}` : 'Sort By'
@@ -552,10 +555,10 @@ export default function ClientDetailPage() {
       case 'email': return <td key={key}>{c.email || '-'}</td>
       case 'experience': return <td key={key}>{c.exp ? `${c.exp} yrs` : '-'}</td>
       case 'skills': return <td key={key}>{renderSkillsCell(c)}</td>
-      case 'salary': return <td key={key}>{c.salary ? <span className="candidate-money-value">{ctcValue(c.salary)}</span> : <span className="candidate-empty-value">-</span>}</td>
+      case 'salary': return <td key={key}>{c.salary ? <span className="candidate-money-value">{formatClientDetailCtc(c.salary)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'location': return <td key={key}>{c.location || c.city || '-'}</td>
       case 'notice': return <td key={key}>{noticeMeta ? <span className={`candidate-notice-pill candidate-notice-pill-${noticeMeta.tone}`}>{noticeMeta.label}</span> : <span className="candidate-empty-value">-</span>}</td>
-      case 'expectedSalary': return <td key={key}>{c.expectedSalary ? <span className="candidate-money-value">{ctcValue(c.expectedSalary)}</span> : <span className="candidate-empty-value">-</span>}</td>
+      case 'expectedSalary': return <td key={key}>{c.expectedSalary ? <span className="candidate-money-value">{formatClientDetailCtc(c.expectedSalary)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'relocate': return <td key={key}>{c.openToRelocate || '-'}</td>
       case 'comments': return <td key={key} className="cell-ellipsis">{c.notes || '-'}</td>
       case 'linkedin': {
@@ -580,7 +583,7 @@ export default function ClientDetailPage() {
           </td>
         )
       }
-      case 'offeredCtc': return <td key={key}>{c.offeredCtc ? <span className="candidate-money-value">{ctcValue(c.offeredCtc)}</span> : <span className="candidate-empty-value">-</span>}</td>
+      case 'offeredCtc': return <td key={key}>{c.offeredCtc ? <span className="candidate-money-value">{formatClientDetailCtc(c.offeredCtc)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'dateOfJoining': return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
       case 'cv': {
         const cvHref = resolveCandidateCvHref(c)
@@ -697,14 +700,13 @@ export default function ClientDetailPage() {
           <div className="section-title"><Briefcase size={18} /><h3>{selectedGroup.jobTitle} Candidates{selectedGroup.status ? ` - ${statusLabelForValue(selectedGroup.status)}` : ''}</h3></div>
           <div className="candidate-columns-toolbar">
             <div className="candidate-columns-control" ref={columnsDropdownRef}>
-              <button className="filter-select candidate-columns-btn" type="button" onClick={(event) => { setPendingColumns(visibleColumns); setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect() }); setColumnsOpen(open => !open) }}><span>Columns</span><ChevronDown size={13} /></button>
+              <button className="filter-select candidate-columns-btn" type="button" onClick={(event) => { setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect() }); setColumnsOpen(open => !open) }}><span>Columns</span><ChevronDown size={13} /></button>
               <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
               {columnsOpen && (
-                <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
+                <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
                   <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)}>Select All</button>
                   <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
                   <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
-                  <button className="candidate-columns-action" type="button" onClick={resetColumnsToDefault}>Reset to Default</button>
                   <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(savedColumns?.length ? savedColumns : DEFAULT_CANDIDATE_COLUMN_KEYS)}>Reset to Saved Preference</button>
                   <div className="candidate-columns-divider" />
                   {CANDIDATE_TABLE_COLUMNS.map(column => <label className="candidate-column-option" key={column.key}><input type="checkbox" checked={pendingColumns.includes(column.key)} onChange={() => togglePendingColumn(column.key)} />{column.label}</label>)}
