@@ -485,12 +485,17 @@ export default function ClientsPage() {
   }, [clientDuplicate, focusPopup])
 
   const openContactModal = (client) => {
+    const currentContact = selectedContact(client)
+    const source = isRealContact(currentContact)
+      ? currentContact
+      : (client._contacts || []).find(isRealContact) || client
+    const followUp = selectedFollowUp(client)
     setForm({
-      ...clientToForm(client),
+      ...clientToForm({ ...client, ...source }),
       client_group_id: client.client_group_id || client.id,
-      connected_on_date: todayLocal(),
-      follow_up_date: todayLocal(),
-      status: '',
+      client_display_id: client.client_display_id || source.client_display_id || '',
+      follow_up_date: followUp?.follow_up_date || source.follow_up_date || client.follow_up_date || '',
+      comments: followUp?.follow_up_comments || source.comments || client.comments || '',
       contact_person: '',
       mobile: '',
       email: '',
@@ -972,7 +977,7 @@ export default function ClientsPage() {
       />
 
       {isOpen && createPortal((
-        <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && setIsOpen(false)}>
+        <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && editingClient && setIsOpen(false)}>
           <div className="modal-card modal-card-lg" ref={clientModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingClient ? 'Edit Client' : 'Add Client'}>
             <div className="modal-header">
               <span className="modal-title">{editingClient ? 'Edit Client' : 'Add New Client'}</span>

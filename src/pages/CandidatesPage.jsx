@@ -1905,7 +1905,7 @@ export default function CandidatesPage() {
 
       {/* ===== Add Candidate Modal ===== */}
       {addOpen && createPortal((
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !saving && setAddOpen(false)}>
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && editing && !saving && setAddOpen(false)}>
           <div className="modal-card modal-card-lg" ref={candidateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add Candidate">
             <div className="modal-header">
               <span className="modal-title">{editing ? 'Edit Candidate' : 'Add New Candidate'}</span>
