@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { API_UNAUTHORIZED_EVENT, apiFetch } from '../services/apiClient'
@@ -37,8 +37,34 @@ function syncSessionStorage(user) {
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [profileLoading, setProfileLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+
+  const loadProfile = useCallback(async ({ force = false } = {}) => {
+    if (loading || !session?.user || (!force && profile)) return profile
+    setProfileLoading(true)
+    try {
+      const response = await apiFetch('/api/user-profiles')
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'Unable to load profile.')
+      const nextProfile = payload.data || null
+      setProfile(nextProfile)
+      const profileName = String(nextProfile?.name || '').trim()
+      if (profileName) {
+        setUser(current => {
+          if (!current) return current
+          const nextUser = { ...current, profile_name: profileName }
+          syncSessionStorage(nextUser)
+          return nextUser
+        })
+      }
+      return nextProfile
+    } finally {
+      setProfileLoading(false)
+    }
+  }, [loading, profile, session])
 
   useEffect(() => {
     let mounted = true
@@ -49,6 +75,7 @@ export function AuthProvider({ children }) {
       if (!email) {
         setSession(null)
         setUser(null)
+        setProfile(null)
         syncSessionStorage(null)
         return false
       }
@@ -57,6 +84,7 @@ export function AuthProvider({ children }) {
         await supabase.auth.signOut()
         setSession(null)
         setUser(null)
+        setProfile(null)
         syncSessionStorage(null)
         navigate('/login?error=domain', { replace: true })
         return false
@@ -66,19 +94,6 @@ export function AuthProvider({ children }) {
       setSession(nextSession)
       setUser(nextUser)
       syncSessionStorage(nextUser)
-
-      try {
-        const response = await apiFetch('/api/user-profiles')
-        const payload = await response.json().catch(() => ({}))
-        const profileName = String(payload.data?.name || '').trim()
-        if (profileName) {
-          nextUser = { ...nextUser, profile_name: profileName }
-          setUser(nextUser)
-          syncSessionStorage(nextUser)
-        }
-      } catch {
-        nextUser = { ...nextUser }
-      }
       return true
     }
 
@@ -109,6 +124,7 @@ export function AuthProvider({ children }) {
       if (event === 'SIGNED_OUT') {
         setSession(null)
         setUser(null)
+        setProfile(null)
         syncSessionStorage(null)
         navigate('/login', { replace: true })
         return
@@ -129,6 +145,7 @@ export function AuthProvider({ children }) {
     const handleProfileNameUpdate = (event) => {
       const nextName = String(event.detail || '').trim()
       if (!nextName) return
+      setProfile(current => current ? { ...current, name: nextName } : current)
       setUser(current => {
         if (!current) return current
         const nextUser = { ...current, profile_name: nextName }
@@ -146,6 +163,7 @@ export function AuthProvider({ children }) {
       syncSessionStorage(null)
       setSession(null)
       setUser(null)
+      setProfile(null)
       navigate('/login?error=session', { replace: true })
     }
     window.addEventListener(API_UNAUTHORIZED_EVENT, handleUnauthorized)
@@ -155,8 +173,12 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     session,
     user,
+    profile,
+    profileLoading,
     loading,
     isAuthenticated: Boolean(session?.user),
+    loadProfile,
+    setProfile,
     signOut: async () => {
       if (supabase) {
         await supabase.auth.signOut()
@@ -164,10 +186,11 @@ export function AuthProvider({ children }) {
         syncSessionStorage(null)
         setSession(null)
         setUser(null)
+        setProfile(null)
         navigate('/login', { replace: true })
       }
     },
-  }), [loading, navigate, session, user])
+  }), [loadProfile, loading, navigate, profile, profileLoading, session, user])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

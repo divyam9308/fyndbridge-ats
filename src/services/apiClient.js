@@ -53,10 +53,18 @@ export async function openProtectedUrl(url) {
     window.open(url, '_blank', 'noopener,noreferrer')
     return
   }
-  const popup = window.open('', '_blank', 'noopener,noreferrer')
+  const popup = window.open('', '_blank')
   try {
     const response = await apiFetch(url)
     if (!response.ok) throw new Error('Unauthorized')
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      const payload = await response.json().catch(() => ({}))
+      if (!payload.url) throw new Error('Document unavailable')
+      if (popup) popup.location.href = payload.url
+      else window.open(payload.url, '_blank', 'noopener,noreferrer')
+      return
+    }
     const blob = await response.blob()
     const objectUrl = URL.createObjectURL(blob)
     if (popup) popup.location.href = objectUrl

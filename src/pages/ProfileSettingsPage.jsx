@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/useAuth'
 import { apiFetch } from '../services/apiClient'
 import '../styles/Shared.css'
@@ -15,7 +15,7 @@ const EMPTY_PROFILE = {
 }
 
 export default function ProfileSettingsPage() {
-  const { user } = useAuth()
+  const { user, session, loading: authLoading, profile, loadProfile, setProfile } = useAuth()
   const [form, setForm] = useState(EMPTY_PROFILE)
   const [originalProfile, setOriginalProfile] = useState(EMPTY_PROFILE)
   const [saving, setSaving] = useState(false)
@@ -23,50 +23,56 @@ export default function ProfileSettingsPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
+  const baseProfile = useMemo(() => ({
+    ...EMPTY_PROFILE,
+    user_id: user?.id || '',
+    email: user?.email || '',
+    name: user?.profile_name || user?.user_metadata?.full_name || user?.user_metadata?.name || ''
+  }), [user])
+
   useEffect(() => {
     const userId = user?.id || ''
     const email = user?.email || ''
     const fallbackName = user?.profile_name || user?.user_metadata?.full_name || user?.user_metadata?.name || ''
-    const baseProfile = {
+    const nextBase = {
       ...EMPTY_PROFILE,
       user_id: userId,
       email,
       name: fallbackName
     }
-    setForm(current => ({ ...baseProfile, ...current, user_id: userId, email, name: current.name || fallbackName }))
-    setOriginalProfile(current => current.user_id || current.email || current.name ? current : baseProfile)
+    setForm(current => ({ ...nextBase, ...current, user_id: userId, email, name: current.name || fallbackName }))
+    setOriginalProfile(current => current.user_id || current.email || current.name ? current : nextBase)
   }, [user])
 
   useEffect(() => {
-    const timer = window.setTimeout(async () => {
-      if (!user?.id) {
+    let cancelled = false
+    async function load() {
+      if (authLoading) return
+      if (!session || !user?.id) {
         setLoading(false)
         return
       }
       setLoading(true)
       try {
-        const res = await apiFetch('/api/user-profiles')
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error || 'Unable to load profile.')
+        const data = profile || await loadProfile()
+        if (cancelled) return
         const nextProfile = {
-          ...EMPTY_PROFILE,
-          user_id: user.id || '',
-          email: user.email || '',
-          name: user.profile_name || user.user_metadata?.full_name || user.user_metadata?.name || '',
-          ...(data.data || {}),
+          ...baseProfile,
+          ...(data || {}),
           user_id: user.id || '',
           email: user.email || ''
         }
         setForm(nextProfile)
         setOriginalProfile(nextProfile)
       } catch (err) {
-        setError(err.message)
+        if (!cancelled) setError(err.message)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [user])
+    }
+    load()
+    return () => { cancelled = true }
+  }, [authLoading, baseProfile, loadProfile, profile, session, user])
 
   const update = (event) => {
     const { name, value } = event.target
@@ -91,6 +97,7 @@ export default function ProfileSettingsPage() {
       const nextProfile = { ...EMPTY_PROFILE, ...(data.data || {}), user_id: user?.id || form.user_id, email: user?.email || form.email }
       setForm(nextProfile)
       setOriginalProfile(nextProfile)
+      setProfile(nextProfile)
       try {
         const current = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
         window.sessionStorage.setItem('fb_user', JSON.stringify({ ...current, name: data.data?.name || current.name || '' }))

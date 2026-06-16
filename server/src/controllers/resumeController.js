@@ -115,11 +115,11 @@ async function openResume(req, res) {
     const { data, error } = await supabase.storage
       .from(RESUME_BUCKET)
       .createSignedUrl(storagePath, 60 * 60)
-if (error || !data?.signedUrl) {
+    if (error || !data?.signedUrl) {
       return res.status(404).json({ error: 'Resume file could not be opened' })
     }
 
-    return res.redirect(data.signedUrl)
+    return res.json({ url: data.signedUrl })
   } catch (err) {
     console.error('openResume:', err.message)
     return res.status(500).json({ error: 'Resume file could not be opened' })

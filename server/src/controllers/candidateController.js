@@ -786,7 +786,6 @@ async function listCandidates(req, res) {
     const to = from + limit - 1
     const sortField = cleanText(req.query.sortField)
     const sortDirection = cleanText(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
-    const paginateById = sortField === 'candidate_id'
     const aiFilters = parseJsonFilter(req.query.ai_filters)
     const skillCandidateIds = await resolveSkillCandidateIds(aiFilters)
     const associationCandidateIds = await resolveAssociationCandidateIds(aiFilters)
@@ -811,7 +810,7 @@ async function listCandidates(req, res) {
       .select(`*, ${relationSelect}`, { count: 'exact' })
 
     if (sortField === 'candidate_id') {
-      query = query.order('created_at', { ascending: false })
+      query = query.order('created_at', { ascending: sortDirection !== 'desc' })
     } else if (req.query.sortField === 'candidate_name') {
       query = query.order('full_name', { ascending: req.query.sortDirection !== 'desc' })
     } else {
@@ -898,7 +897,7 @@ async function listCandidates(req, res) {
       }
     })
     query = appliedAi.query
-    if (!paginateById) query = query.range(from, to)
+    query = query.range(from, to)
     const { data, error, count } = await query
 
     if (error) {
@@ -924,13 +923,8 @@ async function listCandidates(req, res) {
 
     flattened = await enrichCandidateRows(flattened)
 
-    if (paginateById) {
-      const direction = sortDirection === 'desc' ? -1 : 1
-      flattened = [...flattened].sort((a, b) => compareDisplayIds(a.candidate_display_id, b.candidate_display_id, 'CA') * direction)
-    }
-
     const total = count || 0
-    const paged = paginateById ? flattened.slice(from, to + 1) : flattened
+    const paged = flattened.slice(0, limit)
 
     return res.json({
       data: paged,

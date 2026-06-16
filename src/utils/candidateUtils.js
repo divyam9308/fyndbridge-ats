@@ -123,16 +123,7 @@ export const resolveCandidateCvHref = (candidate) => {
 }
 
 export const logCandidateCvOpen = (candidate) => {
-  const info = getCandidateCvOpenInfo(candidate)
-  console.log('[CV open]', {
-    candidateId: info.candidateId,
-    cv_url: info.cvUrl,
-    cv_storage_path: info.cvStoragePath,
-    finalUrl: info.finalUrl,
-    bucketName: info.bucketName,
-    sourceType: info.sourceType,
-    cleanPath: info.cleanPath
-  })
+  if (import.meta.env?.DEV) console.log('[CV open]', { candidateId: candidate?.candidateId || candidate?.id || '' })
 }
 import { STORAGE_BUCKETS } from './storageBuckets'
 export { openProtectedUrl } from '../services/apiClient'

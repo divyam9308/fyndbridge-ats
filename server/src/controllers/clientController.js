@@ -371,7 +371,6 @@ async function listClients(req, res) {
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
     const to = from + limit - 1
-    const paginateById = paginate && sort.field === 'client_id'
 
     let query = supabase.from('clients').select('*', { count: paginate ? 'exact' : undefined })
     if (req.query.search) {
@@ -394,14 +393,13 @@ async function listClients(req, res) {
         query = query.eq('status', clean(req.query.status))
       }
     }
-    if (sort.field === 'client_id') query = query.order('created_at', { ascending: false })
+    if (sort.field === 'client_id') query = query.order('created_at', { ascending: sort.direction !== 'desc' })
     else if (sort.field === 'client_name') query = query.order('client_name', { ascending: sort.direction !== 'desc' }).order('name', { ascending: sort.direction !== 'desc' })
     else query = query.order('created_at', { ascending: false })
-    if (paginate && !paginateById) query = query.range(from, to)
+    if (paginate) query = query.range(from, to)
     const { data, error, count } = await query
     if (error) throw error
-    const sortedData = paginateById || !paginate ? sortClientRows(data || [], sort) : (data || [])
-    const pagedData = paginateById ? sortedData.slice(from, to + 1) : sortedData
+    const pagedData = !paginate ? sortClientRows(data || [], sort) : (data || [])
 
     const clientIds = pagedData.map((client) => client.id)
     const jobsQuery = supabase.from('jobs').select('client_id, status, mandate_status')
