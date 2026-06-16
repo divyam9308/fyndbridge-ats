@@ -452,14 +452,14 @@ async function listJobUsers(req, res) {
 
     for (const row of userProfiles || []) {
       const profile = profileById.get(row.user_id) || profileByEmail.get(clean(row.email).toLowerCase())
-      const name = preferredUserName(row.name, profile?.full_name, row.email || profile?.email)
+      const name = clean(row.name) || clean(profile?.full_name)
       if (!name || seen.has(name.toLowerCase())) continue
       seen.add(name.toLowerCase())
       users.push({ id: row.user_id, name, email: row.email || profile?.email || '' })
     }
 
     for (const row of profiles || []) {
-      const name = preferredUserName('', row.full_name, row.email)
+      const name = clean(row.full_name)
       if (!name || seen.has(name.toLowerCase())) continue
       seen.add(name.toLowerCase())
       users.push({ id: row.id, name, email: row.email || '' })

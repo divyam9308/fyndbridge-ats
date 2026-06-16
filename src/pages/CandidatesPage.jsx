@@ -894,7 +894,12 @@ export default function CandidatesPage() {
       setDuplicateBypass(null)
       setAddOpen(false)
       setEditing(false)
-      await loadCandidates(page, { showLoading: false })
+      await loadCandidates(1, { showLoading: false })
+      setPage(1)
+      setForm(current => ({ ...current, candidateDisplayId: 'Loading...' }))
+      fetchNextCandidateDisplayId()
+        .then(candidateDisplayId => setForm(current => ({ ...current, candidateDisplayId })))
+        .catch(() => setForm(current => ({ ...current, candidateDisplayId: '' })))
     } catch (err) {
       if (err.duplicate) {
         setCandidateDuplicate({ source: 'manual', candidate: form, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, allowAddDuplicate: err.duplicate.allowAddDuplicate !== false, message: err.message })
@@ -1061,7 +1066,8 @@ export default function CandidatesPage() {
     const nextIndex = currentImportIndex + 1
     if (nextIndex >= importQueue.length) {
       closeImport()
-      await loadCandidates(page, { showLoading: false })
+      await loadCandidates(1, { showLoading: false })
+      setPage(1)
       return
     }
     const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
@@ -1080,7 +1086,8 @@ export default function CandidatesPage() {
     try {
       await saveCandidateToApi(candidateToSave, { duplicateAction: duplicateBypass?.source === 'resume' ? 'add_duplicate' : '' })
       setDuplicateBypass(null)
-      await loadCandidates(page, { showLoading: false })
+      await loadCandidates(1, { showLoading: false })
+      setPage(1)
       await advanceResumeReview('Candidate saved.')
     } catch (err) {
       if (err.duplicate) {

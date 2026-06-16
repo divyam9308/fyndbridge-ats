@@ -24,6 +24,7 @@ const STATUS_BADGE_MAP = {
 }
 const TERMS = ['%', 'Fixed Fee Model', 'Slab %', 'Any Other']
 const BILLING_ENTITIES = ['FCS', 'FCAPL']
+const REGION_OPTIONS = ['', 'North', 'South', 'East', 'West', 'International']
 const EMPTY_FORM = {
   client_group_id: '',
   client_display_id: '',
@@ -1031,6 +1032,10 @@ export default function ClientsPage() {
                         </div>
                         )}
                       </div>
+                    ) : name === 'region' ? (
+                      <select name={name} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving}>
+                        {REGION_OPTIONS.map(option => <option key={option || '-'} value={option}>{option || '-'}</option>)}
+                      </select>
                     ) : name === 'sector' ? (
                       <div className="client-search-wrap">
                         <input className={`form-control${errors[name] ? ' is-error' : ''}`} value={sectorSearch || form.sector} onChange={e => {

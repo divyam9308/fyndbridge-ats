@@ -41,7 +41,7 @@ const EMPTY_FORM = {
   job_display_id: '',
   consultants: ['-'],
   consultant_user_ids: [],
-  team_lead: '',
+  team_lead: '-',
   team_lead_user_id: '',
   client_id: '',
   role: '',
@@ -266,11 +266,14 @@ export default function JobsPage() {
   const openModal = useCallback(async () => {
     setEditingJob(null)
     setErrors({})
-    setForm({ ...EMPTY_FORM, job_display_id: 'Loading...', allocation_date: todayLocal() })
+    setForm({ ...EMPTY_FORM, consultants: ['-'], team_lead: '-', team_lead_user_id: '', job_display_id: 'Loading...', allocation_date: todayLocal() })
     setClientSearch('')
     setRoleSearch('')
     setSectorSearch('')
     setTeamLeadSearch('')
+    setTeamLeadOpen(false)
+    setConsultantSearch({})
+    setConsultantPickerOpen({})
     setAddingNewRole(false)
     setJdFile(null)
     setClientSuggestionsOpen(false)
