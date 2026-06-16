@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient'
 
 const API_UNAUTHORIZED_EVENT = 'fb:api-unauthorized'
-let isOpening = false
+const documentOpenLocks = new Map()
 
 const isPrivateApiUrl = (value) => {
   const text = String(value || '')
@@ -94,16 +94,21 @@ export function openExternalUrl(url) {
   return openUrlInNewTab(normalized)
 }
 
-export async function openProtectedUrl(url) {
+function acquireDocumentLock(url) {
+  const key = String(url || '').trim()
+  const now = Date.now()
+  const expiresAt = documentOpenLocks.get(key) || 0
+  if (expiresAt > now) return false
+  documentOpenLocks.set(key, now + 1000)
+  return true
+}
+
+export async function openProtectedUrl(url, options = {}) {
   if (!url) return false
-  if (isOpening) return false
-  isOpening = true
+  if (!acquireDocumentLock(url)) return false
+  const notFoundMessage = options.notFoundMessage || 'Document file not found. Please re-upload the CV.'
   if (!isPrivateApiUrl(url)) {
-    try {
-      return openExternalUrl(url)
-    } finally {
-      isOpening = false
-    }
+    return openExternalUrl(url)
   }
   try {
     console.log('[document open] request', { url })
@@ -111,25 +116,16 @@ export async function openProtectedUrl(url) {
     const contentType = response.headers.get('content-type') || ''
     if (!response.ok) {
       const payload = contentType.includes('application/json') ? await response.json().catch(() => ({})) : {}
-      throw new Error(payload.error || `Document open failed (${response.status})`)
+      throw new Error(payload.error || notFoundMessage)
     }
-    if (contentType.includes('application/json')) {
-      const payload = await response.json().catch(() => ({}))
-      console.log('[document open] signed URL result', { ok: Boolean(payload.url), path: payload.path || '' })
-      if (!normalizeExternalUrl(payload.url)) throw new Error(payload.error || 'Invalid document URL')
-      openUrlInNewTab(payload.url)
-      return true
-    }
-    const blob = await response.blob()
-    const objectUrl = URL.createObjectURL(blob)
-    openUrlInNewTab(objectUrl)
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+    const payload = await response.json().catch(() => ({}))
+    console.log('[document open] signed URL result', { ok: Boolean(payload.url), path: payload.path || '' })
+    if (!normalizeExternalUrl(payload.url)) throw new Error(payload.error || notFoundMessage)
+    openUrlInNewTab(payload.url)
     return true
   } catch (err) {
-    showDocumentToast(err.message || 'Document could not be opened.')
+    showDocumentToast(err.message || notFoundMessage)
     return false
-  } finally {
-    isOpening = false
   }
 }
 

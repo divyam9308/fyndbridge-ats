@@ -479,7 +479,7 @@ export default function CandidatesPage() {
   const openDocument = useCallback(async (key, url) => {
     setOpeningDocument(key)
     try {
-      await openProtectedUrl(url)
+      await openProtectedUrl(url, { notFoundMessage: 'Document file not found. Please re-upload the CV.' })
     } finally {
       setOpeningDocument('')
     }
@@ -1612,7 +1612,7 @@ export default function CandidatesPage() {
         return (
           <td key={key}>
             {cvHref ? (
-              <a href="#" target="_blank" rel="noopener noreferrer" className="cv-table-link candidate-cv-link" title="Open CV" onClick={event => { event.preventDefault(); event.stopPropagation(); logCandidateCvOpen(c); openDocument(docKey, cvHref) }}>
+              <a href="#" rel="noopener noreferrer" className="cv-table-link candidate-cv-link" title="Open CV" onClick={event => { event.preventDefault(); event.stopPropagation(); event.nativeEvent?.stopImmediatePropagation?.(); logCandidateCvOpen(c); openDocument(docKey, cvHref) }}>
                 {isOpening ? <Loader2 size={15} className="spin" /> : <FileText size={15} strokeWidth={2} />}
               </a>
             ) : (
@@ -1824,7 +1824,7 @@ export default function CandidatesPage() {
             <div className="candidate-drawer-actions">
               <button className="btn-primary" onClick={() => openEditCandidate(selectedCandidate)}>Edit</button>
               {resolveCandidateCvHref(selectedCandidate) && (
-                <a className="btn-secondary" href="#" target="_blank" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); logCandidateCvOpen(selectedCandidate); openDocument(`cv-detail-${selectedCandidate.associationId || selectedCandidate.id}`, resolveCandidateCvHref(selectedCandidate)) }}>{openingDocument === `cv-detail-${selectedCandidate.associationId || selectedCandidate.id}` ? <Loader2 size={14} className="spin" /> : <FileText size={14} />} CV</a>
+                <a className="btn-secondary" href="#" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); event.nativeEvent?.stopImmediatePropagation?.(); logCandidateCvOpen(selectedCandidate); openDocument(`cv-detail-${selectedCandidate.associationId || selectedCandidate.id}`, resolveCandidateCvHref(selectedCandidate)) }}>{openingDocument === `cv-detail-${selectedCandidate.associationId || selectedCandidate.id}` ? <Loader2 size={14} className="spin" /> : <FileText size={14} />} CV</a>
               )}
               {normalizeExternalUrl(selectedCandidate.linkedinUrl) && (
                 <a className="btn-secondary" href={normalizeExternalUrl(selectedCandidate.linkedinUrl)} target="_blank" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); openExternalUrl(selectedCandidate.linkedinUrl) }}>LinkedIn</a>

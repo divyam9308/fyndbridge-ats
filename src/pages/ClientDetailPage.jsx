@@ -116,7 +116,7 @@ export default function ClientDetailPage() {
   const openDocument = useCallback(async (key, url) => {
     setOpeningDocument(key)
     try {
-      await openProtectedUrl(url)
+      await openProtectedUrl(url, { notFoundMessage: 'Document file not found. Please re-upload the CV.' })
     } finally {
       setOpeningDocument('')
     }
@@ -463,7 +463,7 @@ export default function ClientDetailPage() {
       case 'cv': {
         const cvHref = resolveCandidateCvHref(c)
         const docKey = `cv-${c.associationId || c.id}`
-        return <td key={key}>{cvHref ? <a href="#" target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={(event) => { event.preventDefault(); event.stopPropagation(); logCandidateCvOpen(c); openDocument(docKey, cvHref) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
+        return <td key={key}>{cvHref ? <a href="#" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={(event) => { event.preventDefault(); event.stopPropagation(); event.nativeEvent?.stopImmediatePropagation?.(); logCandidateCvOpen(c); openDocument(docKey, cvHref) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
       }
       case 'month': return <td key={key}>{formatMonth(c.createdAt)}</td>
       case 'action': return <td key={key}><button className="row-action-btn" type="button" title="Edit Candidate" onClick={() => openEditCandidate(c)}><Pencil size={13} /></button></td>
