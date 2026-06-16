@@ -57,6 +57,19 @@ const termsLabel = (client) => client.terms_signed_type === 'Any Other' ? client
 const showCommercialFields = (client) => client.contract_signed === true || client.contract_signed === 'Yes'
 const commercialDash = (client, value) => showCommercialFields(client) ? dash(value) : '-'
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
+const contactNameFor = (client) => String(client?.contact_person || client?.contact || '').replace(/\s+/g, ' ').trim()
+const isRealContact = (client) => {
+  const name = contactNameFor(client)
+  return Boolean(name && !/^contact\s+\d+$/i.test(name))
+}
+const isPlaceholderContact = (client) => {
+  if (!client.client_group_id || client.id === client.client_group_id) return false
+  const contactName = normalizeText(client.contact_person || client.contact)
+  const hasOnlyPlaceholderName = !contactName || /^contact\s+\d+$/.test(contactName)
+  const hasContactDetails = ['mobile', 'phone', 'email', 'linkedin', 'designation']
+    .some(key => normalizeText(client[key]))
+  return hasOnlyPlaceholderName && !hasContactDetails
+}
 const todayLocal = () => {
   const date = new Date()
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
@@ -105,20 +118,12 @@ const getCurrentUser = () => {
 const getCanonicalClients = (clients) => {
   const map = new Map()
   clients.forEach(client => {
+    if (isPlaceholderContact(client)) return
     const name = client.client_name || client.name || ''
     const key = String(client.client_group_id || client.client_display_id || name).trim().toLowerCase()
     if (key && !map.has(key)) map.set(key, client)
   })
   return [...map.values()].sort((a, b) => String(a.client_name || a.name || '').localeCompare(String(b.client_name || b.name || ''), undefined, { sensitivity: 'base' }))
-}
-
-const isPlaceholderContact = (client) => {
-  if (!client.client_group_id || client.id === client.client_group_id) return false
-  const contactName = normalizeText(client.contact_person || client.contact)
-  const hasOnlyPlaceholderName = !contactName || /^contact\s+\d+$/.test(contactName)
-  const hasContactDetails = ['mobile', 'phone', 'email', 'linkedin', 'designation']
-    .some(key => normalizeText(client[key]))
-  return hasOnlyPlaceholderName && !hasContactDetails
 }
 
 const getConsultantNameFromUser = (user) => {
@@ -326,9 +331,10 @@ export default function ClientsPage() {
     })
 
     return [...groups.entries()].map(([key, contacts]) => {
-      const selectedId = selectedContacts[key] || contacts[0]?.id
-      const selected = contacts.find(contact => contact.id === selectedId) || contacts[0]
-      return { ...selected, _contact_group_id: key, _contacts: contacts }
+      const validContacts = contacts.filter(isRealContact)
+      const selectedId = selectedContacts[key]
+      const selected = validContacts.find(contact => contact.id === selectedId) || validContacts[0] || contacts[0]
+      return { ...selected, _contact_group_id: key, _contacts: validContacts }
     })
   }, [clients, selectedContacts])
 
@@ -599,9 +605,10 @@ export default function ClientsPage() {
   }
 
   const selectedContact = (client) => {
-    const contacts = client._contacts || [client]
-    const selected = selectedContacts[client._contact_group_id] || client.id
-    return contacts.find((item) => item.id === selected) || contacts[0] || client
+    const contacts = client._contacts || []
+    if (!contacts.length) return {}
+    const selected = selectedContacts[client._contact_group_id]
+    return contacts.find((item) => item.id === selected) || contacts[0]
   }
 
   const saveFollowUp = async () => {
@@ -695,11 +702,11 @@ export default function ClientsPage() {
           <td key={key}>
             <span className="inline-action-cell">
               {(client._contacts || []).length > 1 ? (
-                <select className="filter-select compact-select" value={contact.id} onChange={(event) => setSelectedContacts((current) => ({ ...current, [client._contact_group_id]: event.target.value }))}>
-                  {client._contacts.map((item) => <option key={item.id} value={item.id}>{item.contact_person || item.contact}</option>)}
+                <select className="filter-select compact-select" value={contact.id || ''} onChange={(event) => setSelectedContacts((current) => ({ ...current, [client._contact_group_id]: event.target.value }))}>
+                  {client._contacts.map((item) => <option key={item.id} value={item.id}>{contactNameFor(item)}</option>)}
                 </select>
               ) : (
-                <span>{dash(contact.contact_person || contact.contact)}</span>
+                <span>{dash(contactNameFor(contact))}</span>
               )}
               <button className="row-action-btn" type="button" title="Add Contact" onClick={() => openContactModal(client)}><Plus size={12} /></button>
             </span>
