@@ -86,10 +86,9 @@ function openUrlInNewTab(url) {
 
   console.log('[document open] window.open', { ok: true })
 
-  const opened = window.open(normalized, '_blank', 'noopener,noreferrer')
+  const opened = window.open(normalized, '_blank')
 
-  // Important: do NOT fallback to creating <a target="_blank"> and clicking it.
-  // That fallback can cause duplicate openings in Chromium/Vercel builds.
+  if (opened) opened.opener = null
   return Boolean(opened)
 }
 
