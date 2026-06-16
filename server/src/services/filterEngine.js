@@ -5,6 +5,15 @@ const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
 
 const clean = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
 const lower = (value) => clean(value).toLowerCase()
+const normalizeSearch = (value) => lower(value)
+  .replace(/\breactjs\b/g, 'react')
+  .replace(/\bnodejs\b/g, 'node')
+  .replace(/\bjs\b/g, 'javascript')
+  .replace(/\bml\b/g, 'machine learning')
+  .replace(/[^\p{L}\p{N}]+/gu, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+const keywordTerms = (value) => normalizeSearch(value).split(' ').filter(Boolean)
 const digits = (value) => clean(value).replace(/[^\d.]/g, '')
 const numberValue = (value) => {
   const n = Number(digits(value))
@@ -154,9 +163,9 @@ const configs = {
   clients: { fields: clientFields }
 }
 
-const mandateSearchFields = ['job_id', 'consultant', 'team_lead', 'client_id', 'client_name', 'role', 'location', 'budget', 'vertical', 'comments']
-const candidateSearchFields = ['candidate_name', 'consultant', 'client_name', 'role', 'designation', 'organisation', 'mobile', 'email', 'current_location', 'skills', 'status']
-const clientSearchFields = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'comments', 'status', 'terms_signed', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_document']
+const mandateSearchFields = ['job_id', 'consultant', 'team_lead', 'client_id', 'client_name', 'role', 'location', 'budget', 'experience', 'vertical', 'mandate_status', 'comments']
+const candidateSearchFields = ['candidate_id', 'candidate_name', 'consultant', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'current_ctc', 'expected_ctc', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin']
+const clientSearchFields = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
 const candidateContainsFields = new Set(candidateSearchFields)
 const clientContainsFields = new Set(clientSearchFields)
 
@@ -272,20 +281,32 @@ function isPlainClientPrompt(prompt) {
   return /^[a-z0-9][\w\s@+&.-]+$/i.test(clean(prompt))
 }
 
+function isSimpleKeywordPrompt(page, prompt) {
+  if (page === 'clients') return isPlainClientPrompt(prompt)
+  if (page === 'candidates') return isPlainCandidatePrompt(prompt)
+  if (page === 'mandates') return isPlainMandatePrompt(prompt)
+  return false
+}
+
+function keywordFields(page) {
+  if (page === 'clients') return clientSearchFields
+  if (page === 'candidates') return candidateSearchFields
+  if (page === 'mandates') return mandateSearchFields
+  return []
+}
+
+function buildKeywordFilters(page, prompt) {
+  let value = clean(prompt)
+  if (page === 'clients') value = value.replace(/^clients?\s+/i, '').replace(/\s+clients?$/i, '').trim()
+  if (page === 'candidates') value = value.replace(/^(candidate|candidates)\s+/i, '').trim()
+  if (page === 'mandates') value = value.replace(/^mandates?\s+(?:for\s+)?/i, '').replace(/\bmandates?\b/gi, '').trim()
+  const terms = keywordTerms(value)
+  return terms.length ? { mode: 'keyword', terms, fields: keywordFields(page) } : null
+}
+
 function validateAiFilters(page, data, prompt = '') {
   const config = configs[page]
-  if (page === 'mandates' && isPlainMandatePrompt(prompt)) {
-    const value = clean(prompt).replace(/^mandates?\s+(?:for\s+)?/i, '').replace(/\bmandates?\b/gi, '').trim()
-    if (value) return { mode: 'any', conditions: mandateSearchFields.map(field => ({ field, operator: 'contains', value })) }
-  }
-  if (page === 'candidates' && isPlainCandidatePrompt(prompt)) {
-    const value = clean(prompt).replace(/^(candidate|candidates)\s+/i, '').trim()
-    if (value) return { mode: 'any', conditions: candidateSearchFields.map(field => ({ field, operator: 'contains', value })) }
-  }
-  if (page === 'clients' && isPlainClientPrompt(prompt)) {
-    const value = clean(prompt).replace(/^clients?\s+/i, '').replace(/\s+clients?$/i, '').trim()
-    if (value) return { mode: 'any', conditions: clientSearchFields.map(field => ({ field, operator: 'contains', value })) }
-  }
+  if (isSimpleKeywordPrompt(page, prompt)) return buildKeywordFilters(page, prompt)
   const normalized = (Array.isArray(data?.conditions) ? data.conditions : [])
     .map(condition => {
       const next = { ...condition }
@@ -383,16 +404,16 @@ function parsePrompt(page, prompt) {
   })
 
   ;[
-    ['experience', /experience\s*(>=|>|<=|<|=|below|above)\s*(\d+)/i],
-    ['current_ctc', /(?:salary|current ctc|current salary)\s*(>=|>|<=|<|=|below|above)\s*(\d+)/i],
-    ['expected_ctc', /(?:expected salary|expected ctc)\s*(>=|>|<=|<|=|below|above)\s*(\d+)/i],
-    ['notice_period', /notice\s*(>=|>|<=|<|=|below|above)\s*(\d+)/i]
+    ['experience', /experience\s*(>=|>|<=|<|=|below|above|less than|greater than)\s*(\d+)/i],
+    ['current_ctc', /(?:salary|current ctc|current salary)\s*(>=|>|<=|<|=|below|above|less than|greater than)\s*(\d+)/i],
+    ['expected_ctc', /(?:expected salary|expected ctc)\s*(>=|>|<=|<|=|below|above|less than|greater than)\s*(\d+)/i],
+    ['notice_period', /notice(?:\s+period)?\s*(>=|>|<=|<|=|below|above|less than|greater than|less|greater)\s*(\d+)/i]
   ].forEach(([field, regex]) => {
     if (!config.fields[field]) return
     const match = text.match(regex)
     if (!match) return
     const op = match[1]
-    add(field, op === '>' || op === 'above' ? 'greater_than' : op === '>=' ? 'greater_than_or_equal' : op === '<' || op === 'below' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : 'equals', match[2])
+    add(field, op === '>' || op === 'above' || op === 'greater' || op === 'greater than' ? 'greater_than' : op === '>=' ? 'greater_than_or_equal' : op === '<' || op === 'below' || op === 'less' || op === 'less than' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : 'equals', match[2])
   })
   ;[
     ['experience', /experience\s*(\d+)\s*(?:-|to)\s*(\d+)/i],
@@ -499,6 +520,15 @@ function compareValue(actual, operator, expected, type) {
 
 function applyFilters(page, rows, filters, valueGetter) {
   const config = configs[page]
+  if (filters?.mode === 'keyword') {
+    const terms = Array.isArray(filters.terms) ? filters.terms.map(normalizeSearch).filter(Boolean) : []
+    const fields = Array.isArray(filters.fields) ? filters.fields : keywordFields(page)
+    if (!terms.length) return rows
+    return rows.filter(row => {
+      const haystack = normalizeSearch(fields.map(field => valueGetter(row, field)).flat().join(' '))
+      return terms.every(term => haystack.includes(term))
+    })
+  }
   const normalized = (filters?.conditions || []).map(condition => normalizeCondition(config, condition)).filter(Boolean)
   if (!normalized.length) return rows
   const match = (row, condition) => {
@@ -510,5 +540,5 @@ function applyFilters(page, rows, filters, valueGetter) {
     : normalized.every(condition => match(row, condition)))
 }
 
-module.exports = { configs, parsePrompt, applyFilters, normalizeCondition, buildAiFilterPrompt, validateAiFilters, aiFilterSchema, OPERATORS }
+module.exports = { configs, parsePrompt, applyFilters, normalizeCondition, buildAiFilterPrompt, validateAiFilters, aiFilterSchema, OPERATORS, isSimpleKeywordPrompt, buildKeywordFilters }
 

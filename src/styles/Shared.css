@@ -603,6 +603,27 @@
   background: var(--gray-50);
 }
 .data-table tbody tr:hover .row-actions { opacity: 1; }
+.ai-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 12px;
+}
+.ai-filter-pill {
+  border: 1px solid var(--gray-200);
+  background: var(--white);
+  border-radius: 999px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 9px;
+}
+.ai-filter-highlight {
+  background: rgba(212, 175, 55, 0.35);
+  border-radius: 3px;
+  color: inherit;
+  padding: 0 1px;
+}
 
 /* ===== Sticky Candidates Master Table ===== */
 .candidates-master-table {

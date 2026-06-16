@@ -12,12 +12,14 @@ import { openProtectedUrl } from '../services/apiClient'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
+import { filterPills, highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const SORT_OPTIONS = [
   { field: 'job_id', label: 'Job ID' },
   { field: 'role', label: 'Alphabetic order' }
 ]
+const MANDATE_AI_SEARCH_FIELDS = ['job_id', 'consultant', 'team_lead', 'client_id', 'client_name', 'role', 'location', 'budget', 'experience', 'vertical', 'mandate_status', 'comments']
 const MANDATE_TABLE_COLUMNS = [
   { key: 'jobId', label: 'Job ID' },
   { key: 'consultant', label: 'Consultant' },
@@ -456,6 +458,11 @@ export default function JobsPage() {
     event.preventDefault()
     setAiError('')
     if (!aiText.trim()) return
+    if (isSimpleKeywordSearch('mandates', aiText)) {
+      setAiFilters(keywordFilters('mandates', aiText, MANDATE_AI_SEARCH_FIELDS))
+      setPage(1)
+      return
+    }
     setAiLoading(true)
     try {
       const res = await fetch('/api/jobs/ai-filter', {
@@ -465,11 +472,14 @@ export default function JobsPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setAiFilters(null)
-      setAiError(data.error || 'Could not parse Mandates filter.')
+        setAiFilters(keywordFilters('mandates', aiText, MANDATE_AI_SEARCH_FIELDS))
+        setPage(1)
         return
       }
       setAiFilters(data.filters)
+      setPage(1)
+    } catch {
+      setAiFilters(keywordFilters('mandates', aiText, MANDATE_AI_SEARCH_FIELDS))
       setPage(1)
     } finally {
       setAiLoading(false)
@@ -582,28 +592,28 @@ export default function JobsPage() {
       case 'jobId':
         return <td key={column.key}>{job.job_display_id ? <span className="table-id-chip table-job-id-chip">{job.job_display_id}</span> : mutedDash}</td>
       case 'consultant':
-        return <td key={column.key}>{(job.consultants || []).length <= 1 ? dash(job.consultants?.[0]) : <div className="candidate-columns-control mandate-consultants-control"><button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('consultants', job.id, event.currentTarget)}>{job.consultants[0]} +{job.consultants.length - 1}</button></div>}</td>
+        return <td key={column.key}>{(job.consultants || []).length <= 1 ? highlightText(dash(job.consultants?.[0]), aiFilters) : <div className="candidate-columns-control mandate-consultants-control"><button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('consultants', job.id, event.currentTarget)}>{highlightText(job.consultants[0], aiFilters)} +{job.consultants.length - 1}</button></div>}</td>
       case 'teamLead':
-        return <td key={column.key}>{dash(job.team_lead)}</td>
+        return <td key={column.key}>{highlightText(dash(job.team_lead), aiFilters)}</td>
       case 'clientId':
         return <td key={column.key}>{job.client_display_id ? <span className="table-id-chip table-client-id-chip">{job.client_display_id}</span> : mutedDash}</td>
       case 'clientName':
-        return <td key={column.key}>{dash(job.client_name)}</td>
+        return <td key={column.key}>{highlightText(dash(job.client_name), aiFilters)}</td>
       case 'role':
         return (
           <td key={column.key}>
             <div>
-              <button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>{dash(job.role)}</button>
-              <div className="sub-text candidate-location-text">{formatLocationText(job.location) || '-'}</div>
+              <button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>{highlightText(dash(job.role), aiFilters)}</button>
+              <div className="sub-text candidate-location-text">{highlightText(formatLocationText(job.location) || '-', aiFilters)}</div>
             </div>
           </td>
         )
       case 'budget':
-        return <td key={column.key}>{dash(job.budget)}</td>
+        return <td key={column.key}>{highlightText(dash(job.budget), aiFilters)}</td>
       case 'mandateStatus':
-        return <td key={column.key}><span className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`}>{dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority))}</span></td>
+        return <td key={column.key}><span className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`}>{highlightText(dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority)), aiFilters)}</span></td>
       case 'sector':
-        return <td key={column.key}>{dash(job.vertical)}</td>
+        return <td key={column.key}>{highlightText(dash(job.vertical), aiFilters)}</td>
       case 'allocationDate':
         return <td key={column.key}>{dash(job.allocation_date)}</td>
       case 'jd':
@@ -681,6 +691,11 @@ export default function JobsPage() {
         <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalJobs / pageSize))} onPageChange={setPage} loading={loading} />
       </div>
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}
+      {aiFilters && (
+        <div className="ai-filter-pills">
+          {filterPills(aiFilters).map(label => <span className="ai-filter-pill" key={label}>🔍 {label}</span>)}
+        </div>
+      )}
 
       <div className="table-card table-card-popovers">
         {loading ? (

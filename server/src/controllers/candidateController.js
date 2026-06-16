@@ -6,7 +6,7 @@ const supabase = require('../services/supabaseAdmin')
 const { parseResume } = require('../services/resumeParser')
 const { RESUME_BUCKET, prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplicate, checkLinkedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
 const { callAiJson } = require('../services/aiProvider')
-const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema } = require('../services/filterEngine')
+const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 
@@ -542,6 +542,32 @@ const CANDIDATE_FILTER_MAPPING = {
 }
 const ASSOCIATION_FILTER_FIELDS = new Set(['consultant', 'client_name', 'role', 'current_ctc', 'expected_ctc', 'comments', 'status'])
 
+function candidateFilterValue(row, field) {
+  return {
+    candidate_id: row.candidate_display_id,
+    candidate_name: row.full_name,
+    consultant: row.consultant_name,
+    email: row.email,
+    mobile: row.mobile_number,
+    designation: row.current_designation,
+    organisation: row.current_organisation || row.current_company,
+    experience: row.experience_years,
+    skills: row.skills,
+    client_id: row.client_display_id,
+    client_name: row.client_name,
+    role: row.job_title,
+    current_ctc: row.current_salary,
+    expected_ctc: row.expected_salary,
+    current_location: row.location || row.city,
+    notice_period: row.notice_period,
+    open_to_relocate: row.open_to_relocate,
+    comments: row.notes,
+    status: row.status,
+    month: row.created_at,
+    linkedin: row.linkedin_url
+  }[field]
+}
+
 function skillVariants(value) {
   const text = cleanText(value)
   if (!text) return []
@@ -787,6 +813,7 @@ async function listCandidates(req, res) {
     const sortField = cleanText(req.query.sortField)
     const sortDirection = cleanText(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
     const aiFilters = parseJsonFilter(req.query.ai_filters)
+    const localAiFilter = aiFilters?.mode === 'keyword'
     const skillCandidateIds = await resolveSkillCandidateIds(aiFilters)
     const associationCandidateIds = await resolveAssociationCandidateIds(aiFilters)
     const aiAssociationFilter = aiFilters?.mode !== 'any' && (aiFilters?.conditions || []).some((condition) => ASSOCIATION_FILTER_FIELDS.has(String(condition.field || '').toLowerCase()))
@@ -883,7 +910,7 @@ async function listCandidates(req, res) {
       )
     }
 
-    const appliedAi = applyQueryFilters(query, 'candidates', aiFilters, candidateFilterMappingFor(aiFilters), {
+    const appliedAi = localAiFilter ? { query } : applyQueryFilters(query, 'candidates', aiFilters, candidateFilterMappingFor(aiFilters), {
       applyCondition(nextQuery, condition) {
         if (condition.field !== 'skills') return nextQuery
         if (!skillCandidateIds?.length) return nextQuery.eq('id', '__no_match__')
@@ -897,7 +924,7 @@ async function listCandidates(req, res) {
       }
     })
     query = appliedAi.query
-    query = query.range(from, to)
+    if (!localAiFilter) query = query.range(from, to)
     const { data, error, count } = await query
 
     if (error) {
@@ -922,9 +949,10 @@ async function listCandidates(req, res) {
     }
 
     flattened = await enrichCandidateRows(flattened)
+    if (localAiFilter) flattened = applySharedFilters('candidates', flattened, aiFilters, candidateFilterValue)
 
-    const total = count || 0
-    const paged = flattened.slice(0, limit)
+    const total = localAiFilter ? flattened.length : count || 0
+    const paged = localAiFilter ? flattened.slice(from, to + 1) : flattened.slice(0, limit)
 
     return res.json({
       data: paged,
@@ -1360,10 +1388,9 @@ return res.json({ filters: fallback })
     }
 return res.json({ filters })
   } catch (err) {
-    if (err.statusCode) {
-      return res.status(err.statusCode).json({ error: err.message })
-    }
-
+    const fallback = validateAiFilters('candidates', null, req.body.prompt)
+    if (fallback) return res.json({ filters: fallback, fallback: true })
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'buildAiCandidateFilters', err)
   }
 }

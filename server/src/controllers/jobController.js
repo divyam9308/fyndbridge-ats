@@ -219,7 +219,9 @@ const JOB_FILTER_MAPPING = {
 
 async function listJobs(req, res) {
   try {
-    const paginate = String(req.query.all || '').toLowerCase() !== 'true'
+    const aiFilters = req.query.ai_filters ? JSON.parse(req.query.ai_filters) : null
+    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.conditions || []).some(condition => condition.field === 'consultant')
+    const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
@@ -228,7 +230,6 @@ async function listJobs(req, res) {
     const sortDirection = clean(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
     let query = supabase.from('jobs').select('*, clients(name, client_name, client_display_id)', { count: paginate ? 'exact' : undefined })
     if (req.query.client_id) query = query.eq('client_id', req.query.client_id)
-    const aiFilters = req.query.ai_filters ? JSON.parse(req.query.ai_filters) : null
     const clientNameConditions = (aiFilters?.conditions || []).filter((condition) => ['client_name', 'client'].includes(String(condition.field || '').toLowerCase()))
     let matchedClientIds = null
     if (clientNameConditions.length) {
@@ -246,7 +247,7 @@ async function listJobs(req, res) {
 return res.json({ data: [], total: 0, page, totalPages: 1, limit })
       }
     }
-    const filtered = applyQueryFilters(query, 'mandates', aiFilters, JOB_FILTER_MAPPING, {
+    const filtered = localAiFilter ? { query } : applyQueryFilters(query, 'mandates', aiFilters, JOB_FILTER_MAPPING, {
       applyCondition(nextQuery, condition) {
         if (condition.field !== 'client_name') return nextQuery
         if (!matchedClientIds?.length) return nextQuery.eq('client_id', '__no_match__')
@@ -266,7 +267,9 @@ return res.json({ data: [], total: 0, page, totalPages: 1, limit })
     if (error) throw error
     let rows = (data || []).map(formatJob)
     if (!paginate) rows = applySharedFilters('mandates', rows, aiFilters, jobFilterValue)
-    const total = paginate ? count || 0 : rows.length
+    const filteredTotal = rows.length
+    if (localAiFilter) rows = rows.slice(from, to + 1)
+    const total = paginate ? count || 0 : filteredTotal
     const totalPages = paginate ? Math.max(1, Math.ceil(total / limit)) : 1
 return res.json({ data: rows, total, page, totalPages, limit })
   } catch (err) {
@@ -482,6 +485,8 @@ async function buildJobFilters(req, res) {
     if (!filters) return res.status(400).json({ error: 'Could not parse Mandates filter.' })
     return res.json({ filters })
   } catch (err) {
+    const fallback = validateAiFilters('mandates', null, req.body.prompt)
+    if (fallback) return res.json({ filters: fallback, fallback: true })
     return logAndSendInternal(res, 'buildJobFilters', err)
   }
 }

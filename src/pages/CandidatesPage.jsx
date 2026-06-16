@@ -12,6 +12,7 @@ import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtecte
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
+import { filterPills, highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
 
 /* ====== Static reference data ====== */
 const STATUS_OPTIONS = CANDIDATE_STATUS_OPTIONS
@@ -161,6 +162,7 @@ const SORT_OPTIONS = [
   { field: 'candidate_name', label: 'Alphabetic Order', toggle: true },
   { field: 'consultant', label: 'Consultant', toggle: false }
 ]
+const CANDIDATE_AI_SEARCH_FIELDS = ['candidate_id', 'candidate_name', 'consultant', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'current_ctc', 'expected_ctc', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin']
 
 /* ====== Empty forms ====== */
 const EMPTY_CAND = {
@@ -844,6 +846,13 @@ export default function CandidatesPage() {
       clearAiFilter()
       return
     }
+    if (isSimpleKeywordSearch('candidates', prompt)) {
+      setAiFilters(keywordFilters('candidates', prompt, CANDIDATE_AI_SEARCH_FIELDS))
+      setAiAppliedPrompt(prompt)
+      setAiFilterError('')
+      setPage(1)
+      return
+    }
 
     setAiFilterLoading(true)
     setAiFilterError('')
@@ -867,9 +876,10 @@ export default function CandidatesPage() {
       setPage(1)
     } catch (err) {
       notifyAiQuota(err.message)
-      setAiFilterError(err.message)
-      setAiFilters(null)
-      setAiAppliedPrompt('')
+      setAiFilters(keywordFilters('candidates', prompt, CANDIDATE_AI_SEARCH_FIELDS))
+      setAiAppliedPrompt(prompt)
+      setAiFilterError('')
+      setPage(1)
     } finally {
       setAiFilterLoading(false)
     }
@@ -1479,7 +1489,7 @@ export default function CandidatesPage() {
     return (
       <div className="table-chip-cell">
         <div className="table-chip-list">
-          {visibleSkills.map(skill => <span className="table-skill-chip" key={skill}>{skill}</span>)}
+          {visibleSkills.map(skill => <span className="table-skill-chip" key={skill}>{highlightText(skill, aiFilters)}</span>)}
         </div>
         {skills.length > 3 && (
           <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(candidate.associationId || candidate.id, 'skills', event)}>
@@ -1497,7 +1507,7 @@ export default function CandidatesPage() {
     const isLong = text.length > 24
     return (
       <div className="table-comment-cell">
-        <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{text}</div>
+        <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{highlightText(text, aiFilters)}</div>
         {isLong && (
           <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(candidate.associationId || candidate.id, 'comments', event)}>
             <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'Show less' : 'View full comment'}
@@ -1526,7 +1536,7 @@ export default function CandidatesPage() {
             {c.consultant ? (
               <span className="candidate-consultant-chip">
                 <span className="candidate-consultant-avatar" style={consultantAvatarStyle}>{consultantInitials}</span>
-                <span>{c.consultant}</span>
+                <span>{highlightText(c.consultant, aiFilters)}</span>
               </span>
             ) : (
               <span className="candidate-muted-dash">-</span>
@@ -1534,13 +1544,13 @@ export default function CandidatesPage() {
           </td>
         )
       case 'client':
-        return <td key={key}>{c.client || '-'}</td>
+        return <td key={key}>{highlightText(c.client || '-', aiFilters)}</td>
       case 'clientId':
         return <td key={key}>{clientIdValue !== '-' ? <span className="candidate-id-chip candidate-client-id-chip">{clientIdValue}</span> : <span className="candidate-muted-dash">-</span>}</td>
       case 'jobId':
         return <td key={key}>{jobIdValue !== '-' ? <span className="candidate-id-chip candidate-job-id-chip">{jobIdValue}</span> : <span className="candidate-muted-dash">-</span>}</td>
       case 'job':
-        return <td key={key} className="cell-ellipsis">{c.job || '-'}</td>
+        return <td key={key} className="cell-ellipsis">{highlightText(c.job || '-', aiFilters)}</td>
       case 'name':
         return (
           <td key={key}>
@@ -1548,7 +1558,7 @@ export default function CandidatesPage() {
               <div className="name-avatar" style={candidateAvatarStyle}>{initials(c.name)}</div>
               <div className="candidate-name-content">
                 <div className="name-text candidate-group-name">
-                  <span className="candidate-name-text">{c.name}</span>
+                  <span className="candidate-name-text">{highlightText(c.name, aiFilters)}</span>
                   {isGroup && groupIndex === 0 && (
                     <button
                       className="candidate-submission-chip"
@@ -1563,19 +1573,19 @@ export default function CandidatesPage() {
                     </button>
                   )}
                 </div>
-                <div className="sub-text candidate-location-text">{String(c.location || '').trim() || '-'}</div>
+                <div className="sub-text candidate-location-text">{highlightText(String(c.location || '').trim() || '-', aiFilters)}</div>
               </div>
             </div>
           </td>
         )
       case 'organisation':
-        return <td key={key}><span style={{ fontWeight:500, color:'var(--navy-darkest)' }}>{c.currentOrganisation || c.currentCompany || '-'}</span></td>
+        return <td key={key}><span style={{ fontWeight:500, color:'var(--navy-darkest)' }}>{highlightText(c.currentOrganisation || c.currentCompany || '-', aiFilters)}</span></td>
       case 'designation':
-        return <td key={key}>{c.designation || '-'}</td>
+        return <td key={key}>{highlightText(c.designation || '-', aiFilters)}</td>
       case 'mobile':
-        return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{c.mobile || '-'}</td>
+        return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{highlightText(c.mobile || '-', aiFilters)}</td>
       case 'email':
-        return <td key={key}>{c.email || '-'}</td>
+        return <td key={key}>{highlightText(c.email || '-', aiFilters)}</td>
       case 'experience':
         return <td key={key}>{c.exp ? `${c.exp} yrs` : '-'}</td>
       case 'skills': {
@@ -1763,6 +1773,11 @@ export default function CandidatesPage() {
       {aiFilterError && (
         <div className="form-error" style={{ display:'block', marginBottom:12 }}>
           {aiFilterError}
+        </div>
+      )}
+      {aiFilters && (
+        <div className="ai-filter-pills">
+          {filterPills(aiFilters).map(label => <span className="ai-filter-pill" key={label}>🔍 {label}</span>)}
         </div>
       )}
 

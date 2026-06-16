@@ -102,6 +102,18 @@ function buildOrClause(definition, condition) {
 
 function applyQueryFilters(query, page, filters, mapping, extras = {}) {
   const normalized = normalizeFilters(page, filters)
+  if (filters?.mode === 'keyword') {
+    const fields = Array.isArray(filters.fields) ? filters.fields : Object.keys(mapping)
+    const terms = Array.isArray(filters.terms) ? filters.terms : []
+    for (const term of terms) {
+      const clauses = fields.flatMap((field) => (mapping[field] || [])
+        .filter((definition) => ['text', 'array'].includes(definition.kind))
+        .map((definition) => buildOrClause(definition, { operator: 'contains', value: term }))
+        .filter(Boolean))
+      if (clauses.length) query = query.or(clauses.join(','))
+    }
+    return { query, normalized: [] }
+  }
   if (!normalized.length) return { query, normalized }
 
   if (filters?.mode === 'any') {

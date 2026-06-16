@@ -10,6 +10,7 @@ import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
+import { filterPills, highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
 
 const STATUSES = ['Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const STATUS_OPTIONS = ['', ...STATUSES]
@@ -105,6 +106,7 @@ const SORT_OPTIONS = [
   { field: 'client_id', label: 'Client ID' },
   { field: 'client_name', label: 'Alphabetical Order' }
 ]
+const CLIENT_AI_SEARCH_FIELDS = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
 
 const getCurrentUser = () => {
   if (typeof window === 'undefined') return {}
@@ -693,6 +695,12 @@ export default function ClientsPage() {
       clearFilters()
       return
     }
+    if (isSimpleKeywordSearch('clients', prompt)) {
+      setAiFilters(keywordFilters('clients', prompt, CLIENT_AI_SEARCH_FIELDS))
+      setAiFilterError('')
+      setPage(1)
+      return
+    }
     setAiFilterLoading(true)
     setAiFilterError('')
     try {
@@ -705,9 +713,10 @@ export default function ClientsPage() {
       if (!res.ok) throw new Error(data.error || 'Could not parse Clients filter.')
       setAiFilters(data.filters || null)
       setPage(1)
-    } catch (err) {
-      setAiFilterError(err.message)
-      setAiFilters(null)
+    } catch {
+      setAiFilters(keywordFilters('clients', prompt, CLIENT_AI_SEARCH_FIELDS))
+      setAiFilterError('')
+      setPage(1)
     } finally {
       setAiFilterLoading(false)
     }
@@ -729,13 +738,13 @@ export default function ClientsPage() {
       case 'clientId':
         return <td key={key}>{client.client_display_id ? <span className="table-id-chip table-client-id-chip">{client.client_display_id}</span> : mutedDash}</td>
       case 'consultant':
-        return <td key={key}>{dash(client.consultant_name || client.consultant)}</td>
+        return <td key={key}>{highlightText(dash(client.consultant_name || client.consultant), aiFilters)}</td>
       case 'clientName':
         return (
           <td key={key}>
             <div>
-              <Link className="name-text" to={`/dashboard/clients/${client.id}`}>{client.client_name}</Link>
-              <div className="sub-text candidate-location-text">{formatLocationRegion(client.location, client.region) || '-'}</div>
+              <Link className="name-text" to={`/dashboard/clients/${client.id}`}>{highlightText(client.client_name, aiFilters)}</Link>
+              <div className="sub-text candidate-location-text">{highlightText(formatLocationRegion(client.location, client.region) || '-', aiFilters)}</div>
             </div>
           </td>
         )
@@ -748,29 +757,29 @@ export default function ClientsPage() {
                   {client._contacts.map((item) => <option key={item.id} value={item.id}>{contactNameFor(item)}</option>)}
                 </select>
               ) : (
-                <span>{dash(contactNameFor(contact))}</span>
+                <span>{highlightText(dash(contactNameFor(contact)), aiFilters)}</span>
               )}
               <button className="row-action-btn" type="button" title="Add Contact" onClick={() => openContactModal(client)}><Plus size={12} /></button>
             </span>
           </td>
         )
       case 'mobile':
-        return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{dash(contact.mobile || contact.phone)}</td>
+        return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{highlightText(dash(contact.mobile || contact.phone), aiFilters)}</td>
       case 'email':
-        return <td key={key} style={{ color: 'var(--info)', fontSize: 12.5 }}>{dash(contact.email)}</td>
+        return <td key={key} style={{ color: 'var(--info)', fontSize: 12.5 }}>{highlightText(dash(contact.email), aiFilters)}</td>
       case 'designation':
-        return <td key={key}>{dash(contact.designation)}</td>
+        return <td key={key}>{highlightText(dash(contact.designation), aiFilters)}</td>
       case 'linkedin':
         {
           const linkedInUrl = normalizeExternalUrl(contact.linkedin)
           return <td key={key}>{linkedInUrl ? <a className="cv-table-link" href={linkedInUrl} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openExternalUrl(linkedInUrl) }}>LinkedIn</a> : mutedDash}</td>
         }
       case 'sector':
-        return <td key={key}>{dash(client.sector)}</td>
+        return <td key={key}>{highlightText(dash(client.sector), aiFilters)}</td>
       case 'connectedOnDate':
-        return <td key={key}>{dash(client.connected_on_date)}</td>
+        return <td key={key}>{highlightText(dash(client.connected_on_date), aiFilters)}</td>
       case 'comments':
-        return <td key={key}>{dash(followUp?.follow_up_comments || client.comments)}</td>
+        return <td key={key}>{highlightText(dash(followUp?.follow_up_comments || client.comments), aiFilters)}</td>
       case 'followUpDate':
         return (
           <td key={key}>
@@ -788,7 +797,7 @@ export default function ClientsPage() {
           </td>
         )
       case 'status':
-        return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[client.status] || 'badge-not-converted'}`}>{dash(client.status)}</span></td>
+        return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[client.status] || 'badge-not-converted'}`}>{highlightText(dash(client.status), aiFilters)}</span></td>
       case 'termsSigned':
         return <td key={key}>{commercialDash(client, termsLabel(client))}</td>
       case 'value':
@@ -910,6 +919,11 @@ export default function ClientsPage() {
       {aiFilterError && (
         <div className="form-error" style={{ display:'block', marginBottom:12 }}>
           {aiFilterError}
+        </div>
+      )}
+      {aiFilters && (
+        <div className="ai-filter-pills">
+          {filterPills(aiFilters).map(label => <span className="ai-filter-pill" key={label}>🔍 {label}</span>)}
         </div>
       )}
 
