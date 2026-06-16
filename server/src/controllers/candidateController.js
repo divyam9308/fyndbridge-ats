@@ -179,7 +179,7 @@ async function ensureCandidateDisplayIds() {
 }
 
 async function nextCandidateDisplayId() {
-  return allocateNextDisplayId({ supabase, table: 'candidates', column: 'candidate_display_id', prefix: 'CA' })
+  return allocateNextDisplayId({ supabase, table: 'candidates', column: 'candidate_display_id', prefix: 'CA', mode: 'max_plus_one' })
 }
 
 async function getNextCandidateDisplayId(req, res) {
@@ -653,6 +653,24 @@ async function insertCandidate(payload) {
   return result
 }
 
+async function insertCandidateWithDisplayId(payload) {
+  const candidateDisplayId = await nextCandidateDisplayId()
+  const result = await insertCandidate({ ...payload, candidate_display_id: candidateDisplayId })
+  if (result.error || !result.data) return result
+  if (result.data.candidate_display_id === candidateDisplayId) return result
+
+  const update = await supabase
+    .from('candidates')
+    .update({ candidate_display_id: candidateDisplayId })
+    .eq('id', result.data.id)
+    .select('*')
+    .single()
+
+  if (!update.error) return update
+  await supabase.from('candidates').delete().eq('id', result.data.id)
+  return { data: null, error: update.error }
+}
+
 async function updateCandidateRow(candidateId, payload) {
   let updatePayload = payload
   let result = null
@@ -1079,16 +1097,13 @@ async function createCandidate(req, res) {
       let insertedCandidate = null
       let insertError = null
       for (let attempt = 0; attempt < 5; attempt += 1) {
-        const insertPayload = {
-          ...candidatePayload,
-          candidate_display_id: await nextCandidateDisplayId()
-        }
+        const insertPayload = { ...candidatePayload }
 
         if (req.user?.id) {
           insertPayload.created_by = req.user.id
         }
 
-        const result = await insertCandidate(insertPayload)
+        const result = await insertCandidateWithDisplayId(insertPayload)
         insertedCandidate = result.data
         insertError = result.error
         if (!insertError) break
