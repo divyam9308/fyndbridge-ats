@@ -98,6 +98,8 @@ async function prepareUploadedCv(file) {
       resume_url: existing.resume_url || existing.cv_link || '',
       cv_file_hash: hash,
       cv_storage_path: existingPath,
+      cv_original_name: meta.originalName,
+      cv_mimetype: meta.contentType,
       duplicate: true
     }
   }
@@ -110,7 +112,16 @@ async function prepareUploadedCv(file) {
   const storageDuplicate = Boolean(error && /already exists|duplicate/i.test(error.message || ''))
   if (error && !storageDuplicate) throw error
   const url = publicUrl(objectPath)
-  return { cv_link: url, resume_url: url, cv_file_hash: hash, cv_storage_path: normalizeResumeStoragePath(objectPath), duplicate: storageDuplicate, resume_path: normalizeResumeStoragePath(objectPath) }
+  return {
+    cv_link: url,
+    resume_url: url,
+    cv_file_hash: hash,
+    cv_storage_path: normalizeResumeStoragePath(objectPath),
+    cv_original_name: meta.originalName,
+    cv_mimetype: meta.contentType,
+    duplicate: storageDuplicate,
+    resume_path: normalizeResumeStoragePath(objectPath)
+  }
 }
 
 async function checkUploadedCvDuplicate(file) {

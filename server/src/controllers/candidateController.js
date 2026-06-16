@@ -41,6 +41,8 @@ const CANDIDATE_FIELDS = [
   'cv_link',
   'cv_file_hash',
   'cv_storage_path',
+  'cv_original_name',
+  'cv_mimetype',
   'linkedin_url',
   'resume_url',
   'source',
@@ -415,6 +417,10 @@ function flattenAssociation(row) {
     skills: candidate.skills || [],
     education: candidate.education || null,
     cv_link: candidate.cv_link || candidate.resume_url || null,
+    cv_file_hash: candidate.cv_file_hash || null,
+    cv_storage_path: candidate.cv_storage_path || null,
+    cv_original_name: candidate.cv_original_name || null,
+    cv_mimetype: candidate.cv_mimetype || null,
     linkedin_url: candidate.linkedin_url || null,
     resume_url: candidate.resume_url || null,
     client_id: row.client_id || candidate.client_id || null,
@@ -456,6 +462,10 @@ function flattenCandidateOnly(candidate) {
     skills: candidate.skills || [],
     education: candidate.education || null,
     cv_link: candidate.cv_link || candidate.resume_url || null,
+    cv_file_hash: candidate.cv_file_hash || null,
+    cv_storage_path: candidate.cv_storage_path || null,
+    cv_original_name: candidate.cv_original_name || null,
+    cv_mimetype: candidate.cv_mimetype || null,
     linkedin_url: candidate.linkedin_url || null,
     resume_url: candidate.resume_url || null,
     client_id: candidate.client_id || null,
@@ -691,10 +701,12 @@ async function applyCvInput(req, candidatePayload) {
       candidatePayload.resume_url = cv.resume_url
       candidatePayload.cv_file_hash = cv.cv_file_hash
       candidatePayload.cv_storage_path = cv.cv_storage_path
+      candidatePayload.cv_original_name = cv.cv_original_name || req.file.originalname || candidatePayload.cv_original_name
+      candidatePayload.cv_mimetype = cv.cv_mimetype || req.file.mimetype || candidatePayload.cv_mimetype
       return cv
     }
   }
-  const tempResumePath = normalizeResumeStoragePath(candidatePayload.cv_storage_path || '')
+  const tempResumePath = String(candidatePayload.cv_storage_path || '').trim()
   if (!req.file && tempResumePath && tempResumePath.startsWith('/tmp/')) {
     try {
       await fs.access(tempResumePath)
@@ -713,10 +725,15 @@ async function applyCvInput(req, candidatePayload) {
         candidatePayload.resume_url = cv.resume_url
         candidatePayload.cv_file_hash = cv.cv_file_hash
         candidatePayload.cv_storage_path = cv.cv_storage_path
+        candidatePayload.cv_original_name = cv.cv_original_name || req.body.cv_original_name || candidatePayload.cv_original_name
+        candidatePayload.cv_mimetype = cv.cv_mimetype || req.body.cv_mimetype || candidatePayload.cv_mimetype
         return cv
       }
     } catch (err) {
       console.error('applyCvInput temp upload error:', err.message)
+      const uploadError = new Error('Resume upload failed. Please re-upload the CV and try again.')
+      uploadError.statusCode = err.statusCode || 400
+      throw uploadError
     } finally {
       try { await fs.unlink(tempResumePath) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('applyCvInput temp cleanup:', cleanupError.message) }
     }
@@ -727,6 +744,8 @@ async function applyCvInput(req, candidatePayload) {
       candidatePayload.cv_link = cv.cv_link
       candidatePayload.resume_url = cv.resume_url
       if (cv.cv_storage_path) candidatePayload.cv_storage_path = cv.cv_storage_path
+      if (req.body.cv_original_name) candidatePayload.cv_original_name = req.body.cv_original_name
+      if (req.body.cv_mimetype) candidatePayload.cv_mimetype = req.body.cv_mimetype
       return cv
     }
   }
@@ -1173,6 +1192,9 @@ const { data: association, error: associationError } = await insertAssociation(a
     if (isDisplayIdUniqueError(err, 'candidate_display_id')) {
       return res.status(400).json({ error: 'Could not allocate unique Candidate ID. Please try again.' })
     }
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message })
+    }
     return logAndSendInternal(res, 'createCandidate', err)
   } finally {
     if (req.file?.path) {
@@ -1333,6 +1355,9 @@ const { data: inserted, error: insertError } = await insertAssociation(assocInse
       return res.json({ ...flattenCandidateOnly(data), cv_duplicate: Boolean(cvResult?.duplicate) })
     }
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message })
+    }
     return logAndSendInternal(res, 'updateCandidate', err)
   } finally {
     if (req.file?.path) {
@@ -1605,7 +1630,23 @@ async function parseResumeRoute(req, res) {
     }
 
     const parsed = await parseResume(tmpFilePath)
-    return res.json(parsed)
+    const uploadSource = req.file || {
+      path: tmpFilePath,
+      originalname: path.basename(tmpFilePath || 'resume.pdf'),
+      mimetype: 'application/pdf'
+    }
+    const cv = await prepareUploadedCv(uploadSource)
+    return res.json({
+      ...parsed,
+      resume_path: cv?.resume_path || cv?.cv_storage_path || tmpFilePath,
+      resume_url: cv?.resume_url || cv?.cv_link || '',
+      cv_link: cv?.cv_link || cv?.resume_url || '',
+      cv_file_hash: cv?.cv_file_hash || '',
+      cv_storage_path: cv?.cv_storage_path || cv?.resume_path || tmpFilePath,
+      cv_original_name: cv?.cv_original_name || uploadSource.originalname || '',
+      cv_mimetype: cv?.cv_mimetype || uploadSource.mimetype || '',
+      cv_duplicate: Boolean(cv?.duplicate)
+    })
   } catch (err) {
     console.error('parseResumeRoute:', err.message)
     return res.status(500).json({ error: 'Parsing failed', detail: err.message })

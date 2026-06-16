@@ -1,7 +1,8 @@
 const { v4: uuidv4 } = require('uuid')
 const { parseResume } = require('../services/resumeParser')
 const supabase = require('../services/supabaseAdmin')
-const { RESUME_BUCKET, checkUploadedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
+const fs = require('fs/promises')
+const { RESUME_BUCKET, prepareUploadedCv, normalizeResumeStoragePath } = require('../services/cvStorage')
 const { MIME_BY_EXTENSION, pathExtension } = require('../services/documentFile')
 
 function cleanText(value) {
@@ -33,6 +34,7 @@ function rowFromParsed(file, parsed, error = null, storage = {}, warnings = []) 
     summary: cleanText(ai.summary || extracted.cover_letter?.value),
     resume_path: storage.resume_path || '',
     resume_url: storage.resume_url || '',
+    cv_link: storage.resume_url || '',
     cv_file_hash: storage.cv_file_hash || '',
     cv_storage_path: storage.cv_storage_path || storage.resume_path || '',
     cv_original_name: file.originalname || '',
@@ -48,17 +50,17 @@ async function parseOne(file) {
   const warnings = []
 
   try {
-    const duplicate = await checkUploadedCvDuplicate(file)
+    const uploaded = await prepareUploadedCv(file)
     storage = {
-      resume_path: file.path,
-      resume_url: duplicate?.cv_link || '',
-      cv_file_hash: duplicate?.cv_file_hash || '',
-      cv_storage_path: file.path,
-      cv_duplicate: Boolean(duplicate?.duplicate)
+      resume_path: uploaded?.resume_path || uploaded?.cv_storage_path || file.path,
+      resume_url: uploaded?.resume_url || uploaded?.cv_link || '',
+      cv_file_hash: uploaded?.cv_file_hash || '',
+      cv_storage_path: uploaded?.cv_storage_path || uploaded?.resume_path || file.path,
+      cv_duplicate: Boolean(uploaded?.duplicate)
     }
   } catch (err) {
-    console.error('checkUploadedCvDuplicate:', err.message)
-    warnings.push('Resume duplicate check could not be completed')
+    console.error('prepareUploadedCv:', err.message)
+    warnings.push('Resume upload could not be completed; it will be retried on save')
   }
 
   try {
@@ -66,6 +68,16 @@ async function parseOne(file) {
     return rowFromParsed(file, parsed, null, storage, warnings)
   } catch (err) {
     return rowFromParsed(file, null, err.message || 'Unable to parse resume', storage, warnings)
+  } finally {
+    if (storage.cv_storage_path && !String(storage.cv_storage_path).startsWith('/tmp/')) {
+      try {
+        await fs.unlink(file.path)
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          console.error('parseOne cleanup:', err.message)
+        }
+      }
+    }
   }
 }
 
