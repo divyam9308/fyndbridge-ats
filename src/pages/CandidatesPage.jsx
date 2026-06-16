@@ -295,6 +295,7 @@ export default function CandidatesPage() {
   const importModalRef = useRef(null)
   const duplicateModalRef = useRef(null)
   const cvLinkCheckTimerRef = useRef(null)
+  const importCancelledRef = useRef(false)
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1045,6 +1046,7 @@ export default function CandidatesPage() {
     const validationError = validateResumeFiles(files)
     setImportError(validationError)
     if (validationError) return
+    importCancelledRef.current = false
     setResumeFiles(files)
     setImportOpen(true)
     setParsed(false)
@@ -1062,6 +1064,10 @@ export default function CandidatesPage() {
       if (!response.ok) throw new Error(payload.error || 'Unable to parse resumes.')
       const rows = payload.rows || []
       if (!rows.length) throw new Error('No resumes were parsed.')
+      if (importCancelledRef.current) {
+        await discardResumeTemps(rows.map(row => row?.cv_storage_path || row?.resume_path))
+        return
+      }
       await startResumeReview(rows)
     } catch (err) {
       notifyAiQuota(err.message)
@@ -1122,11 +1128,17 @@ export default function CandidatesPage() {
   }
 
   const skipCurrentResume = () => {
-    advanceResumeReview('Resume skipped.')
+    discardResumeTemps([parsedForm?.cvStoragePath || importQueue[currentImportIndex]?.cv_storage_path || importQueue[currentImportIndex]?.resume_path])
+      .finally(() => advanceResumeReview('Resume skipped.'))
   }
 
   const cancelRemainingResumes = () => {
-    if (window.confirm('Cancel remaining resume reviews?')) closeImport()
+    if (!window.confirm('Cancel remaining resume reviews?')) return
+    importCancelledRef.current = true
+    const remainingPaths = importQueue
+      .slice(parsed ? currentImportIndex : 0)
+      .map(row => row?.cv_storage_path || row?.resume_path)
+    discardResumeTemps(remainingPaths).finally(() => closeImport())
   }
 
   const resolveCandidateDuplicate = async (duplicateAction) => {
@@ -1201,6 +1213,20 @@ export default function CandidatesPage() {
     setParsing(false); setParsed(false); setParsedForm(null); setParsedSkillInput('')
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
+
+  const discardResumeTemps = useCallback(async (paths = []) => {
+    const uniquePaths = [...new Set(paths.map(value => String(value || '').trim()).filter(value => value.startsWith('/tmp/')))]
+    if (!uniquePaths.length) return
+    try {
+      await fetch('/api/resumes/discard-temp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths: uniquePaths })
+      })
+    } catch {
+      // Cleanup is best-effort.
+    }
+  }, [])
 
   // ---- Parsed form change ----
   const handleParsedChange = (e) => {
@@ -1988,7 +2014,7 @@ export default function CandidatesPage() {
           <div className="modal-card modal-card-lg" ref={importModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Parse and add candidates">
             <div className="modal-header">
               <span className="modal-title">{parsed ? 'Parse & Add Candidates' : 'Upload Resumes'}</span>
-              <button className="modal-close" onClick={closeImport} aria-label="Close"><X size={16} /></button>
+              <button className="modal-close" onClick={cancelRemainingResumes} aria-label="Close"><X size={16} /></button>
             </div>
 
             <div className="modal-body">

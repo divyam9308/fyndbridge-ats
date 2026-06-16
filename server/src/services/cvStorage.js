@@ -126,20 +126,15 @@ async function prepareUploadedCv(file) {
 
 async function checkUploadedCvDuplicate(file) {
   if (!file) return null
-  const meta = getDocumentFileMeta(file)
   const buffer = await fileBuffer(file)
   const hash = sha256(buffer)
   const existing = await findByHash(hash)
-  const existingPath = normalizeResumeStoragePath(existing?.cv_storage_path || existing?.resume_url || existing?.cv_link || '')
-  const canReuseExisting = existingPath &&
-    extensionMatchesPath(existingPath, meta.extension) &&
-    await storageObjectExists(RESUME_BUCKET, existingPath)
   return {
-    duplicate: Boolean(existing && canReuseExisting),
+    duplicate: Boolean(existing),
     cv_link: existing?.cv_link || existing?.resume_url || '',
     resume_url: existing?.resume_url || existing?.cv_link || '',
     cv_file_hash: hash,
-    cv_storage_path: canReuseExisting ? existingPath : ''
+    cv_storage_path: normalizeResumeStoragePath(existing?.cv_storage_path || '')
   }
 }
 

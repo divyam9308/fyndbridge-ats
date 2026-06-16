@@ -29,6 +29,7 @@ function handleUploadErrors(err, req, res, next) {
 }
 
 router.post('/bulk-parse', upload.array('resumes', 10), handleUploadErrors, controller.bulkParseResumes)
+router.post('/discard-temp', express.json(), controller.discardTempResumes)
 router.get('/open', controller.openResume)
 router.get('/open/:encodedPath', controller.openResume)
 

@@ -2,7 +2,7 @@ const { v4: uuidv4 } = require('uuid')
 const { parseResume } = require('../services/resumeParser')
 const supabase = require('../services/supabaseAdmin')
 const fs = require('fs/promises')
-const { RESUME_BUCKET, prepareUploadedCv, normalizeResumeStoragePath } = require('../services/cvStorage')
+const { RESUME_BUCKET, checkUploadedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
 const { MIME_BY_EXTENSION, pathExtension } = require('../services/documentFile')
 
 function cleanText(value) {
@@ -50,17 +50,17 @@ async function parseOne(file) {
   const warnings = []
 
   try {
-    const uploaded = await prepareUploadedCv(file)
+    const duplicate = await checkUploadedCvDuplicate(file)
     storage = {
-      resume_path: uploaded?.resume_path || uploaded?.cv_storage_path || file.path,
-      resume_url: uploaded?.resume_url || uploaded?.cv_link || '',
-      cv_file_hash: uploaded?.cv_file_hash || '',
-      cv_storage_path: uploaded?.cv_storage_path || uploaded?.resume_path || file.path,
-      cv_duplicate: Boolean(uploaded?.duplicate)
+      resume_path: file.path,
+      resume_url: duplicate?.resume_url || duplicate?.cv_link || '',
+      cv_file_hash: duplicate?.cv_file_hash || '',
+      cv_storage_path: file.path,
+      cv_duplicate: Boolean(duplicate?.duplicate)
     }
   } catch (err) {
-    console.error('prepareUploadedCv:', err.message)
-    warnings.push('Resume upload could not be completed; it will be retried on save')
+    console.error('checkUploadedCvDuplicate:', err.message)
+    warnings.push('Resume duplicate check could not be completed')
   }
 
   try {
@@ -68,16 +68,6 @@ async function parseOne(file) {
     return rowFromParsed(file, parsed, null, storage, warnings)
   } catch (err) {
     return rowFromParsed(file, null, err.message || 'Unable to parse resume', storage, warnings)
-  } finally {
-    if (storage.cv_storage_path && !String(storage.cv_storage_path).startsWith('/tmp/')) {
-      try {
-        await fs.unlink(file.path)
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          console.error('parseOne cleanup:', err.message)
-        }
-      }
-    }
   }
 }
 
@@ -154,8 +144,31 @@ async function openResume(req, res) {
   }
 }
 
+async function discardTempResumes(req, res) {
+  try {
+    const values = Array.isArray(req.body?.paths) ? req.body.paths : [req.body?.path]
+    const paths = values
+      .map((value) => String(value || '').trim())
+      .filter((value) => value.startsWith('/tmp/'))
+
+    await Promise.all(paths.map(async (filePath) => {
+      try {
+        await fs.unlink(filePath)
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err
+      }
+    }))
+
+    return res.json({ deleted: paths.length })
+  } catch (err) {
+    console.error('discardTempResumes:', err.message)
+    return res.status(500).json({ error: 'Could not discard temporary resumes' })
+  }
+}
+
 module.exports = {
   bulkParseResumes,
-  openResume
+  openResume,
+  discardTempResumes
 }
 

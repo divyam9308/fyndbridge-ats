@@ -693,6 +693,13 @@ async function updateCandidateRow(candidateId, payload) {
   return result
 }
 
+async function deleteUploadedCvResult(cv) {
+  const objectPath = normalizeResumeStoragePath(cv?.cv_storage_path || cv?.resume_path || '')
+  if (!objectPath || cv?.duplicate) return
+  const { error } = await supabase.storage.from(RESUME_BUCKET).remove([objectPath])
+  if (error) console.error('deleteUploadedCvResult:', error.message)
+}
+
 async function applyCvInput(req, candidatePayload) {
   if (req.file) {
     const cv = await prepareUploadedCv(req.file)
@@ -718,6 +725,21 @@ async function applyCvInput(req, candidatePayload) {
           : tempResumePath.toLowerCase().endsWith('.docx')
             ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             : 'application/msword')
+      }
+      const duplicateCv = await checkUploadedCvDuplicate(tempFile)
+      if (duplicateCv?.duplicate) {
+        if (!duplicateCv.cv_storage_path) {
+          const duplicateError = new Error('Resume already exists, but its stored CV file could not be reused. Please re-upload the CV from the saved candidate if needed.')
+          duplicateError.statusCode = 409
+          throw duplicateError
+        }
+        candidatePayload.cv_link = duplicateCv.cv_link || duplicateCv.resume_url || candidatePayload.cv_link
+        candidatePayload.resume_url = duplicateCv.resume_url || duplicateCv.cv_link || candidatePayload.resume_url
+        candidatePayload.cv_file_hash = duplicateCv.cv_file_hash
+        candidatePayload.cv_storage_path = duplicateCv.cv_storage_path
+        candidatePayload.cv_original_name = req.body.cv_original_name || candidatePayload.cv_original_name
+        candidatePayload.cv_mimetype = req.body.cv_mimetype || candidatePayload.cv_mimetype
+        return { ...duplicateCv, duplicate: true }
       }
       const cv = await prepareUploadedCv(tempFile)
       if (cv) {
@@ -1045,6 +1067,7 @@ async function getCandidate(req, res) {
 }
 
 async function createCandidate(req, res) {
+  let cvResult = null
   try {
     const incomingStatus = req.body.status || req.body.candidateStatus || req.body.application_status || req.body.association_status;
     const body = normalizeRequestBody({
@@ -1061,8 +1084,6 @@ async function createCandidate(req, res) {
     const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
     const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
     const duplicateAction = cleanText(body.duplicate_action)
-    let cvResult = null
-
     associationPayload.status =
       typeof associationPayload.status === "string" && associationPayload.status.trim()
         ? associationPayload.status.trim()
@@ -1189,6 +1210,9 @@ const { data: association, error: associationError } = await insertAssociation(a
 
     return res.status(201).json({ ...flattenAssociation(association), cv_duplicate: Boolean(cvResult?.duplicate) })
   } catch (err) {
+    if (cvResult && !cvResult.duplicate) {
+      await deleteUploadedCvResult(cvResult)
+    }
     if (isDisplayIdUniqueError(err, 'candidate_display_id')) {
       return res.status(400).json({ error: 'Could not allocate unique Candidate ID. Please try again.' })
     }
@@ -1204,6 +1228,7 @@ const { data: association, error: associationError } = await insertAssociation(a
 }
 
 async function updateCandidate(req, res) {
+  let cvResult = null
   try {
     const incomingStatus = req.body.status || req.body.candidateStatus || req.body.application_status || req.body.association_status;
     const body = normalizeRequestBody({
@@ -1222,7 +1247,7 @@ async function updateCandidate(req, res) {
     const associationId = body.association_id || req.params.id
     const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
     const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
-    const cvResult = await applyCvInput(req, candidatePayload)
+    cvResult = await applyCvInput(req, candidatePayload)
 
     if (Object.prototype.hasOwnProperty.call(associationPayload, 'status')) {
       associationPayload.status =
@@ -1355,6 +1380,9 @@ const { data: inserted, error: insertError } = await insertAssociation(assocInse
       return res.json({ ...flattenCandidateOnly(data), cv_duplicate: Boolean(cvResult?.duplicate) })
     }
   } catch (err) {
+    if (cvResult && !cvResult.duplicate) {
+      await deleteUploadedCvResult(cvResult)
+    }
     if (err.statusCode) {
       return res.status(err.statusCode).json({ error: err.message })
     }
@@ -1635,23 +1663,23 @@ async function parseResumeRoute(req, res) {
       originalname: path.basename(tmpFilePath || 'resume.pdf'),
       mimetype: 'application/pdf'
     }
-    const cv = await prepareUploadedCv(uploadSource)
+    const cv = await checkUploadedCvDuplicate(uploadSource)
     return res.json({
       ...parsed,
-      resume_path: cv?.resume_path || cv?.cv_storage_path || tmpFilePath,
+      resume_path: tmpFilePath,
       resume_url: cv?.resume_url || cv?.cv_link || '',
       cv_link: cv?.cv_link || cv?.resume_url || '',
       cv_file_hash: cv?.cv_file_hash || '',
-      cv_storage_path: cv?.cv_storage_path || cv?.resume_path || tmpFilePath,
-      cv_original_name: cv?.cv_original_name || uploadSource.originalname || '',
-      cv_mimetype: cv?.cv_mimetype || uploadSource.mimetype || '',
+      cv_storage_path: tmpFilePath,
+      cv_original_name: uploadSource.originalname || '',
+      cv_mimetype: uploadSource.mimetype || '',
       cv_duplicate: Boolean(cv?.duplicate)
     })
   } catch (err) {
     console.error('parseResumeRoute:', err.message)
     return res.status(500).json({ error: 'Parsing failed', detail: err.message })
   } finally {
-    if (tmpFilePath) {
+    if (tmpFilePath && !req.file) {
       try {
         await fs.unlink(tmpFilePath)
       } catch (err) {
