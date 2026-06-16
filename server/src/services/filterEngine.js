@@ -19,8 +19,30 @@ const moneyValue = (value) => {
   return Math.round(n)
 }
 const dateValue = (value) => {
-  const date = value instanceof Date ? value : new Date(clean(value))
+  let text = clean(value)
+  const now = new Date()
+  if (/^\d{1,2}\s+[a-z]+$/i.test(text)) text = `${text} ${now.getFullYear()}`
+  const ymd = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, '0')}-${ymd[3].padStart(2, '0')}`
+  const dmy = text.match(/^(\d{1,2})\s+([a-z]+)\s+(\d{4})$/i)
+  if (dmy) {
+    const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+    const month = months.findIndex(item => dmy[2].toLowerCase().startsWith(item))
+    if (month >= 0) return `${dmy[3]}-${String(month + 1).padStart(2, '0')}-${dmy[1].padStart(2, '0')}`
+  }
+  const date = value instanceof Date ? value : new Date(text)
   return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10)
+}
+const todayValue = () => {
+  const date = new Date()
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 10)
+}
+const weekRange = () => {
+  const start = new Date(todayValue())
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  return [dateValue(start), dateValue(end)]
 }
 
 function normalizeBudget(value) {
@@ -89,23 +111,54 @@ const mandateFields = {
   job_id: { aliases: ['job id', 'mandate id', 'jb id', 'jb'], type: 'id' },
   consultant: { aliases: ['consultant'], type: 'text' },
   team_lead: { aliases: ['team lead', 'tl'], type: 'text' },
+  client_id: { aliases: ['client id', 'cl id', 'cl'], type: 'id' },
   client_name: { aliases: ['client', 'client name'], type: 'text' },
   role: { aliases: ['job role', 'role'], type: 'text' },
   location: { aliases: ['location', 'city'], type: 'text' },
   budget: { aliases: ['budget', 'salary range'], type: 'budget' },
+  experience: { aliases: ['experience', 'exp'], type: 'number' },
   mandate_status: { aliases: ['mandate status', 'status', 'priority'], type: 'mandate_status' },
-  vertical: { aliases: ['vertical', 'domain'], type: 'text' },
+  vertical: { aliases: ['vertical', 'domain', 'sector'], type: 'text' },
+  comments: { aliases: ['comment', 'comments', 'notes'], type: 'text' },
   date_of_allocation: { aliases: ['allocation date', 'date of allocation', 'date'], type: 'date' }
+}
+
+const clientFields = {
+  client_id: { aliases: ['client id', 'cl id', 'cl'], type: 'id' },
+  client_name: { aliases: ['client', 'client name', 'name'], type: 'text' },
+  location: { aliases: ['location', 'city'], type: 'text' },
+  region: { aliases: ['region', 'state'], type: 'text' },
+  consultant: { aliases: ['consultant', 'recruiter'], type: 'text' },
+  contact_person: { aliases: ['contact person', 'contact'], type: 'text' },
+  mobile: { aliases: ['mobile', 'phone', 'contact number'], type: 'text' },
+  email: { aliases: ['email', 'email id'], type: 'text' },
+  linkedin: { aliases: ['linkedin'], type: 'text' },
+  sector: { aliases: ['sector', 'vertical', 'domain'], type: 'text' },
+  connected_on_date: { aliases: ['connected on date', 'connected date', 'connected on'], type: 'date' },
+  comments: { aliases: ['comment', 'comments', 'notes'], type: 'text' },
+  follow_up_date: { aliases: ['follow up date', 'follow up', 'followup'], type: 'date' },
+  status: { aliases: ['status'], type: 'enum' },
+  terms_signed: { aliases: ['terms signed', 'terms'], type: 'text' },
+  value: { aliases: ['value', 'terms value', 'fee value'], type: 'money' },
+  gstin: { aliases: ['gstin', 'gst'], type: 'text' },
+  pan: { aliases: ['pan'], type: 'text' },
+  address_on_invoice: { aliases: ['address on invoice', 'invoice address', 'address'], type: 'text' },
+  designation: { aliases: ['designation'], type: 'text' },
+  contract_signed: { aliases: ['contract signed', 'contract'], type: 'boolean' },
+  contract_document: { aliases: ['contract document', 'contract pdf', 'contract file'], type: 'text' }
 }
 
 const configs = {
   candidates: { fields: candidateFields },
-  mandates: { fields: mandateFields }
+  mandates: { fields: mandateFields },
+  clients: { fields: clientFields }
 }
 
-const mandateSearchFields = ['client_name', 'role', 'consultant', 'team_lead', 'location', 'vertical']
-const candidateSearchFields = ['consultant', 'client_name', 'role', 'designation', 'mobile', 'email', 'skills']
+const mandateSearchFields = ['job_id', 'consultant', 'team_lead', 'client_id', 'client_name', 'role', 'location', 'budget', 'vertical', 'comments']
+const candidateSearchFields = ['candidate_name', 'consultant', 'client_name', 'role', 'designation', 'organisation', 'mobile', 'email', 'current_location', 'skills', 'status']
+const clientSearchFields = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'comments', 'status', 'terms_signed', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_document']
 const candidateContainsFields = new Set(candidateSearchFields)
+const clientContainsFields = new Set(clientSearchFields)
 
 Object.values(configs).forEach(config => {
   Object.entries(config.fields).forEach(([field, meta]) => {
@@ -181,7 +234,8 @@ function buildAiFilterPrompt(page, prompt) {
     `Allowed operators: ${OPERATORS.join(', ')}.`,
     'Use canonical field names only. Never invent fields.',
     'Default text searches to contains. Use equals only for explicit exact matches.',
-    page === 'mandates' ? 'For plain text with no field, search across client_name, role, consultant, team_lead, location, and vertical using contains.' : '',
+    page === 'mandates' ? 'For plain text with no field, search across mandate searchable text fields using contains.' : '',
+    page === 'clients' ? 'For plain text with no field, search across all client text fields using contains.' : '',
     page === 'mandates' ? 'For phrases like "client bluepeak", "client name bluepeak", and "mandates for bluepeak", use client_name contains bluepeak.' : '',
     'Use is_empty for blank/null/empty/- and is_not_empty for not blank.',
     'Detect IDs: CA10 -> candidate_id equals CA10; CL5 -> client_id equals CL5; JB10 -> job_id equals JB10.',
@@ -199,7 +253,7 @@ function isExactPrompt(prompt) {
 
 function isPlainMandatePrompt(prompt) {
   const text = lower(prompt)
-  if (!text || /\b(JB\d+|P[123])\b/i.test(prompt)) return false
+  if (!text || /\b(JB\d+|CL\d+|P[123])\b/i.test(prompt)) return false
   if (/[<>=]/.test(text) || /\b(before|after|on|between|budget|priority|mandate status|status|date|allocation|team lead|tl|consultant|client|client name|role|job role|location|city|vertical|domain)\b/i.test(text)) return false
   return /^[a-z0-9][\w\s&.-]+$/i.test(clean(prompt))
 }
@@ -208,6 +262,13 @@ function isPlainCandidatePrompt(prompt) {
   const text = lower(prompt)
   if (!text || /\b(CA\d+|CL\d+|JB\d+)\b/i.test(prompt)) return false
   if (/[<>=]/.test(text) || /\b(before|after|on|between|salary|ctc|experience|notice|date|status|stage|relocate|consultant|client|role|job|designation|mobile|phone|email|skills?)\b/i.test(text)) return false
+  return /^[a-z0-9][\w\s@+&.-]+$/i.test(clean(prompt))
+}
+
+function isPlainClientPrompt(prompt) {
+  const text = lower(prompt)
+  if (!text || /\bCL\d+\b/i.test(prompt)) return false
+  if (/[<>=]/.test(text) || /\b(after|before|on|today|this week|between|value|follow up|connected|status|contract signed|terms|gst|gstin|pan|consultant|contact|client|location|region|sector|mobile|phone|email|linkedin)\b/i.test(text)) return false
   return /^[a-z0-9][\w\s@+&.-]+$/i.test(clean(prompt))
 }
 
@@ -221,6 +282,10 @@ function validateAiFilters(page, data, prompt = '') {
     const value = clean(prompt).replace(/^(candidate|candidates)\s+/i, '').trim()
     if (value) return { mode: 'any', conditions: candidateSearchFields.map(field => ({ field, operator: 'contains', value })) }
   }
+  if (page === 'clients' && isPlainClientPrompt(prompt)) {
+    const value = clean(prompt).replace(/^clients?\s+/i, '').replace(/\s+clients?$/i, '').trim()
+    if (value) return { mode: 'any', conditions: clientSearchFields.map(field => ({ field, operator: 'contains', value })) }
+  }
   const normalized = (Array.isArray(data?.conditions) ? data.conditions : [])
     .map(condition => {
       const next = { ...condition }
@@ -232,6 +297,10 @@ function validateAiFilters(page, data, prompt = '') {
         const field = aliasMap(config).get(lower(next.field)) || next.field
         if (candidateContainsFields.has(field)) next.operator = 'contains'
       }
+      if (page === 'clients') {
+        const field = aliasMap(config).get(lower(next.field)) || next.field
+        if (clientContainsFields.has(field) && !isExactPrompt(prompt)) next.operator = 'contains'
+      }
       return normalizeCondition(config, next)
     })
     .filter(Boolean)
@@ -242,8 +311,22 @@ function validateAiFilters(page, data, prompt = '') {
     seen.add(key)
     return true
   })
-  if (!conditions.length && clean(prompt)) return parsePrompt(page, prompt)
-  return conditions.length ? { conditions } : null
+  const deterministic = clean(prompt) ? parsePrompt(page, prompt) : null
+  const forcedFields = new Set((deterministic?.conditions || [])
+    .filter(condition => ['greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'between', 'before', 'after', 'on', 'starts_with'].includes(condition.operator))
+    .map(condition => condition.field))
+  const merged = [
+    ...conditions.filter(condition => !forcedFields.has(condition.field)),
+    ...(deterministic?.conditions || [])
+  ]
+  const mergedSeen = new Set()
+  const unique = merged.filter(condition => {
+    const key = JSON.stringify(condition)
+    if (mergedSeen.has(key)) return false
+    mergedSeen.add(key)
+    return true
+  })
+  return unique.length ? { conditions: unique } : null
 }
 
 function parsePrompt(page, prompt) {
@@ -269,6 +352,13 @@ function parsePrompt(page, prompt) {
   if (config.fields.budget) {
     const budget = text.match(/(?:budget|salary range)?\s*(>?\s*\d+\s*(?:-|to)\s*\d+|>\s*\d+)(?:\s*(?:lac|lpa|lakh|lakhs))?/i)
     if (budget) add('budget', 'equals', budget[1])
+  }
+  if (config.fields.value) {
+    const valueMatch = text.match(/(?:value|terms value)\s*(>=|>|<=|<|=|below|above|over|under)?\s*(\d+(?:\.\d+)?)\s*(?:lac|lpa|lakh|lakhs|cr|crore|crores)?/i)
+    if (valueMatch) {
+      const op = valueMatch[1] || '='
+      add('value', op === '>' || op === 'above' || op === 'over' ? 'greater_than' : op === '>=' ? 'greater_than_or_equal' : op === '<' || op === 'below' || op === 'under' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : 'equals', valueMatch[0])
+    }
   }
 
   const explicit = [
@@ -304,9 +394,55 @@ function parsePrompt(page, prompt) {
     const op = match[1]
     add(field, op === '>' || op === 'above' ? 'greater_than' : op === '>=' ? 'greater_than_or_equal' : op === '<' || op === 'below' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : 'equals', match[2])
   })
+  ;[
+    ['experience', /experience\s*(\d+)\s*(?:-|to)\s*(\d+)/i],
+    ['current_ctc', /(?:salary|current ctc|current salary)\s*(\d+)\s*(?:-|to)\s*(\d+)/i],
+    ['expected_ctc', /(?:expected salary|expected ctc)\s*(\d+)\s*(?:-|to)\s*(\d+)/i],
+    ['notice_period', /notice\s*(\d+)\s*(?:-|to)\s*(\d+)/i],
+    ['value', /(?:value|terms value)\s*(\d+)\s*(?:-|to)\s*(\d+)/i]
+  ].forEach(([field, regex]) => {
+    if (!config.fields[field]) return
+    const match = text.match(regex)
+    if (match) add(field, 'between', [match[1], match[2]])
+  })
+  if (config.fields.budget) {
+    const budgetRange = text.match(/budget\s*(\d+)\s*(?:-|to)\s*(\d+)/i)
+    if (budgetRange) add('budget', 'equals', `${budgetRange[1]}-${budgetRange[2]} lac`)
+  }
 
-  const dateMatch = text.match(/(?:date|allocation date|date of allocation)\s+(after|before|on)\s+(.+)$/i)
+  if (config.fields.contract_signed) {
+    const contractMatch = text.match(/contract signed\s+(yes|no|true|false)/i)
+    if (contractMatch) add('contract_signed', 'equals', contractMatch[1])
+  }
+  if (config.fields.gstin) {
+    const gstMatch = text.match(/(?:gstin|gst)\s+(?:starts with|starts)\s+([a-z0-9]+)/i)
+    if (gstMatch) add('gstin', 'starts_with', gstMatch[1])
+  }
+  ;[
+    ['consultant', /consultant\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)$/i],
+    ['contact_person', /(?:contact person|contact)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)$/i],
+    ['client_name', /(?:client|client name)\s+(?:is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)$/i],
+    ['location', /(?:location|city)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)$/i],
+    ['region', /region\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)$/i],
+    ['sector', /sector\s+(?:is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)$/i]
+  ].forEach(([field, regex]) => {
+    if (!config.fields[field]) return
+    const match = text.match(regex)
+    if (match) add(field, 'contains', match[1])
+  })
+
+  const dateMatch = text.match(/(?:date|allocation date|date of allocation|connected(?: on)?|follow up)\s+(after|before|on)\s+(.+)$/i)
   if (dateMatch) add(config.fields.date_of_allocation ? 'date_of_allocation' : 'date', dateMatch[1].toLowerCase(), dateMatch[2])
+  if (config.fields.connected_on_date) {
+    const connected = text.match(/connected(?: on)?\s+(after|before|on)\s+(.+)$/i)
+    if (connected) add('connected_on_date', connected[1].toLowerCase(), connected[2])
+  }
+  if (config.fields.follow_up_date) {
+    if (/\bfollow up\s+today\b/i.test(text)) add('follow_up_date', 'on', todayValue())
+    if (/\bfollow up\s+this week\b/i.test(text)) add('follow_up_date', 'between', weekRange())
+    const follow = text.match(/follow up\s+(after|before|on)\s+(.+)$/i)
+    if (follow) add('follow_up_date', follow[1].toLowerCase(), follow[2])
+  }
 
   if (!conditions.length && config.fields.client_name && /^[a-z0-9][\w\s&.-]+$/i.test(text)) add('client_name', 'contains', text.replace(/\b(client|mandates?)\b/gi, '').trim())
 

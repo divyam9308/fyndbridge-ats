@@ -1,8 +1,11 @@
 const { randomUUID } = require('crypto')
 const supabase = require('../services/supabaseAdmin')
+const { callAiJson } = require('../services/aiProvider')
 const { uploadDocument } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
+const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
+const { applyQueryFilters } = require('../services/queryFilters')
 
 const CLIENT_STATUSES = [
   'Active',
@@ -102,6 +105,30 @@ function nextFreeDisplayId(rows, prefix, includeReservations = false) {
 
 const SORT_FIELDS = new Set(['client_id', 'client_name'])
 const SORT_DIRECTIONS = new Set(['asc', 'desc'])
+const CLIENT_FILTER_MAPPING = {
+  client_id: [{ column: 'client_display_id', kind: 'text' }],
+  client_name: [{ column: 'client_name', kind: 'text' }, { column: 'name', kind: 'text' }],
+  location: [{ column: 'location', kind: 'text' }, { column: 'city', kind: 'text' }, { column: 'address_on_invoice', kind: 'text' }],
+  region: [{ column: 'region', kind: 'text' }, { column: 'state', kind: 'text' }],
+  consultant: [{ column: 'consultant_name', kind: 'text' }, { column: 'consultant', kind: 'text' }],
+  contact_person: [{ column: 'contact_person', kind: 'text' }, { column: 'contact', kind: 'text' }],
+  mobile: [{ column: 'mobile', kind: 'text' }, { column: 'phone', kind: 'text' }],
+  email: [{ column: 'email', kind: 'text' }],
+  linkedin: [{ column: 'linkedin', kind: 'text' }],
+  sector: [{ column: 'sector', kind: 'text' }],
+  connected_on_date: [{ column: 'connected_on_date', kind: 'date' }],
+  comments: [{ column: 'comments', kind: 'text' }, { column: 'notes', kind: 'text' }],
+  follow_up_date: [{ column: 'follow_up_date', kind: 'date' }],
+  status: [{ column: 'status', kind: 'text' }],
+  terms_signed: [{ column: 'terms_signed_type', kind: 'text' }, { column: 'terms_signed_custom', kind: 'text' }],
+  value: [{ column: 'terms_value', kind: 'text' }],
+  gstin: [{ column: 'gstin', kind: 'text' }],
+  pan: [{ column: 'pan', kind: 'text' }],
+  address_on_invoice: [{ column: 'address_on_invoice', kind: 'text' }],
+  designation: [{ column: 'designation', kind: 'text' }],
+  contract_signed: [{ column: 'contract_signed', kind: 'boolean' }],
+  contract_document: [{ column: 'contract_document', kind: 'text' }, { column: 'contract_pdf_url', kind: 'text' }, { column: 'contract_pdf_storage_path', kind: 'text' }]
+}
 
 function normalizeSort(query) {
   const field = clean(query.sortField)
@@ -154,6 +181,42 @@ async function ensureClientDisplayIds() {
 
 async function nextClientDisplayId() {
   return allocateNextDisplayId({ supabase, table: 'clients', column: 'client_display_id', prefix: 'CL' })
+}
+
+function parseJsonFilter(value) {
+  if (!value) return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+function clientFilterValue(row, field) {
+  return {
+    client_id: row.client_display_id,
+    client_name: row.client_name || row.name,
+    location: [row.location, row.city, row.address_on_invoice].filter(Boolean).join(' '),
+    region: row.region || row.state,
+    consultant: row.consultant_name || row.consultant,
+    contact_person: row.contact_person || row.contact,
+    mobile: row.mobile || row.phone,
+    email: row.email,
+    linkedin: row.linkedin,
+    sector: row.sector,
+    connected_on_date: row.connected_on_date,
+    comments: row.comments || row.notes,
+    follow_up_date: row.follow_up_date,
+    status: row.status,
+    terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
+    value: row.terms_value,
+    gstin: row.gstin,
+    pan: row.pan,
+    address_on_invoice: row.address_on_invoice,
+    designation: row.designation,
+    contract_signed: row.contract_signed,
+    contract_document: row.contract_document || row.contract_pdf_url || row.contract_pdf_storage_path
+  }[field]
 }
 
 async function isClientDisplayIdAvailable(displayId) {
@@ -373,7 +436,9 @@ async function updateClientRow(id, payload) {
 async function listClients(req, res) {
   try {
     const sort = normalizeSort(req.query)
-    const paginate = String(req.query.all || '').toLowerCase() !== 'true'
+    const aiFilters = parseJsonFilter(req.query.ai_filters)
+    const localAiFilter = (aiFilters?.conditions || []).some(condition => condition.field === 'value')
+    const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
@@ -400,6 +465,10 @@ async function listClients(req, res) {
         query = query.eq('status', clean(req.query.status))
       }
     }
+    if (!localAiFilter) {
+      const appliedAi = applyQueryFilters(query, 'clients', aiFilters, CLIENT_FILTER_MAPPING)
+      query = appliedAi.query
+    }
     if (sort.field === 'client_id') query = query.order('created_at', { ascending: sort.direction !== 'desc' })
     else if (sort.field === 'client_name') query = query.order('client_name', { ascending: sort.direction !== 'desc' }).order('name', { ascending: sort.direction !== 'desc' })
     else query = query.order('created_at', { ascending: false })
@@ -423,11 +492,33 @@ async function listClients(req, res) {
 
     const followUpsMap = await loadFollowUps(pagedData.map((client) => client.id))
     const rows = pagedData.map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || [], jobsByClient[client.id] || []))
-    const total = paginate ? count || 0 : rows.length
+    const filteredRows = paginate ? rows : applySharedFilters('clients', rows, aiFilters, clientFilterValue)
+    const dataRows = localAiFilter ? filteredRows.slice(from, to + 1) : filteredRows
+    const total = paginate ? count || 0 : filteredRows.length
     const totalPages = paginate ? Math.max(1, Math.ceil(total / limit)) : 1
-return res.json({ data: rows, total, page, totalPages, limit })
+return res.json({ data: dataRows, total, page, totalPages, limit })
   } catch (err) {
     return logAndSendInternal(res, 'listClients', err)
+  }
+}
+
+async function buildClientFilters(req, res) {
+  const prompt = clean(req.body.prompt)
+  if (!prompt) return res.status(400).json({ error: 'prompt is required' })
+  try {
+    const parsed = await callAiJson({
+      prompt: buildAiFilterPrompt('clients', prompt),
+      schema: aiFilterSchema(),
+      schemaName: 'client_filter',
+      temperature: 0
+    })
+    const filters = validateAiFilters('clients', parsed, prompt)
+    if (!filters) return res.status(400).json({ error: 'Could not parse Clients filter.' })
+    return res.json({ filters })
+  } catch (err) {
+    const fallback = validateAiFilters('clients', null, prompt)
+    if (fallback) return res.json({ filters: fallback, fallback: true })
+    return logAndSendInternal(res, 'buildClientFilters', err)
   }
 }
 
@@ -622,6 +713,7 @@ module.exports = {
   checkClientDuplicate,
   getNextClientDisplayId,
   listClients,
+  buildClientFilters,
   getClient,
   createClient,
   updateClient,

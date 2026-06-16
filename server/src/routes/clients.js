@@ -7,6 +7,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 router.get('/check-duplicate', controller.checkClientDuplicate)
 router.get('/next-display-id', controller.getNextClientDisplayId)
+router.post('/ai-filter', controller.buildClientFilters)
 router.get('/', controller.listClients)
 router.post('/', upload.single('contract_document_file'), controller.createClient)
 router.get('/:id', controller.getClient)

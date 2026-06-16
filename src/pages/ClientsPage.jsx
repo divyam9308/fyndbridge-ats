@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText } from 'lucide-react'
+import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText, Search } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
@@ -200,6 +200,10 @@ export default function ClientsPage() {
   const [sortOpen, setSortOpen] = useState(false)
   const [sortAnchor, setSortAnchor] = useState(null)
   const [statusFilter, setStatusFilter] = useState('All')
+  const [aiFilterText, setAiFilterText] = useState('')
+  const [aiFilters, setAiFilters] = useState(null)
+  const [aiFilterLoading, setAiFilterLoading] = useState(false)
+  const [aiFilterError, setAiFilterError] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [totalClients, setTotalClients] = useState(0)
@@ -253,19 +257,21 @@ export default function ClientsPage() {
         params.set('sortDirection', sortDirection)
       }
       if (statusFilter !== 'All') params.set('status', statusFilter)
+      if (aiFilters) params.set('ai_filters', JSON.stringify(aiFilters))
       const res = await fetch(`/api/clients${params.toString() ? `?${params.toString()}` : ''}`)
       if (!res.ok) throw new Error('Failed to fetch clients from server.')
       const data = await res.json()
       setClients(data.data || [])
       setTotalClients(Number(data.total) || 0)
       setPage(Number(data.page) || 1)
+      if (import.meta.env.DEV && aiFilters) console.debug('Clients AI filter', { filters: aiFilters, matched: Number(data.total) || 0 })
       setError(null)
     } catch (err) {
       setError(err.message)
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [page, pageSize, sortDirection, sortField, statusFilter])
+  }, [aiFilters, page, pageSize, sortDirection, sortField, statusFilter])
 
   const openDocument = useCallback(async (key, url) => {
     setOpeningDocument(key)
@@ -680,6 +686,42 @@ export default function ClientsPage() {
     setSortOpen(false)
   }
 
+  const applyAiFilter = async (event) => {
+    event.preventDefault()
+    const prompt = aiFilterText.trim()
+    if (!prompt) {
+      clearFilters()
+      return
+    }
+    setAiFilterLoading(true)
+    setAiFilterError('')
+    try {
+      const res = await fetch('/api/clients/ai-filter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not parse Clients filter.')
+      setAiFilters(data.filters || null)
+      setPage(1)
+    } catch (err) {
+      setAiFilterError(err.message)
+      setAiFilters(null)
+    } finally {
+      setAiFilterLoading(false)
+    }
+  }
+
+  const clearFilters = () => {
+    setStatusFilter('All')
+    setAiFilterText('')
+    setAiFilters(null)
+    setAiFilterError('')
+    setAiFilterLoading(false)
+    setPage(1)
+  }
+
   const renderClientCell = ({ key }, client) => {
     const followUp = selectedFollowUp(client)
     const contact = selectedContact(client)
@@ -829,6 +871,21 @@ export default function ClientsPage() {
         </div>
         <button className="filter-clear" type="button" onClick={() => { setStatusFilter('All'); setPage(1) }}>Clear Filter</button>
         <div className="filter-divider" />
+        <form onSubmit={applyAiFilter} className="candidate-ai-filter-form">
+          <span className="filter-label">AI Filter</span>
+          <input
+            className="filter-input candidate-ai-filter-input"
+            value={aiFilterText}
+            onChange={e => { setAiFilterText(e.target.value); setAiFilterError('') }}
+            id="filter-ai-clients"
+          />
+          <button className="btn-secondary" type="submit" disabled={aiFilterLoading} style={{ height:34, padding:'0 12px' }}>
+            {aiFilterLoading ? <Loader2 size={14} className="spin" /> : <Search size={14} />}
+            Apply
+          </button>
+          <button className="filter-clear" type="button" onClick={clearFilters}>Clear Filters</button>
+        </form>
+        <div className="filter-divider" />
         <span className="filter-label">Sort By</span>
         <div className="candidate-sort-control" ref={sortDropdownRef}>
           <button className="filter-select candidate-sort-btn" type="button" onClick={(event) => { setSortAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setSortOpen(open => !open) }}>
@@ -849,6 +906,12 @@ export default function ClientsPage() {
         <div className="filter-bar-spacer" />
         <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalClients / pageSize))} onPageChange={setPage} loading={loading} />
       </div>
+
+      {aiFilterError && (
+        <div className="form-error" style={{ display:'block', marginBottom:12 }}>
+          {aiFilterError}
+        </div>
+      )}
 
       <div className="table-card">
         {loading ? (

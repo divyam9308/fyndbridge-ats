@@ -468,6 +468,7 @@ export default function CandidatesPage() {
       setCandidates(Array.isArray(payload.data) ? payload.data.map(apiCandidateToUi) : [])
       setTotalCandidates(Number(payload.total) || 0)
       setPage(Number(payload.page) || nextPage)
+      if (import.meta.env.DEV && aiFilters) console.debug('Candidates AI filter', { filters: aiFilters, matched: Number(payload.total) || 0 })
       setApiError('')
     } catch (err) {
       setApiError(err.message)

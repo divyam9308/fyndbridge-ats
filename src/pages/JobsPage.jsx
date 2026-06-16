@@ -168,6 +168,7 @@ export default function JobsPage() {
       setJobs(jobsData.data || [])
       setTotalJobs(Number(jobsData.total) || 0)
       setPage(Number(jobsData.page) || 1)
+      if (import.meta.env.DEV && aiFilters) console.debug('Mandates AI filter', { filters: aiFilters, matched: Number(jobsData.total) || 0 })
       setDbClients(clientsData.data || [])
       setUserOptions(usersData.data || [])
       setError(null)

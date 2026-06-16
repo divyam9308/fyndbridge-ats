@@ -122,6 +122,11 @@ function applyQueryFilters(query, page, filters, mapping, extras = {}) {
     const extraQuery = extras.applyCondition ? extras.applyCondition(query, condition) : query
     query = extraQuery
     if (!definitions.length) continue
+    if (definitions.length > 1) {
+      const clauses = definitions.map((definition) => buildOrClause(definition, condition)).filter(Boolean)
+      if (clauses.length) query = query.or(clauses.join(','))
+      continue
+    }
     for (const definition of definitions) {
       query = applySingleCondition(query, definition, condition)
     }

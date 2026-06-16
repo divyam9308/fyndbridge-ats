@@ -189,12 +189,15 @@ function jobFilterValue(row, field) {
     job_id: row.job_display_id,
     consultant: row.consultants,
     team_lead: row.team_lead,
+    client_id: row.client_display_id,
     client_name: row.client_name,
     role: row.role,
     location: row.location,
     budget: row.budget,
+    experience: row.experience,
     mandate_status: row.mandate_status,
     vertical: row.vertical,
+    comments: row.comments || row.notes,
     date_of_allocation: row.allocation_date
   }[field]
 }
@@ -203,11 +206,14 @@ const JOB_FILTER_MAPPING = {
   job_id: [{ column: 'job_display_id', kind: 'text' }],
   consultant: [{ column: 'consultants', kind: 'array' }],
   team_lead: [{ column: 'team_lead', kind: 'text' }],
+  client_id: [{ column: 'clients.client_display_id', kind: 'text' }],
   role: [{ column: 'title', kind: 'text' }],
   location: [{ column: 'city', kind: 'text' }],
   budget: [{ column: 'budget', kind: 'text' }],
+  experience: [{ column: 'experience', kind: 'number' }],
   mandate_status: [{ column: 'mandate_status', kind: 'text' }],
   vertical: [{ column: 'vertical', kind: 'text' }],
+  comments: [{ column: 'comments', kind: 'text' }, { column: 'notes', kind: 'text' }],
   date_of_allocation: [{ column: 'allocation_date', kind: 'date' }]
 }
 
