@@ -112,6 +112,15 @@ const getCanonicalClients = (clients) => {
   return [...map.values()].sort((a, b) => String(a.client_name || a.name || '').localeCompare(String(b.client_name || b.name || ''), undefined, { sensitivity: 'base' }))
 }
 
+const isPlaceholderContact = (client) => {
+  if (!client.client_group_id || client.id === client.client_group_id) return false
+  const contactName = normalizeText(client.contact_person || client.contact)
+  const hasOnlyPlaceholderName = !contactName || /^contact\s+\d+$/.test(contactName)
+  const hasContactDetails = ['mobile', 'phone', 'email', 'linkedin', 'designation']
+    .some(key => normalizeText(client[key]))
+  return hasOnlyPlaceholderName && !hasContactDetails
+}
+
 const getConsultantNameFromUser = (user) => {
   const profileName = String(user?.name || user?.profile_name || '').trim()
   if (profileName) return profileName
@@ -310,6 +319,7 @@ export default function ClientsPage() {
   const groupedClients = useMemo(() => {
     const groups = new Map()
     clients.forEach((client) => {
+      if (isPlaceholderContact(client)) return
       const key = client.client_group_id || client.id
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key).push(client)
@@ -686,7 +696,7 @@ export default function ClientsPage() {
             <span className="inline-action-cell">
               {(client._contacts || []).length > 1 ? (
                 <select className="filter-select compact-select" value={contact.id} onChange={(event) => setSelectedContacts((current) => ({ ...current, [client._contact_group_id]: event.target.value }))}>
-                  {client._contacts.map((item, index) => <option key={item.id} value={item.id}>{item.contact_person || item.contact || `Contact ${index + 1}`}</option>)}
+                  {client._contacts.map((item) => <option key={item.id} value={item.id}>{item.contact_person || item.contact}</option>)}
                 </select>
               ) : (
                 <span>{dash(contact.contact_person || contact.contact)}</span>

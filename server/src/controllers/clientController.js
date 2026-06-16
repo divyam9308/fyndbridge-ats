@@ -46,6 +46,13 @@ function normalizeDuplicateText(value) {
   return clean(value).toLowerCase()
 }
 
+function isPlaceholderContactPayload({ contactPerson, mobile, email, linkedin, designation }) {
+  const name = clean(contactPerson).toLowerCase()
+  const hasPlaceholderName = !name || /^contact\s+\d+$/.test(name)
+  const hasDetails = [mobile, email, linkedin, designation].some(value => Boolean(clean(value)))
+  return hasPlaceholderName && !hasDetails
+}
+
 function displayIdNumber(value, prefix) {
   const match = String(value || '').match(new RegExp(`^${prefix}\\s*(\\d+)$`, 'i'))
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
@@ -251,6 +258,11 @@ function clientPayload(body) {
   }
   if (body.client_group_id && !contactPerson) {
     const err = new Error('Contact Person is required')
+    err.statusCode = 400
+    throw err
+  }
+  if (body.client_group_id && isPlaceholderContactPayload({ contactPerson, mobile, email, linkedin: body.linkedin, designation: body.designation })) {
+    const err = new Error('Enter real contact details before saving a contact person')
     err.statusCode = 400
     throw err
   }
