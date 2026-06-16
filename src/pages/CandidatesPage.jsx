@@ -438,6 +438,18 @@ export default function CandidatesPage() {
   }, [importOpen, parsed, focusPopup])
 
   useEffect(() => {
+    if (!importOpen) return undefined
+    const blockEscapeClose = (event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation?.()
+    }
+    document.addEventListener('keydown', blockEscapeClose, true)
+    return () => document.removeEventListener('keydown', blockEscapeClose, true)
+  }, [importOpen])
+
+  useEffect(() => {
     if (candidateDuplicate) focusPopup(duplicateModalRef)
   }, [candidateDuplicate, focusPopup])
 
@@ -1947,7 +1959,7 @@ export default function CandidatesPage() {
 
       {/* ===== Bulk Resume Review Modal ===== */}
       {importOpen && createPortal((
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeImport()}>
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { e.preventDefault(); e.stopPropagation() } }}>
           <div className="modal-card modal-card-lg" ref={importModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Parse and add candidates">
             <div className="modal-header">
               <span className="modal-title">{parsed ? 'Parse & Add Candidates' : 'Upload Resumes'}</span>
