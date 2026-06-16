@@ -121,6 +121,7 @@ export default function JobsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [totalJobs, setTotalJobs] = useState(0)
+  const [openingDocument, setOpeningDocument] = useState('')
   const [visibleColumns, setVisibleColumns] = useState(DEFAULT_MANDATE_COLUMN_KEYS)
   const [pendingColumns, setPendingColumns] = useState(DEFAULT_MANDATE_COLUMN_KEYS)
   const [savedColumns, setSavedColumns] = useState(null)
@@ -176,6 +177,15 @@ export default function JobsPage() {
       setLoading(false)
     }
   }, [aiFilters, page, pageSize, sortDirection, sortField])
+
+  const openDocument = useCallback(async (key, url) => {
+    setOpeningDocument(key)
+    try {
+      await openProtectedUrl(url)
+    } finally {
+      setOpeningDocument('')
+    }
+  }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(fetchData, 0)
@@ -596,7 +606,10 @@ export default function JobsPage() {
       case 'allocationDate':
         return <td key={column.key}>{dash(job.allocation_date)}</td>
       case 'jd':
-        return <td key={column.key}>{job.jd_url ? <a href={job.jd_url} target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD" onClick={(event) => { event.preventDefault(); openProtectedUrl(job.jd_url) }}><FileText size={15} /></a> : '-'}</td>
+        {
+          const docKey = `jd-${job.id}`
+          return <td key={column.key}>{job.jd_url ? <a href="#" target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD" onClick={(event) => { event.preventDefault(); openDocument(docKey, job.jd_url) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
+        }
       case 'action':
         return <td key={column.key}><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)}><Pencil size={13} /></button></td>
       default:
@@ -944,7 +957,7 @@ export default function JobsPage() {
                 <div className="form-group">
                   <label className="form-label">JD File</label>
                   <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="form-control" onChange={e => setJdFile(e.target.files?.[0] || null)} disabled={saving} />
-                  {form.jd_url && <a className="cv-table-link" href={form.jd_url} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); openProtectedUrl(form.jd_url) }}><FileText size={13} /> Current JD</a>}
+                  {form.jd_url && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); openDocument('jd-form', form.jd_url) }}>{openingDocument === 'jd-form' ? <Loader2 size={13} className="spin" /> : <FileText size={13} />} Current JD</a>}
                 </div>
               </div>
             </div>

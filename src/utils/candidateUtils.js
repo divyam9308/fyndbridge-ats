@@ -126,4 +126,4 @@ export const logCandidateCvOpen = (candidate) => {
   if (import.meta.env?.DEV) console.log('[CV open]', { candidateId: candidate?.candidateId || candidate?.id || '' })
 }
 import { STORAGE_BUCKETS } from './storageBuckets'
-export { openProtectedUrl } from '../services/apiClient'
+export { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'

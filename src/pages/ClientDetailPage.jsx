@@ -4,7 +4,7 @@ import { useLocation, useParams, Link } from 'react-router-dom'
 import { ChevronDown, ChevronLeft, AlertCircle, Loader2, Briefcase, FileText, Pencil, X } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientDetailPage.css'
-import { apiCandidateToUi, logCandidateCvOpen, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
+import { apiCandidateToUi, logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
@@ -99,6 +99,7 @@ export default function ClientDetailPage() {
   const [savingCandidate, setSavingCandidate] = useState(false)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
+  const [openingDocument, setOpeningDocument] = useState('')
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
   const editModalRef = useRef(null)
@@ -110,6 +111,15 @@ export default function ClientDetailPage() {
       const target = node.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])')
       ;(target || node).focus({ preventScroll: true })
     })
+  }, [])
+
+  const openDocument = useCallback(async (key, url) => {
+    setOpeningDocument(key)
+    try {
+      await openProtectedUrl(url)
+    } finally {
+      setOpeningDocument('')
+    }
   }, [])
 
   useEffect(() => {
@@ -443,11 +453,18 @@ export default function ClientDetailPage() {
       case 'expectedSalary': return <td key={key}>{fmt(c.expectedSalary)}</td>
       case 'relocate': return <td key={key}>{c.openToRelocate || '-'}</td>
       case 'comments': return <td key={key} className="cell-ellipsis">{c.notes || '-'}</td>
-      case 'linkedin': return <td key={key}>{c.linkedinUrl ? <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="table-link">LinkedIn</a> : '-'}</td>
+      case 'linkedin': {
+        const linkedInUrl = normalizeExternalUrl(c.linkedinUrl)
+        return <td key={key}>{linkedInUrl ? <a href={linkedInUrl} target="_blank" rel="noopener noreferrer" className="table-link" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openExternalUrl(linkedInUrl) }}>LinkedIn</a> : '-'}</td>
+      }
       case 'status': return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status || '-'}</span></td>
       case 'offeredCtc': return <td key={key}>{c.status === 'Hired' ? fmt(c.offeredCtc) : '-'}</td>
       case 'dateOfJoining': return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
-      case 'cv': return <td key={key}>{resolveCandidateCvHref(c) ? <a href={resolveCandidateCvHref(c)} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={(event) => { event.preventDefault(); logCandidateCvOpen(c); openProtectedUrl(resolveCandidateCvHref(c)) }}><FileText size={15} /></a> : '-'}</td>
+      case 'cv': {
+        const cvHref = resolveCandidateCvHref(c)
+        const docKey = `cv-${c.associationId || c.id}`
+        return <td key={key}>{cvHref ? <a href="#" target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={(event) => { event.preventDefault(); event.stopPropagation(); logCandidateCvOpen(c); openDocument(docKey, cvHref) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
+      }
       case 'month': return <td key={key}>{formatMonth(c.createdAt)}</td>
       case 'action': return <td key={key}><button className="row-action-btn" type="button" title="Edit Candidate" onClick={() => openEditCandidate(c)}><Pencil size={13} /></button></td>
       default: return null

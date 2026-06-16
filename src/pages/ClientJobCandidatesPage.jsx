@@ -19,8 +19,18 @@ export default function ClientJobCandidatesPage() {
   const [client, setClient] = useState(null)
   const [job, setJob] = useState(null)
   const [candidates, setCandidates] = useState([])
+  const [openingDocument, setOpeningDocument] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  const openDocument = async (key, url) => {
+    setOpeningDocument(key)
+    try {
+      await openProtectedUrl(url)
+    } finally {
+      setOpeningDocument('')
+    }
+  }
 
   const statusFilter = searchParams.get('status') || 'All'
 
@@ -228,8 +238,8 @@ export default function ClientJobCandidatesPage() {
                     <td>{c.consultant || '—'}</td>
                     <td>
                       {resolveCandidateCvHref(c) ? (
-                        <a href={resolveCandidateCvHref(c)} target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={(event) => { event.preventDefault(); logCandidateCvOpen(c); openProtectedUrl(resolveCandidateCvHref(c)) }}>
-                          <FileText size={15} strokeWidth={2} />
+                        <a href="#" target="_blank" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={(event) => { event.preventDefault(); event.stopPropagation(); logCandidateCvOpen(c); openDocument(`cv-${c.associationId || c.id}`, resolveCandidateCvHref(c)) }}>
+                          {openingDocument === `cv-${c.associationId || c.id}` ? <Loader2 size={15} className="spin" /> : <FileText size={15} strokeWidth={2} />}
                         </a>
                       ) : (
                         <span style={{ color: 'var(--gray-400)', fontSize: 12 }}>—</span>

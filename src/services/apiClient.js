@@ -47,13 +47,42 @@ export function installApiFetchInterceptor() {
   window.__fbApiFetchInstalled = true
 }
 
-export async function openProtectedUrl(url) {
-  if (!url) return
-  if (!isPrivateApiUrl(url)) {
-    window.open(url, '_blank', 'noopener,noreferrer')
-    return
+export function normalizeExternalUrl(url) {
+  const text = String(url || '').trim()
+  if (!text || text === '-') return ''
+  const value = /^https?:\/\//i.test(text) ? text : `https://${text}`
+  try {
+    const parsed = new URL(value)
+    return ['http:', 'https:'].includes(parsed.protocol) && parsed.hostname.includes('.') ? parsed.href : ''
+  } catch {
+    return ''
   }
-  const popup = window.open('', '_blank')
+}
+
+function openUrlInNewTab(url) {
+  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+  if (opened) return true
+  const link = document.createElement('a')
+  link.href = url
+  link.target = '_blank'
+  link.rel = 'noopener noreferrer'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  return true
+}
+
+export function openExternalUrl(url) {
+  const normalized = normalizeExternalUrl(url)
+  if (!normalized) return false
+  return openUrlInNewTab(normalized)
+}
+
+export async function openProtectedUrl(url) {
+  if (!url) return false
+  if (!isPrivateApiUrl(url)) {
+    return openExternalUrl(url)
+  }
   try {
     const response = await apiFetch(url)
     if (!response.ok) throw new Error('Unauthorized')
@@ -61,17 +90,17 @@ export async function openProtectedUrl(url) {
     if (contentType.includes('application/json')) {
       const payload = await response.json().catch(() => ({}))
       if (!payload.url) throw new Error('Document unavailable')
-      if (popup) popup.location.href = payload.url
-      else window.open(payload.url, '_blank', 'noopener,noreferrer')
-      return
+      openUrlInNewTab(payload.url)
+      return true
     }
     const blob = await response.blob()
     const objectUrl = URL.createObjectURL(blob)
-    if (popup) popup.location.href = objectUrl
-    else window.open(objectUrl, '_blank', 'noopener,noreferrer')
+    openUrlInNewTab(objectUrl)
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+    return true
   } catch {
-    if (popup) popup.close()
+    window.alert('Please allow pop-ups to open the document.')
+    return false
   }
 }
 

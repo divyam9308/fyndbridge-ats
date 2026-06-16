@@ -8,7 +8,7 @@ import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
-import { logCandidateCvOpen, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
+import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
@@ -305,6 +305,7 @@ export default function CandidatesPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [totalCandidates, setTotalCandidates] = useState(0)
+  const [openingDocument, setOpeningDocument] = useState('')
   const activeConsultantName = getConsultantNameFromUser(getCurrentUser())
 
   // Filters
@@ -474,6 +475,15 @@ export default function CandidatesPage() {
       if (showLoading) setLoadingCandidates(false)
     }
   }, [aiAppliedPrompt, aiFilters, filterJob, page, pageSize, sortDirection, sortField])
+
+  const openDocument = useCallback(async (key, url) => {
+    setOpeningDocument(key)
+    try {
+      await openProtectedUrl(url)
+    } finally {
+      setOpeningDocument('')
+    }
+  }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1578,7 +1588,7 @@ export default function CandidatesPage() {
         return <td key={key}>{renderCommentsCell(c)}</td>
       case 'linkedin':
         {
-          const linkedinUrl = String(c.linkedinUrl || '').trim()
+          const linkedinUrl = normalizeExternalUrl(c.linkedinUrl)
           return (
           <td key={key}>
             {linkedinUrl ? (
@@ -1597,11 +1607,13 @@ export default function CandidatesPage() {
         return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
       case 'cv': {
         const cvHref = resolveCandidateCvHref(c)
+        const docKey = `cv-${c.associationId || c.id}`
+        const isOpening = openingDocument === docKey
         return (
           <td key={key}>
             {cvHref ? (
-              <a href={cvHref} target="_blank" rel="noopener noreferrer" className="cv-table-link candidate-cv-link" title="Open CV" onClick={event => { event.preventDefault(); event.stopPropagation(); logCandidateCvOpen(c); openProtectedUrl(cvHref) }}>
-                <FileText size={15} strokeWidth={2} />
+              <a href="#" target="_blank" rel="noopener noreferrer" className="cv-table-link candidate-cv-link" title="Open CV" onClick={event => { event.preventDefault(); event.stopPropagation(); logCandidateCvOpen(c); openDocument(docKey, cvHref) }}>
+                {isOpening ? <Loader2 size={15} className="spin" /> : <FileText size={15} strokeWidth={2} />}
               </a>
             ) : (
               <span className="candidate-empty-value">-</span>
@@ -1812,10 +1824,10 @@ export default function CandidatesPage() {
             <div className="candidate-drawer-actions">
               <button className="btn-primary" onClick={() => openEditCandidate(selectedCandidate)}>Edit</button>
               {resolveCandidateCvHref(selectedCandidate) && (
-                <a className="btn-secondary" href={resolveCandidateCvHref(selectedCandidate)} target="_blank" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); logCandidateCvOpen(selectedCandidate); openProtectedUrl(resolveCandidateCvHref(selectedCandidate)) }}><FileText size={14} /> CV</a>
+                <a className="btn-secondary" href="#" target="_blank" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); logCandidateCvOpen(selectedCandidate); openDocument(`cv-detail-${selectedCandidate.associationId || selectedCandidate.id}`, resolveCandidateCvHref(selectedCandidate)) }}>{openingDocument === `cv-detail-${selectedCandidate.associationId || selectedCandidate.id}` ? <Loader2 size={14} className="spin" /> : <FileText size={14} />} CV</a>
               )}
-              {selectedCandidate.linkedinUrl && (
-                <a className="btn-secondary" href={selectedCandidate.linkedinUrl} target="_blank" rel="noopener noreferrer">LinkedIn</a>
+              {normalizeExternalUrl(selectedCandidate.linkedinUrl) && (
+                <a className="btn-secondary" href={normalizeExternalUrl(selectedCandidate.linkedinUrl)} target="_blank" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); openExternalUrl(selectedCandidate.linkedinUrl) }}>LinkedIn</a>
               )}
             </div>
 
