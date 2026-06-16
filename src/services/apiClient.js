@@ -24,67 +24,89 @@ export async function authHeaders(existing = undefined) {
 export async function apiFetch(input, init = {}) {
   const url = typeof input === 'string' ? input : input?.url || ''
   const needsAuth = isPrivateApiUrl(url)
-  const headers = needsAuth ? await authHeaders(init.headers || (typeof input !== 'string' ? input.headers : undefined)) : new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined) || {})
+  const headers = needsAuth
+    ? await authHeaders(init.headers || (typeof input !== 'string' ? input.headers : undefined))
+    : new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined) || {})
+
   const response = await window.fetch(input, { ...init, headers })
+
   if (needsAuth && response.status === 401) {
     window.dispatchEvent(new CustomEvent(API_UNAUTHORIZED_EVENT, { detail: { url } }))
   }
+
   return response
 }
 
 export function installApiFetchInterceptor() {
   if (typeof window === 'undefined' || window.__fbApiFetchInstalled) return
+
   const nativeFetch = window.fetch.bind(window)
+
   window.fetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input?.url || ''
     const needsAuth = isPrivateApiUrl(url)
-    const headers = needsAuth ? await authHeaders(init.headers || (typeof input !== 'string' ? input.headers : undefined)) : init.headers
+    const headers = needsAuth
+      ? await authHeaders(init.headers || (typeof input !== 'string' ? input.headers : undefined))
+      : init.headers
+
     const response = await nativeFetch(input, needsAuth ? { ...init, headers } : init)
+
     if (needsAuth && response.status === 401) {
       window.dispatchEvent(new CustomEvent(API_UNAUTHORIZED_EVENT, { detail: { url } }))
     }
+
     return response
   }
+
   window.__fbApiFetchInstalled = true
 }
 
 export function normalizeExternalUrl(url) {
   const text = String(url || '').trim()
   if (!text || text === '-') return ''
+
   const value = /^https?:\/\//i.test(text) ? text : `https://${text}`
+
   try {
     const parsed = new URL(value)
-    return ['http:', 'https:'].includes(parsed.protocol) && parsed.hostname.includes('.') ? parsed.href : ''
+    return ['http:', 'https:'].includes(parsed.protocol) && parsed.hostname.includes('.')
+      ? parsed.href
+      : ''
   } catch {
     return ''
   }
 }
 
 function openUrlInNewTab(url) {
-  if (!String(url || '').startsWith('blob:') && !normalizeExternalUrl(url)) return false
-  console.log('[document open] window.open', { url })
-  const opened = window.open(url, '_blank', 'noopener,noreferrer')
-  if (opened) return true
-  const link = document.createElement('a')
-  link.href = url
-  link.target = '_blank'
-  link.rel = 'noopener noreferrer'
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  return true
+  const text = String(url || '').trim()
+  const isBlobUrl = text.startsWith('blob:')
+  const normalized = isBlobUrl ? text : normalizeExternalUrl(text)
+
+  if (!normalized) return false
+
+  console.log('[document open] window.open', { url: normalized })
+
+  const opened = window.open(normalized, '_blank', 'noopener,noreferrer')
+
+  // Important: do NOT fallback to creating <a target="_blank"> and clicking it.
+  // That fallback can cause duplicate openings in Chromium/Vercel builds.
+  return Boolean(opened)
 }
 
 function showDocumentToast(message) {
   const existing = document.querySelector('[data-document-open-toast="true"]')
   if (existing) existing.remove()
+
   const toast = document.createElement('div')
   toast.className = 'notice-toast is-visible'
   toast.dataset.documentOpenToast = 'true'
+
   const text = document.createElement('span')
   text.textContent = message
+
   toast.appendChild(text)
   document.body.appendChild(toast)
+
   window.setTimeout(() => toast.remove(), 5000)
 }
 
@@ -96,32 +118,72 @@ export function openExternalUrl(url) {
 
 function acquireDocumentLock(url) {
   const key = String(url || '').trim()
+  if (!key) return false
+
   const now = Date.now()
   const expiresAt = documentOpenLocks.get(key) || 0
+
   if (expiresAt > now) return false
-  documentOpenLocks.set(key, now + 1000)
+
+  documentOpenLocks.set(key, now + 1500)
+
+  window.setTimeout(() => {
+    if ((documentOpenLocks.get(key) || 0) <= Date.now()) {
+      documentOpenLocks.delete(key)
+    }
+  }, 1600)
+
   return true
 }
 
 export async function openProtectedUrl(url, options = {}) {
-  if (!url) return false
-  if (!acquireDocumentLock(url)) return false
+  const rawUrl = String(url || '').trim()
+  if (!rawUrl) return false
+
+  if (!acquireDocumentLock(rawUrl)) return false
+
   const notFoundMessage = options.notFoundMessage || 'Document file not found. Please re-upload the CV.'
-  if (!isPrivateApiUrl(url)) {
-    return openExternalUrl(url)
+
+  if (!isPrivateApiUrl(rawUrl)) {
+    const opened = openExternalUrl(rawUrl)
+    if (!opened) showDocumentToast('Please allow pop-ups to open the document.')
+    return opened
   }
+
   try {
-    console.log('[document open] request', { url })
-    const response = await apiFetch(url)
+    console.log('[document open] request', { url: rawUrl })
+
+    const response = await apiFetch(rawUrl)
     const contentType = response.headers.get('content-type') || ''
+
     if (!response.ok) {
-      const payload = contentType.includes('application/json') ? await response.json().catch(() => ({})) : {}
+      const payload = contentType.includes('application/json')
+        ? await response.json().catch(() => ({}))
+        : {}
+
       throw new Error(payload.error || notFoundMessage)
     }
+
     const payload = await response.json().catch(() => ({}))
-    console.log('[document open] signed URL result', { ok: Boolean(payload.url), path: payload.path || '' })
-    if (!normalizeExternalUrl(payload.url)) throw new Error(payload.error || notFoundMessage)
-    openUrlInNewTab(payload.url)
+
+    console.log('[document open] signed URL result', {
+      ok: Boolean(payload.url),
+      path: payload.path || '',
+    })
+
+    const signedUrl = normalizeExternalUrl(payload.url)
+
+    if (!signedUrl) {
+      throw new Error(payload.error || notFoundMessage)
+    }
+
+    const opened = openUrlInNewTab(signedUrl)
+
+    if (!opened) {
+      showDocumentToast('Please allow pop-ups to open the document.')
+      return false
+    }
+
     return true
   } catch (err) {
     showDocumentToast(err.message || notFoundMessage)
