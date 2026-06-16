@@ -1,5 +1,6 @@
 const supabase = require('../services/supabaseAdmin')
 const { bucketForType, normalizeStoragePath } = require('../services/storageBuckets')
+const { MIME_BY_EXTENSION, pathExtension } = require('../services/documentFile')
 
 async function fileExists(bucket, objectPath) {
   const slash = objectPath.lastIndexOf('/')
@@ -17,14 +18,19 @@ async function openDocument(req, res) {
     console.log('[document open] storage path', { type: req.params.type, bucket, path })
     if (!bucket || !path) return res.status(400).json({ error: 'Document path is required' })
 
-    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600)
+    const extension = pathExtension(path)
+    const fileName = path.split('/').pop() || `document.${extension || 'pdf'}`
+    const contentType = MIME_BY_EXTENSION[extension] || 'application/octet-stream'
+    const disposition = extension === 'pdf' ? 'inline' : 'attachment'
+    const options = disposition === 'attachment' ? { download: fileName } : undefined
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600, options)
     console.log('[document open] signed URL creation result', { type: req.params.type, ok: Boolean(data?.signedUrl), error: error?.message || '' })
     if (error || !data?.signedUrl) {
       const exists = await fileExists(bucket, path)
       if (!exists) return res.status(404).json({ error: 'Document file not found. Please re-upload the document.', path })
       return res.status(404).json({ error: error?.message || 'Document file could not be opened', path })
     }
-    return res.json({ url: data.signedUrl, path })
+    return res.json({ url: data.signedUrl, fileName, contentType, disposition, path })
   } catch (err) {
     console.error('openDocument:', err.message || err)
     return res.status(500).json({ error: 'Document file could not be opened' })

@@ -1,8 +1,8 @@
 const fs = require('fs/promises')
 const crypto = require('crypto')
-const path = require('path')
 const supabase = require('./supabaseAdmin')
 const { STORAGE_BUCKETS, normalizeStoragePath } = require('./storageBuckets')
+const { getDocumentFileMeta, extensionMatchesPath } = require('./documentFile')
 
 const RESUME_BUCKET = STORAGE_BUCKETS.CV
 
@@ -16,15 +16,6 @@ function normalizeCvLink(value) {
 
 function normalizeResumeStoragePath(value) {
   return normalizeStoragePath(value, RESUME_BUCKET)
-}
-
-function extensionForFile(file) {
-  const ext = path.extname(file.originalname || '').toLowerCase().replace(/[^.a-z0-9]/g, '')
-  if (ext) return ext
-  if (file.mimetype === 'application/pdf') return '.pdf'
-  if (file.mimetype === 'application/msword') return '.doc'
-  if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return '.docx'
-  return '.bin'
 }
 
 async function fileBuffer(file) {
@@ -80,24 +71,40 @@ function publicUrl(objectPath) {
   return data?.publicUrl || ''
 }
 
+async function storageObjectExists(bucket, objectPath) {
+  const cleanPath = normalizeStoragePath(objectPath, bucket)
+  if (!cleanPath) return false
+  const slash = cleanPath.lastIndexOf('/')
+  const folder = slash === -1 ? '' : cleanPath.slice(0, slash)
+  const name = slash === -1 ? cleanPath : cleanPath.slice(slash + 1)
+  const { data, error } = await supabase.storage.from(bucket).list(folder, { search: name, limit: 1 })
+  if (error) return false
+  return (data || []).some((item) => item.name === name)
+}
+
 async function prepareUploadedCv(file) {
   if (!file) return null
+  const meta = getDocumentFileMeta(file)
   const buffer = await fileBuffer(file)
   const hash = sha256(buffer)
   const existing = await findByHash(hash)
-  if (existing?.resume_url || existing?.cv_link) {
+  const existingPath = normalizeResumeStoragePath(existing?.cv_storage_path || existing?.resume_url || existing?.cv_link || '')
+  const canReuseExisting = existingPath &&
+    extensionMatchesPath(existingPath, meta.extension) &&
+    await storageObjectExists(RESUME_BUCKET, existingPath)
+  if (canReuseExisting) {
     return {
-      cv_link: existing.cv_link || existing.resume_url,
-      resume_url: existing.resume_url || existing.cv_link,
+      cv_link: existing.cv_link || existing.resume_url || '',
+      resume_url: existing.resume_url || existing.cv_link || '',
       cv_file_hash: hash,
-      cv_storage_path: normalizeResumeStoragePath(existing.cv_storage_path || ''),
+      cv_storage_path: existingPath,
       duplicate: true
     }
   }
 
-  const objectPath = `${hash}${extensionForFile(file)}`
+  const objectPath = `${hash}.${meta.extension}`
   const { error } = await supabase.storage.from(RESUME_BUCKET).upload(objectPath, buffer, {
-    contentType: file.mimetype,
+    contentType: meta.contentType,
     upsert: false
   })
   const storageDuplicate = Boolean(error && /already exists|duplicate/i.test(error.message || ''))
@@ -108,15 +115,20 @@ async function prepareUploadedCv(file) {
 
 async function checkUploadedCvDuplicate(file) {
   if (!file) return null
+  const meta = getDocumentFileMeta(file)
   const buffer = await fileBuffer(file)
   const hash = sha256(buffer)
   const existing = await findByHash(hash)
+  const existingPath = normalizeResumeStoragePath(existing?.cv_storage_path || existing?.resume_url || existing?.cv_link || '')
+  const canReuseExisting = existingPath &&
+    extensionMatchesPath(existingPath, meta.extension) &&
+    await storageObjectExists(RESUME_BUCKET, existingPath)
   return {
-    duplicate: Boolean(existing),
+    duplicate: Boolean(existing && canReuseExisting),
     cv_link: existing?.cv_link || existing?.resume_url || '',
     resume_url: existing?.resume_url || existing?.cv_link || '',
     cv_file_hash: hash,
-    cv_storage_path: normalizeResumeStoragePath(existing?.cv_storage_path || '')
+    cv_storage_path: canReuseExisting ? existingPath : ''
   }
 }
 
@@ -151,6 +163,7 @@ module.exports = {
   prepareUploadedCv,
   prepareLinkedCv,
   checkUploadedCvDuplicate,
-  checkLinkedCvDuplicate
+  checkLinkedCvDuplicate,
+  storageObjectExists
 }
 

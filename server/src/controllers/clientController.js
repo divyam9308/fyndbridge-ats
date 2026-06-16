@@ -214,11 +214,6 @@ function normalizeClient(row, activeJobs = 0, followUps = [], jobs = []) {
 
 async function uploadContractPdf(file) {
   if (!file) return null
-  if (file.mimetype !== 'application/pdf') {
-    const err = new Error('Contract document must be a PDF')
-    err.statusCode = 400
-    throw err
-  }
   return uploadDocument(file, STORAGE_BUCKETS.CONTRACT, String(new Date().getFullYear()))
 }
 

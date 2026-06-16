@@ -391,8 +391,8 @@ export default function ClientsPage() {
 
   const handleContractFile = (event) => {
     const file = event.target.files?.[0] || null
-    if (file && file.type !== 'application/pdf') {
-      setErrors((current) => ({ ...current, contract_document: 'Contract document must be a PDF' }))
+    if (file && !['pdf', 'doc', 'docx'].includes(String(file.name || '').split('.').pop()?.toLowerCase())) {
+      setErrors((current) => ({ ...current, contract_document: 'Contract document must be PDF, DOC, or DOCX' }))
       setContractFile(null)
       event.target.value = ''
       return
@@ -979,7 +979,7 @@ export default function ClientsPage() {
                 {form.contract_signed === 'Yes' && (
                   <div className="form-group">
                     <label className="form-label">Contract PDF</label>
-                    <input type="file" accept="application/pdf" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving} />
+                    <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving} />
                     {form.contract_document && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('contract-form', form.contract_document) }}>{openingDocument === 'contract-form' ? 'Opening...' : 'Current Contract'}</a>}
                     {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
                   </div>

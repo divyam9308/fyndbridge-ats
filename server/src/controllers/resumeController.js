@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid')
 const { parseResume } = require('../services/resumeParser')
 const supabase = require('../services/supabaseAdmin')
 const { RESUME_BUCKET, checkUploadedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
+const { MIME_BY_EXTENSION, pathExtension } = require('../services/documentFile')
 
 function cleanText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
@@ -34,6 +35,8 @@ function rowFromParsed(file, parsed, error = null, storage = {}, warnings = []) 
     resume_url: storage.resume_url || '',
     cv_file_hash: storage.cv_file_hash || '',
     cv_storage_path: storage.cv_storage_path || storage.resume_path || '',
+    cv_original_name: file.originalname || '',
+    cv_mimetype: file.mimetype || '',
     cv_duplicate: Boolean(storage.cv_duplicate),
     warnings,
     error
@@ -113,9 +116,14 @@ async function openResume(req, res) {
       return res.status(400).json({ error: 'Resume path is required' })
     }
 
+    const extension = pathExtension(storagePath)
+    const fileName = storagePath.split('/').pop() || `resume.${extension || 'pdf'}`
+    const contentType = MIME_BY_EXTENSION[extension] || 'application/octet-stream'
+    const disposition = extension === 'pdf' ? 'inline' : 'attachment'
+    const options = disposition === 'attachment' ? { download: fileName } : undefined
     const { data, error } = await supabase.storage
       .from(RESUME_BUCKET)
-      .createSignedUrl(storagePath, 60 * 60)
+      .createSignedUrl(storagePath, 60 * 60, options)
     console.log('[CV open] signed URL creation result', { ok: Boolean(data?.signedUrl), error: error?.message || '' })
     if (error || !data?.signedUrl) {
       const slash = storagePath.lastIndexOf('/')
@@ -127,7 +135,7 @@ async function openResume(req, res) {
       return res.status(404).json({ error: error?.message || 'Resume file could not be opened', path: storagePath })
     }
 
-    return res.json({ url: data.signedUrl, path: storagePath })
+    return res.json({ url: data.signedUrl, fileName, contentType, disposition, path: storagePath })
   } catch (err) {
     console.error('openResume:', err.message)
     return res.status(500).json({ error: 'Resume file could not be opened' })

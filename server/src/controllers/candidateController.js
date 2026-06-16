@@ -656,12 +656,12 @@ async function applyCvInput(req, candidatePayload) {
       await fs.access(tempResumePath)
       const tempFile = {
         path: tempResumePath,
-        originalname: path.basename(tempResumePath),
-        mimetype: tempResumePath.toLowerCase().endsWith('.pdf')
+        originalname: req.body.cv_original_name || path.basename(tempResumePath),
+        mimetype: req.body.cv_mimetype || (tempResumePath.toLowerCase().endsWith('.pdf')
           ? 'application/pdf'
           : tempResumePath.toLowerCase().endsWith('.docx')
             ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-            : 'application/msword'
+            : 'application/msword')
       }
       const cv = await prepareUploadedCv(tempFile)
       if (cv) {

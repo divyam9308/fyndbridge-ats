@@ -84,7 +84,7 @@ function openUrlInNewTab(url) {
 
   if (!normalized) return false
 
-  console.log('[document open] window.open', { url: normalized })
+  console.log('[document open] window.open', { ok: true })
 
   const opened = window.open(normalized, '_blank', 'noopener,noreferrer')
 

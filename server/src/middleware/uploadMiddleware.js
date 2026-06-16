@@ -1,4 +1,5 @@
 const multer = require('multer')
+const { getDocumentFileMeta } = require('../services/documentFile')
 
 const upload = multer({
   dest: '/tmp/',
@@ -6,18 +7,12 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = new Set([
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ])
-    if (!allowedTypes.has(file.mimetype)) {
-      const error = new Error('Only PDF, DOC, and DOCX files are accepted')
-      error.statusCode = 400
+    try {
+      getDocumentFileMeta(file)
+      return cb(null, true)
+    } catch (error) {
       return cb(error)
     }
-
-    return cb(null, true)
   }
 })
 

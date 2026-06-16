@@ -169,7 +169,7 @@ const EMPTY_CAND = {
   noticePeriod:'', openToRelocate:'',
   offeredCtc:'', dateOfJoining:'',
   client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', status:'',
-  cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
+  cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', cvOriginalName:'', cvMimetype:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
 }
 
 const apiCandidateToUi = (row) => ({
@@ -277,6 +277,8 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     cv_link: f.cvLink,
     cv_file_hash: f.cvFileHash || undefined,
     cv_storage_path: f.cvStoragePath || undefined,
+    cv_original_name: f.cvOriginalName || undefined,
+    cv_mimetype: f.cvMimetype || undefined,
     linkedin_url: f.linkedinUrl,
     notes: f.notes,
     consultant_name: f.consultantName || consultantName || '',
@@ -986,6 +988,8 @@ export default function CandidatesPage() {
       cvLink: row.resume_url || '',
       cvFileHash: row.cv_file_hash || '',
       cvStoragePath: row.resume_path || row.cv_storage_path || '',
+      cvOriginalName: row.cv_original_name || row.file_name || '',
+      cvMimetype: row.cv_mimetype || '',
       notes: row.summary || row.error || '',
       source: 'resume'
     }

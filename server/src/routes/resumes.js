@@ -1,14 +1,9 @@
 const express = require('express')
 const multer = require('multer')
 const controller = require('../controllers/resumeController')
+const { getDocumentFileMeta } = require('../services/documentFile')
 
 const router = express.Router()
-
-const allowedTypes = new Set([
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-])
 
 const upload = multer({
   dest: '/tmp/',
@@ -17,13 +12,12 @@ const upload = multer({
     files: 10
   },
   fileFilter: (req, file, cb) => {
-    if (!allowedTypes.has(file.mimetype)) {
-      const error = new Error('Only PDF, DOC, and DOCX files are accepted')
-      error.statusCode = 400
+    try {
+      getDocumentFileMeta(file)
+      return cb(null, true)
+    } catch (error) {
       return cb(error)
     }
-
-    return cb(null, true)
   }
 })
 
