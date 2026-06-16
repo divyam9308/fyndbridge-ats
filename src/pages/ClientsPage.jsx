@@ -5,12 +5,14 @@ import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
+import TablePopover from '../components/TablePopover'
 import CompactPagination from '../components/CompactPagination'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { filterPills, highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
+import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 const STATUSES = ['Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const STATUS_OPTIONS = ['', ...STATUSES]
@@ -212,6 +214,8 @@ export default function ClientsPage() {
   const [totalClients, setTotalClients] = useState(0)
   const [openingDocument, setOpeningDocument] = useState('')
   const [statusOpen, setStatusOpen] = useState(false)
+  const [tablePopover, setTablePopover] = useState(null)
+  const [statusSaving, setStatusSaving] = useState({})
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
   const [selectedExistingClientId, setSelectedExistingClientId] = useState(null)
   const [addingNewClient, setAddingNewClient] = useState(false)
@@ -672,9 +676,47 @@ export default function ClientsPage() {
         const payload = await response.json().catch(() => ({}))
         throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
       }
+      setVisibleColumns(value)
+      setPendingColumns(value)
       setSavedColumns(value)
+      setColumnsOpen(false)
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  const toggleTablePopover = (type, id, element) => {
+    if (!element || !id) return
+    const anchorRect = element.getBoundingClientRect()
+    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorRect })
+  }
+
+  const updateClientStatus = async (client, status) => {
+    const previousClients = clients
+    const previousAllClients = allClients
+    const nextStatus = status === '-' ? '' : status
+    setClients(current => current.map(row => row.id === client.id ? { ...row, status: nextStatus } : row))
+    setAllClients(current => current.map(row => row.id === client.id ? { ...row, status: nextStatus } : row))
+    setStatusSaving(current => ({ ...current, [client.id]: true }))
+    setTablePopover(null)
+    try {
+      const body = new FormData()
+      body.append('status', nextStatus)
+      const response = await fetch(`/api/clients/${client.id}`, {
+        method: 'PATCH',
+        body
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.detail || data.error || 'Unable to update client status.')
+      setClients(current => current.map(row => row.id === client.id ? { ...row, ...data } : row))
+      setAllClients(current => current.map(row => row.id === client.id ? { ...row, ...data } : row))
+      setError(null)
+    } catch (err) {
+      setClients(previousClients)
+      setAllClients(previousAllClients)
+      setError(err.message)
+    } finally {
+      setStatusSaving(current => ({ ...current, [client.id]: false }))
     }
   }
 
@@ -783,7 +825,7 @@ export default function ClientsPage() {
       case 'sector':
         return <td key={key}>{highlightText(dash(client.sector), aiFilters)}</td>
       case 'connectedOnDate':
-        return <td key={key}>{highlightText(dash(client.connected_on_date), aiFilters)}</td>
+        return <td key={key}>{highlightText(formatDateDDMMYYYY(client.connected_on_date), aiFilters)}</td>
       case 'comments':
         return <td key={key}>{highlightText(dash(followUp?.follow_up_comments || client.comments), aiFilters)}</td>
       case 'followUpDate':
@@ -795,15 +837,23 @@ export default function ClientsPage() {
                   {client.follow_ups.map((item) => <option key={item.id} value={item.id}>Follow Up {item.follow_up_number}</option>)}
                 </select>
               ) : (
-                <span>{dash(client.follow_up_date)}</span>
+                <span>{formatDateDDMMYYYY(client.follow_up_date)}</span>
               )}
-              <span>{followUp?.follow_up_date || ''}</span>
+              <span>{formatDateDDMMYYYY(followUp?.follow_up_date)}</span>
               <button className="row-action-btn" type="button" title="Add Follow Up" onClick={() => { setFollowUpClient(client); setFollowUpForm({ follow_up_date: todayLocal(), follow_up_comments: '' }) }}><Plus size={12} /></button>
             </span>
           </td>
         )
       case 'status':
-        return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[client.status] || 'badge-not-converted'}`}>{highlightText(dash(client.status), aiFilters)}</span></td>
+        return (
+          <td key={key}>
+            <div className="candidate-columns-control mandate-status-control">
+              <button className={`badge ${STATUS_BADGE_MAP[client.status] || 'badge-not-converted'}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('client-status', client.id, event.currentTarget)} disabled={statusSaving[client.id]}>
+                {highlightText(dash(client.status), aiFilters)}
+              </button>
+            </div>
+          </td>
+        )
       case 'termsSigned':
         return <td key={key}>{commercialDash(client, termsLabel(client))}</td>
       case 'value':
@@ -976,6 +1026,21 @@ export default function ClientsPage() {
         onPageChange={setPage}
         onPageSizeChange={(value) => { setPageSize(value); setPage(1) }}
       />
+
+      {tablePopover?.type === 'client-status' && (() => {
+        const client = groupedClients.find(item => item.id === tablePopover.id)
+        if (!client) return null
+        return (
+          <TablePopover anchorRect={tablePopover.anchorRect} width={190} onClose={() => setTablePopover(null)}>
+            <button className="candidate-columns-action" type="button" onClick={() => updateClientStatus(client, '-')}>-</button>
+            {STATUSES.map(status => (
+              <button className="candidate-columns-action" type="button" key={status} onClick={() => updateClientStatus(client, status)}>
+                {status}
+              </button>
+            ))}
+          </TablePopover>
+        )
+      })()}
 
       {isOpen && createPortal((
         <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && editingClient && setIsOpen(false)}>

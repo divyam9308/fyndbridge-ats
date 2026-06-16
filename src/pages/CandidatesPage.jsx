@@ -13,6 +13,7 @@ import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateC
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
 import { filterPills, highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
+import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 /* ====== Static reference data ====== */
 const STATUS_OPTIONS = CANDIDATE_STATUS_OPTIONS
@@ -50,24 +51,14 @@ const duplicateIdentityTokens = (candidate) => {
   if (isMeaningfulDuplicateValue(email)) tokens.push(`e:${email}`)
   return tokens
 }
-const formatDate = (value) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`
-}
+const formatDate = formatDateDDMMYYYY
 
 const notifyAiQuota = (message) => {
   if (message === 'AI quota reached') {
     window.dispatchEvent(new CustomEvent('ai-quota-reached', { detail: 'AI quota reached' }))
   }
 }
-const formatMonth = (value) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('en-US', { month: 'short' })
-}
+const formatMonth = formatDateDDMMYYYY
 const avatarColorsFor = (value) => {
   const text = String(value || '').trim()
   const hash = [...text].reduce((sum, char) => sum + char.charCodeAt(0), 0)
@@ -684,7 +675,10 @@ export default function CandidatesPage() {
         throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
       }
 
+      setVisibleColumns(value)
+      setPendingColumns(value)
       setSavedColumns(value)
+      setColumnsOpen(false)
     } catch (err) {
       setApiError(err.message)
     }

@@ -238,6 +238,7 @@ async function getNextClientDisplayId(req, res) {
 }
 
 function deriveClientStatus(row, jobs = []) {
+  if (row.status) return row.status
   if (jobs.length && jobs.every((job) => job.status === 'Scrapped' || job.mandate_status === 'Scrapped')) return 'Inactive'
   if (jobs.some((job) => ['Ongoing', 'Completed'].includes(job.status) || ['Ongoing', 'Completed'].includes(job.mandate_status))) return 'Active'
   return row.status || ''

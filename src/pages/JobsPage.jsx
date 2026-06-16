@@ -13,6 +13,7 @@ import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { filterPills, highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
+import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const SORT_OPTIONS = [
@@ -618,7 +619,7 @@ export default function JobsPage() {
       case 'sector':
         return <td key={column.key}>{highlightText(dash(job.vertical), aiFilters)}</td>
       case 'allocationDate':
-        return <td key={column.key}>{dash(job.allocation_date)}</td>
+        return <td key={column.key}>{formatDateDDMMYYYY(job.allocation_date)}</td>
       case 'jd':
         {
           const docKey = `jd-${job.id}`

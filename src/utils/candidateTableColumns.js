@@ -35,5 +35,5 @@ export const mergeCandidateColumnPreference = (value) => {
     ? value.filter(key => !REMOVED_CANDIDATE_COLUMN_KEYS.has(key) && DEFAULT_CANDIDATE_COLUMN_KEYS.includes(key))
     : []
   if (!saved.length) return null
-  return [...saved, ...DEFAULT_CANDIDATE_COLUMN_KEYS.filter(key => !saved.includes(key))]
+  return saved
 }

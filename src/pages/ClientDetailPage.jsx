@@ -11,6 +11,7 @@ import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } fr
 import { supabase } from '../services/supabaseClient'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
+import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
 const MANDATE_SUMMARY_COLUMNS = [
@@ -54,16 +55,8 @@ const displayIdNumber = (value, prefix) => Number(String(value || '').replace(ne
 const compareText = (a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' })
 const initials = (name) => String(name || '').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 const mutedDash = <span className="table-muted-dash">-</span>
-const formatDate = (value) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '-' : `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`
-}
-const formatMonth = (value) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('en-US', { month: 'short' })
-}
+const formatDate = formatDateDDMMYYYY
+const formatMonth = formatDateDDMMYYYY
 const getCurrentUser = () => {
   try {
     return JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
@@ -421,16 +414,28 @@ export default function ClientDetailPage() {
     setColumnsOpen(false)
   }
   const saveColumnPreference = async () => {
-    const session = supabase ? (await supabase.auth.getSession()).data.session : null
-    const currentUser = getCurrentUser()
-    const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
-    const value = pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS
-    await fetch(`/api/user-preferences/${CLIENT_DETAIL_COLUMNS_PREFERENCE_KEY}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, value }),
-    })
-    setSavedColumns(value)
+    try {
+      const session = supabase ? (await supabase.auth.getSession()).data.session : null
+      const currentUser = getCurrentUser()
+      const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
+      const value = pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS
+      const response = await fetch(`/api/user-preferences/${CLIENT_DETAIL_COLUMNS_PREFERENCE_KEY}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, value }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
+      }
+      setVisibleColumns(value)
+      setPendingColumns(value)
+      setSavedColumns(value)
+      setColumnsOpen(false)
+      setError(null)
+    } catch (err) {
+      setError(err.message)
+    }
   }
   const resetColumnsToDefault = () => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const sortLabel = () => {
@@ -524,6 +529,13 @@ export default function ClientDetailPage() {
 
   const renderCandidateCell = ({ key }, c) => {
     const noticeMeta = getNoticeMeta(c.noticePeriod)
+    const ctcValue = (value) => {
+      const text = String(value ?? '').trim()
+      if (!text || text === '-') return '-'
+      if (/₹/.test(text) && /lpa/i.test(text)) return text
+      const normalized = text.replace(/^rs\.?\s*/i, '').replace(/^â‚¹\s*/i, '').replace(/\s*lpa$/i, '').trim()
+      return `₹${normalized} LPA`
+    }
     switch (key) {
       case 'candidateDisplayId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.candidateDisplayId || '-'}</td>
       case 'date': return <td key={key}>{formatDate(c.createdAt)}</td>
@@ -540,10 +552,10 @@ export default function ClientDetailPage() {
       case 'email': return <td key={key}>{c.email || '-'}</td>
       case 'experience': return <td key={key}>{c.exp ? `${c.exp} yrs` : '-'}</td>
       case 'skills': return <td key={key}>{renderSkillsCell(c)}</td>
-      case 'salary': return <td key={key}>{c.salary ? <span className="candidate-money-value">{formatCandidateCtc(c.salary)}</span> : <span className="candidate-empty-value">-</span>}</td>
+      case 'salary': return <td key={key}>{c.salary ? <span className="candidate-money-value">{ctcValue(c.salary)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'location': return <td key={key}>{c.location || c.city || '-'}</td>
       case 'notice': return <td key={key}>{noticeMeta ? <span className={`candidate-notice-pill candidate-notice-pill-${noticeMeta.tone}`}>{noticeMeta.label}</span> : <span className="candidate-empty-value">-</span>}</td>
-      case 'expectedSalary': return <td key={key}>{c.expectedSalary ? <span className="candidate-money-value">{formatCandidateCtc(c.expectedSalary)}</span> : <span className="candidate-empty-value">-</span>}</td>
+      case 'expectedSalary': return <td key={key}>{c.expectedSalary ? <span className="candidate-money-value">{ctcValue(c.expectedSalary)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'relocate': return <td key={key}>{c.openToRelocate || '-'}</td>
       case 'comments': return <td key={key} className="cell-ellipsis">{c.notes || '-'}</td>
       case 'linkedin': {
@@ -568,7 +580,7 @@ export default function ClientDetailPage() {
           </td>
         )
       }
-      case 'offeredCtc': return <td key={key}>{c.offeredCtc ? <span className="candidate-money-value">{formatCandidateCtc(c.offeredCtc)}</span> : <span className="candidate-empty-value">-</span>}</td>
+      case 'offeredCtc': return <td key={key}>{c.offeredCtc ? <span className="candidate-money-value">{ctcValue(c.offeredCtc)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'dateOfJoining': return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
       case 'cv': {
         const cvHref = resolveCandidateCvHref(c)
