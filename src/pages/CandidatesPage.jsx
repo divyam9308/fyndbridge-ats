@@ -513,6 +513,12 @@ export default function CandidatesPage() {
     return () => window.clearTimeout(timer)
   }, [loadCandidates, page])
 
+  useEffect(() => {
+    const refreshCandidates = () => { loadCandidates(page, { showLoading: false }) }
+    window.addEventListener('ats:candidates-updated', refreshCandidates)
+    return () => window.removeEventListener('ats:candidates-updated', refreshCandidates)
+  }, [loadCandidates, page])
+
   const saveCandidateToApi = async (candidate, { update = false, duplicateAction = '' } = {}) => {
     const prepared = await ensureCandidateClient(candidate)
     const body = uiCandidateToApi(prepared, activeConsultantName, dbClients, dbJobs)

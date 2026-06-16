@@ -10,9 +10,33 @@ import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTION
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { supabase } from '../services/supabaseClient'
 import TablePopover from '../components/TablePopover'
+import FloatingDropdown from '../components/FloatingDropdown'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
-const STATUS_COLUMNS = CANDIDATE_STATUSES.map(status => [status, status])
+const MANDATE_SUMMARY_COLUMNS = [
+  ['Interested', 'Interested'],
+  ['Not Interested', 'Not Interested'],
+  ['Rejected by Recruiter', 'Rejected By Recruiter'],
+  ['Client Submission', 'Client Submission'],
+  ['Interview', 'Interview'],
+  ['Rejected by Client', 'Rejected By Client'],
+  ['Offered', 'Offered'],
+  ['Offer Declined', 'Offered Declined'],
+  ['Dropout', 'Dropout'],
+  ['Hired', 'Hired'],
+]
+const CLIENT_DETAIL_STATUS_OPTIONS = [
+  { value: 'Interested', label: 'Interested' },
+  { value: 'Not Interested', label: 'Not Interested' },
+  { value: 'Rejected by Recruiter', label: 'Rejected By Recruiter' },
+  { value: 'Client Submission', label: 'Client Submission' },
+  { value: 'Interview', label: 'Interview' },
+  { value: 'Rejected by Client', label: 'Rejected By Client' },
+  { value: 'Offered', label: 'Offered' },
+  { value: 'Offer Declined', label: 'Offered Declined' },
+  { value: 'Dropout', label: 'Dropout' },
+  { value: 'Hired', label: 'Hired' },
+]
 
 const SORT_OPTIONS = [
   { field: 'candidate_id', label: 'Candidate ID', toggle: true },
@@ -20,13 +44,14 @@ const SORT_OPTIONS = [
   { field: 'consultant', label: 'Consultant', toggle: false },
 ]
 const RELOCATE_OPTIONS = ['', 'Yes', 'No']
+const statusLabelForValue = (value) => CLIENT_DETAIL_STATUS_OPTIONS.find(option => option.value === value)?.label || value
 
 const pageSize = 50
+const CLIENT_DETAIL_COLUMNS_PREFERENCE_KEY = 'clientDetailMandateCandidatesColumns'
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
 const getJobText = (candidate) => candidate.job || candidate.job_title || candidate.jobTitle || candidate.role || candidate.position || 'Unassigned Mandate'
 const displayIdNumber = (value, prefix) => Number(String(value || '').replace(new RegExp(`^${prefix}`, 'i'), '')) || Number.MAX_SAFE_INTEGER
 const compareText = (a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' })
-const fmt = (n) => n ? `Rs. ${Number(n).toLocaleString('en-IN')}` : '-'
 const initials = (name) => String(name || '').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 const mutedDash = <span className="table-muted-dash">-</span>
 const formatDate = (value) => {
@@ -45,6 +70,27 @@ const getCurrentUser = () => {
   } catch {
     return {}
   }
+}
+const formatCandidateCtc = (value) => {
+  const text = String(value ?? '').trim()
+  if (!text || text === '-') return '-'
+  if (/lpa/i.test(text)) return text
+  const normalized = text.replace(/^rs\.?\s*/i, '').replace(/^₹\s*/i, '').trim()
+  return `${normalized} LPA`
+}
+const getNoticeMeta = (value) => {
+  const text = String(value ?? '').trim()
+  if (!text || text === '-') return null
+  const numeric = Number(text.replace(/[^\d.]/g, ''))
+  const label = /days?/i.test(text) ? text : `${text} days`
+  if (!Number.isFinite(numeric)) return { label, tone: 'mid' }
+  if (numeric <= 30) return { label, tone: 'low' }
+  if (numeric < 60) return { label, tone: 'mid' }
+  return { label, tone: 'high' }
+}
+const normalizeSkills = (skills) => {
+  if (Array.isArray(skills)) return skills.map(skill => String(skill || '').trim()).filter(Boolean)
+  return String(skills || '').split(',').map(skill => skill.trim()).filter(Boolean)
 }
 const candidateToEditForm = (candidate) => ({
   association_id: candidate.associationId,
@@ -90,6 +136,7 @@ export default function ClientDetailPage() {
   const [visibleColumns, setVisibleColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const [pendingColumns, setPendingColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const [savedColumns, setSavedColumns] = useState(null)
+  const [columnsAnchor, setColumnsAnchor] = useState(null)
   const [sortField, setSortField] = useState('')
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
@@ -99,6 +146,7 @@ export default function ClientDetailPage() {
   const [savingCandidate, setSavingCandidate] = useState(false)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
+  const [expandedCells, setExpandedCells] = useState({})
   const [openingDocument, setOpeningDocument] = useState('')
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
@@ -196,7 +244,7 @@ export default function ClientDetailPage() {
         const session = supabase ? (await supabase.auth.getSession()).data.session : null
         const currentUser = getCurrentUser()
         const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
-        const response = await fetch(`/api/user-preferences/candidate_columns?user_id=${encodeURIComponent(userId)}`)
+        const response = await fetch(`/api/user-preferences/${CLIENT_DETAIL_COLUMNS_PREFERENCE_KEY}?user_id=${encodeURIComponent(userId)}`)
         const payload = await response.json().catch(() => ({}))
         const value = mergeCandidateColumnPreference(payload.data?.value)
         if (value?.length) {
@@ -211,18 +259,6 @@ export default function ClientDetailPage() {
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
-
-  useEffect(() => {
-    if (!columnsOpen) return
-    const handleClickOutside = (event) => {
-      if (!columnsDropdownRef.current?.contains(event.target)) {
-        setPendingColumns(visibleColumns)
-        setColumnsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [columnsOpen, visibleColumns])
 
   useEffect(() => {
     if (!sortOpen) return
@@ -311,7 +347,15 @@ export default function ClientDetailPage() {
   const openGroup = (groupKey, jobTitle, status = '') => {
     setSelectedGroup({ groupKey, jobTitle, status })
     setPage(1)
+    setTablePopover(null)
   }
+
+  const refreshClientJobs = useCallback(async () => {
+    const jobsRes = await fetch(`/api/jobs?client_id=${clientId}&all=true`)
+    if (!jobsRes.ok) throw new Error('Failed to refresh client jobs.')
+    const jobsPayload = await jobsRes.json().catch(() => ({}))
+    setClientJobs(jobsPayload.data || [])
+  }, [clientId])
 
   const updateMandateStatus = async (group, status) => {
     const job = group.relatedJob
@@ -339,6 +383,38 @@ export default function ClientDetailPage() {
     const anchorRect = element.getBoundingClientRect()
     setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorRect })
   }
+  const updateCandidateStatus = async (candidate, status) => {
+    const associationId = candidate.associationId || candidate.id
+    if (!associationId || candidate.status === status) {
+      setTablePopover(null)
+      return
+    }
+    const previousCandidates = candidates
+    const optimistic = candidates.map(row => row.associationId === associationId ? { ...row, status } : row)
+    setCandidates(optimistic)
+    setStatusSaving(current => ({ ...current, [associationId]: true }))
+    setTablePopover(null)
+    try {
+      const response = await fetch(`/api/candidates/${associationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ association_id: associationId, status }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || Object.values(data.errors || {})[0] || 'Unable to update candidate status.')
+      const updated = apiCandidateToUi(data)
+      setCandidates(current => current.map(row => row.associationId === updated.associationId ? updated : row))
+      await refreshClientJobs()
+      window.dispatchEvent(new Event('ats:jobs-updated'))
+      window.dispatchEvent(new Event('ats:candidates-updated'))
+      setError(null)
+    } catch (err) {
+      setCandidates(previousCandidates)
+      setError(err.message)
+    } finally {
+      setStatusSaving(current => ({ ...current, [associationId]: false }))
+    }
+  }
   const togglePendingColumn = (key) => setPendingColumns(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key])
   const proceedColumns = () => {
     setVisibleColumns(pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS)
@@ -349,13 +425,14 @@ export default function ClientDetailPage() {
     const currentUser = getCurrentUser()
     const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
     const value = pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS
-    await fetch('/api/user-preferences/candidate_columns', {
+    await fetch(`/api/user-preferences/${CLIENT_DETAIL_COLUMNS_PREFERENCE_KEY}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId, value }),
     })
     setSavedColumns(value)
   }
+  const resetColumnsToDefault = () => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const sortLabel = () => {
     const option = SORT_OPTIONS.find(item => item.field === sortField)
     return option ? `${option.label} ${sortDirection === 'asc' ? '↓' : '↑'}` : 'Sort By'
@@ -420,17 +497,33 @@ export default function ClientDetailPage() {
     }
   }
 
+  const toggleExpandedCell = (id, key, event) => {
+    event.stopPropagation()
+    const cellKey = `${id}-${key}`
+    setExpandedCells(current => ({ ...current, [cellKey]: !current[cellKey] }))
+  }
   const renderSkillsCell = (candidate) => {
-    const skills = Array.isArray(candidate.skills) ? candidate.skills.filter(Boolean) : []
+    const skills = normalizeSkills(candidate.skills)
     if (!skills.length) return '-'
+    const cellKey = `${candidate.associationId || candidate.id}-skills`
+    const expanded = Boolean(expandedCells[cellKey])
+    const visibleSkills = expanded ? skills : skills.slice(0, 3)
     return (
-      <div className="table-chip-list">
-        {skills.map(skill => <span className="table-skill-chip" key={skill}>{skill}</span>)}
+      <div className="table-chip-cell">
+        <div className="table-chip-list">
+          {visibleSkills.map(skill => <span className="table-skill-chip" key={skill}>{skill}</span>)}
+        </div>
+        {skills.length > 3 && (
+          <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(candidate.associationId || candidate.id, 'skills', event)}>
+            <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'Show less' : `+${skills.length - 3} more`}
+          </button>
+        )}
       </div>
     )
   }
 
   const renderCandidateCell = ({ key }, c) => {
+    const noticeMeta = getNoticeMeta(c.noticePeriod)
     switch (key) {
       case 'candidateDisplayId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.candidateDisplayId || '-'}</td>
       case 'date': return <td key={key}>{formatDate(c.createdAt)}</td>
@@ -447,18 +540,35 @@ export default function ClientDetailPage() {
       case 'email': return <td key={key}>{c.email || '-'}</td>
       case 'experience': return <td key={key}>{c.exp ? `${c.exp} yrs` : '-'}</td>
       case 'skills': return <td key={key}>{renderSkillsCell(c)}</td>
-      case 'salary': return <td key={key}>{fmt(c.salary)}</td>
+      case 'salary': return <td key={key}>{c.salary ? <span className="candidate-money-value">{formatCandidateCtc(c.salary)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'location': return <td key={key}>{c.location || c.city || '-'}</td>
-      case 'notice': return <td key={key}>{c.noticePeriod !== '' && c.noticePeriod !== null ? c.noticePeriod : '-'}</td>
-      case 'expectedSalary': return <td key={key}>{fmt(c.expectedSalary)}</td>
+      case 'notice': return <td key={key}>{noticeMeta ? <span className={`candidate-notice-pill candidate-notice-pill-${noticeMeta.tone}`}>{noticeMeta.label}</span> : <span className="candidate-empty-value">-</span>}</td>
+      case 'expectedSalary': return <td key={key}>{c.expectedSalary ? <span className="candidate-money-value">{formatCandidateCtc(c.expectedSalary)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'relocate': return <td key={key}>{c.openToRelocate || '-'}</td>
       case 'comments': return <td key={key} className="cell-ellipsis">{c.notes || '-'}</td>
       case 'linkedin': {
         const linkedInUrl = normalizeExternalUrl(c.linkedinUrl)
         return <td key={key}>{linkedInUrl ? <a href={linkedInUrl} target="_blank" rel="noopener noreferrer" className="table-link" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openExternalUrl(linkedInUrl) }}>LinkedIn</a> : '-'}</td>
       }
-      case 'status': return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status || '-'}</span></td>
-      case 'offeredCtc': return <td key={key}>{c.status === 'Hired' ? fmt(c.offeredCtc) : '-'}</td>
+      case 'status': {
+        const associationId = c.associationId || c.id
+        return (
+          <td key={key}>
+            <div className="candidate-columns-control mandate-status-control">
+              <button
+                className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}
+                type="button"
+                onMouseDown={event => event.stopPropagation()}
+                onClick={(event) => toggleTablePopover('candidate-status', associationId, event.currentTarget)}
+                disabled={statusSaving[associationId]}
+              >
+                {c.status ? statusLabelForValue(c.status) : '-'}
+              </button>
+            </div>
+          </td>
+        )
+      }
+      case 'offeredCtc': return <td key={key}>{c.offeredCtc ? <span className="candidate-money-value">{formatCandidateCtc(c.offeredCtc)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'dateOfJoining': return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
       case 'cv': {
         const cvHref = resolveCandidateCvHref(c)
@@ -514,7 +624,7 @@ export default function ClientDetailPage() {
                 <th>Mandate / Role</th>
                 <th>Status</th>
                 <th className="align-center">Candidates Assigned</th>
-                {STATUS_COLUMNS.map(([, label]) => <th className="align-center" key={label}>{label}</th>)}
+                {MANDATE_SUMMARY_COLUMNS.map(([, label]) => <th className="align-center" key={label}>{label}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -530,9 +640,9 @@ export default function ClientDetailPage() {
                     </div>
                   </td>
                   <td className="align-center"><button className="count-badge-link" type="button" onClick={() => openGroup(group.key, group.title)}>{group.stats.total}</button></td>
-                  {STATUS_COLUMNS.map(([key, label]) => (
+                  {MANDATE_SUMMARY_COLUMNS.map(([key, label]) => (
                     <td className="align-center" key={key}>
-                      {group.stats[key] ? <button className="count-badge-link" type="button" onClick={() => openGroup(group.key, group.title, label)}>{group.stats[key]}</button> : <span className="count-zero">0</span>}
+                      {group.stats[key] ? <button className="count-badge-link" type="button" onClick={() => openGroup(group.key, group.title, key)}>{group.stats[key]}</button> : <span className="count-zero">0</span>}
                     </td>
                   ))}
                 </tr>
@@ -544,6 +654,19 @@ export default function ClientDetailPage() {
       </div>
 
       {tablePopover && (() => {
+        if (tablePopover.type === 'candidate-status') {
+          const candidate = candidates.find(item => (item.associationId || item.id) === tablePopover.id)
+          if (!candidate) return null
+          return (
+            <TablePopover anchorRect={tablePopover.anchorRect} width={180} onClose={() => setTablePopover(null)}>
+              {CLIENT_DETAIL_STATUS_OPTIONS.map(option => (
+                <button className="candidate-columns-action" type="button" key={option.value} onClick={() => updateCandidateStatus(candidate, option.value)}>
+                  {option.label}
+                </button>
+              ))}
+            </TablePopover>
+          )
+        }
         const group = jobGroups.find(item => item.relatedJob?.id === tablePopover.id)
         if (!group) return null
         return (
@@ -559,20 +682,21 @@ export default function ClientDetailPage() {
 
       {selectedGroup && (
         <>
-          <div className="section-title"><Briefcase size={18} /><h3>{selectedGroup.jobTitle} Candidates{selectedGroup.status ? ` - ${selectedGroup.status}` : ''}</h3></div>
+          <div className="section-title"><Briefcase size={18} /><h3>{selectedGroup.jobTitle} Candidates{selectedGroup.status ? ` - ${statusLabelForValue(selectedGroup.status)}` : ''}</h3></div>
           <div className="candidate-columns-toolbar">
             <div className="candidate-columns-control" ref={columnsDropdownRef}>
-              <button className="filter-select candidate-columns-btn" type="button" onClick={() => { setPendingColumns(visibleColumns); setColumnsOpen(open => !open) }}><span>Columns</span><ChevronDown size={13} /></button>
+              <button className="filter-select candidate-columns-btn" type="button" onClick={(event) => { setPendingColumns(visibleColumns); setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect() }); setColumnsOpen(open => !open) }}><span>Columns</span><ChevronDown size={13} /></button>
               <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
               {columnsOpen && (
-                <div className="filter-dropdown candidate-columns-dropdown">
+                <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
                   <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)}>Select All</button>
                   <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
                   <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
+                  <button className="candidate-columns-action" type="button" onClick={resetColumnsToDefault}>Reset to Default</button>
                   <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(savedColumns?.length ? savedColumns : DEFAULT_CANDIDATE_COLUMN_KEYS)}>Reset to Saved Preference</button>
                   <div className="candidate-columns-divider" />
                   {CANDIDATE_TABLE_COLUMNS.map(column => <label className="candidate-column-option" key={column.key}><input type="checkbox" checked={pendingColumns.includes(column.key)} onChange={() => togglePendingColumn(column.key)} />{column.label}</label>)}
-                </div>
+                </FloatingDropdown>
               )}
             </div>
           </div>
