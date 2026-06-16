@@ -608,7 +608,7 @@ export default function JobsPage() {
       case 'jd':
         {
           const docKey = `jd-${job.id}`
-          return <td key={column.key}>{job.jd_url ? <a href="#" target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD" onClick={(event) => { event.preventDefault(); openDocument(docKey, job.jd_url) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
+          return <td key={column.key}>{job.jd_url ? <a href="#" target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument(docKey, job.jd_url) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
         }
       case 'action':
         return <td key={column.key}><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)}><Pencil size={13} /></button></td>
@@ -957,7 +957,7 @@ export default function JobsPage() {
                 <div className="form-group">
                   <label className="form-label">JD File</label>
                   <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="form-control" onChange={e => setJdFile(e.target.files?.[0] || null)} disabled={saving} />
-                  {form.jd_url && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); openDocument('jd-form', form.jd_url) }}>{openingDocument === 'jd-form' ? <Loader2 size={13} className="spin" /> : <FileText size={13} />} Current JD</a>}
+                  {form.jd_url && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('jd-form', form.jd_url) }}>{openingDocument === 'jd-form' ? <Loader2 size={13} className="spin" /> : <FileText size={13} />} Current JD</a>}
                 </div>
               </div>
             </div>

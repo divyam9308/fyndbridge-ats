@@ -107,6 +107,7 @@ async function openResume(req, res) {
   try {
     const rawPath = req.query.path || req.params.encodedPath || ''
     const storagePath = normalizeResumeStoragePath(decodeURIComponent(rawPath))
+    console.log('[CV open] storage path', { path: storagePath })
 
     if (!storagePath) {
       return res.status(400).json({ error: 'Resume path is required' })
@@ -115,11 +116,18 @@ async function openResume(req, res) {
     const { data, error } = await supabase.storage
       .from(RESUME_BUCKET)
       .createSignedUrl(storagePath, 60 * 60)
+    console.log('[CV open] signed URL creation result', { ok: Boolean(data?.signedUrl), error: error?.message || '' })
     if (error || !data?.signedUrl) {
-      return res.status(404).json({ error: 'Resume file could not be opened' })
+      const slash = storagePath.lastIndexOf('/')
+      const folder = slash === -1 ? '' : storagePath.slice(0, slash)
+      const name = slash === -1 ? storagePath : storagePath.slice(slash + 1)
+      const listed = await supabase.storage.from(RESUME_BUCKET).list(folder, { search: name, limit: 1 })
+      const exists = !listed.error && (listed.data || []).some((item) => item.name === name)
+      if (!exists) return res.status(404).json({ error: 'Document file not found. Please re-upload the CV.', path: storagePath })
+      return res.status(404).json({ error: error?.message || 'Resume file could not be opened', path: storagePath })
     }
 
-    return res.json({ url: data.signedUrl })
+    return res.json({ url: data.signedUrl, path: storagePath })
   } catch (err) {
     console.error('openResume:', err.message)
     return res.status(500).json({ error: 'Resume file could not be opened' })

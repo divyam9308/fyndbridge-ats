@@ -749,7 +749,7 @@ export default function ClientsPage() {
       case 'contractPdf': {
         const contractUrl = client.contract_document || client.contract_pdf_url
         const docKey = `contract-${client.id}`
-        return <td key={key}>{contractUrl ? <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" title="Open Contract PDF" onClick={(event) => { event.preventDefault(); openDocument(docKey, contractUrl) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
+        return <td key={key}>{contractUrl ? <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" title="Open Contract PDF" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument(docKey, contractUrl) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
       }
       case 'actions':
         return <td key={key}><div className="row-actions"><button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)}><Pencil size={13} strokeWidth={2} /></button></div></td>
@@ -980,7 +980,7 @@ export default function ClientsPage() {
                   <div className="form-group">
                     <label className="form-label">Contract PDF</label>
                     <input type="file" accept="application/pdf" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving} />
-                    {form.contract_document && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); openDocument('contract-form', form.contract_document) }}>{openingDocument === 'contract-form' ? 'Opening...' : 'Current Contract'}</a>}
+                    {form.contract_document && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('contract-form', form.contract_document) }}>{openingDocument === 'contract-form' ? 'Opening...' : 'Current Contract'}</a>}
                     {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
                   </div>
                 )}

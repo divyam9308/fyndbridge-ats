@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient'
 
 const API_UNAUTHORIZED_EVENT = 'fb:api-unauthorized'
+let isOpening = false
 
 const isPrivateApiUrl = (value) => {
   const text = String(value || '')
@@ -60,6 +61,8 @@ export function normalizeExternalUrl(url) {
 }
 
 function openUrlInNewTab(url) {
+  if (!String(url || '').startsWith('blob:') && !normalizeExternalUrl(url)) return false
+  console.log('[document open] window.open', { url })
   const opened = window.open(url, '_blank', 'noopener,noreferrer')
   if (opened) return true
   const link = document.createElement('a')
@@ -72,6 +75,19 @@ function openUrlInNewTab(url) {
   return true
 }
 
+function showDocumentToast(message) {
+  const existing = document.querySelector('[data-document-open-toast="true"]')
+  if (existing) existing.remove()
+  const toast = document.createElement('div')
+  toast.className = 'notice-toast is-visible'
+  toast.dataset.documentOpenToast = 'true'
+  const text = document.createElement('span')
+  text.textContent = message
+  toast.appendChild(text)
+  document.body.appendChild(toast)
+  window.setTimeout(() => toast.remove(), 5000)
+}
+
 export function openExternalUrl(url) {
   const normalized = normalizeExternalUrl(url)
   if (!normalized) return false
@@ -80,16 +96,27 @@ export function openExternalUrl(url) {
 
 export async function openProtectedUrl(url) {
   if (!url) return false
+  if (isOpening) return false
+  isOpening = true
   if (!isPrivateApiUrl(url)) {
-    return openExternalUrl(url)
+    try {
+      return openExternalUrl(url)
+    } finally {
+      isOpening = false
+    }
   }
   try {
+    console.log('[document open] request', { url })
     const response = await apiFetch(url)
-    if (!response.ok) throw new Error('Unauthorized')
     const contentType = response.headers.get('content-type') || ''
+    if (!response.ok) {
+      const payload = contentType.includes('application/json') ? await response.json().catch(() => ({})) : {}
+      throw new Error(payload.error || `Document open failed (${response.status})`)
+    }
     if (contentType.includes('application/json')) {
       const payload = await response.json().catch(() => ({}))
-      if (!payload.url) throw new Error('Document unavailable')
+      console.log('[document open] signed URL result', { ok: Boolean(payload.url), path: payload.path || '' })
+      if (!normalizeExternalUrl(payload.url)) throw new Error(payload.error || 'Invalid document URL')
       openUrlInNewTab(payload.url)
       return true
     }
@@ -98,9 +125,11 @@ export async function openProtectedUrl(url) {
     openUrlInNewTab(objectUrl)
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
     return true
-  } catch {
-    window.alert('Please allow pop-ups to open the document.')
+  } catch (err) {
+    showDocumentToast(err.message || 'Document could not be opened.')
     return false
+  } finally {
+    isOpening = false
   }
 }
 
