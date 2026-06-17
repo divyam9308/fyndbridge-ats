@@ -14,7 +14,8 @@ create table if not exists public.notifications (
 );
 
 alter table public.notifications
-  add column if not exists action_type text default 'mark_read';
+  add column if not exists action_type text default 'mark_read',
+  add column if not exists follow_up_date date;
 
 update public.notifications
 set action_type = case
@@ -29,7 +30,9 @@ create index if not exists notifications_sender_user_id_idx on public.notificati
 create index if not exists notifications_mandate_id_idx on public.notifications(mandate_id);
 create index if not exists notifications_status_idx on public.notifications(status);
 create index if not exists notifications_created_at_idx on public.notifications(created_at);
+create index if not exists notifications_follow_up_date_idx on public.notifications(follow_up_date);
 drop index if exists notifications_assignment_unique_idx;
+drop index if exists notifications_client_follow_up_due_unique_idx;
 
 create unique index if not exists notifications_assignment_unique_idx
   on public.notifications(mandate_id, recipient_user_id, role_type, action_type)
@@ -38,6 +41,10 @@ create unique index if not exists notifications_assignment_unique_idx
 create unique index if not exists notifications_read_confirmation_unique_idx
   on public.notifications(mandate_id, recipient_user_id, sender_user_id, action_type)
   where action_type = 'assignment_read_confirmation';
+
+create unique index if not exists notifications_client_follow_up_due_unique_idx
+  on public.notifications(recipient_user_id, client_id, follow_up_date, action_type)
+  where action_type = 'client_follow_up_due';
 
 alter table public.notifications enable row level security;
 

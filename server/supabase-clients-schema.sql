@@ -2,6 +2,7 @@ create table if not exists public.clients (
   id uuid primary key default gen_random_uuid(),
   client_display_id text unique,
   consultant_name text,
+  consultant_user_id uuid,
   name text unique not null,
   contact text,
   phone text not null,
@@ -30,3 +31,6 @@ alter table public.clients
 
 create index if not exists clients_name_idx
   on public.clients(name);
+
+create index if not exists clients_consultant_user_id_idx
+  on public.clients(consultant_user_id);

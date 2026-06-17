@@ -145,6 +145,7 @@ function clientToForm(client) {
     client_group_id: client.client_group_id || client.id || '',
     client_display_id: client.client_display_id || '',
     consultant_name: client.consultant_name || client.consultant || '',
+    consultant_user_id: client.consultant_user_id || '',
     client_name: client.client_name || client.name || '',
     location: client.location || client.city || '',
     region: client.region || client.state || '',

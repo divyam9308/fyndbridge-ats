@@ -35,6 +35,7 @@ create table if not exists public.candidate_associations (
   candidate_id uuid not null references public.candidates(id) on delete cascade,
   client_id uuid references public.clients(id) on delete set null,
   consultant_name text,
+  consultant_user_id uuid,
   client_name text,
   job_title text,
   status text not null default 'Interested',
@@ -143,6 +144,7 @@ alter table public.candidates
 alter table public.candidate_associations
   add column if not exists client_id uuid references public.clients(id) on delete set null,
   add column if not exists consultant_name text,
+  add column if not exists consultant_user_id uuid,
   add column if not exists offered_ctc integer,
   add column if not exists date_of_joining date;
 
@@ -160,6 +162,9 @@ create index if not exists candidates_client_id_idx
 
 create index if not exists candidate_associations_client_id_idx
   on public.candidate_associations(client_id);
+
+create index if not exists candidate_associations_consultant_user_id_idx
+  on public.candidate_associations(consultant_user_id);
 
 create index if not exists candidate_associations_job_id_idx
   on public.candidate_associations(job_id);

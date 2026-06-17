@@ -161,7 +161,7 @@ export default function NotificationBell() {
       {toast && (
         <div className="notification-toast" onMouseEnter={() => setToastPaused(true)} onMouseLeave={() => setToastPaused(false)}>
           <button className="notification-toast-close" type="button" onClick={() => setToast(null)} aria-label="Close notification"><X size={14} /></button>
-          <div className="notification-item-title">New Mandate Assignment</div>
+          <div className="notification-item-title">{toast.title || 'Notification'}</div>
           <div className="notification-message">{toast.message}</div>
           {toast.status === 'pending' && <button className="notification-read-btn" type="button" onClick={() => markRead(toast)}>Mark as Read</button>}
         </div>

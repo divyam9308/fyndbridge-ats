@@ -2,6 +2,11 @@ const supabase = require('./supabaseAdmin')
 
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 const sameName = (left, right) => clean(left).toLowerCase() === clean(right).toLowerCase()
+const todayLocal = () => {
+  const date = new Date()
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 10)
+}
 
 async function findProfileUser({ userId = '', name = '' } = {}) {
   const id = clean(userId)
@@ -51,4 +56,23 @@ async function createConsultantAssignmentNotification({ type, senderId, consulta
   if (error && error.code !== '23505' && error.code !== '42P01') throw error
 }
 
-module.exports = { createConsultantAssignmentNotification, findProfileUser }
+async function createClientFollowUpDueNotification({ recipientUserId, clientId, clientName, followUpDate }) {
+  const recipient = clean(recipientUserId)
+  const dueDate = clean(followUpDate)
+  const name = clean(clientName)
+  if (!recipient || !clientId || !dueDate || dueDate !== todayLocal() || !name) return
+  const { error } = await supabase.from('notifications').insert({
+    recipient_user_id: recipient,
+    sender_user_id: null,
+    client_id: clientId,
+    follow_up_date: dueDate,
+    role_type: 'system',
+    title: 'Client Follow Up Due',
+    message: `Today you have a follow up with ${name}`,
+    status: 'pending',
+    action_type: 'client_follow_up_due'
+  })
+  if (error && error.code !== '23505' && error.code !== '42P01') throw error
+}
+
+module.exports = { createConsultantAssignmentNotification, createClientFollowUpDueNotification, findProfileUser, sameName, todayLocal }

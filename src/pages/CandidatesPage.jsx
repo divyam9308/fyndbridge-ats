@@ -188,6 +188,7 @@ const apiCandidateToUi = (row) => ({
   notes: row.notes || '',
   consultant: row.consultant_name || '',
   consultantName: row.consultant_name || '',
+  consultantUserId: row.consultant_user_id || '',
   createdAt: row.created_at || '',
 })
 
@@ -873,7 +874,7 @@ export default function CandidatesPage() {
       ...EMPTY_CAND,
       ...candidate,
       consultantName: candidate.consultantName || candidate.consultant || '',
-      consultantUserId: '',
+      consultantUserId: candidate.consultantUserId || candidate.consultant_user_id || '',
       associationId: candidate.associationId,
       candidateId: candidate.candidateId,
       clientId: candidate.clientId || matchedClient?.id || '',

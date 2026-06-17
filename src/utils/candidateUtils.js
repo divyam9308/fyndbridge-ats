@@ -42,6 +42,7 @@ export const apiCandidateToUi = (row) => ({
   notes: row.notes || '',
   consultant: row.consultant_name || '',
   consultantName: row.consultant_name || '',
+  consultantUserId: row.consultant_user_id || '',
   createdAt: row.created_at || '',
 })
 

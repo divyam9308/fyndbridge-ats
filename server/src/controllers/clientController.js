@@ -336,6 +336,7 @@ function clientPayload(body) {
   return {
     client_group_id: body.client_group_id || null,
     client_display_id: nullable(body.client_display_id),
+    consultant_user_id: nullable(body.consultant_user_id),
     consultant_name: nullable(body.consultant_name || body.consultant),
     client_name: clientName,
     name: clientName,

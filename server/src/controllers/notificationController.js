@@ -1,4 +1,5 @@
 const supabase = require('../services/supabaseAdmin')
+const { createClientFollowUpDueNotification, sameName, todayLocal } = require('../services/assignmentNotifications')
 
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
@@ -17,9 +18,44 @@ async function profileMap(userIds = []) {
   return byId
 }
 
+async function ensureClientFollowUpDueNotifications(req) {
+  const userId = clean(req.user?.id)
+  if (!userId) return
+
+  const { data: profile, error: profileError } = await supabase
+    .from('user_profiles')
+    .select('user_id, name')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (profileError) throw profileError
+
+  const profileName = clean(profile?.name)
+  const dueDate = todayLocal()
+  const { data: clients, error: clientsError } = await supabase
+    .from('clients')
+    .select('*')
+    .eq('follow_up_date', dueDate)
+  if (clientsError) throw clientsError
+
+  for (const client of clients || []) {
+    const consultantName = clean(client.consultant_name)
+    const consultantUserId = clean(client.consultant_user_id)
+    if (!consultantName || consultantName === '-') continue
+    if (consultantUserId && consultantUserId !== userId) continue
+    if (!consultantUserId && (!profileName || !sameName(consultantName, profileName))) continue
+    await createClientFollowUpDueNotification({
+      recipientUserId: userId,
+      clientId: client.id,
+      clientName: clean(client.client_name || client.name),
+      followUpDate: client.follow_up_date
+    })
+  }
+}
+
 async function listNotifications(req, res) {
   try {
     if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' })
+    await ensureClientFollowUpDueNotifications(req)
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
