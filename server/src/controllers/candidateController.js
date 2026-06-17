@@ -579,7 +579,9 @@ function candidateFilterValue(row, field) {
     comments: row.notes,
     status: row.status,
     month: row.created_at,
-    linkedin: row.linkedin_url
+    linkedin: row.linkedin_url,
+    education: row.education,
+    cv: row.cv_link || row.resume_url
   }[field]
 }
 

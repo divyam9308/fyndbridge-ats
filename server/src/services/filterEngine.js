@@ -16,7 +16,10 @@ const normalizeSearch = (value) => lower(value)
 const keywordTerms = (value) => normalizeSearch(value).split(' ').filter(Boolean)
 const digits = (value) => clean(value).replace(/[^\d.]/g, '')
 const numberValue = (value) => {
+  const text = lower(value)
   const n = Number(digits(value))
+  if (!Number.isFinite(n)) return null
+  if (/\bk\b/.test(text)) return n * 1000
   return Number.isFinite(n) ? n : null
 }
 const moneyValue = (value) => {
@@ -39,6 +42,8 @@ const dateValue = (value) => {
     const month = months.findIndex(item => dmy[2].toLowerCase().startsWith(item))
     if (month >= 0) return `${dmy[3]}-${String(month + 1).padStart(2, '0')}-${dmy[1].padStart(2, '0')}`
   }
+  const slash = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+  if (slash) return `${slash[3]}-${slash[2].padStart(2, '0')}-${slash[1].padStart(2, '0')}`
   const date = value instanceof Date ? value : new Date(text)
   return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10)
 }
@@ -54,10 +59,22 @@ const todayValue = () => {
   }, {})
   return `${parts.year}-${parts.month}-${parts.day}`
 }
-const weekRange = () => {
-  const start = new Date(todayValue())
+const relativeDate = (days) => {
+  const date = new Date(`${todayValue()}T00:00:00`)
+  date.setDate(date.getDate() + days)
+  return dateValue(date)
+}
+const weekRange = (offsetDays = 0) => {
+  const start = new Date(`${todayValue()}T00:00:00`)
+  start.setDate(start.getDate() + offsetDays)
   const end = new Date(start)
   end.setDate(start.getDate() + 6)
+  return [dateValue(start), dateValue(end)]
+}
+const monthRange = (offsetMonths = 0) => {
+  const today = new Date(`${todayValue()}T00:00:00`)
+  const start = new Date(today.getFullYear(), today.getMonth() + offsetMonths, 1)
+  const end = new Date(today.getFullYear(), today.getMonth() + offsetMonths + 1, 0)
   return [dateValue(start), dateValue(end)]
 }
 
@@ -106,72 +123,100 @@ const normalizers = {
   mandate_status: normalizeMandateStatus
 }
 
+const EMPTY_RE = /^(?:is\s+)?(?:empty|blank|missing|not provided|not available|null|no value|not filled|not uploaded|not attached|absent)$/i
+const NOT_EMPTY_RE = /^(?:is\s+)?(?:not empty|has value|has data|exists|present|filled|filled in|available|provided|uploaded|attached)$/i
+const FILLER_RE = /\b(?:column|field|where|show|give|list|find|all|records|rows)\b/gi
+
+function stripFiller(value) {
+  return clean(value).replace(FILLER_RE, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function comparatorOperator(value) {
+  const text = lower(value)
+  if (/^(?:>=|at least|minimum|min|not less than|greater than or equal(?: to)?)$/.test(text)) return 'greater_than_or_equal'
+  if (/^(?:<=|at most|maximum|max|not more than|less than or equal(?: to)?)$/.test(text)) return 'less_than_or_equal'
+  if (/^(?:>|greater than|more than|above|over|higher than|exceeding|greater)$/.test(text)) return 'greater_than'
+  if (/^(?:<|less than|below|under|lower than|fewer than|less)$/.test(text)) return 'less_than'
+  if (/^(?:!=|is not|not equal|not equals|except|excluding|other than)$/.test(text)) return 'not_equals'
+  if (/^(?:=|is|equals?|equal to|exactly|same as)$/.test(text)) return 'equals'
+  return ''
+}
+
+function normalizeFieldValue(meta, value) {
+  let next = stripFiller(value)
+  if (meta.type === 'boolean') {
+    next = next.replace(/\b(?:signed|done|available|present)\b/i, 'yes').replace(/\b(?:not signed|missing|not available|absent)\b/i, 'no')
+  }
+  return clean(next.replace(/^(?:is|are|equals?|equal to|contains?|include|includes|has|having|with|matching)\s+/i, ''))
+}
+
 const candidateFields = {
   candidate_id: { aliases: ['candidate id', 'ca id', 'ca'], type: 'id', operators: ['contains', 'equals'] },
   candidate_name: { aliases: ['candidate', 'name', 'candidate name'], type: 'text' },
-  consultant: { aliases: ['consultant', 'consultant name', 'recruiter'], type: 'text' },
-  email: { aliases: ['email', 'email id'], type: 'text' },
-  mobile: { aliases: ['phone', 'mobile', 'contact number'], type: 'text' },
-  designation: { aliases: ['designation', 'current designation', 'role title'], type: 'text' },
+  consultant: { aliases: ['consultant', 'consultant name', 'recruiter', 'owner', 'assigned consultant'], type: 'text' },
+  email: { aliases: ['email', 'mail', 'email id'], type: 'text' },
+  mobile: { aliases: ['phone', 'mobile', 'number', 'contact number'], type: 'text' },
+  designation: { aliases: ['designation', 'current designation', 'title', 'role title'], type: 'text' },
   organisation: { aliases: ['organisation', 'organization', 'company', 'company/organisation', 'company/organization', 'current organisation', 'current organization', 'current company'], type: 'text' },
-  experience: { aliases: ['experience', 'exp', 'years'], type: 'number' },
+  experience: { aliases: ['experience', 'exp', 'years', 'years experience', 'total experience'], type: 'number' },
   client_id: { aliases: ['client id', 'cl id', 'cl'], type: 'id' },
   client_name: { aliases: ['client', 'client name'], type: 'text' },
-  role: { aliases: ['role', 'job', 'job role', 'mandate'], type: 'text' },
-  date: { aliases: ['date', 'created date', 'added date'], type: 'date' },
-  skills: { aliases: ['skill', 'skills', 'technology'], type: 'text' },
-  current_ctc: { aliases: ['salary', 'current ctc', 'current salary'], type: 'money' },
+  role: { aliases: ['role', 'job', 'job role', 'mandate', 'position', 'applied role'], type: 'text' },
+  date: { aliases: ['date', 'created date', 'added date', 'submission date'], type: 'date' },
+  skills: { aliases: ['skill', 'skills', 'technology', 'tech stack', 'technologies'], type: 'text' },
+  current_ctc: { aliases: ['salary', 'current ctc', 'current salary', 'current package', 'current compensation'], type: 'money' },
   current_location: { aliases: ['location', 'current location', 'city'], type: 'text' },
-  notice_period: { aliases: ['notice', 'notice period'], type: 'number' },
-  expected_ctc: { aliases: ['expected salary', 'expected ctc'], type: 'money' },
-  open_to_relocate: { aliases: ['relocate', 'open to relocate', 'relocation'], type: 'boolean' },
-  comments: { aliases: ['comment', 'comments', 'notes'], type: 'text' },
-  status: { aliases: ['status', 'stage'], type: 'enum' },
-  month: { aliases: ['month'], type: 'text' },
-  linkedin: { aliases: ['linkedin'], type: 'text' },
-  cv: { aliases: ['cv', 'resume'], type: 'text' }
+  notice_period: { aliases: ['notice', 'notice period', 'joining time', 'availability'], type: 'number' },
+  expected_ctc: { aliases: ['expected salary', 'expected ctc', 'expected package', 'expected compensation'], type: 'money' },
+  open_to_relocate: { aliases: ['relocate', 'open to relocate', 'relocation', 'willing to relocate'], type: 'boolean' },
+  comments: { aliases: ['comment', 'comments', 'notes', 'remarks'], type: 'text' },
+  status: { aliases: ['status', 'candidate status', 'stage'], type: 'enum' },
+  month: { aliases: ['month', 'submission month'], type: 'text' },
+  linkedin: { aliases: ['linkedin', 'linkedin url', 'profile'], type: 'text' },
+  cv: { aliases: ['cv', 'resume', 'document', 'candidate cv', 'resume file'], type: 'text' },
+  education: { aliases: ['education', 'qualification', 'degree', 'academics'], type: 'text' }
 }
 
 const mandateFields = {
   job_id: { aliases: ['job id', 'mandate id', 'jb id', 'jb'], type: 'id' },
-  consultant: { aliases: ['consultant', 'consultant name', 'consultant names'], type: 'text' },
-  team_lead: { aliases: ['team lead', 'tl'], type: 'text' },
+  consultant: { aliases: ['consultant', 'consultant name', 'consultant names', 'recruiter', 'assigned consultant'], type: 'text' },
+  team_lead: { aliases: ['team lead', 'lead', 'tl'], type: 'text' },
   client_id: { aliases: ['client id', 'cl id', 'cl'], type: 'id' },
-  client_name: { aliases: ['client', 'client name'], type: 'text' },
-  role: { aliases: ['job role', 'role'], type: 'text' },
-  location: { aliases: ['location', 'city'], type: 'text' },
-  budget: { aliases: ['budget', 'salary range'], type: 'budget' },
-  experience: { aliases: ['experience', 'exp'], type: 'number' },
-  mandate_status: { aliases: ['mandate status', 'status', 'priority'], type: 'mandate_status' },
-  vertical: { aliases: ['vertical', 'domain', 'sector'], type: 'text' },
-  comments: { aliases: ['comment', 'comments', 'notes'], type: 'text' },
-  date_of_allocation: { aliases: ['allocation date', 'date of allocation', 'date'], type: 'date' },
-  jd: { aliases: ['jd', 'jd file', 'jd filename', 'jd path'], type: 'text' }
+  client_name: { aliases: ['client', 'client name', 'company'], type: 'text' },
+  role: { aliases: ['job role', 'role', 'job', 'position', 'mandate'], type: 'text' },
+  location: { aliases: ['location', 'city', 'job location'], type: 'text' },
+  budget: { aliases: ['budget', 'salary budget', 'ctc budget', 'compensation', 'package', 'salary range'], type: 'budget' },
+  experience: { aliases: ['experience', 'exp', 'years', 'required experience'], type: 'number' },
+  mandate_status: { aliases: ['mandate status', 'status', 'job status', 'priority'], type: 'mandate_status' },
+  vertical: { aliases: ['vertical', 'domain', 'sector', 'industry'], type: 'text' },
+  comments: { aliases: ['comment', 'comments', 'notes', 'remarks'], type: 'text' },
+  date_of_allocation: { aliases: ['allocation date', 'date of allocation', 'assigned date', 'date assigned', 'date'], type: 'date' },
+  jd: { aliases: ['jd', 'job description', 'jd file', 'jd filename', 'jd path', 'jd document'], type: 'text' }
 }
 
 const clientFields = {
   client_id: { aliases: ['client id', 'cl id', 'cl'], type: 'id' },
-  client_name: { aliases: ['client', 'client name', 'name'], type: 'text' },
-  location: { aliases: ['location', 'city'], type: 'text' },
-  region: { aliases: ['region', 'state'], type: 'text' },
-  consultant: { aliases: ['consultant', 'consultant name', 'recruiter'], type: 'text' },
-  contact_person: { aliases: ['contact person', 'contact'], type: 'text' },
-  mobile: { aliases: ['mobile', 'phone', 'contact number'], type: 'text' },
-  email: { aliases: ['email', 'email id'], type: 'text' },
-  linkedin: { aliases: ['linkedin'], type: 'text' },
-  sector: { aliases: ['sector', 'vertical', 'domain'], type: 'text' },
-  connected_on_date: { aliases: ['connected on date', 'connected date', 'connected on'], type: 'date' },
-  comments: { aliases: ['comment', 'comments', 'notes'], type: 'text' },
-  follow_up_date: { aliases: ['follow up date', 'follow up', 'followup'], type: 'date' },
-  status: { aliases: ['status'], type: 'enum' },
-  terms_signed: { aliases: ['terms signed', 'terms'], type: 'text' },
-  value: { aliases: ['value', 'terms value', 'fee value'], type: 'money' },
+  client_name: { aliases: ['client', 'client name', 'name', 'company', 'company name', 'organization', 'organisation'], type: 'text' },
+  location: { aliases: ['location', 'city', 'client location'], type: 'text' },
+  region: { aliases: ['region', 'state', 'zone'], type: 'text' },
+  consultant: { aliases: ['consultant', 'consultant name', 'recruiter', 'owner', 'assigned consultant'], type: 'text' },
+  contact_person: { aliases: ['contact person', 'contact', 'poc', 'point of contact'], type: 'text' },
+  mobile: { aliases: ['mobile', 'phone', 'contact number', 'number'], type: 'text' },
+  email: { aliases: ['email', 'mail', 'email id'], type: 'text' },
+  linkedin: { aliases: ['linkedin', 'linkedin url', 'profile'], type: 'text' },
+  sector: { aliases: ['sector', 'vertical', 'domain', 'industry'], type: 'text' },
+  connected_on_date: { aliases: ['connected on date', 'connected date', 'connected on', 'date connected', 'added date'], type: 'date' },
+  comments: { aliases: ['comment', 'comments', 'notes', 'remarks'], type: 'text' },
+  follow_up_date: { aliases: ['follow up date', 'follow up', 'follow-up', 'followup', 'next follow up', 'due follow up'], type: 'date' },
+  status: { aliases: ['status', 'client status'], type: 'enum' },
+  terms_signed: { aliases: ['terms signed', 'terms', 'agreement signed'], type: 'text' },
+  value: { aliases: ['value', 'client value', 'billing value', 'deal value', 'revenue', 'terms value', 'fee value'], type: 'money' },
   billing_entity: { aliases: ['billing entity'], type: 'text' },
-  gstin: { aliases: ['gstin', 'gst'], type: 'text' },
-  pan: { aliases: ['pan'], type: 'text' },
-  address_on_invoice: { aliases: ['address on invoice', 'invoice address', 'address'], type: 'text' },
-  designation: { aliases: ['designation'], type: 'text' },
-  contract_signed: { aliases: ['contract signed', 'contract'], type: 'boolean' },
+  gstin: { aliases: ['gstin', 'gst', 'gst number', 'gstin number'], type: 'text' },
+  pan: { aliases: ['pan', 'pan number'], type: 'text' },
+  address_on_invoice: { aliases: ['address on invoice', 'invoice address', 'address', 'billing address'], type: 'text' },
+  designation: { aliases: ['designation', 'contact designation', 'title'], type: 'text' },
+  contract_signed: { aliases: ['contract signed', 'contract', 'contract status'], type: 'boolean' },
   contract_document: { aliases: ['contract document', 'contract pdf', 'contract file'], type: 'text' }
 }
 
@@ -208,38 +253,46 @@ function escapeRegExp(value) {
 }
 
 function parseFieldSegment(config, segment) {
-  const text = clean(segment).replace(/^any\s+/i, '')
+  const text = stripFiller(segment).replace(/^any\s+/i, '')
   if (!text) return null
   const map = aliasMap(config)
   const aliases = [...map.keys()].sort((a, b) => b.length - a.length)
   for (const alias of aliases) {
-    const match = text.match(new RegExp(`^${escapeRegExp(alias)}\\s*(?:(?:is|equals?|equal to|contains|include|includes|has|with)\\s+)?(.+)$`, 'i'))
+    const match = text.match(new RegExp(`^${escapeRegExp(alias)}\\b\\s*(?:column|field)?\\s*(.+)?$`, 'i'))
     if (!match) continue
     const field = map.get(lower(alias))
     const meta = config.fields[field]
-    const value = clean(match[1])
-    if (!meta || !value) continue
+    const rawValue = normalizeFieldValue(meta, match[1] || '')
+    if (!meta || !rawValue) continue
+    if (NOT_EMPTY_RE.test(rawValue)) return normalizeCondition(config, { field, operator: 'is_not_empty', value: null })
+    if (EMPTY_RE.test(rawValue)) return normalizeCondition(config, { field, operator: 'is_empty', value: null })
     if (meta.type === 'date') {
-      if (/^today$/i.test(value)) return normalizeCondition(config, { field, operator: 'on', value: todayValue() })
-      if (/^this week$/i.test(value)) return normalizeCondition(config, { field, operator: 'between', value: weekRange() })
-      const dated = value.match(/^(after|before|on)\s+(.+)$/i)
+      if (/^(?:is\s+)?today$|^due today$/i.test(rawValue)) return normalizeCondition(config, { field, operator: 'on', value: todayValue() })
+      if (/^tomorrow$/i.test(rawValue)) return normalizeCondition(config, { field, operator: 'on', value: relativeDate(1) })
+      if (/^yesterday$/i.test(rawValue)) return normalizeCondition(config, { field, operator: 'on', value: relativeDate(-1) })
+      if (/^this week$/i.test(rawValue)) return normalizeCondition(config, { field, operator: 'between', value: weekRange() })
+      if (/^next week$/i.test(rawValue)) return normalizeCondition(config, { field, operator: 'between', value: weekRange(7) })
+      if (/^this month$/i.test(rawValue)) return normalizeCondition(config, { field, operator: 'between', value: monthRange(0) })
+      if (/^last month$/i.test(rawValue)) return normalizeCondition(config, { field, operator: 'between', value: monthRange(-1) })
+      const dated = rawValue.match(/^(after|before|on)\s+(.+)$/i)
       if (dated) return normalizeCondition(config, { field, operator: lower(dated[1]), value: dated[2] })
     }
     if (['number', 'money', 'budget'].includes(meta.type)) {
-      const between = value.match(/(?:between\s+)?(\d+(?:\.\d+)?)\s*(?:-|to|and)\s*(\d+(?:\.\d+)?)/i)
+      const between = rawValue.match(/(?:between|from|range)?\s*(\d+(?:\.\d+)?)\s*(?:-|to|and)\s*(\d+(?:\.\d+)?)/i)
       if (between) return normalizeCondition(config, { field, operator: 'between', value: [between[1], between[2]] })
-      const comparator = value.match(/^(>=|>|<=|<|=|below|above|under|over|more than|less than|greater than|at least)\s*(\d+(?:\.\d+)?)/i)
+      const comparator = rawValue.match(/^(>=|>|<=|<|=|below|above|under|over|more than|less than|greater than|at least|minimum|min|not less than|greater than or equal to|at most|maximum|max|not more than|less than or equal to|higher than|exceeding|lower than|fewer than)\s*(.+)$/i)
       if (comparator) {
-        const op = lower(comparator[1])
-        return normalizeCondition(config, {
-          field,
-          operator: op === '>' || op === 'above' || op === 'over' || op === 'more than' || op === 'greater than' ? 'greater_than' : op === '>=' || op === 'at least' ? 'greater_than_or_equal' : op === '<' || op === 'below' || op === 'under' || op === 'less than' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : 'equals',
-          value: comparator[2]
-        })
+        return normalizeCondition(config, { field, operator: comparatorOperator(comparator[1]) || 'equals', value: comparator[2] })
       }
     }
+    const notEquals = rawValue.match(/^(is not|not equal|not equals|except|excluding|other than|!=)\s+(.+)$/i)
+    if (notEquals) return normalizeCondition(config, { field, operator: 'not_equals', value: notEquals[2] })
+    const starts = rawValue.match(/^starts with\s+(.+)$/i)
+    if (starts) return normalizeCondition(config, { field, operator: 'starts_with', value: starts[1] })
+    const ends = rawValue.match(/^ends with\s+(.+)$/i)
+    if (ends) return normalizeCondition(config, { field, operator: 'ends_with', value: ends[1] })
     const operator = ['id', 'enum', 'mandate_status', 'boolean'].includes(meta.type) ? 'equals' : 'contains'
-    return normalizeCondition(config, { field, operator, value })
+    return normalizeCondition(config, { field, operator, value: rawValue })
   }
   return null
 }
@@ -450,7 +503,7 @@ function validateAiFilters(page, data, prompt = '') {
 
 function parsePrompt(page, prompt) {
   const config = configs[page]
-  const text = clean(prompt)
+  let text = clean(prompt).replace(/^(?:clients|candidates|mandates|jobs)\s+(?=with|in|from)\b/i, '')
   const logical = parseLogicalPrompt(page, text)
   if (logical) return logical
   const conditions = []
@@ -462,6 +515,38 @@ function parsePrompt(page, prompt) {
   const addAny = (field, operator, values) => {
     values.forEach(value => add(field, operator, value))
     if (values.length > 1) mode = 'any'
+  }
+  const addParsedSegment = (segment) => {
+    const condition = parseFieldSegment(config, segment)
+    if (condition) conditions.push(condition)
+  }
+
+  if (page === 'mandates') {
+    const contextClient = clean(prompt).match(/\bmandates?\s+for\s+(.+?)(?=\s+(?:with|and|or|plus|in)\b|$)/i)
+    if (contextClient) {
+      add('client_name', 'contains', contextClient[1])
+    }
+  }
+
+  const map = aliasMap(config)
+  const aliases = [...map.keys()].sort((a, b) => b.length - a.length)
+  aliases.forEach(alias => {
+    const field = map.get(alias)
+    const meta = config.fields[field]
+    if (!meta) return
+    const pattern = new RegExp(`\\b${escapeRegExp(alias)}\\b\\s*(?:column|field)?\\s*((?:is\\s+not|not\\s+equal|not\\s+equals|not\\s+more\\s+than|not\\s+less\\s+than|less\\s+than\\s+or\\s+equal\\s+to|greater\\s+than\\s+or\\s+equal\\s+to|at\\s+least|at\\s+most|more\\s+than|greater\\s+than|less\\s+than|higher\\s+than|lower\\s+than|fewer\\s+than|same\\s+as|equal\\s+to|starts\\s+with|ends\\s+with|contains|includes|include|having|matching|with|is|are|has|>=|<=|!=|>|<|=)?\\s*[^,]+?)(?=\\s+(?:and|or|with|plus)\\s+\\b(?:${aliases.map(escapeRegExp).join('|')})\\b|$)`, 'i')
+    const match = text.match(pattern)
+    if (match) addParsedSegment(`${alias} ${match[1]}`)
+  })
+
+  const placeMatch = text.match(/\b(?:in|from)\s+([a-z][\w\s.-]*?)(?=\s+(?:with|and|or|plus|for)\b|$)/i)
+  if (placeMatch) {
+    if (config.fields.current_location) add('current_location', 'contains', placeMatch[1])
+    else if (config.fields.location) add('location', 'contains', placeMatch[1])
+  }
+  if (page === 'mandates') {
+    const mandateFor = text.match(/\b(?:mandates?|jobs?)\s+for\s+([a-z0-9][\w\s&.-]*?)(?=\s+(?:with|and|or|plus|in)\b|$)/i)
+    if (mandateFor) add('client_name', 'contains', mandateFor[1])
   }
 
   const idMatch = text.match(/\b(CA\d+|CL\d+|JB\d+)\b/i)
@@ -500,8 +585,8 @@ function parsePrompt(page, prompt) {
     ['consultant', /consultant\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|team lead|role|location|budget|priority|mandate status|status|vertical|date|in|for)\b|$)/i],
     ['team_lead', /(?:team lead|tl)\s+(?:is\s+|equals\s+)?(-|[a-z][\w\s.-]*?)(?=\s+(?:client|consultant|role|location|budget|priority|mandate status|status|vertical|date|in|for)\b|$)/i],
     ['role', /(?:role|job role|job)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:client|consultant|team lead|location|budget|priority|mandate status|status|vertical|date|in|for)\b|$)/i],
-    ['current_location', /(?:location|city|current location)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date|for)\b|$)|\bin\s+([a-z][\w\s.-]*?)(?=\s+(?:for|client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date)\b|$)/i],
-    ['location', /(?:location|city|current location)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date|for)\b|$)|\bin\s+([a-z][\w\s.-]*?)(?=\s+(?:for|client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date)\b|$)/i],
+    ['current_location', /(?:location|city|current location)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:with|and|or|plus|client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date|for)\b|$)|\bin\s+([a-z][\w\s.-]*?)(?=\s+(?:with|and|or|plus|for|client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date)\b|$)/i],
+    ['location', /(?:location|city|current location)\s+(?:is\s+|equals\s+)?([a-z][\w\s.-]*?)(?=\s+(?:with|and|or|plus|client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date|for)\b|$)|\bin\s+([a-z][\w\s.-]*?)(?=\s+(?:with|and|or|plus|for|client|consultant|team lead|role|budget|priority|mandate status|status|vertical|date)\b|$)/i],
     ['vertical', /(?:vertical|domain)\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)(?=\s+(?:client|consultant|team lead|role|location|budget|priority|mandate status|status|date|in|for)\b|$)/i],
     ['designation', /designation\s+(?:contains\s+|is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)$/i],
     ['mobile', /(?:mobile|phone|contact number)\s+(?:contains\s+|has\s+|is\s+|equals\s+)?([+\d][\d\s+.-]*?)$/i],

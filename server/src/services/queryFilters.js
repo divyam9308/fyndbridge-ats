@@ -33,8 +33,8 @@ function applySingleCondition(query, definition, condition) {
     return query
   }
 
-  if (operator === 'is_empty') return query.or(`${column}.is.null,${column}.eq.""`)
-  if (operator === 'is_not_empty') return query.not(column, 'is', null).not(column, 'eq', '')
+  if (operator === 'is_empty') return query.or(`${column}.is.null,${column}.eq."",${column}.eq.-`)
+  if (operator === 'is_not_empty') return query.not(column, 'is', null).not(column, 'eq', '').not(column, 'eq', '-')
 
   if (definition.kind === 'boolean') {
     if (operator === 'not_equals') return query.neq(column, value)
