@@ -1514,13 +1514,6 @@ export default function CandidatesPage() {
           </>
         )}
 
-        <div className="form-group full">
-          <label className="form-label">Education</label>
-          <textarea name="education" value={f.education} onChange={handleLocalChange}
-            className="form-control" rows={4} style={{ minHeight: 96, lineHeight: 1.5 }}
-            />
-        </div>
-
         <div className="form-section-title">Mandate Assignment</div>
 
         <div className="form-group">
@@ -1645,10 +1638,16 @@ export default function CandidatesPage() {
           <textarea name="notes" value={f.notes} onChange={handleLocalChange}
             className="form-control" rows={3} style={{ minHeight: 84, lineHeight: 1.5 }} />
         </div>
+
+        <div className="form-group full">
+          <label className="form-label">Education</label>
+          <textarea name="education" value={f.education} onChange={handleLocalChange}
+            className="form-control" rows={4} style={{ minHeight: 96, lineHeight: 1.5 }}
+            />
+        </div>
       </div>
     )
   }
-
   const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'jobId')
   const toggleExpandedCell = (id, key, event) => {
     event.stopPropagation()

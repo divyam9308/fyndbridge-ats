@@ -5,7 +5,7 @@ const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../s
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { applyQueryFilters } = require('../services/queryFilters')
-const { createConsultantAssignmentNotification } = require('../services/assignmentNotifications')
+const { createConsultantAssignmentNotification, createClientFollowUpDueNotification } = require('../services/assignmentNotifications')
 
 const CLIENT_STATUSES = [
   'Active',
@@ -622,16 +622,19 @@ const result = await insertClient(insertPayload)
       if (missingClientColumn(groupError) === 'client_group_id') {
         releaseClientDisplayId(payload.client_display_id)
         await notifyClientConsultantAssignment(req, data)
+        await createClientFollowUpDueNotification({ recipientUserId: data.consultant_user_id, clientId: data.id, clientName: data.client_name || data.name, followUpDate: data.follow_up_date })
         return res.status(201).json(normalizeClient(data))
       }
       if (groupError) throw groupError
       releaseClientDisplayId(payload.client_display_id)
       await notifyClientConsultantAssignment(req, grouped)
+      await createClientFollowUpDueNotification({ recipientUserId: grouped.consultant_user_id, clientId: grouped.id, clientName: grouped.client_name || grouped.name, followUpDate: grouped.follow_up_date })
       return res.status(201).json(normalizeClient(grouped))
     }
 
     releaseClientDisplayId(payload.client_display_id)
     await notifyClientConsultantAssignment(req, data)
+    await createClientFollowUpDueNotification({ recipientUserId: data.consultant_user_id, clientId: data.id, clientName: data.client_name || data.name, followUpDate: data.follow_up_date })
     return res.status(201).json(normalizeClient(data))
   } catch (err) {
     if (err.code === '23505' && /clients_name_key/i.test(err.message || '')) {
@@ -665,6 +668,7 @@ async function updateClient(req, res) {
 
     if (error) throw error
     await notifyClientConsultantAssignment(req, data, existing.consultant_name || existing.consultant)
+    await createClientFollowUpDueNotification({ recipientUserId: data.consultant_user_id, clientId: data.id, clientName: data.client_name || data.name, followUpDate: data.follow_up_date })
     return res.json(normalizeClient(data))
   } catch (err) {
     if (isClientDisplayIdUniqueError(err)) {
@@ -698,15 +702,29 @@ async function addFollowUp(req, res) {
         follow_up_date,
         follow_up_comments: nullable(follow_up_comments)
       })
+
       .select('*')
       .single()
 
     if (error) throw error
 
-    await supabase
+    const { data: updatedClient, error: updateError } = await supabase
       .from('clients')
       .update({ follow_up_date, comments: nullable(follow_up_comments), notes: nullable(follow_up_comments), updated_at: new Date().toISOString() })
       .eq('id', req.params.id)
+      .select('id, consultant_user_id, client_name, name, follow_up_date')
+      .single()
+
+    if (updateError) throw updateError
+
+    if (updatedClient) {
+      await createClientFollowUpDueNotification({
+        recipientUserId: updatedClient.consultant_user_id,
+        clientId: updatedClient.id,
+        clientName: updatedClient.client_name || updatedClient.name,
+        followUpDate: updatedClient.follow_up_date
+      })
+    }
 
     return res.status(201).json(data)
   } catch (err) {
@@ -724,7 +742,7 @@ async function syncClientLatestFollowUp(clientId) {
   if (error) throw error
 
   const row = latest?.[0] || null
-  await supabase
+  const { data: updatedClient, error: updateError } = await supabase
     .from('clients')
     .update({
       follow_up_date: row?.follow_up_date || null,
@@ -733,6 +751,19 @@ async function syncClientLatestFollowUp(clientId) {
       updated_at: new Date().toISOString()
     })
     .eq('id', clientId)
+    .select('id, consultant_user_id, client_name, name, follow_up_date')
+    .single()
+  
+  if (updateError) throw updateError
+
+  if (updatedClient) {
+    await createClientFollowUpDueNotification({
+      recipientUserId: updatedClient.consultant_user_id,
+      clientId: updatedClient.id,
+      clientName: updatedClient.client_name || updatedClient.name,
+      followUpDate: updatedClient.follow_up_date
+    })
+  }
 
   return row
 }

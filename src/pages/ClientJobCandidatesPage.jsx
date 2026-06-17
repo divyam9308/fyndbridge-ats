@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, Users, AlertCircle, Loader2, FileText } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientJobCandidatesPage.css'
 import { apiCandidateToUi, logCandidateCvOpen, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUSES } from '../utils/candidateStatuses'
+import { supabase } from '../services/supabaseClient'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
 const ALL_FILTER_STATUSES = ['All', ...CANDIDATE_STATUSES, 'Rejected']
@@ -34,57 +35,67 @@ export default function ClientJobCandidatesPage() {
 
   const statusFilter = searchParams.get('status') || 'All'
 
-  useEffect(() => {
-    let active = true
-    const fetchData = async () => {
-      try {
-        setLoading(true)
+  const fetchData = useCallback(async (activeObj = { active: true }) => {
+    try {
+      setLoading(true)
 
-        // 1. Fetch Client and Mandate Info
-        const [clientRes, jobRes] = await Promise.all([
-          fetch(`/api/clients/${clientId}`),
-          fetch(`/api/jobs/${jobId}`)
-        ])
+      // 1. Fetch Client and Mandate Info
+      const [clientRes, jobRes] = await Promise.all([
+        fetch(`/api/clients/${clientId}`),
+        fetch(`/api/jobs/${jobId}`)
+      ])
 
-        if (!clientRes.ok) {
-          if (clientRes.status === 404) throw new Error('Client not found.')
-          throw new Error('Failed to fetch client.')
-        }
-        if (!jobRes.ok) {
-          if (jobRes.status === 404) throw new Error('Mandate not found.')
-          throw new Error('Failed to fetch mandate.')
-        }
+      if (!clientRes.ok) {
+        if (clientRes.status === 404) throw new Error('Client not found.')
+        throw new Error('Failed to fetch client.')
+      }
+      if (!jobRes.ok) {
+        if (jobRes.status === 404) throw new Error('Mandate not found.')
+        throw new Error('Failed to fetch mandate.')
+      }
 
-        const clientData = await clientRes.json()
-        const jobData = await jobRes.json()
+      const clientData = await clientRes.json()
+      const jobData = await jobRes.json()
 
-        if (!active) return
-        setClient(clientData)
-        setJob(jobData)
+      if (!activeObj.active) return
+      setClient(clientData)
+      setJob(jobData)
 
-        const candidatesRes = await fetch(`/api/candidates?client_id=${clientId}&job_id=${jobId}&limit=100`)
-        if (!candidatesRes.ok) throw new Error('Failed to fetch candidates.')
-        
-        const candidatesData = await candidatesRes.json()
+      const candidatesRes = await fetch(`/api/candidates?client_id=${clientId}&job_id=${jobId}&limit=100`)
+      if (!candidatesRes.ok) throw new Error('Failed to fetch candidates.')
+      
+      const candidatesData = await candidatesRes.json()
 
-        if (active) {
-          setCandidates((candidatesData.data || []).map(apiCandidateToUi))
-          setError(null)
-        }
-      } catch (err) {
-        if (active) {
-          setError(err.message)
-        }
-      } finally {
-        if (active) {
-          setLoading(false)
-        }
+      if (activeObj.active) {
+        setCandidates((candidatesData.data || []).map(apiCandidateToUi))
+        setError(null)
+      }
+    } catch (err) {
+      if (activeObj.active) {
+        setError(err.message)
+      }
+    } finally {
+      if (activeObj.active) {
+        setLoading(false)
       }
     }
-
-    fetchData()
-    return () => { active = false }
   }, [clientId, jobId])
+
+  useEffect(() => {
+    const activeObj = { active: true }
+    fetchData(activeObj)
+    return () => { activeObj.active = false }
+  }, [fetchData])
+
+  useEffect(() => {
+    if (!supabase) return
+    const channel = supabase
+      .channel(`realtime:client-job-candidates:${clientId}:${jobId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidates' }, () => fetchData({ active: true }))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidate_associations' }, () => fetchData({ active: true }))
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [clientId, jobId, fetchData])
 
   if (loading) {
     return (

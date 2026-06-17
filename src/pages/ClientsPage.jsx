@@ -910,6 +910,27 @@ export default function ClientsPage() {
     )
   }
 
+  const renderValueCell = (client, text) => {
+    const value = String(text || '').trim()
+    if (!value) return mutedDash
+    const cellKey = `${client.id}-value`
+    const expanded = Boolean(expandedCells[cellKey])
+    const words = value.split(/\s+/)
+    const isLong = words.length > 4
+    const displayText = expanded || !isLong ? value : words.slice(0, 4).join(' ')
+    return (
+      <div className="table-comment-cell">
+        <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{highlightText(displayText, aiFilters)}</div>
+        {isLong && (
+          <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(client.id, 'value', event)}>
+            <ChevronDown size={12} className={expanded ? 'is-open' : ''} />
+            {expanded ? <span>View less</span> : <span>View more</span>}
+          </button>
+        )}
+      </div>
+    )
+  }
+
   const renderClientCell = ({ key }, client) => {
     const followUp = selectedFollowUp(client)
     const contact = selectedContact(client)
@@ -984,7 +1005,8 @@ export default function ClientsPage() {
       case 'termsSigned':
         return <td key={key}>{commercialDash(client, termsLabel(client))}</td>
       case 'value':
-        return <td key={key}>{commercialDash(client, client.terms_value)}</td>
+        if (!showCommercialFields(client)) return <td key={key}>-</td>
+        return <td key={key}>{renderValueCell(client, client.terms_value)}</td>
       case 'billingEntity':
         return <td key={key}>{client.contract_signed ? dash(client.billing_entity) : '-'}</td>
       case 'contractSigned':

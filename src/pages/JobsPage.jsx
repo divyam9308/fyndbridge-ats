@@ -285,6 +285,23 @@ export default function JobsPage() {
     return () => { document.body.style.overflow = previous }
   }, [isOpen])
 
+  const getFreshActiveConsultantName = useCallback(async () => {
+    try {
+      const fbUser = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
+      if (fbUser.role === 'Consultant' && fbUser.full_name) {
+        return { name: fbUser.full_name, userId: fbUser.id }
+      }
+      const token = (await supabase?.auth?.getSession())?.data?.session?.access_token
+      if (!token) return { name: '', userId: '' }
+      const res = await fetch('/api/user/profile', { headers: { Authorization: `Bearer ${token}` } })
+      const payload = await res.json()
+      const nextName = payload?.data?.full_name || ''
+      return { name: nextName, userId: payload?.data?.id || '' }
+    } catch {
+      return { name: '', userId: '' }
+    }
+  }, [])
+
   const fetchNextId = async () => {
     const res = await fetch('/api/jobs/next-display-id')
     const data = await res.json().catch(() => ({}))
@@ -309,13 +326,22 @@ export default function JobsPage() {
     setRoleSuggestionsOpen(false)
     setIsOpen(true)
     try {
+      const [nextId, profile] = await Promise.all([
+        fetchNextId().catch(() => ''),
+        getFreshActiveConsultantName().catch(() => ({ name: '' }))
+      ])
       await refreshClientOptions()
-      const nextId = await fetchNextId()
-      setForm(current => current.job_display_id === 'Loading...' ? { ...current, job_display_id: nextId } : current)
+      const cName = profile?.name ? String(profile.name).trim() : ''
+      setForm(current => ({
+        ...current,
+        job_display_id: current.job_display_id === 'Loading...' ? nextId : current.job_display_id,
+        consultants: cName ? [cName] : ['-']
+      }))
+      if (cName) setConsultantSearch({ 0: cName })
     } catch {
       setForm(current => ({ ...current, job_display_id: '' }))
     }
-  }, [refreshClientOptions])
+  }, [refreshClientOptions, getFreshActiveConsultantName])
 
   useEffect(() => {
     const action = location.state?.action
