@@ -6,6 +6,7 @@ const supabase = require('../services/supabaseAdmin')
 const { parseResume } = require('../services/resumeParser')
 const { RESUME_BUCKET, prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplicate, checkLinkedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
 const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
+const { parseAiFilters } = require('../services/aiFilterParser')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { createConsultantAssignmentNotification } = require('../services/assignmentNotifications')
@@ -1462,12 +1463,8 @@ async function buildAiCandidateFilters(req, res) {
       return res.status(400).json({ error: 'prompt is required' })
     }
 
-    const filters = validateAiFilters('candidates', null, prompt)
-    if (!filters) {
-      const fallback = { mode: 'any', conditions: ['consultant', 'client_name', 'role', 'designation', 'mobile', 'email', 'skills'].map(field => ({ field, operator: 'contains', value: prompt })) }
-return res.json({ filters: fallback })
-    }
-return res.json({ filters })
+    const result = await parseAiFilters('candidates', prompt)
+    return res.json(result)
   } catch (err) {
     const fallback = validateAiFilters('candidates', null, req.body.prompt)
     if (fallback) return res.json({ filters: fallback, fallback: true })

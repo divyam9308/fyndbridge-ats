@@ -30,7 +30,7 @@ export const keywordFilters = (page, prompt, fields) => ({
 
 export const filterPills = (filters) => {
   if (!filters) return []
-  if (filters.mode === 'keyword') return [`Global: ${(filters.terms || []).join(' ')}`]
+  if (filters.mode === 'keyword') return []
   return (filters.conditions || []).map(({ field, operator, value }) => {
     const label = field.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
     const op = operator === 'contains' ? '' : `${operator.replace(/_/g, ' ')} `

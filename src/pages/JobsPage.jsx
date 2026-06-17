@@ -13,7 +13,7 @@ import { openProtectedUrl } from '../services/apiClient'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
-import { highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
+import { highlightText, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
@@ -516,11 +516,6 @@ export default function JobsPage() {
     event.preventDefault()
     setAiError('')
     if (!aiText.trim()) return
-    if (isSimpleKeywordSearch('mandates', aiText)) {
-      setAiFilters(keywordFilters('mandates', aiText, MANDATE_AI_SEARCH_FIELDS))
-      setPage(1)
-      return
-    }
     setAiLoading(true)
     try {
       const res = await fetch('/api/jobs/ai-filter', {

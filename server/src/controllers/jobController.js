@@ -3,6 +3,7 @@ const { uploadDocument } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
 const fs = require('fs/promises')
 const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
+const { parseAiFilters } = require('../services/aiFilterParser')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 
@@ -230,7 +231,7 @@ function parseJsonFilter(value) {
 async function listJobs(req, res) {
   try {
     const aiFilters = parseJsonFilter(req.query.ai_filters)
-    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.conditions || []).some(condition => condition.field === 'consultant')
+    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.conditions || []).some(condition => ['consultant', 'budget'].includes(condition.field))
     const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
@@ -475,9 +476,7 @@ async function buildJobFilters(req, res) {
   try {
     const prompt = clean(req.body.prompt)
     if (!prompt) return res.status(400).json({ error: 'prompt is required' })
-    const filters = validateAiFilters('mandates', null, prompt)
-    if (!filters) return res.status(400).json({ error: 'Could not parse Mandates filter.' })
-    return res.json({ filters })
+    return res.json(await parseAiFilters('mandates', prompt))
   } catch (err) {
     const fallback = validateAiFilters('mandates', null, req.body.prompt)
     if (fallback) return res.json({ filters: fallback, fallback: true })

@@ -14,7 +14,7 @@ import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtecte
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
-import { highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
+import { highlightText, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 /* ====== Static reference data ====== */
@@ -978,14 +978,6 @@ export default function CandidatesPage() {
       clearAiFilter()
       return
     }
-    if (isSimpleKeywordSearch('candidates', prompt)) {
-      setAiFilters(keywordFilters('candidates', prompt, CANDIDATE_AI_SEARCH_FIELDS))
-      setAiAppliedPrompt(prompt)
-      setAiFilterError('')
-      setPage(1)
-      return
-    }
-
     setAiFilterLoading(true)
     setAiFilterError('')
     try {

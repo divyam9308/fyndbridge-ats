@@ -4,6 +4,7 @@ const { uploadDocument } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
+const { parseAiFilters } = require('../services/aiFilterParser')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { createConsultantAssignmentNotification, createClientFollowUpDueNotification } = require('../services/assignmentNotifications')
 
@@ -693,9 +694,7 @@ async function buildClientFilters(req, res) {
   const prompt = clean(req.body.prompt)
   if (!prompt) return res.status(400).json({ error: 'prompt is required' })
   try {
-    const filters = validateAiFilters('clients', null, prompt)
-    if (!filters) return res.status(400).json({ error: 'Could not parse Clients filter.' })
-    return res.json({ filters })
+    return res.json(await parseAiFilters('clients', prompt))
   } catch (err) {
     const fallback = validateAiFilters('clients', null, prompt)
     if (fallback) return res.json({ filters: fallback, fallback: true })

@@ -13,7 +13,7 @@ import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
-import { highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
+import { highlightText, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 const STATUSES = ['Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
@@ -903,12 +903,6 @@ export default function ClientsPage() {
     const prompt = aiFilterText.trim()
     if (!prompt) {
       clearFilters()
-      return
-    }
-    if (isSimpleKeywordSearch('clients', prompt)) {
-      setAiFilters(keywordFilters('clients', prompt, CLIENT_AI_SEARCH_FIELDS))
-      setAiFilterError('')
-      setPage(1)
       return
     }
     setAiFilterLoading(true)

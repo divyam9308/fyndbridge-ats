@@ -43,9 +43,16 @@ const dateValue = (value) => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10)
 }
 const todayValue = () => {
-  const date = new Date()
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  return date.toISOString().slice(0, 10)
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date()).reduce((map, part) => {
+    map[part.type] = part.value
+    return map
+  }, {})
+  return `${parts.year}-${parts.month}-${parts.day}`
 }
 const weekRange = () => {
   const start = new Date(todayValue())
@@ -61,6 +68,15 @@ function normalizeBudget(value) {
   const range = text.match(/(\d+)\s*(?:-|to)\s*(\d+)/)
   if (!range) return BUDGETS.find(item => lower(item) === lower(value)) || clean(value)
   return BUDGETS.find(item => item.startsWith(`${range[1]}-${range[2]} `)) || `${range[1]}-${range[2]} lac`
+}
+
+function budgetNumber(value) {
+  const text = lower(value)
+  const gt = text.match(/>\s*(\d+(?:\.\d+)?)/)
+  if (gt) return Number(gt[1])
+  const range = text.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)/)
+  if (range) return (Number(range[1]) + Number(range[2])) / 2
+  return numberValue(value)
 }
 
 function normalizeMandateStatus(value) {
@@ -203,6 +219,25 @@ function parseFieldSegment(config, segment) {
     const meta = config.fields[field]
     const value = clean(match[1])
     if (!meta || !value) continue
+    if (meta.type === 'date') {
+      if (/^today$/i.test(value)) return normalizeCondition(config, { field, operator: 'on', value: todayValue() })
+      if (/^this week$/i.test(value)) return normalizeCondition(config, { field, operator: 'between', value: weekRange() })
+      const dated = value.match(/^(after|before|on)\s+(.+)$/i)
+      if (dated) return normalizeCondition(config, { field, operator: lower(dated[1]), value: dated[2] })
+    }
+    if (['number', 'money', 'budget'].includes(meta.type)) {
+      const between = value.match(/(?:between\s+)?(\d+(?:\.\d+)?)\s*(?:-|to|and)\s*(\d+(?:\.\d+)?)/i)
+      if (between) return normalizeCondition(config, { field, operator: 'between', value: [between[1], between[2]] })
+      const comparator = value.match(/^(>=|>|<=|<|=|below|above|under|over|more than|less than|greater than|at least)\s*(\d+(?:\.\d+)?)/i)
+      if (comparator) {
+        const op = lower(comparator[1])
+        return normalizeCondition(config, {
+          field,
+          operator: op === '>' || op === 'above' || op === 'over' || op === 'more than' || op === 'greater than' ? 'greater_than' : op === '>=' || op === 'at least' ? 'greater_than_or_equal' : op === '<' || op === 'below' || op === 'under' || op === 'less than' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : 'equals',
+          value: comparator[2]
+        })
+      }
+    }
     const operator = ['id', 'enum', 'mandate_status', 'boolean'].includes(meta.type) ? 'equals' : 'contains'
     return normalizeCondition(config, { field, operator, value })
   }
@@ -213,7 +248,7 @@ function parseLogicalPrompt(page, prompt) {
   const config = configs[page]
   const text = clean(prompt)
   if (!config || !text) return null
-  const connector = /\s+or\s+/i.test(text) ? 'or' : /\s+and\s+/i.test(text) ? 'and' : ''
+  const connector = /\s+or\s+/i.test(text) ? 'or' : (/\s+and\s+/i.test(text) && !/\bbetween\s+\d+(?:\.\d+)?\s+and\s+\d+(?:\.\d+)?\b/i.test(text)) ? 'and' : ''
   const parts = connector ? text.split(new RegExp(`\\s+${connector}\\s+`, 'i')).map(clean).filter(Boolean) : [text]
   const conditions = parts.map(part => parseFieldSegment(config, part))
   if (conditions.some(condition => !condition)) return null
@@ -225,7 +260,29 @@ function normalizeCondition(config, condition) {
   const field = map.get(lower(condition.field)) || condition.field
   const meta = config.fields[field]
   if (!meta) return null
-  const operator = OPERATORS.includes(condition.operator) ? condition.operator : 'contains'
+  const operatorText = lower(condition.operator).replace(/\s+/g, '_')
+  const operatorAliases = {
+    greater: 'greater_than',
+    greater_than: 'greater_than',
+    more_than: 'greater_than',
+    above: 'greater_than',
+    over: 'greater_than',
+    less: 'less_than',
+    less_than: 'less_than',
+    below: 'less_than',
+    under: 'less_than',
+    at_least: 'greater_than_or_equal',
+    minimum: 'greater_than_or_equal',
+    at_most: 'less_than_or_equal',
+    maximum: 'less_than_or_equal',
+    equal: 'equals',
+    equal_to: 'equals',
+    is: 'equals'
+  }
+  const operator = OPERATORS.includes(operatorText) ? operatorText : operatorAliases[operatorText] || 'contains'
+  if (['number', 'money', 'budget'].includes(meta.type) && ['contains', 'starts_with', 'ends_with'].includes(operator)) return null
+  if (meta.type === 'boolean' && !['equals', 'not_equals', 'is_empty', 'is_not_empty'].includes(operator)) return null
+  if (['enum', 'mandate_status'].includes(meta.type) && ['contains', 'starts_with', 'ends_with'].includes(operator)) return null
   let value = condition.value
   if (operator === 'between' || operator === 'in') {
     value = (Array.isArray(value) ? value : String(value || '').split(',')).map(item => meta.normalizer(item)).filter(item => item !== null && item !== '')
@@ -241,6 +298,9 @@ function aiFilterSchema() {
     type: 'object',
     additionalProperties: false,
     properties: {
+      mode: { type: 'string' },
+      logic: { type: 'string', enum: ['AND', 'OR', 'and', 'or'] },
+      fallbackText: { type: 'string' },
       conditions: {
         type: 'array',
         items: {
@@ -274,10 +334,11 @@ function buildAiFilterPrompt(page, prompt) {
     .join('\n')
   return [
     'Convert this ATS filter request into JSON only.',
-    'Return exactly {"conditions":[{"field":"canonical_field","operator":"operator","value":"value"}]}.',
+    'Return exactly {"mode":"structured_filter","logic":"AND","conditions":[{"field":"canonical_field","operator":"operator","value":"value"}],"fallbackText":"original request"}.',
     `Allowed operators: ${OPERATORS.join(', ')}.`,
     'Use canonical field names only. Never invent fields.',
     'Default text searches to contains. Use equals only for explicit exact matches.',
+    'For numeric comparisons map greater/more/above/over to greater_than, at least to greater_than_or_equal, less/below/under to less_than.',
     page === 'mandates' ? 'For plain text with no field, search across mandate searchable text fields using contains.' : '',
     page === 'clients' ? 'For plain text with no field, search across all client text fields using contains.' : '',
     page === 'mandates' ? 'For phrases like "client bluepeak", "client name bluepeak", and "mandates for bluepeak", use client_name contains bluepeak.' : '',
@@ -298,7 +359,7 @@ function isExactPrompt(prompt) {
 function isPlainMandatePrompt(prompt) {
   const text = lower(prompt)
   if (!text || /\b(JB\d+|CL\d+|P[123])\b/i.test(prompt)) return false
-  if (/[<>=]/.test(text) || /\b(before|after|on|between|budget|priority|mandate status|status|date|allocation|team lead|tl|consultant|client|client name|role|job role|location|city|vertical|domain)\b/i.test(text)) return false
+  if (/[<>=]/.test(text) || /\b(before|after|on|between|budget|experience|exp|priority|mandate status|status|date|allocation|team lead|tl|consultant|client|client name|role|job role|location|city|vertical|domain)\b/i.test(text)) return false
   return /^[a-z0-9][\w\s&.-]+$/i.test(clean(prompt))
 }
 
@@ -342,8 +403,6 @@ function buildKeywordFilters(page, prompt) {
 function validateAiFilters(page, data, prompt = '') {
   const config = configs[page]
   const deterministic = clean(prompt) ? parsePrompt(page, prompt) : null
-  if (deterministic) return deterministic
-  if (isSimpleKeywordPrompt(page, prompt)) return buildKeywordFilters(page, prompt)
   const normalized = (Array.isArray(data?.conditions) ? data.conditions : [])
     .map(condition => {
       const next = { ...condition }
@@ -383,7 +442,9 @@ function validateAiFilters(page, data, prompt = '') {
     mergedSeen.add(key)
     return true
   })
-  if (unique.length) return { ...(deterministic?.mode ? { mode: deterministic.mode } : {}), conditions: unique }
+  if (unique.length) return { ...((deterministic?.mode || lower(data?.logic) === 'or') ? { mode: deterministic?.mode || 'any' } : {}), conditions: unique }
+  if (deterministic) return deterministic
+  if (isSimpleKeywordPrompt(page, prompt)) return buildKeywordFilters(page, prompt)
   return clean(prompt) ? buildKeywordFilters(page, prompt) : null
 }
 
@@ -415,14 +476,17 @@ function parsePrompt(page, prompt) {
     if (new RegExp(`\\b${status.toLowerCase()}\\b`).test(lower(text)) || (status === 'Scrapped' && /\bscrapped?\b/i.test(text)) || (status === 'Completed' && /\b(completed|closed)\b/i.test(text)) || (status === 'Ongoing' && /\b(ongoing|open|active)\b/i.test(text))) add('mandate_status', 'equals', status)
   })
   if (config.fields.budget) {
-    const budget = text.match(/(?:budget|salary range)?\s*(>?\s*\d+\s*(?:-|to)\s*\d+|>\s*\d+)(?:\s*(?:lac|lpa|lakh|lakhs))?/i)
-    if (budget) add('budget', 'equals', budget[1])
+    const budget = text.match(/(?:budget|salary range)\s*(>=|>|<=|<|=|below|above|under|over|more than|less than|greater than|at least)?\s*(\d+(?:\.\d+)?\s*(?:-|to)\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*(?:lac|lpa|lakh|lakhs))?/i)
+    if (budget) {
+      const op = budget[1] || '='
+      add('budget', op === '>' || op === 'above' || op === 'over' || op === 'more than' || op === 'greater than' ? 'greater_than' : op === '>=' || op === 'at least' ? 'greater_than_or_equal' : op === '<' || op === 'below' || op === 'under' || op === 'less than' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : budget[2].match(/-|to/) ? 'equals' : 'equals', budget[2])
+    }
   }
   if (config.fields.value) {
-    const valueMatch = text.match(/(?:value|terms value)\s*(>=|>|<=|<|=|below|above|over|under)?\s*(\d+(?:\.\d+)?)\s*(?:lac|lpa|lakh|lakhs|cr|crore|crores)?/i)
+    const valueMatch = text.match(/(?:value|terms value)\s*(>=|>|<=|<|=|below|above|under|over|more than|less than|greater than|at least)?\s*(\d+(?:\.\d+)?)\s*(?:lac|lpa|lakh|lakhs|cr|crore|crores)?/i)
     if (valueMatch) {
       const op = valueMatch[1] || '='
-      add('value', op === '>' || op === 'above' || op === 'over' ? 'greater_than' : op === '>=' ? 'greater_than_or_equal' : op === '<' || op === 'below' || op === 'under' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : 'equals', valueMatch[0])
+      add('value', op === '>' || op === 'above' || op === 'over' || op === 'more than' || op === 'greater than' ? 'greater_than' : op === '>=' || op === 'at least' ? 'greater_than_or_equal' : op === '<' || op === 'below' || op === 'under' || op === 'less than' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : 'equals', valueMatch[0])
     }
   }
 
@@ -449,16 +513,16 @@ function parsePrompt(page, prompt) {
   })
 
   ;[
-    ['experience', /experience\s*(>=|>|<=|<|=|below|above|less than|greater than)\s*(\d+)/i],
-    ['current_ctc', /(?:salary|current ctc|current salary)\s*(>=|>|<=|<|=|below|above|less than|greater than)\s*(\d+)/i],
-    ['expected_ctc', /(?:expected salary|expected ctc)\s*(>=|>|<=|<|=|below|above|less than|greater than)\s*(\d+)/i],
-    ['notice_period', /notice(?:\s+period)?\s*(>=|>|<=|<|=|below|above|less than|greater than|less|greater)\s*(\d+)/i]
+    ['experience', /experience\s*(>=|>|<=|<|=|below|above|under|over|more than|less than|greater than|at least)\s*(\d+)/i],
+    ['current_ctc', /(?:salary|current ctc|current salary)\s*(>=|>|<=|<|=|below|above|under|over|more than|less than|greater than|at least)\s*(\d+)/i],
+    ['expected_ctc', /(?:expected salary|expected ctc)\s*(>=|>|<=|<|=|below|above|under|over|more than|less than|greater than|at least)\s*(\d+)/i],
+    ['notice_period', /notice(?:\s+period)?\s*(>=|>|<=|<|=|below|above|under|over|more than|less than|greater than|at least|less|greater)\s*(\d+)/i]
   ].forEach(([field, regex]) => {
     if (!config.fields[field]) return
     const match = text.match(regex)
     if (!match) return
     const op = match[1]
-    add(field, op === '>' || op === 'above' || op === 'greater' || op === 'greater than' ? 'greater_than' : op === '>=' ? 'greater_than_or_equal' : op === '<' || op === 'below' || op === 'less' || op === 'less than' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : 'equals', match[2])
+    add(field, op === '>' || op === 'above' || op === 'over' || op === 'more than' || op === 'greater' || op === 'greater than' ? 'greater_than' : op === '>=' || op === 'at least' ? 'greater_than_or_equal' : op === '<' || op === 'below' || op === 'under' || op === 'less' || op === 'less than' ? 'less_than' : op === '<=' ? 'less_than_or_equal' : 'equals', match[2])
   })
   ;[
     ['experience', /experience\s*(\d+)\s*(?:-|to)\s*(\d+)/i],
@@ -551,6 +615,20 @@ function compareValue(actual, operator, expected, type) {
     if (operator === 'less_than_or_equal') return left <= right
     if (operator === 'not_equals') return left !== right
     return left === right
+  }
+
+  if (type === 'budget') {
+    const left = budgetNumber(actual)
+    if (left === null) return false
+    if (operator === 'between') return left >= Number(expected[0]) && left <= Number(expected[1])
+    const right = budgetNumber(expected)
+    if (right === null) return false
+    if (operator === 'greater_than') return left > right
+    if (operator === 'greater_than_or_equal') return left >= right
+    if (operator === 'less_than') return left < right
+    if (operator === 'less_than_or_equal') return left <= right
+    if (operator === 'not_equals') return left !== right
+    return normalizeBudget(actual) === normalizeBudget(expected)
   }
 
   if (type === 'date') {
