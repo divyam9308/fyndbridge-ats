@@ -192,7 +192,7 @@ function escapeRegExp(value) {
 }
 
 function parseFieldSegment(config, segment) {
-  const text = clean(segment)
+  const text = clean(segment).replace(/^any\s+/i, '')
   if (!text) return null
   const map = aliasMap(config)
   const aliases = [...map.keys()].sort((a, b) => b.length - a.length)
