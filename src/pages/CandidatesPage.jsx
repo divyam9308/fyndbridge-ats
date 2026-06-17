@@ -283,6 +283,7 @@ export default function CandidatesPage() {
   const cvLinkCheckTimerRef = useRef(null)
   const importCancelledRef = useRef(false)
   const pendingRealtimeRefreshRef = useRef(false)
+  const assignmentSourceRef = useRef(null)
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -892,7 +893,9 @@ export default function CandidatesPage() {
   }
 
   const openEditCandidate = (candidate) => {
-    setForm(candidateToForm(candidate))
+    const sourceForm = candidateToForm(candidate)
+    assignmentSourceRef.current = sourceForm
+    setForm(sourceForm)
     setConsultantSearch(candidate.consultantName || candidate.consultant || '')
     setConsultantOpen(false)
     fetchConsultantOptions().catch(() => {})
@@ -906,19 +909,24 @@ export default function CandidatesPage() {
   }
 
   const openAssignAnother = async () => {
-    setForm(current => ({
-      ...current,
+    const source = assignmentSourceRef.current || form
+    setForm({
+      ...EMPTY_CAND,
+      ...source,
+      id: '',
       associationId: '',
       candidateId: '',
       candidateDisplayId: 'Loading...',
       client: '',
       clientId: '',
+      clientDisplayId: '',
       job: '',
       jobId: '',
       jobDisplayId: '',
       notes: '',
-      cvFile: null
-    }))
+      cvFile: null,
+      skills: Array.isArray(source.skills) ? [...source.skills] : []
+    })
     setEditing(false)
     setAssigningAnother(true)
     setErrors({})
@@ -1014,7 +1022,10 @@ export default function CandidatesPage() {
     if (Object.keys(e).length) { setErrors(e); return }
     setSaving(true)
     try {
-      await saveCandidateToApi(form, { update: editing, duplicateAction: assigningAnother ? 'add_duplicate' : (duplicateBypass?.source === 'manual' ? 'add_duplicate' : '') })
+      const candidateToSave = assigningAnother
+        ? { ...form, id: '', associationId: '', candidateId: '', cvFile: null }
+        : form
+      await saveCandidateToApi(candidateToSave, { update: editing && !assigningAnother, duplicateAction: assigningAnother ? 'add_duplicate' : (duplicateBypass?.source === 'manual' ? 'add_duplicate' : '') })
       setDuplicateBypass(null)
       setAddOpen(false)
       setEditing(false)
