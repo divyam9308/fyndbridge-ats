@@ -417,6 +417,7 @@ export default function CandidatesPage() {
   const [errors, setErrors]     = useState({})
   const [skillInput, setSkillInput] = useState('')
   const [editing, setEditing] = useState(false)
+  const [assigningAnother, setAssigningAnother] = useState(false)
   const [collapsed, setCollapsed] = useState({})
   const [selectedCandidate, setSelectedCandidate] = useState(null)
   const [detailPosition, setDetailPosition] = useState(null)
@@ -810,6 +811,10 @@ export default function CandidatesPage() {
     const e = {}
     if (!f.name.trim()) e.name = 'Full Name is required'
     if (!f.mobile.trim()) e.mobile = 'Mobile is required'
+    if (assigningAnother) {
+      if (!f.clientId) e.client = 'Client is required'
+      if (!f.jobId) e.job = 'Mandate is required'
+    }
     return e
   }
 
@@ -830,6 +835,7 @@ export default function CandidatesPage() {
     setConsultantOpen(false)
     setForm({ ...EMPTY_CAND, skills: [], consultantName: profile.name, consultantUserId: consultantUser?.id || '', candidateDisplayId: 'Loading...' })
     setEditing(false)
+    setAssigningAnother(false)
     setErrors({})
     setDuplicateBypass(null)
     setSkillInput('')
@@ -855,6 +861,7 @@ export default function CandidatesPage() {
           setConsultantOpen(false)
           setForm({ ...EMPTY_CAND, skills: [], consultantName: profile.name, consultantUserId: consultantUser?.id || '', candidateDisplayId: 'Loading...' })
           setEditing(false)
+          setAssigningAnother(false)
           setErrors({})
           setDuplicateBypass(null)
           setSkillInput('')
@@ -890,11 +897,40 @@ export default function CandidatesPage() {
     setConsultantOpen(false)
     fetchConsultantOptions().catch(() => {})
     setEditing(true)
+    setAssigningAnother(false)
     setErrors({})
     setDuplicateBypass(null)
     setSkillInput('')
     setSelectedCandidate(null)
     setAddOpen(true)
+  }
+
+  const openAssignAnother = async () => {
+    setForm(current => ({
+      ...current,
+      associationId: '',
+      candidateId: '',
+      candidateDisplayId: 'Loading...',
+      client: '',
+      clientId: '',
+      job: '',
+      jobId: '',
+      jobDisplayId: '',
+      notes: '',
+      cvFile: null
+    }))
+    setEditing(false)
+    setAssigningAnother(true)
+    setErrors({})
+    setDuplicateBypass(null)
+    setClientSuggestionsOpen(false)
+    setJobSuggestionsOpen(false)
+    try {
+      const candidateDisplayId = await fetchNextCandidateDisplayId()
+      setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId } : current)
+    } catch {
+      setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current)
+    }
   }
 
   const openCandidateDetail = async (candidate, event) => {
@@ -978,10 +1014,11 @@ export default function CandidatesPage() {
     if (Object.keys(e).length) { setErrors(e); return }
     setSaving(true)
     try {
-      await saveCandidateToApi(form, { update: editing, duplicateAction: duplicateBypass?.source === 'manual' ? 'add_duplicate' : '' })
+      await saveCandidateToApi(form, { update: editing, duplicateAction: assigningAnother ? 'add_duplicate' : (duplicateBypass?.source === 'manual' ? 'add_duplicate' : '') })
       setDuplicateBypass(null)
       setAddOpen(false)
       setEditing(false)
+      setAssigningAnother(false)
       await loadCandidates(1, { showLoading: false })
       setPage(1)
       setForm(current => ({ ...current, candidateDisplayId: 'Loading...' }))
@@ -1019,7 +1056,7 @@ export default function CandidatesPage() {
   }
 
   const handleCvFileChange = (setF, file) => {
-    setF(current => ({ ...current, cvFile: file || null, cvLink: file ? '' : current.cvLink }))
+    setF(current => ({ ...current, cvFile: file || null, cvLink: file ? '' : current.cvLink, cvOriginalName: file?.name || current.cvOriginalName }))
     if (file) checkCvDuplicate({ file, setF })
   }
 
@@ -1327,7 +1364,7 @@ export default function CandidatesPage() {
   }
 
   // ---- Candidate Form body (shared between Add + Review) ----
-  const CandidateFormBody = ({ f, setF, errs, sInput, onSkillInputChange, onSkillKey, onAddSkill, rmSkill, lowConf = [], onChange }) => {
+  const CandidateFormBody = ({ f, setF, errs, sInput, onSkillInputChange, onSkillKey, onAddSkill, rmSkill, lowConf = [], onChange, lockCv = false }) => {
     const low = (field) => lowConf.includes(field) ? ' low-confidence' : ''
     const visibleClientValue = f.client || ''
     const matchingClients = canonicalClients
@@ -1563,7 +1600,7 @@ export default function CandidatesPage() {
                 refreshOptionData()
               }}
               onBlur={() => window.setTimeout(() => setJobSuggestionsOpen(false), 120)}
-              className="form-control"
+              className={`form-control${errs?.job ? ' is-error' : ''}`}
               placeholder={dbJobs.length ? 'Search mandate...' : 'Loading mandates...'}
               autoComplete="off"
             />
@@ -1578,6 +1615,7 @@ export default function CandidatesPage() {
             </div>
             )}
           </div>
+          {errs?.job && <span className="form-error">{errs.job}</span>}
         </div>
 
         <div className="form-group">
@@ -1597,21 +1635,25 @@ export default function CandidatesPage() {
             {f.cvLink && <span style={{ marginLeft:6, fontSize:10, color:'var(--success)', fontWeight:600, background:'rgba(40,167,69,0.1)', padding:'1px 6px', borderRadius:4 }}>Auto-filled</span>}
           </label>
           <div style={{ display:'grid', gap:8 }}>
-            <div>
-              <span className="sub-text">{f.cvOriginalName ? `Resume: ${f.cvOriginalName}` : 'Choose File'}</span>
-              <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => handleCvFileChange(setF, event.target.files?.[0] || null)} className="form-control" />
-            </div>
+            {!lockCv && (
+              <div>
+                <span className="sub-text">{f.cvOriginalName ? `Resume: ${f.cvOriginalName}` : 'Choose File'}</span>
+                <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => handleCvFileChange(setF, event.target.files?.[0] || null)} className="form-control" />
+              </div>
+            )}
             {cvHref && (
               <button className="btn-secondary" type="button" onClick={(event) => { event.preventDefault(); openDocument(`cv-form-${f.associationId || f.candidateId || f.candidateDisplayId || 'new'}`, cvHref) }}>
                 View Parsed Resume
               </button>
             )}
-            <div>
-              <span className="sub-text">Enter CV Link</span>
-              <input name="cvLink" value={f.cvLink || ''} onChange={event => handleCvLinkChange(setF, event.target.value)}
-                className={`form-control${low('cvLink')}`}
-                />
-            </div>
+            {!lockCv && (
+              <div>
+                <span className="sub-text">Enter CV Link</span>
+                <input name="cvLink" value={f.cvLink || ''} onChange={event => handleCvLinkChange(setF, event.target.value)}
+                  className={`form-control${low('cvLink')}`}
+                  />
+              </div>
+            )}
           </div>
         </div>
 
@@ -2075,13 +2117,14 @@ export default function CandidatesPage() {
       {/* ===== Add Candidate Modal ===== */}
       {addOpen && createPortal((
         <div className="modal-overlay">
-          <div className="modal-card modal-card-lg" ref={candidateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add Candidate">
+          <div className="modal-card modal-card-lg" ref={candidateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={assigningAnother ? 'Assign Another Mandate/Client' : 'Add Candidate'}>
             <div className="modal-header">
-              <span className="modal-title">{editing ? 'Edit Candidate' : 'Add New Candidate'}</span>
-              <button className="modal-close" onClick={() => setAddOpen(false)} aria-label="Close" disabled={saving}><X size={16} /></button>
+              <span className="modal-title">{assigningAnother ? 'Assign Another Mandate/Client' : (editing ? 'Edit Candidate' : 'Add New Candidate')}</span>
+              <button className="modal-close" onClick={() => { setAddOpen(false); setAssigningAnother(false) }} aria-label="Close" disabled={saving}><X size={16} /></button>
             </div>
             <div className="modal-body" ref={candidateModalBodyRef}>
               {errors.form && <div className="form-error" style={{ display:'block', marginBottom:12 }}>{errors.form}</div>}
+              {assigningAnother && <div className="review-banner" style={{ marginBottom:12 }}>Creates a new assignment. The current candidate row will not be changed.</div>}
               {CandidateFormBody({
                 f: form,
                 setF: setForm,
@@ -2091,13 +2134,17 @@ export default function CandidatesPage() {
                 onSkillKey: handleSkillKey,
                 onAddSkill: addManualSkill,
                 rmSkill: removeSkill,
-                onChange: handleChange
+                onChange: handleChange,
+                lockCv: assigningAnother
               })}
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setAddOpen(false)} disabled={saving}>Cancel</button>
+              <button className="btn-secondary" onClick={() => { setAddOpen(false); setAssigningAnother(false) }} disabled={saving}>Cancel</button>
+              {editing && (
+                <button className="btn-secondary" onClick={openAssignAnother} disabled={saving}>Assign Another Mandate/Client</button>
+              )}
               <button className="btn-primary" onClick={handleSave} id="save-candidate-btn" disabled={saving}>
-                {saving ? 'Saving...' : 'Save Candidate'}
+                {saving ? 'Saving...' : (assigningAnother ? 'Save New Assignment' : 'Save Candidate')}
               </button>
             </div>
           </div>
