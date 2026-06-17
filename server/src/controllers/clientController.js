@@ -443,8 +443,9 @@ async function findFollowUpDateDuplicate(clientId, followUpDate, excludeFollowUp
 
 function missingClientColumn(error) {
   if (error?.code !== 'PGRST204' && error?.code !== '42703') return null
-  const match = String(error.message || '').match(/'([^']+)' column|column "([^"]+)"/)
-  return match?.[1] || match?.[2] || null
+  const match = String(error.message || '').match(/'([^']+)' column|column "([^"]+)"|column\s+([a-zA-Z0-9_.]+)\s+does not exist/i)
+  const value = match?.[1] || match?.[2] || match?.[3] || null
+  return value ? String(value).split('.').pop() : null
 }
 
 async function insertClient(payload) {
@@ -471,6 +472,22 @@ async function updateClientRow(id, payload) {
     delete next[col]
   }
   return result
+}
+
+async function loadClientFollowUpNotificationTarget(clientId) {
+  let selectFields = 'id, consultant_user_id, client_name, name, follow_up_date'
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const result = await supabase
+      .from('clients')
+      .select(selectFields)
+      .eq('id', clientId)
+      .maybeSingle()
+    const col = missingClientColumn(result.error)
+    if (!col) return result
+    const fields = selectFields.split(',').map((field) => field.trim()).filter(Boolean)
+    selectFields = fields.filter((field) => field !== col).join(', ')
+  }
+  return { data: null, error: new Error('Unable to load client follow-up notification target') }
 }
 
 async function listClients(req, res) {
@@ -743,14 +760,16 @@ async function addFollowUp(req, res) {
 
     if (error) throw error
 
-    const { data: updatedClient, error: updateError } = await supabase
-      .from('clients')
-      .update({ follow_up_date, comments: nullable(follow_up_comments), notes: nullable(follow_up_comments), updated_at: new Date().toISOString() })
-      .eq('id', req.params.id)
-      .select('id, consultant_user_id, client_name, name, follow_up_date')
-      .single()
+    const { error: updateError } = await updateClientRow(req.params.id, {
+      follow_up_date,
+      comments: nullable(follow_up_comments),
+      notes: nullable(follow_up_comments),
+      updated_at: new Date().toISOString()
+    })
 
     if (updateError) throw updateError
+    const { data: updatedClient, error: notifyTargetError } = await loadClientFollowUpNotificationTarget(req.params.id)
+    if (notifyTargetError) throw notifyTargetError
 
     if (updatedClient) {
       await createClientFollowUpDueNotification({
@@ -779,19 +798,16 @@ async function syncClientLatestFollowUp(clientId) {
   if (error) throw error
 
   const row = latest?.[0] || null
-  const { data: updatedClient, error: updateError } = await supabase
-    .from('clients')
-    .update({
-      follow_up_date: row?.follow_up_date || null,
-      comments: nullable(row?.follow_up_comments),
-      notes: nullable(row?.follow_up_comments),
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', clientId)
-    .select('id, consultant_user_id, client_name, name, follow_up_date')
-    .single()
+  const { error: updateError } = await updateClientRow(clientId, {
+    follow_up_date: row?.follow_up_date || null,
+    comments: nullable(row?.follow_up_comments),
+    notes: nullable(row?.follow_up_comments),
+    updated_at: new Date().toISOString()
+  })
   
   if (updateError) throw updateError
+  const { data: updatedClient, error: notifyTargetError } = await loadClientFollowUpNotificationTarget(clientId)
+  if (notifyTargetError) throw notifyTargetError
 
   if (updatedClient) {
     await createClientFollowUpDueNotification({
