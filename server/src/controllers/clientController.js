@@ -415,23 +415,53 @@ async function loadFollowUps(clientIds) {
   }, {})
 }
 
-async function loadClientWithRelations(clientId) {
-  const { data, error } = await supabase.from('clients').select('*').eq('id', clientId).maybeSingle()
+async function followUpScope(clientId) {
+  const { data: client, error } = await supabase
+    .from('clients')
+    .select('id, client_group_id')
+    .eq('id', clientId)
+    .maybeSingle()
   if (error) throw error
-  if (!data) return null
-  const { data: jobs, error: jobsError } = await supabase.from('jobs').select('status, mandate_status').eq('client_id', clientId)
-  if (jobsError) throw jobsError
-  const followUpsMap = await loadFollowUps([clientId])
-  return normalizeClient(data, 0, followUpsMap[clientId] || [], jobs || [])
+  const ownerId = client?.client_group_id || client?.id || clientId
+  const { data: groupRows, error: groupError } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('client_group_id', ownerId)
+  if (groupError) throw groupError
+  return {
+    ownerId,
+    ids: [...new Set([ownerId, clientId, ...(groupRows || []).map((row) => row.id)].filter(Boolean))]
+  }
 }
 
-async function findFollowUpDateDuplicate(clientId, followUpDate, excludeFollowUpId = '') {
+function mergeFollowUps(followUpsMap, clientIds) {
+  return clientIds.flatMap((id) => followUpsMap[id] || [])
+    .sort((a, b) => {
+      const numberDiff = (a.follow_up_number || 0) - (b.follow_up_number || 0)
+      if (numberDiff) return numberDiff
+      return String(a.created_at || '').localeCompare(String(b.created_at || ''))
+    })
+}
+
+async function loadClientWithRelations(clientId) {
+  const scope = await followUpScope(clientId)
+  const { data, error } = await supabase.from('clients').select('*').eq('id', scope.ownerId).maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  const { data: jobs, error: jobsError } = await supabase.from('jobs').select('status, mandate_status').eq('client_id', scope.ownerId)
+  if (jobsError) throw jobsError
+  const followUpsMap = await loadFollowUps(scope.ids)
+  return normalizeClient(data, 0, mergeFollowUps(followUpsMap, scope.ids), jobs || [])
+}
+
+async function findFollowUpDateDuplicate(clientIds, followUpDate, excludeFollowUpId = '') {
   const normalizedDate = normalizeFollowUpDateValue(followUpDate)
-  if (!clientId || !normalizedDate) return null
+  const ids = Array.isArray(clientIds) ? clientIds.filter(Boolean) : [clientIds].filter(Boolean)
+  if (!ids.length || !normalizedDate) return null
   let query = supabase
     .from('client_follow_ups')
     .select('id, follow_up_date')
-    .eq('client_id', clientId)
+    .in('client_id', ids)
     .eq('follow_up_date', normalizedDate)
     .limit(1)
 
@@ -547,8 +577,23 @@ async function listClients(req, res) {
       jobsByClient[job.client_id].push(job)
     })
 
-    const followUpsMap = await loadFollowUps(pagedData.map((client) => client.id))
-    const rows = pagedData.map((client) => normalizeClient(client, activeJobsMap[client.id] || 0, followUpsMap[client.id] || [], jobsByClient[client.id] || []))
+    const groupIds = [...new Set(pagedData.map((client) => client.client_group_id || client.id).filter(Boolean))]
+    const { data: groupRows, error: groupRowsError } = groupIds.length
+      ? await supabase.from('clients').select('id, client_group_id').in('client_group_id', groupIds)
+      : { data: [], error: null }
+    if (groupRowsError) throw groupRowsError
+    const clientIdsByGroup = (groupRows || []).reduce((map, row) => {
+      const key = row.client_group_id || row.id
+      map[key] = map[key] || []
+      map[key].push(row.id)
+      return map
+    }, {})
+    const followUpsMap = await loadFollowUps([...new Set([...clientIds, ...groupIds, ...(groupRows || []).map((row) => row.id)])])
+    const rows = pagedData.map((client) => {
+      const groupId = client.client_group_id || client.id
+      const scopeIds = [...new Set([groupId, client.id, ...(clientIdsByGroup[groupId] || [])].filter(Boolean))]
+      return normalizeClient(client, activeJobsMap[client.id] || 0, mergeFollowUps(followUpsMap, scopeIds), jobsByClient[client.id] || [])
+    })
     const filteredRows = paginate ? rows : applySharedFilters('clients', rows, aiFilters, clientFilterValue)
     const dataRows = localAiFilter ? filteredRows.slice(from, to + 1) : filteredRows
     const total = paginate ? count || 0 : filteredRows.length
@@ -718,7 +763,7 @@ async function updateClient(req, res) {
     if (error) throw error
     await notifyClientConsultantAssignment(req, data, existing.consultant_name || existing.consultant)
     await createClientFollowUpDueNotification({ recipientUserId: data.consultant_user_id, clientId: data.id, clientName: data.client_name || data.name, followUpDate: data.follow_up_date })
-    return res.json(normalizeClient(data))
+    return res.json(await loadClientWithRelations(data.id))
   } catch (err) {
     if (isClientDisplayIdUniqueError(err)) {
       return res.status(400).json({ error: 'Could not allocate unique Client ID. Please try again.' })
@@ -733,13 +778,14 @@ async function addFollowUp(req, res) {
     const follow_up_date = normalizeFollowUpDateValue(req.body.follow_up_date)
     const { follow_up_comments } = req.body
     if (!follow_up_date) return res.status(400).json({ error: 'Follow Up Date is required' })
-    const duplicate = await findFollowUpDateDuplicate(req.params.id, follow_up_date)
+    const scope = await followUpScope(req.params.id)
+    const duplicate = await findFollowUpDateDuplicate(scope.ids, follow_up_date)
     if (duplicate) return res.status(409).json({ error: 'A follow up already exists for this date.' })
 
     const { data: existing, error: existingError } = await supabase
       .from('client_follow_ups')
       .select('follow_up_number')
-      .eq('client_id', req.params.id)
+      .eq('client_id', scope.ownerId)
       .order('follow_up_number', { ascending: false })
       .limit(1)
 
@@ -749,7 +795,7 @@ async function addFollowUp(req, res) {
     const { data, error } = await supabase
       .from('client_follow_ups')
       .insert({
-        client_id: req.params.id,
+        client_id: scope.ownerId,
         follow_up_number: followUpNumber,
         follow_up_date,
         follow_up_comments: nullable(follow_up_comments)
@@ -760,7 +806,7 @@ async function addFollowUp(req, res) {
 
     if (error) throw error
 
-    const { error: updateError } = await updateClientRow(req.params.id, {
+    const { error: updateError } = await updateClientRow(scope.ownerId, {
       follow_up_date,
       comments: nullable(follow_up_comments),
       notes: nullable(follow_up_comments),
@@ -768,7 +814,7 @@ async function addFollowUp(req, res) {
     })
 
     if (updateError) throw updateError
-    const { data: updatedClient, error: notifyTargetError } = await loadClientFollowUpNotificationTarget(req.params.id)
+    const { data: updatedClient, error: notifyTargetError } = await loadClientFollowUpNotificationTarget(scope.ownerId)
     if (notifyTargetError) throw notifyTargetError
 
     if (updatedClient) {
@@ -781,7 +827,7 @@ async function addFollowUp(req, res) {
       })
     }
 
-    const client = await loadClientWithRelations(req.params.id)
+    const client = await loadClientWithRelations(scope.ownerId)
     return res.status(201).json({ data, client, follow_ups: client?.follow_ups || [] })
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'A follow up already exists for this date.' })
@@ -789,17 +835,17 @@ async function addFollowUp(req, res) {
   }
 }
 
-async function syncClientLatestFollowUp(clientId) {
+async function syncClientLatestFollowUp(scope) {
   const { data: latest, error } = await supabase
     .from('client_follow_ups')
     .select('*')
-    .eq('client_id', clientId)
+    .in('client_id', scope.ids)
     .order('follow_up_number', { ascending: false })
     .limit(1)
   if (error) throw error
 
   const row = latest?.[0] || null
-  const { error: updateError } = await updateClientRow(clientId, {
+  const { error: updateError } = await updateClientRow(scope.ownerId, {
     follow_up_date: row?.follow_up_date || null,
     comments: nullable(row?.follow_up_comments),
     notes: nullable(row?.follow_up_comments),
@@ -807,7 +853,7 @@ async function syncClientLatestFollowUp(clientId) {
   })
   
   if (updateError) throw updateError
-  const { data: updatedClient, error: notifyTargetError } = await loadClientFollowUpNotificationTarget(clientId)
+  const { data: updatedClient, error: notifyTargetError } = await loadClientFollowUpNotificationTarget(scope.ownerId)
   if (notifyTargetError) throw notifyTargetError
 
   if (updatedClient) {
@@ -829,29 +875,30 @@ async function updateFollowUp(req, res) {
     const { follow_up_comments } = req.body
     if (!follow_up_date) return res.status(400).json({ error: 'Follow Up Date is required' })
 
+    const scope = await followUpScope(req.params.id)
     const { data: existing, error: existingError } = await supabase
       .from('client_follow_ups')
       .select('*')
       .eq('id', req.params.followUpId)
-      .eq('client_id', req.params.id)
+      .in('client_id', scope.ids)
       .maybeSingle()
 
     if (existingError) throw existingError
     if (!existing) return res.status(404).json({ error: 'Follow-up not found' })
-    const duplicate = await findFollowUpDateDuplicate(req.params.id, follow_up_date, req.params.followUpId)
+    const duplicate = await findFollowUpDateDuplicate(scope.ids, follow_up_date, req.params.followUpId)
     if (duplicate) return res.status(409).json({ error: 'A follow up already exists for this date.' })
 
     const { data, error } = await supabase
       .from('client_follow_ups')
       .update({ follow_up_date, follow_up_comments: nullable(follow_up_comments) })
       .eq('id', req.params.followUpId)
-      .eq('client_id', req.params.id)
+      .in('client_id', scope.ids)
       .select('*')
       .single()
 
     if (error) throw error
-    await syncClientLatestFollowUp(req.params.id)
-    const client = await loadClientWithRelations(req.params.id)
+    await syncClientLatestFollowUp(scope)
+    const client = await loadClientWithRelations(scope.ownerId)
     return res.json({ data, client, follow_ups: client?.follow_ups || [] })
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'A follow up already exists for this date.' })
@@ -861,26 +908,27 @@ async function updateFollowUp(req, res) {
 
 async function deleteFollowUp(req, res) {
   try {
+    const scope = await followUpScope(req.params.id)
     const { data, error } = await supabase
       .from('client_follow_ups')
       .delete()
       .eq('id', req.params.followUpId)
-      .eq('client_id', req.params.id)
+      .in('client_id', scope.ids)
       .select('*')
       .maybeSingle()
 
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Follow-up not found' })
 
-    await syncClientLatestFollowUp(req.params.id)
+    await syncClientLatestFollowUp(scope)
     const { data: remaining, error: remainingError } = await supabase
       .from('client_follow_ups')
       .select('*')
-      .eq('client_id', req.params.id)
+      .in('client_id', scope.ids)
       .order('follow_up_number', { ascending: true })
 
     if (remainingError) throw remainingError
-    const client = await loadClientWithRelations(req.params.id)
+    const client = await loadClientWithRelations(scope.ownerId)
     return res.json({ data, client, follow_ups: remaining || [] })
   } catch (err) {
     return logAndSendInternal(res, 'deleteFollowUp', err)

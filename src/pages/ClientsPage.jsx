@@ -144,6 +144,8 @@ const getCanonicalClients = (clients) => {
   return [...map.values()].sort((a, b) => String(a.client_name || a.name || '').localeCompare(String(b.client_name || b.name || ''), undefined, { sensitivity: 'base' }))
 }
 
+const followUpClientKey = (client) => client?._contact_group_id || client?.client_group_id || client?.id || ''
+
 const formatLocationRegion = (location, region) => {
   const parts = [location, region].map(value => String(value || '').trim()).filter(Boolean)
   return parts.join(', ')
@@ -697,14 +699,28 @@ export default function ClientsPage() {
 
   const selectedFollowUp = (client) => {
     const followUps = client.follow_ups || []
-    const selected = selectedFollowUps[client.id] || followUps[followUps.length - 1]?.id
+    const selected = selectedFollowUps[followUpClientKey(client)] || followUps[followUps.length - 1]?.id
     return followUps.find((item) => item.id === selected) || followUps[followUps.length - 1] || null
   }
 
   const mergeClientUpdate = useCallback((updatedClient) => {
     if (!updatedClient?.id) return
-    setClients((current) => current.map((client) => (client.id === updatedClient.id ? { ...client, ...updatedClient } : client)))
-    setAllClients((current) => current.map((client) => (client.id === updatedClient.id ? { ...client, ...updatedClient } : client)))
+    const updatedKey = followUpClientKey(updatedClient)
+    const merge = (client) => {
+      if (client.id === updatedClient.id) return { ...client, ...updatedClient }
+      if (updatedKey && followUpClientKey(client) === updatedKey) {
+        return {
+          ...client,
+          follow_ups: Array.isArray(updatedClient.follow_ups) ? updatedClient.follow_ups : client.follow_ups,
+          follow_up_date: updatedClient.follow_up_date,
+          comments: updatedClient.comments,
+          notes: updatedClient.notes
+        }
+      }
+      return client
+    }
+    setClients((current) => current.map(merge))
+    setAllClients((current) => current.map(merge))
   }, [])
 
   const selectedContact = (client) => {
@@ -747,7 +763,8 @@ export default function ClientsPage() {
     try {
       setError(null)
       setFollowUpError('')
-      const res = await fetch(editingFollowUp ? `/api/clients/${followUpClient.id}/follow-ups/${editingFollowUp.id}` : `/api/clients/${followUpClient.id}/follow-ups`, {
+      const clientId = followUpClientKey(followUpClient)
+      const res = await fetch(editingFollowUp ? `/api/clients/${clientId}/follow-ups/${editingFollowUp.id}` : `/api/clients/${clientId}/follow-ups`, {
         method: editingFollowUp ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...followUpForm, follow_up_date: normalizedDate })
@@ -757,7 +774,7 @@ export default function ClientsPage() {
       if (data.client) mergeClientUpdate(data.client)
       const latestFollowUps = Array.isArray(data.client?.follow_ups) ? data.client.follow_ups : []
       const selectedId = data.data?.id || editingFollowUp?.id || latestFollowUps[latestFollowUps.length - 1]?.id || ''
-      setSelectedFollowUps((current) => ({ ...current, [followUpClient.id]: selectedId }))
+      setSelectedFollowUps((current) => ({ ...current, [clientId]: selectedId }))
       setFollowUpClient(null)
       setEditingFollowUp(null)
       setFollowUpForm({ follow_up_date: '', follow_up_comments: '' })
@@ -839,13 +856,14 @@ export default function ClientsPage() {
     try {
       setError(null)
       const { client, followUp } = deletingFollowUp
-      const res = await fetch(`/api/clients/${client.id}/follow-ups/${followUp.id}`, { method: 'DELETE' })
+      const clientId = followUpClientKey(client)
+      const res = await fetch(`/api/clients/${clientId}/follow-ups/${followUp.id}`, { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to delete follow-up.')
       if (data.client) mergeClientUpdate(data.client)
       const remaining = Array.isArray(data.client?.follow_ups) ? data.client.follow_ups : (Array.isArray(data.follow_ups) ? data.follow_ups : [])
       const latest = remaining[remaining.length - 1] || null
-      setSelectedFollowUps((current) => ({ ...current, [client.id]: current[client.id] === followUp.id ? latest?.id || '' : current[client.id] || latest?.id || '' }))
+      setSelectedFollowUps((current) => ({ ...current, [clientId]: current[clientId] === followUp.id ? latest?.id || '' : current[clientId] || latest?.id || '' }))
       setDeletingFollowUp(null)
     } catch (err) {
       setError(err.message)
@@ -1240,7 +1258,7 @@ export default function ClientsPage() {
                   className="candidate-columns-action follow-up-date-action"
                   type="button"
                   onClick={() => {
-                    setSelectedFollowUps((current) => ({ ...current, [client.id]: item.id }))
+                    setSelectedFollowUps((current) => ({ ...current, [followUpClientKey(client)]: item.id }))
                     setTablePopover(null)
                   }}
                 >

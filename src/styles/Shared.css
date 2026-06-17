@@ -170,14 +170,14 @@
 .candidate-columns-action.follow-up-date-action {
   justify-content: flex-start;
   min-width: 0;
-  color: var(--navy-darkest);
-  font-weight: 600;
+  color: #111827;
+  font-weight: 400;
 }
 .candidate-columns-action.follow-up-date-action:hover {
   background: var(--gray-50);
 }
 .client-follow-up-date-text {
-  color: var(--navy-darkest);
+  color: #111827;
 }
 
 /* ===== Filter Bar ===== */
