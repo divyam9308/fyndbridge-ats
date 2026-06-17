@@ -1,10 +1,9 @@
 const { randomUUID } = require('crypto')
 const supabase = require('../services/supabaseAdmin')
-const { callAiJson } = require('../services/aiProvider')
 const { uploadDocument } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
-const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
+const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { applyQueryFilters } = require('../services/queryFilters')
 
 const CLIENT_STATUSES = [
@@ -122,6 +121,7 @@ const CLIENT_FILTER_MAPPING = {
   status: [{ column: 'status', kind: 'text' }],
   terms_signed: [{ column: 'terms_signed_type', kind: 'text' }, { column: 'terms_signed_custom', kind: 'text' }],
   value: [{ column: 'terms_value', kind: 'text' }],
+  billing_entity: [{ column: 'billing_entity', kind: 'text' }],
   gstin: [{ column: 'gstin', kind: 'text' }],
   pan: [{ column: 'pan', kind: 'text' }],
   address_on_invoice: [{ column: 'address_on_invoice', kind: 'text' }],
@@ -210,6 +210,7 @@ function clientFilterValue(row, field) {
     status: row.status,
     terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
     value: row.terms_value,
+    billing_entity: row.billing_entity,
     gstin: row.gstin,
     pan: row.pan,
     address_on_invoice: row.address_on_invoice,
@@ -438,7 +439,7 @@ async function listClients(req, res) {
   try {
     const sort = normalizeSort(req.query)
     const aiFilters = parseJsonFilter(req.query.ai_filters)
-    const localAiFilter = (aiFilters?.conditions || []).some(condition => condition.field === 'value')
+    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.conditions || []).some(condition => condition.field === 'value')
     const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
@@ -496,7 +497,7 @@ async function listClients(req, res) {
     const filteredRows = paginate ? rows : applySharedFilters('clients', rows, aiFilters, clientFilterValue)
     const dataRows = localAiFilter ? filteredRows.slice(from, to + 1) : filteredRows
     const total = paginate ? count || 0 : filteredRows.length
-    const totalPages = paginate ? Math.max(1, Math.ceil(total / limit)) : 1
+    const totalPages = Math.max(1, Math.ceil(total / limit))
 return res.json({ data: dataRows, total, page, totalPages, limit })
   } catch (err) {
     return logAndSendInternal(res, 'listClients', err)
@@ -507,13 +508,7 @@ async function buildClientFilters(req, res) {
   const prompt = clean(req.body.prompt)
   if (!prompt) return res.status(400).json({ error: 'prompt is required' })
   try {
-    const parsed = await callAiJson({
-      prompt: buildAiFilterPrompt('clients', prompt),
-      schema: aiFilterSchema(),
-      schemaName: 'client_filter',
-      temperature: 0
-    })
-    const filters = validateAiFilters('clients', parsed, prompt)
+    const filters = validateAiFilters('clients', null, prompt)
     if (!filters) return res.status(400).json({ error: 'Could not parse Clients filter.' })
     return res.json({ filters })
   } catch (err) {

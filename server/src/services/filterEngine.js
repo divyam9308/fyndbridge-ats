@@ -93,11 +93,11 @@ const normalizers = {
 const candidateFields = {
   candidate_id: { aliases: ['candidate id', 'ca id', 'ca'], type: 'id', operators: ['contains', 'equals'] },
   candidate_name: { aliases: ['candidate', 'name', 'candidate name'], type: 'text' },
-  consultant: { aliases: ['consultant', 'recruiter'], type: 'text' },
+  consultant: { aliases: ['consultant', 'consultant name', 'recruiter'], type: 'text' },
   email: { aliases: ['email', 'email id'], type: 'text' },
   mobile: { aliases: ['phone', 'mobile', 'contact number'], type: 'text' },
   designation: { aliases: ['designation', 'current designation', 'role title'], type: 'text' },
-  organisation: { aliases: ['organisation', 'organization', 'company', 'current organisation'], type: 'text' },
+  organisation: { aliases: ['organisation', 'organization', 'company', 'company/organisation', 'company/organization', 'current organisation', 'current organization', 'current company'], type: 'text' },
   experience: { aliases: ['experience', 'exp', 'years'], type: 'number' },
   client_id: { aliases: ['client id', 'cl id', 'cl'], type: 'id' },
   client_name: { aliases: ['client', 'client name'], type: 'text' },
@@ -118,7 +118,7 @@ const candidateFields = {
 
 const mandateFields = {
   job_id: { aliases: ['job id', 'mandate id', 'jb id', 'jb'], type: 'id' },
-  consultant: { aliases: ['consultant'], type: 'text' },
+  consultant: { aliases: ['consultant', 'consultant name', 'consultant names'], type: 'text' },
   team_lead: { aliases: ['team lead', 'tl'], type: 'text' },
   client_id: { aliases: ['client id', 'cl id', 'cl'], type: 'id' },
   client_name: { aliases: ['client', 'client name'], type: 'text' },
@@ -129,7 +129,8 @@ const mandateFields = {
   mandate_status: { aliases: ['mandate status', 'status', 'priority'], type: 'mandate_status' },
   vertical: { aliases: ['vertical', 'domain', 'sector'], type: 'text' },
   comments: { aliases: ['comment', 'comments', 'notes'], type: 'text' },
-  date_of_allocation: { aliases: ['allocation date', 'date of allocation', 'date'], type: 'date' }
+  date_of_allocation: { aliases: ['allocation date', 'date of allocation', 'date'], type: 'date' },
+  jd: { aliases: ['jd', 'jd file', 'jd filename', 'jd path'], type: 'text' }
 }
 
 const clientFields = {
@@ -137,7 +138,7 @@ const clientFields = {
   client_name: { aliases: ['client', 'client name', 'name'], type: 'text' },
   location: { aliases: ['location', 'city'], type: 'text' },
   region: { aliases: ['region', 'state'], type: 'text' },
-  consultant: { aliases: ['consultant', 'recruiter'], type: 'text' },
+  consultant: { aliases: ['consultant', 'consultant name', 'recruiter'], type: 'text' },
   contact_person: { aliases: ['contact person', 'contact'], type: 'text' },
   mobile: { aliases: ['mobile', 'phone', 'contact number'], type: 'text' },
   email: { aliases: ['email', 'email id'], type: 'text' },
@@ -149,6 +150,7 @@ const clientFields = {
   status: { aliases: ['status'], type: 'enum' },
   terms_signed: { aliases: ['terms signed', 'terms'], type: 'text' },
   value: { aliases: ['value', 'terms value', 'fee value'], type: 'money' },
+  billing_entity: { aliases: ['billing entity'], type: 'text' },
   gstin: { aliases: ['gstin', 'gst'], type: 'text' },
   pan: { aliases: ['pan'], type: 'text' },
   address_on_invoice: { aliases: ['address on invoice', 'invoice address', 'address'], type: 'text' },
@@ -163,9 +165,9 @@ const configs = {
   clients: { fields: clientFields }
 }
 
-const mandateSearchFields = ['job_id', 'consultant', 'team_lead', 'client_id', 'client_name', 'role', 'location', 'budget', 'experience', 'vertical', 'mandate_status', 'comments']
-const candidateSearchFields = ['candidate_id', 'candidate_name', 'consultant', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'current_ctc', 'expected_ctc', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin']
-const clientSearchFields = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
+const mandateSearchFields = ['job_id', 'consultant', 'team_lead', 'client_id', 'client_name', 'role', 'location', 'budget', 'experience', 'vertical', 'date_of_allocation', 'mandate_status', 'comments', 'jd']
+const candidateSearchFields = ['candidate_id', 'candidate_name', 'consultant', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'date', 'current_ctc', 'expected_ctc', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin']
+const clientSearchFields = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'billing_entity', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
 const candidateContainsFields = new Set(candidateSearchFields)
 const clientContainsFields = new Set(clientSearchFields)
 
@@ -183,6 +185,39 @@ function aliasMap(config) {
     ;[field, ...(meta.aliases || [])].forEach(alias => map.set(lower(alias), field))
   })
   return map
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function parseFieldSegment(config, segment) {
+  const text = clean(segment)
+  if (!text) return null
+  const map = aliasMap(config)
+  const aliases = [...map.keys()].sort((a, b) => b.length - a.length)
+  for (const alias of aliases) {
+    const match = text.match(new RegExp(`^${escapeRegExp(alias)}\\s*(?:(?:is|equals?|equal to|contains|include|includes|has|with)\\s+)?(.+)$`, 'i'))
+    if (!match) continue
+    const field = map.get(lower(alias))
+    const meta = config.fields[field]
+    const value = clean(match[1])
+    if (!meta || !value) continue
+    const operator = ['id', 'enum', 'mandate_status', 'boolean'].includes(meta.type) ? 'equals' : 'contains'
+    return normalizeCondition(config, { field, operator, value })
+  }
+  return null
+}
+
+function parseLogicalPrompt(page, prompt) {
+  const config = configs[page]
+  const text = clean(prompt)
+  if (!config || !text) return null
+  const connector = /\s+or\s+/i.test(text) ? 'or' : /\s+and\s+/i.test(text) ? 'and' : ''
+  const parts = connector ? text.split(new RegExp(`\\s+${connector}\\s+`, 'i')).map(clean).filter(Boolean) : [text]
+  const conditions = parts.map(part => parseFieldSegment(config, part))
+  if (conditions.some(condition => !condition)) return null
+  return { ...(connector === 'or' && conditions.length > 1 ? { mode: 'any' } : {}), conditions }
 }
 
 function normalizeCondition(config, condition) {
@@ -306,6 +341,8 @@ function buildKeywordFilters(page, prompt) {
 
 function validateAiFilters(page, data, prompt = '') {
   const config = configs[page]
+  const deterministic = clean(prompt) ? parsePrompt(page, prompt) : null
+  if (deterministic) return deterministic
   if (isSimpleKeywordPrompt(page, prompt)) return buildKeywordFilters(page, prompt)
   const normalized = (Array.isArray(data?.conditions) ? data.conditions : [])
     .map(condition => {
@@ -332,7 +369,6 @@ function validateAiFilters(page, data, prompt = '') {
     seen.add(key)
     return true
   })
-  const deterministic = clean(prompt) ? parsePrompt(page, prompt) : null
   const forcedFields = new Set((deterministic?.conditions || [])
     .filter(condition => ['greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'between', 'before', 'after', 'on', 'starts_with'].includes(condition.operator))
     .map(condition => condition.field))
@@ -347,12 +383,15 @@ function validateAiFilters(page, data, prompt = '') {
     mergedSeen.add(key)
     return true
   })
-  return unique.length ? { ...(deterministic?.mode ? { mode: deterministic.mode } : {}), conditions: unique } : null
+  if (unique.length) return { ...(deterministic?.mode ? { mode: deterministic.mode } : {}), conditions: unique }
+  return clean(prompt) ? buildKeywordFilters(page, prompt) : null
 }
 
 function parsePrompt(page, prompt) {
   const config = configs[page]
   const text = clean(prompt)
+  const logical = parseLogicalPrompt(page, text)
+  if (logical) return logical
   const conditions = []
   let mode = ''
   const add = (field, operator, value) => {
@@ -482,8 +521,6 @@ function parsePrompt(page, prompt) {
     const follow = text.match(/follow up\s+(after|before|on)\s+(.+)$/i)
     if (follow) add('follow_up_date', follow[1].toLowerCase(), follow[2])
   }
-
-  if (!conditions.length && config.fields.client_name && /^[a-z0-9][\w\s&.-]+$/i.test(text)) add('client_name', 'contains', text.replace(/\b(client|mandates?)\b/gi, '').trim())
 
   const unique = []
   const seen = new Set()

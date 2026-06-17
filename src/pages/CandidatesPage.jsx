@@ -14,7 +14,7 @@ import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtecte
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
-import { filterPills, highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
+import { highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 /* ====== Static reference data ====== */
@@ -137,7 +137,7 @@ const SORT_OPTIONS = [
   { field: 'candidate_name', label: 'Alphabetic Order', toggle: true },
   { field: 'consultant', label: 'Consultant', toggle: false }
 ]
-const CANDIDATE_AI_SEARCH_FIELDS = ['candidate_id', 'candidate_name', 'consultant', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'current_ctc', 'expected_ctc', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin']
+const CANDIDATE_AI_SEARCH_FIELDS = ['candidate_id', 'candidate_name', 'consultant', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'date', 'current_ctc', 'expected_ctc', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin']
 
 /* ====== Empty forms ====== */
 const EMPTY_CAND = {
@@ -1874,11 +1874,6 @@ export default function CandidatesPage() {
       {aiFilterError && (
         <div className="form-error" style={{ display:'block', marginBottom:12 }}>
           {aiFilterError}
-        </div>
-      )}
-      {aiFilters && (
-        <div className="ai-filter-pills">
-          {filterPills(aiFilters).map(label => <span className="ai-filter-pill" key={label}>🔍 {label}</span>)}
         </div>
       )}
 

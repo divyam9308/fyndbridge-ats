@@ -2,8 +2,7 @@ const supabase = require('../services/supabaseAdmin')
 const { uploadDocument } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
 const fs = require('fs/promises')
-const { callAiJson } = require('../services/aiProvider')
-const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
+const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 
@@ -198,7 +197,8 @@ function jobFilterValue(row, field) {
     mandate_status: row.mandate_status,
     vertical: row.vertical,
     comments: row.comments || row.notes,
-    date_of_allocation: row.allocation_date
+    date_of_allocation: row.allocation_date,
+    jd: row.jd_storage_path || row.jd_url
   }[field]
 }
 
@@ -214,12 +214,22 @@ const JOB_FILTER_MAPPING = {
   mandate_status: [{ column: 'mandate_status', kind: 'text' }],
   vertical: [{ column: 'vertical', kind: 'text' }],
   comments: [{ column: 'comments', kind: 'text' }, { column: 'notes', kind: 'text' }],
-  date_of_allocation: [{ column: 'allocation_date', kind: 'date' }]
+  date_of_allocation: [{ column: 'allocation_date', kind: 'date' }],
+  jd: [{ column: 'jd_storage_path', kind: 'text' }, { column: 'jd_url', kind: 'text' }]
+}
+
+function parseJsonFilter(value) {
+  if (!value) return null
+  try {
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return null
+  }
 }
 
 async function listJobs(req, res) {
   try {
-    const aiFilters = req.query.ai_filters ? JSON.parse(req.query.ai_filters) : null
+    const aiFilters = parseJsonFilter(req.query.ai_filters)
     const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.conditions || []).some(condition => condition.field === 'consultant')
     const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
@@ -270,7 +280,7 @@ return res.json({ data: [], total: 0, page, totalPages: 1, limit })
     const filteredTotal = rows.length
     if (localAiFilter) rows = rows.slice(from, to + 1)
     const total = paginate ? count || 0 : filteredTotal
-    const totalPages = paginate ? Math.max(1, Math.ceil(total / limit)) : 1
+    const totalPages = Math.max(1, Math.ceil(total / limit))
 return res.json({ data: rows, total, page, totalPages, limit })
   } catch (err) {
     return logAndSendInternal(res, 'listJobs', err)
@@ -465,13 +475,7 @@ async function buildJobFilters(req, res) {
   try {
     const prompt = clean(req.body.prompt)
     if (!prompt) return res.status(400).json({ error: 'prompt is required' })
-    const parsed = await callAiJson({
-      prompt: buildAiFilterPrompt('mandates', prompt),
-      schema: aiFilterSchema(),
-      schemaName: 'mandate_filter',
-      temperature: 0
-    })
-    const filters = validateAiFilters('mandates', parsed, prompt)
+    const filters = validateAiFilters('mandates', null, prompt)
     if (!filters) return res.status(400).json({ error: 'Could not parse Mandates filter.' })
     return res.json({ filters })
   } catch (err) {

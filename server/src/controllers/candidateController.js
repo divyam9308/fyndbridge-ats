@@ -5,8 +5,7 @@ const { v4: uuidv4 } = require('uuid')
 const supabase = require('../services/supabaseAdmin')
 const { parseResume } = require('../services/resumeParser')
 const { RESUME_BUCKET, prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplicate, checkLinkedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
-const { callAiJson } = require('../services/aiProvider')
-const { buildAiFilterPrompt, validateAiFilters, aiFilterSchema, applyFilters: applySharedFilters } = require('../services/filterEngine')
+const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 
@@ -566,6 +565,7 @@ function candidateFilterValue(row, field) {
     client_id: row.client_display_id,
     client_name: row.client_name,
     role: row.job_title,
+    date: row.created_at,
     current_ctc: row.current_salary,
     expected_ctc: row.expected_salary,
     current_location: row.location || row.city,
@@ -872,7 +872,7 @@ async function listCandidates(req, res) {
     const sortField = cleanText(req.query.sortField)
     const sortDirection = cleanText(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
     const aiFilters = parseJsonFilter(req.query.ai_filters)
-    const localAiFilter = aiFilters?.mode === 'keyword'
+    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.conditions || []).some((condition) => ['client_id', 'month'].includes(String(condition.field || '').toLowerCase()))
     const skillCandidateIds = await resolveSkillCandidateIds(aiFilters)
     const associationCandidateIds = await resolveAssociationCandidateIds(aiFilters)
     const aiAssociationFilter = aiFilters?.mode !== 'any' && (aiFilters?.conditions || []).some((condition) => ASSOCIATION_FILTER_FIELDS.has(String(condition.field || '').toLowerCase()))
@@ -1443,13 +1443,7 @@ async function buildAiCandidateFilters(req, res) {
       return res.status(400).json({ error: 'prompt is required' })
     }
 
-    const parsed = await callAiJson({
-      prompt: buildAiFilterPrompt('candidates', prompt),
-      schema: aiFilterSchema(),
-      schemaName: 'candidate_filter',
-      temperature: 0
-    })
-    const filters = validateAiFilters('candidates', parsed, prompt)
+    const filters = validateAiFilters('candidates', null, prompt)
     if (!filters) {
       const fallback = { mode: 'any', conditions: ['consultant', 'client_name', 'role', 'designation', 'mobile', 'email', 'skills'].map(field => ({ field, operator: 'contains', value: prompt })) }
 return res.json({ filters: fallback })

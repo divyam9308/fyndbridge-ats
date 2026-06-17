@@ -13,7 +13,7 @@ import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
-import { filterPills, highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
+import { highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 const STATUSES = ['Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
@@ -112,7 +112,7 @@ const SORT_OPTIONS = [
   { field: 'client_name', label: 'Alphabetical Order' }
 ]
 const CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY = 'clientsTableColumns'
-const CLIENT_AI_SEARCH_FIELDS = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
+const CLIENT_AI_SEARCH_FIELDS = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'billing_entity', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
 
 const getCurrentUser = () => {
   if (typeof window === 'undefined') return {}
@@ -1066,11 +1066,6 @@ export default function ClientsPage() {
       {statusUpdateError && (
         <div className="form-error" style={{ display:'block', marginBottom:12 }}>
           {statusUpdateError}
-        </div>
-      )}
-      {aiFilters && (
-        <div className="ai-filter-pills">
-          {filterPills(aiFilters).map(label => <span className="ai-filter-pill" key={label}>🔍 {label}</span>)}
         </div>
       )}
 
