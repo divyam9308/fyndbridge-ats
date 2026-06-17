@@ -2,6 +2,11 @@ const supabase = require('../services/supabaseAdmin')
 const { createClientFollowUpDueNotification, sameName, todayLocal } = require('../services/assignmentNotifications')
 
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
+const CLEARED_TITLE_PREFIX = '[cleared] '
+const missingColumn = (error, column) => (
+  (error?.code === '42703' || error?.code === 'PGRST204') &&
+  String(error.message || '').includes(column)
+)
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
 const preferredName = (profile, fallbackEmail) => clean(profile?.name || profile?.full_name) || displayNameFromEmail(profile?.email || fallbackEmail)
 
@@ -59,7 +64,8 @@ async function ensureClientFollowUpDueNotifications(req) {
       recipientUserId: userId,
       clientId: client.id,
       clientName: clean(client.client_name || client.name),
-      followUpDate: followUp.follow_up_date
+      followUpDate: followUp.follow_up_date,
+      followUpId: followUp.id
     })
   }
 }
@@ -68,16 +74,28 @@ async function listNotifications(req, res) {
   try {
     if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' })
     await ensureClientFollowUpDueNotifications(req)
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('notifications')
       .select('*')
       .eq('recipient_user_id', req.user.id)
+      .is('cleared_at', null)
       .order('created_at', { ascending: false })
       .limit(30)
+    if (missingColumn(error, 'cleared_at')) {
+      const fallback = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('recipient_user_id', req.user.id)
+        .order('created_at', { ascending: false })
+        .limit(30)
+      data = fallback.data
+      error = fallback.error
+    }
     if (error) throw error
-    const senders = await profileMap((data || []).map(row => row.sender_user_id))
+    const visibleRows = (data || []).filter(row => !String(row.title || '').startsWith(CLEARED_TITLE_PREFIX))
+    const senders = await profileMap(visibleRows.map(row => row.sender_user_id))
     return res.json({
-      data: (data || []).map(row => ({
+      data: visibleRows.map(row => ({
         ...row,
         sender_name: row.sender_user_id ? preferredName(senders.get(row.sender_user_id), '') : 'System'
       }))
@@ -164,12 +182,33 @@ async function markNotificationRead(req, res) {
 async function clearReadNotifications(req, res) {
   try {
     if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' })
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('notifications')
-      .delete()
+      .update({ cleared_at: new Date().toISOString() })
       .eq('recipient_user_id', req.user.id)
       .eq('status', 'read')
+      .is('cleared_at', null)
       .select('id')
+    if (missingColumn(error, 'cleared_at')) {
+      const { data: readRows, error: readError } = await supabase
+        .from('notifications')
+        .select('id, title')
+        .eq('recipient_user_id', req.user.id)
+        .eq('status', 'read')
+      if (readError) throw readError
+      const rows = (readRows || []).filter(row => !String(row.title || '').startsWith(CLEARED_TITLE_PREFIX))
+      const updated = await Promise.all(rows.map(row => supabase
+        .from('notifications')
+        .update({ title: `${CLEARED_TITLE_PREFIX}${row.title || 'Notification'}` })
+        .eq('id', row.id)
+        .eq('recipient_user_id', req.user.id)
+        .select('id')
+        .single()))
+      const failed = updated.find(result => result.error)
+      if (failed) throw failed.error
+      data = rows
+      error = null
+    }
     if (error) throw error
     return res.json({ success: true, cleared: (data || []).length })
   } catch (err) {

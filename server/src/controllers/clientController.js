@@ -471,6 +471,49 @@ async function findFollowUpDateDuplicate(clientIds, followUpDate, excludeFollowU
   return data?.[0] || null
 }
 
+async function syncEditedClientFollowUp(clientId, body) {
+  if (!Object.prototype.hasOwnProperty.call(body, 'follow_up_date')) return
+  const followUpDate = normalizeFollowUpDateValue(body.follow_up_date)
+  if (!followUpDate) return
+  const scope = await followUpScope(clientId)
+  const followUpsMap = await loadFollowUps(scope.ids)
+  const followUps = mergeFollowUps(followUpsMap, scope.ids)
+  const selectedId = clean(body.follow_up_id)
+  const target = followUps.find((item) => item.id === selectedId) || followUps[followUps.length - 1] || null
+  const duplicate = await findFollowUpDateDuplicate(scope.ids, followUpDate, target?.id || '')
+  if (duplicate) {
+    const err = new Error('A follow up already exists for this date.')
+    err.statusCode = 409
+    throw err
+  }
+
+  if (target) {
+    const { error } = await supabase
+      .from('client_follow_ups')
+      .update({ follow_up_date: followUpDate, updated_at: new Date().toISOString() })
+      .eq('id', target.id)
+    if (error) throw error
+    await syncClientLatestFollowUp(scope)
+    return
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from('client_follow_ups')
+    .select('follow_up_number')
+    .eq('client_id', scope.ownerId)
+    .order('follow_up_number', { ascending: false })
+    .limit(1)
+  if (existingError) throw existingError
+  const { error } = await supabase.from('client_follow_ups').insert({
+    client_id: scope.ownerId,
+    follow_up_number: ((existing || [])[0]?.follow_up_number || 0) + 1,
+    follow_up_date: followUpDate,
+    follow_up_comments: nullable(body.comments || body.notes)
+  })
+  if (error) throw error
+  await syncClientLatestFollowUp(scope)
+}
+
 function missingClientColumn(error) {
   if (error?.code !== 'PGRST204' && error?.code !== '42703') return null
   const match = String(error.message || '').match(/'([^']+)' column|column "([^"]+)"|column\s+([a-zA-Z0-9_.]+)\s+does not exist/i)
@@ -754,7 +797,9 @@ async function updateClient(req, res) {
       req.body.contract_pdf_url = contract.path
       req.body.contract_pdf_storage_path = contract.path
     }
+    await syncEditedClientFollowUp(req.params.id, req.body)
     const payload = clientPayload({ ...existing, ...req.body })
+    delete payload.follow_up_date
     if (!payload.client_display_id) {
       payload.client_display_id = existing?.client_display_id || await nextClientDisplayId(payload.client_name)
     }
@@ -823,7 +868,8 @@ async function addFollowUp(req, res) {
         consultantName: updatedClient.consultant_name || updatedClient.consultant,
         clientId: updatedClient.id,
         clientName: updatedClient.client_name || updatedClient.name,
-        followUpDate: updatedClient.follow_up_date
+        followUpDate: updatedClient.follow_up_date,
+        followUpId: data.id
       })
     }
 
@@ -862,7 +908,8 @@ async function syncClientLatestFollowUp(scope) {
       consultantName: updatedClient.consultant_name || updatedClient.consultant,
       clientId: updatedClient.id,
       clientName: updatedClient.client_name || updatedClient.name,
-      followUpDate: updatedClient.follow_up_date
+      followUpDate: updatedClient.follow_up_date,
+      followUpId: row?.id
     })
   }
 

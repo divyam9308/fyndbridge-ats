@@ -56,7 +56,7 @@ async function createConsultantAssignmentNotification({ type, senderId, consulta
   if (error && error.code !== '23505' && error.code !== '42P01') throw error
 }
 
-async function createClientFollowUpDueNotification({ recipientUserId, consultantUserId = '', consultantName = '', clientId, clientName, followUpDate }) {
+async function createClientFollowUpDueNotification({ recipientUserId, consultantUserId = '', consultantName = '', clientId, clientName, followUpDate, followUpId = '' }) {
   const recipientProfile = clean(recipientUserId)
     ? { id: clean(recipientUserId) }
     : await findProfileUser({ userId: consultantUserId, name: consultantName })
@@ -72,6 +72,7 @@ async function createClientFollowUpDueNotification({ recipientUserId, consultant
     .eq('client_id', clientId)
     .eq('action_type', 'client_follow_up_due')
     .limit(1)
+  if (clean(followUpId)) existingQuery = existingQuery.eq('follow_up_id', clean(followUpId))
   let { data: existing, error: existingError } = await existingQuery.eq('follow_up_date', dueDate)
   if (existingError?.code === '42703' || existingError?.code === 'PGRST204') {
     const fallback = await supabase
@@ -97,7 +98,10 @@ async function createClientFollowUpDueNotification({ recipientUserId, consultant
     status: 'pending',
     action_type: 'client_follow_up_due'
   }
-  let { error } = await supabase.from('notifications').insert({ ...row, follow_up_date: dueDate })
+  const withFollowUpFields = clean(followUpId)
+    ? { ...row, follow_up_date: dueDate, follow_up_id: clean(followUpId) }
+    : { ...row, follow_up_date: dueDate }
+  let { error } = await supabase.from('notifications').insert(withFollowUpFields)
   if (error?.code === '42703' || error?.code === 'PGRST204') {
     const fallback = await supabase.from('notifications').insert(row)
     error = fallback.error

@@ -10,12 +10,17 @@ create table if not exists public.notifications (
   status text default 'pending' check (status in ('pending','read')),
   action_type text default 'mark_read',
   read_at timestamptz,
+  cleared_at timestamptz,
+  follow_up_id uuid,
+  follow_up_date date,
   created_at timestamptz default now()
 );
 
 alter table public.notifications
   add column if not exists action_type text default 'mark_read',
-  add column if not exists follow_up_date date;
+  add column if not exists follow_up_date date,
+  add column if not exists cleared_at timestamptz,
+  add column if not exists follow_up_id uuid;
 
 update public.notifications
 set action_type = case
@@ -31,6 +36,7 @@ create index if not exists notifications_mandate_id_idx on public.notifications(
 create index if not exists notifications_status_idx on public.notifications(status);
 create index if not exists notifications_created_at_idx on public.notifications(created_at);
 create index if not exists notifications_follow_up_date_idx on public.notifications(follow_up_date);
+create index if not exists notifications_cleared_at_idx on public.notifications(cleared_at);
 drop index if exists notifications_assignment_unique_idx;
 drop index if exists notifications_client_follow_up_due_unique_idx;
 
@@ -65,7 +71,7 @@ create policy notifications_insert_service_only
   with check (false);
 
 grant select on public.notifications to authenticated;
-grant update(status, read_at) on public.notifications to authenticated;
+grant update(status, read_at, cleared_at) on public.notifications to authenticated;
 
 do $$
 begin
