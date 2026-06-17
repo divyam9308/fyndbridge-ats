@@ -739,7 +739,7 @@ export default function ClientDetailPage() {
         </>
       )}
       {editCandidate && editForm && createPortal((
-        <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && !savingCandidate && setEditCandidate(null)}>
+        <div className="modal-overlay">
           <div className="modal-card modal-card-lg" ref={editModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Edit Candidate">
             <div className="modal-header">
               <span className="modal-title">Edit Candidate</span>

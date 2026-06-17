@@ -756,7 +756,7 @@ export default function JobsPage() {
       })()}
 
       {isOpen && createPortal((
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && editingJob && setIsOpen(false)}>
+        <div className="modal-overlay">
           <div className="modal-card modal-card-lg" ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingJob ? 'Edit Mandate' : 'Add Mandate'}>
             <div className="modal-header">
               <span className="modal-title">{editingJob ? 'Edit Mandate' : 'Add Mandate'}</span>

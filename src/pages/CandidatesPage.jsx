@@ -432,18 +432,6 @@ export default function CandidatesPage() {
   }, [importOpen, parsed, focusPopup])
 
   useEffect(() => {
-    if (!importOpen) return undefined
-    const blockEscapeClose = (event) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation?.()
-    }
-    document.addEventListener('keydown', blockEscapeClose, true)
-    return () => document.removeEventListener('keydown', blockEscapeClose, true)
-  }, [importOpen])
-
-  useEffect(() => {
     if (candidateDuplicate) focusPopup(duplicateModalRef)
   }, [candidateDuplicate, focusPopup])
 
@@ -1978,7 +1966,7 @@ export default function CandidatesPage() {
 
       {/* ===== Add Candidate Modal ===== */}
       {addOpen && createPortal((
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && editing && !saving && setAddOpen(false)}>
+        <div className="modal-overlay">
           <div className="modal-card modal-card-lg" ref={candidateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add Candidate">
             <div className="modal-header">
               <span className="modal-title">{editing ? 'Edit Candidate' : 'Add New Candidate'}</span>
@@ -2010,7 +1998,7 @@ export default function CandidatesPage() {
 
       {/* ===== Bulk Resume Review Modal ===== */}
       {importOpen && createPortal((
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { e.preventDefault(); e.stopPropagation() } }}>
+        <div className="modal-overlay">
           <div className="modal-card modal-card-lg" ref={importModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Parse and add candidates">
             <div className="modal-header">
               <span className="modal-title">{parsed ? 'Parse & Add Candidates' : 'Upload Resumes'}</span>
@@ -2086,7 +2074,7 @@ export default function CandidatesPage() {
       ), document.body)}
 
       {candidateDuplicate && createPortal((
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCandidateDuplicate(null)}>
+        <div className="modal-overlay">
           <div className="modal-card" ref={duplicateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Duplicate Candidate">
             <div className="modal-header">
               <span className="modal-title">Duplicate Candidate</span>
@@ -2125,7 +2113,7 @@ export default function CandidatesPage() {
       ), document.body)}
 
       {cvDuplicateNotice && createPortal((
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCvDuplicateNotice(null)}>
+        <div className="modal-overlay">
           <div className="modal-card" role="dialog" aria-modal="true" aria-label="Duplicate CV">
             <div className="modal-header">
               <span className="modal-title">Duplicate CV</span>
@@ -2147,7 +2135,7 @@ export default function CandidatesPage() {
         const existing = duplicateExistingToUi(candidateDuplicate.existing || {})
         const incoming = candidateDuplicate.candidate || {}
         return (
-          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDuplicateMoreOpen(false)}>
+          <div className="modal-overlay">
             <div className="modal-card modal-card-xl" role="dialog" aria-modal="true" aria-label="Duplicate Candidate Details">
               <div className="modal-header">
                 <span className="modal-title">Duplicate Candidate Details</span>

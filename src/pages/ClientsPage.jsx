@@ -137,9 +137,7 @@ const getConsultantNameFromUser = (user) => {
   if (profileName) return profileName
   const metadataName = String(user?.full_name || user?.user_metadata?.full_name || user?.user_metadata?.name || '').trim()
   if (metadataName) return metadataName
-  const email = String(user?.email || user?.id || '').trim()
-  const prefix = email.includes('@') ? email.split('@')[0] : ''
-  return prefix || 'hr'
+  return ''
 }
 const formatLocationRegion = (location, region) => {
   const parts = [location, region].map(value => String(value || '').trim()).filter(Boolean)
@@ -217,6 +215,7 @@ export default function ClientsPage() {
   const [statusOpen, setStatusOpen] = useState(false)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
+  const [expandedCells, setExpandedCells] = useState({})
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
   const [selectedExistingClientId, setSelectedExistingClientId] = useState(null)
   const [addingNewClient, setAddingNewClient] = useState(false)
@@ -777,6 +776,32 @@ export default function ClientsPage() {
     setPage(1)
   }
 
+  const toggleExpandedCell = (id, key, event) => {
+    event.stopPropagation()
+    const cellKey = `${id}-${key}`
+    setExpandedCells(current => ({ ...current, [cellKey]: !current[cellKey] }))
+  }
+
+  const renderCommentsCell = (client, text) => {
+    const value = String(text || '').trim()
+    if (!value) return mutedDash
+    const cellKey = `${client.id}-comments`
+    const expanded = Boolean(expandedCells[cellKey])
+    const words = value.split(/\s+/)
+    const isLong = words.length > 4
+    const displayText = expanded || !isLong ? value : words.slice(0, 4).join(' ')
+    return (
+      <div className="table-comment-cell">
+        <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{highlightText(displayText, aiFilters)}</div>
+        {isLong && (
+          <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(client.id, 'comments', event)}>
+            <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'View less' : 'View more'}
+          </button>
+        )}
+      </div>
+    )
+  }
+
   const renderClientCell = ({ key }, client) => {
     const followUp = selectedFollowUp(client)
     const contact = selectedContact(client)
@@ -825,7 +850,7 @@ export default function ClientsPage() {
       case 'connectedOnDate':
         return <td key={key}>{highlightText(formatDateDDMMYYYY(client.connected_on_date), aiFilters)}</td>
       case 'comments':
-        return <td key={key}>{highlightText(dash(followUp?.follow_up_comments || client.comments), aiFilters)}</td>
+        return <td key={key}>{renderCommentsCell(client, followUp?.follow_up_comments || client.comments)}</td>
       case 'followUpDate':
         return (
           <td key={key}>
@@ -1041,7 +1066,7 @@ export default function ClientsPage() {
       })()}
 
       {isOpen && createPortal((
-        <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && editingClient && setIsOpen(false)}>
+        <div className="modal-overlay">
           <div className="modal-card modal-card-lg" ref={clientModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingClient ? 'Edit Client' : 'Add Client'}>
             <div className="modal-header">
               <span className="modal-title">{editingClient ? 'Edit Client' : 'Add New Client'}</span>
@@ -1200,7 +1225,7 @@ export default function ClientsPage() {
       ), document.body)}
 
       {clientAlreadyAdded && createPortal((
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setClientAlreadyAdded(false)}>
+        <div className="modal-overlay">
           <div className="modal-card" role="dialog" aria-modal="true" aria-label="Client Already Added">
             <div className="modal-header">
               <span className="modal-title">Client Already Added</span>
@@ -1217,7 +1242,7 @@ export default function ClientsPage() {
       ), document.body)}
 
       {clientDuplicate && createPortal((
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setClientDuplicate(null)}>
+        <div className="modal-overlay">
           <div className="modal-card" ref={duplicateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Duplicate Client">
             <div className="modal-header">
               <span className="modal-title">Duplicate Client</span>
@@ -1255,7 +1280,7 @@ export default function ClientsPage() {
         const existing = clientDuplicate.existing || {}
         const incoming = clientDuplicate.client || {}
         return (
-          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDuplicateMoreOpen(false)}>
+          <div className="modal-overlay">
             <div className="modal-card modal-card-lg" role="dialog" aria-modal="true" aria-label="Duplicate Client Details">
               <div className="modal-header">
                 <span className="modal-title">Duplicate Client Details</span>
@@ -1292,7 +1317,7 @@ export default function ClientsPage() {
       })(), document.body)}
 
       {followUpClient && createPortal((
-        <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && setFollowUpClient(null)}>
+        <div className="modal-overlay">
           <div className="modal-card" ref={followUpModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add Follow Up">
             <div className="modal-header">
               <span className="modal-title">Add Follow Up {(followUpClient.follow_ups || []).length + 1}</span>
