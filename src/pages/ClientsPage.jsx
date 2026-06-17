@@ -82,6 +82,15 @@ const todayLocal = () => {
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
   return date.toISOString().slice(0, 10)
 }
+const normalizeFollowUpDate = (value) => {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) return text
+  return new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 10)
+}
 const CLIENT_TABLE_COLUMNS = [
   { key: 'clientId', label: 'Client ID' },
   { key: 'clientName', label: 'Client Name' },
@@ -691,6 +700,12 @@ export default function ClientsPage() {
     return followUps.find((item) => item.id === selected) || followUps[followUps.length - 1] || null
   }
 
+  const mergeClientUpdate = useCallback((updatedClient) => {
+    if (!updatedClient?.id) return
+    setClients((current) => current.map((client) => (client.id === updatedClient.id ? { ...client, ...updatedClient } : client)))
+    setAllClients((current) => current.map((client) => (client.id === updatedClient.id ? { ...client, ...updatedClient } : client)))
+  }, [])
+
   const selectedContact = (client) => {
     const contacts = client._contacts || []
     if (!contacts.length) return {}
@@ -716,21 +731,32 @@ export default function ClientsPage() {
 
   const saveFollowUp = async () => {
     if (!followUpForm.follow_up_date) return
+    const normalizedDate = normalizeFollowUpDate(followUpForm.follow_up_date)
+    const duplicate = (followUpClient?.follow_ups || []).some((item) => (
+      normalizeFollowUpDate(item.follow_up_date) === normalizedDate &&
+      item.id !== editingFollowUp?.id
+    ))
+    if (duplicate) {
+      setError('A follow up already exists for this date.')
+      return
+    }
     setSaving(true)
     try {
+      setError(null)
       const res = await fetch(editingFollowUp ? `/api/clients/${followUpClient.id}/follow-ups/${editingFollowUp.id}` : `/api/clients/${followUpClient.id}/follow-ups`, {
         method: editingFollowUp ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(followUpForm)
+        body: JSON.stringify({ ...followUpForm, follow_up_date: normalizedDate })
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to save follow-up.')
-      setSelectedFollowUps((current) => ({ ...current, [followUpClient.id]: data.id || editingFollowUp?.id || '' }))
+      if (data.client) mergeClientUpdate(data.client)
+      const latestFollowUps = Array.isArray(data.client?.follow_ups) ? data.client.follow_ups : []
+      const selectedId = data.data?.id || editingFollowUp?.id || latestFollowUps[latestFollowUps.length - 1]?.id || ''
+      setSelectedFollowUps((current) => ({ ...current, [followUpClient.id]: selectedId }))
       setFollowUpClient(null)
       setEditingFollowUp(null)
       setFollowUpForm({ follow_up_date: '', follow_up_comments: '' })
-      await fetchClients({ showLoading: false })
-      await fetchClientOptions()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -807,16 +833,16 @@ export default function ClientsPage() {
     if (!deletingFollowUp?.client?.id || !deletingFollowUp?.followUp?.id) return
     setSaving(true)
     try {
+      setError(null)
       const { client, followUp } = deletingFollowUp
       const res = await fetch(`/api/clients/${client.id}/follow-ups/${followUp.id}`, { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to delete follow-up.')
-      const remaining = Array.isArray(data.follow_ups) ? data.follow_ups : []
+      if (data.client) mergeClientUpdate(data.client)
+      const remaining = Array.isArray(data.client?.follow_ups) ? data.client.follow_ups : (Array.isArray(data.follow_ups) ? data.follow_ups : [])
       const latest = remaining[remaining.length - 1] || null
       setSelectedFollowUps((current) => ({ ...current, [client.id]: current[client.id] === followUp.id ? latest?.id || '' : current[client.id] || latest?.id || '' }))
       setDeletingFollowUp(null)
-      await fetchClients({ showLoading: false })
-      await fetchClientOptions()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -981,17 +1007,26 @@ export default function ClientsPage() {
       case 'comments':
         return <td key={key}>{renderCommentsCell(client, followUp?.follow_up_comments || client.comments)}</td>
       case 'followUpDate':
-        return (
-          <td key={key}>
-            <span className="inline-action-cell">
-              <button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('client-follow-up', client.id, event.currentTarget)}>
-                <span>{formatDateDDMMYYYY(followUp?.follow_up_date || client.follow_up_date)}</span>
-                <ChevronDown size={12} strokeWidth={2} />
-              </button>
-              <button className="row-action-btn" type="button" title="Add Follow Up" onClick={() => openAddFollowUp(client)}><Plus size={12} /></button>
-            </span>
-          </td>
-        )
+        {
+          const followUps = client.follow_ups || []
+          const followUpText = formatDateDDMMYYYY(followUp?.follow_up_date || client.follow_up_date)
+          const hasMultipleFollowUps = followUps.length > 1
+          return (
+            <td key={key}>
+              <span className="inline-action-cell">
+                {hasMultipleFollowUps ? (
+                  <button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('client-follow-up', client.id, event.currentTarget)}>
+                    <span className="client-follow-up-date-text">{followUpText}</span>
+                    <ChevronDown size={12} strokeWidth={2} />
+                  </button>
+                ) : (
+                  <span className="client-follow-up-date-text">{followUpText || '-'}</span>
+                )}
+                <button className="row-action-btn" type="button" title="Add Follow Up" onClick={() => openAddFollowUp(client)}><Plus size={12} /></button>
+              </span>
+            </td>
+          )
+        }
       case 'status':
         return (
           <td key={key}>
@@ -1192,7 +1227,7 @@ export default function ClientsPage() {
       })()}
       {tablePopover?.type === 'client-follow-up' && (() => {
         const client = groupedClients.find(item => item.id === tablePopover.id)
-        if (!client || !(client.follow_ups || []).length) return null
+        if (!client || (client.follow_ups || []).length <= 1) return null
         return (
           <TablePopover anchorRect={tablePopover.anchorRect} width={220} onClose={() => setTablePopover(null)}>
             {client.follow_ups.map((item) => (

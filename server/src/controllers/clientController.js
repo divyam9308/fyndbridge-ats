@@ -41,6 +41,16 @@ function nullable(value) {
   return next || null
 }
 
+function normalizeFollowUpDateValue(value) {
+  const text = clean(value)
+  if (!text) return ''
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) return text
+  return new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 10)
+}
+
 function normalizeBoolean(value) {
   return value === true || String(value || '').toLowerCase() === 'true' || String(value || '').toLowerCase() === 'yes'
 }
@@ -405,6 +415,31 @@ async function loadFollowUps(clientIds) {
   }, {})
 }
 
+async function loadClientWithRelations(clientId) {
+  const { data, error } = await supabase.from('clients').select('*').eq('id', clientId).maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  const { data: jobs, error: jobsError } = await supabase.from('jobs').select('status, mandate_status').eq('client_id', clientId)
+  if (jobsError) throw jobsError
+  const followUpsMap = await loadFollowUps([clientId])
+  return normalizeClient(data, 0, followUpsMap[clientId] || [], jobs || [])
+}
+
+async function findFollowUpDateDuplicate(clientId, followUpDate, excludeFollowUpId = '') {
+  const normalizedDate = normalizeFollowUpDateValue(followUpDate)
+  if (!clientId || !normalizedDate) return null
+  let query = supabase
+    .from('client_follow_ups')
+    .select('id, follow_up_date')
+    .eq('client_id', clientId)
+    .eq('follow_up_date', normalizedDate)
+
+  if (excludeFollowUpId) query = query.neq('id', excludeFollowUpId)
+  const { data, error } = await query.maybeSingle()
+  if (error) throw error
+  return data || null
+}
+
 function missingClientColumn(error) {
   if (error?.code !== 'PGRST204' && error?.code !== '42703') return null
   const match = String(error.message || '').match(/'([^']+)' column|column "([^"]+)"/)
@@ -534,13 +569,9 @@ async function notifyClientConsultantAssignment(req, client, previousConsultantN
 
 async function getClient(req, res) {
   try {
-    const { data, error } = await supabase.from('clients').select('*').eq('id', req.params.id).maybeSingle()
-    if (error) throw error
-    if (!data) return res.status(404).json({ error: 'Client not found' })
-    const { data: jobs, error: jobsError } = await supabase.from('jobs').select('status, mandate_status').eq('client_id', req.params.id)
-    if (jobsError) throw jobsError
-    const followUpsMap = await loadFollowUps([data.id])
-    return res.json(normalizeClient(data, 0, followUpsMap[data.id] || [], jobs || []))
+    const client = await loadClientWithRelations(req.params.id)
+    if (!client) return res.status(404).json({ error: 'Client not found' })
+    return res.json(client)
   } catch (err) {
     return logAndSendInternal(res, 'getClient', err)
   }
@@ -681,8 +712,11 @@ async function updateClient(req, res) {
 
 async function addFollowUp(req, res) {
   try {
-    const { follow_up_date, follow_up_comments } = req.body
+    const follow_up_date = normalizeFollowUpDateValue(req.body.follow_up_date)
+    const { follow_up_comments } = req.body
     if (!follow_up_date) return res.status(400).json({ error: 'Follow Up Date is required' })
+    const duplicate = await findFollowUpDateDuplicate(req.params.id, follow_up_date)
+    if (duplicate) return res.status(409).json({ error: 'A follow up already exists for this date.' })
 
     const { data: existing, error: existingError } = await supabase
       .from('client_follow_ups')
@@ -726,7 +760,8 @@ async function addFollowUp(req, res) {
       })
     }
 
-    return res.status(201).json(data)
+    const client = await loadClientWithRelations(req.params.id)
+    return res.status(201).json({ data, client, follow_ups: client?.follow_ups || [] })
   } catch (err) {
     return logAndSendInternal(res, 'addFollowUp', err)
   }
@@ -770,7 +805,8 @@ async function syncClientLatestFollowUp(clientId) {
 
 async function updateFollowUp(req, res) {
   try {
-    const { follow_up_date, follow_up_comments } = req.body
+    const follow_up_date = normalizeFollowUpDateValue(req.body.follow_up_date)
+    const { follow_up_comments } = req.body
     if (!follow_up_date) return res.status(400).json({ error: 'Follow Up Date is required' })
 
     const { data: existing, error: existingError } = await supabase
@@ -782,6 +818,8 @@ async function updateFollowUp(req, res) {
 
     if (existingError) throw existingError
     if (!existing) return res.status(404).json({ error: 'Follow-up not found' })
+    const duplicate = await findFollowUpDateDuplicate(req.params.id, follow_up_date, req.params.followUpId)
+    if (duplicate) return res.status(409).json({ error: 'A follow up already exists for this date.' })
 
     const { data, error } = await supabase
       .from('client_follow_ups')
@@ -793,7 +831,8 @@ async function updateFollowUp(req, res) {
 
     if (error) throw error
     await syncClientLatestFollowUp(req.params.id)
-    return res.json(data)
+    const client = await loadClientWithRelations(req.params.id)
+    return res.json({ data, client, follow_ups: client?.follow_ups || [] })
   } catch (err) {
     return logAndSendInternal(res, 'updateFollowUp', err)
   }
@@ -820,7 +859,8 @@ async function deleteFollowUp(req, res) {
       .order('follow_up_number', { ascending: true })
 
     if (remainingError) throw remainingError
-    return res.json({ data, follow_ups: remaining || [] })
+    const client = await loadClientWithRelations(req.params.id)
+    return res.json({ data, client, follow_ups: remaining || [] })
   } catch (err) {
     return logAndSendInternal(res, 'deleteFollowUp', err)
   }
