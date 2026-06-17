@@ -3,9 +3,16 @@ const supabase = require('./supabaseAdmin')
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 const sameName = (left, right) => clean(left).toLowerCase() === clean(right).toLowerCase()
 const todayLocal = () => {
-  const date = new Date()
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  return date.toISOString().slice(0, 10)
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date()).reduce((map, part) => {
+    map[part.type] = part.value
+    return map
+  }, {})
+  return `${parts.year}-${parts.month}-${parts.day}`
 }
 
 async function findProfileUser({ userId = '', name = '' } = {}) {

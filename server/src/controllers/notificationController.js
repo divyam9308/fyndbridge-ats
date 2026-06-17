@@ -92,7 +92,11 @@ async function listNotifications(req, res) {
       error = fallback.error
     }
     if (error) throw error
-    const visibleRows = (data || []).filter(row => !String(row.title || '').startsWith(CLEARED_TITLE_PREFIX))
+    const dueDate = todayLocal()
+    const visibleRows = (data || []).filter(row => (
+      !String(row.title || '').startsWith(CLEARED_TITLE_PREFIX) &&
+      (row.action_type !== 'client_follow_up_due' || clean(row.follow_up_date) === dueDate)
+    ))
     const senders = await profileMap(visibleRows.map(row => row.sender_user_id))
     return res.json({
       data: visibleRows.map(row => ({
