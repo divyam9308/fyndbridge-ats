@@ -440,29 +440,19 @@ async function getNextJobDisplayId(req, res) {
 
 async function listJobUsers(req, res) {
   try {
-    const [{ data: userProfiles, error: userProfilesError }, { data: profiles, error: profilesError }] = await Promise.all([
-      supabase.from('user_profiles').select('user_id, email, name').order('name'),
-      supabase.from('profiles').select('id, email, full_name').order('full_name')
-    ])
-    if (userProfilesError && profilesError) throw userProfilesError
-    const profileById = new Map((profiles || []).map(row => [row.id, row]))
-    const profileByEmail = new Map((profiles || []).map(row => [clean(row.email).toLowerCase(), row]))
+    const { data: userProfiles, error } = await supabase
+      .from('user_profiles')
+      .select('user_id, email, name')
+      .order('name')
+    if (error) throw error
     const seen = new Set()
     const users = []
 
     for (const row of userProfiles || []) {
-      const profile = profileById.get(row.user_id) || profileByEmail.get(clean(row.email).toLowerCase())
-      const name = clean(row.name) || clean(profile?.full_name)
+      const name = clean(row.name)
       if (!name || seen.has(name.toLowerCase())) continue
       seen.add(name.toLowerCase())
-      users.push({ id: row.user_id, name, email: row.email || profile?.email || '' })
-    }
-
-    for (const row of profiles || []) {
-      const name = clean(row.full_name)
-      if (!name || seen.has(name.toLowerCase())) continue
-      seen.add(name.toLowerCase())
-      users.push({ id: row.id, name, email: row.email || '' })
+      users.push({ id: row.user_id, name, email: row.email || '' })
     }
 
     return res.json({ data: users })

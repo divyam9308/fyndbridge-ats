@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
     if (loading || !session?.user || (!force && profile)) return profile
     setProfileLoading(true)
     try {
-      const response = await apiFetch('/api/user-profiles')
+      const response = await apiFetch('/api/user-profiles', { cache: 'no-store' })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'Unable to load profile.')
       const nextProfile = payload.data || null

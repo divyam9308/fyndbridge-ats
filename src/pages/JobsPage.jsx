@@ -337,9 +337,9 @@ export default function JobsPage() {
 
   const userList = useMemo(() => userOptions
     .map(user => {
-      if (typeof user === 'string') return { id: '', name: user.trim(), email: '' }
+      if (typeof user === 'string') return null
       if (!user || typeof user !== 'object') return null
-      const name = displayUserLabel(user)
+      const name = String(user.name || user.display_name || '').trim()
       return name ? { ...user, name } : null
     })
     .filter(Boolean), [userOptions])

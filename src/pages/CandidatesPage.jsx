@@ -330,17 +330,23 @@ export default function CandidatesPage() {
     return () => window.clearTimeout(timer)
   }, [refreshOptionData])
 
+  const getFreshActiveConsultantName = useCallback(async () => {
+    const profile = await loadProfile({ force: true }).catch(() => null)
+    const nextName = String(profile?.name || profile?.display_name || '').trim()
+    setActiveConsultantName(nextName || '-')
+    return nextName
+  }, [loadProfile])
+
   useEffect(() => {
     let cancelled = false
     const syncConsultant = async () => {
-      const profile = await loadProfile({ force: true }).catch(() => null)
+      const nextName = await getFreshActiveConsultantName()
       if (cancelled) return
-      const nextName = String(profile?.name || profile?.display_name || '').trim() || '-'
-      setActiveConsultantName(nextName)
+      setActiveConsultantName(nextName || '-')
     }
     syncConsultant()
     return () => { cancelled = true }
-  }, [loadProfile])
+  }, [getFreshActiveConsultantName])
 
   useEffect(() => {
     window.addEventListener('ats:clients-updated', refreshOptionData)
@@ -752,7 +758,8 @@ export default function CandidatesPage() {
   }, [])
 
   const openAddModal = async () => {
-    setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName, candidateDisplayId: 'Loading...' })
+    const consultantName = await getFreshActiveConsultantName()
+    setForm({ ...EMPTY_CAND, skills: [], consultantName, candidateDisplayId: 'Loading...' })
     setEditing(false)
     setErrors({})
     setDuplicateBypass(null)
@@ -773,19 +780,21 @@ export default function CandidatesPage() {
       navigate(location.pathname, { replace: true, state: {} })
       if (action === 'upload-resumes') fileInputRef.current?.click()
       if (action === 'add-candidate') {
-        setForm({ ...EMPTY_CAND, skills: [], consultantName: activeConsultantName, candidateDisplayId: 'Loading...' })
-        setEditing(false)
-        setErrors({})
-        setDuplicateBypass(null)
-        setSkillInput('')
-        setAddOpen(true)
-        fetchNextCandidateDisplayId()
-          .then(candidateDisplayId => setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId } : current))
-          .catch(() => setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current))
+        getFreshActiveConsultantName().then((consultantName) => {
+          setForm({ ...EMPTY_CAND, skills: [], consultantName, candidateDisplayId: 'Loading...' })
+          setEditing(false)
+          setErrors({})
+          setDuplicateBypass(null)
+          setSkillInput('')
+          setAddOpen(true)
+          fetchNextCandidateDisplayId()
+            .then(candidateDisplayId => setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId } : current))
+            .catch(() => setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current))
+        })
       }
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [activeConsultantName, fetchNextCandidateDisplayId, location.pathname, location.state, navigate])
+  }, [fetchNextCandidateDisplayId, getFreshActiveConsultantName, location.pathname, location.state, navigate])
 
   const candidateToForm = (candidate) => {
     const matchedClient = dbClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
@@ -981,12 +990,12 @@ export default function CandidatesPage() {
     return ''
   }
 
-  const mapBulkResumeRowToForm = (row) => {
+  const mapBulkResumeRowToForm = (row, consultantName = activeConsultantName) => {
     const parsedClient = row.client_name || ''
     const matchedClient = findClientByName(parsedClient)
     return {
       ...EMPTY_CAND,
-      consultantName: activeConsultantName,
+      consultantName,
       name: row.candidate_name || '',
       email: row.email || '',
       mobile: row.phone_number || '',
@@ -1016,9 +1025,10 @@ export default function CandidatesPage() {
 
   const startResumeReview = async (rows) => {
     const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
+    const consultantName = await getFreshActiveConsultantName()
     setImportQueue(rows)
     setCurrentImportIndex(0)
-    setParsedForm({ ...mapBulkResumeRowToForm(rows[0]), candidateDisplayId })
+    setParsedForm({ ...mapBulkResumeRowToForm(rows[0], consultantName), candidateDisplayId })
     setParsed(true)
     setReviewNotice(rows[0]?.error ? `Parsing warning: ${rows[0].error}` : '')
     if (rows[0]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
@@ -1080,8 +1090,9 @@ export default function CandidatesPage() {
       return
     }
     const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
+    const consultantName = await getFreshActiveConsultantName()
     setCurrentImportIndex(nextIndex)
-    setParsedForm({ ...mapBulkResumeRowToForm(importQueue[nextIndex]), candidateDisplayId })
+    setParsedForm({ ...mapBulkResumeRowToForm(importQueue[nextIndex], consultantName), candidateDisplayId })
     setParsedSkillInput('')
     setReviewNotice(importQueue[nextIndex]?.error ? `Parsing warning: ${importQueue[nextIndex].error}` : notice)
     if (importQueue[nextIndex]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')

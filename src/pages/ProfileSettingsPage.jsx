@@ -97,13 +97,16 @@ export default function ProfileSettingsPage() {
       const nextProfile = { ...EMPTY_PROFILE, ...(data.data || {}), user_id: user?.id || form.user_id, email: user?.email || form.email }
       setForm(nextProfile)
       setOriginalProfile(nextProfile)
-      setProfile(nextProfile)
-      await loadProfile({ force: true })
+      setProfile(null)
+      const refreshedProfile = await loadProfile({ force: true })
+      const savedName = refreshedProfile?.name || refreshedProfile?.display_name || data.data?.name || ''
       try {
         const current = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
-        window.sessionStorage.setItem('fb_user', JSON.stringify({ ...current, name: data.data?.name || current.name || '' }))
-      } catch {}
-      window.dispatchEvent(new CustomEvent('fb:profile-name-updated', { detail: data.data?.name || '' }))
+        window.sessionStorage.setItem('fb_user', JSON.stringify({ ...current, name: savedName || current.name || '' }))
+      } catch {
+        // Session storage sync is best-effort.
+      }
+      window.dispatchEvent(new CustomEvent('fb:profile-name-updated', { detail: savedName }))
       setMessage('Profile saved.')
     } catch (err) {
       setError(err.message)

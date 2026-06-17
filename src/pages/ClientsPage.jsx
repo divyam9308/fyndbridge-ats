@@ -445,7 +445,7 @@ export default function ClientsPage() {
 
   const openModal = useCallback(async () => {
     const profile = await loadProfile({ force: true }).catch(() => null)
-    const consultantName = String(profile?.name || profile?.display_name || '').trim() || '-'
+    const consultantName = String(profile?.name || profile?.display_name || '').trim()
     setForm({ ...EMPTY_FORM, consultant_name: consultantName, connected_on_date: todayLocal(), follow_up_date: todayLocal() })
     setErrors({})
     setContractFile(null)
