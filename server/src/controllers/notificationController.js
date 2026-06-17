@@ -31,13 +31,25 @@ async function ensureClientFollowUpDueNotifications(req) {
 
   const profileName = clean(profile?.name)
   const dueDate = todayLocal()
+  const { data: followUps, error: followUpsError } = await supabase
+    .from('client_follow_ups')
+    .select('*')
+    .eq('follow_up_date', dueDate)
+  if (followUpsError) throw followUpsError
+
+  const clientIds = [...new Set((followUps || []).map(row => row.client_id).filter(Boolean))]
+  if (!clientIds.length) return
+
   const { data: clients, error: clientsError } = await supabase
     .from('clients')
     .select('*')
-    .eq('follow_up_date', dueDate)
+    .in('id', clientIds)
   if (clientsError) throw clientsError
 
-  for (const client of clients || []) {
+  const clientsById = new Map((clients || []).map(client => [client.id, client]))
+  for (const followUp of followUps || []) {
+    const client = clientsById.get(followUp.client_id)
+    if (!client) continue
     const consultantName = clean(client.consultant_name)
     const consultantUserId = clean(client.consultant_user_id)
     if (!consultantName || consultantName === '-') continue
@@ -47,7 +59,7 @@ async function ensureClientFollowUpDueNotifications(req) {
       recipientUserId: userId,
       clientId: client.id,
       clientName: clean(client.client_name || client.name),
-      followUpDate: client.follow_up_date
+      followUpDate: followUp.follow_up_date
     })
   }
 }

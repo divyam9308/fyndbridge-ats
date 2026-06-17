@@ -475,7 +475,7 @@ async function updateClientRow(id, payload) {
 }
 
 async function loadClientFollowUpNotificationTarget(clientId) {
-  let selectFields = 'id, consultant_user_id, client_name, name, follow_up_date'
+  let selectFields = 'id, consultant_user_id, consultant_name, consultant, client_name, name, follow_up_date'
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const result = await supabase
       .from('clients')
@@ -773,7 +773,8 @@ async function addFollowUp(req, res) {
 
     if (updatedClient) {
       await createClientFollowUpDueNotification({
-        recipientUserId: updatedClient.consultant_user_id,
+        consultantUserId: updatedClient.consultant_user_id,
+        consultantName: updatedClient.consultant_name || updatedClient.consultant,
         clientId: updatedClient.id,
         clientName: updatedClient.client_name || updatedClient.name,
         followUpDate: updatedClient.follow_up_date
@@ -811,7 +812,8 @@ async function syncClientLatestFollowUp(clientId) {
 
   if (updatedClient) {
     await createClientFollowUpDueNotification({
-      recipientUserId: updatedClient.consultant_user_id,
+      consultantUserId: updatedClient.consultant_user_id,
+      consultantName: updatedClient.consultant_name || updatedClient.consultant,
       clientId: updatedClient.id,
       clientName: updatedClient.client_name || updatedClient.name,
       followUpDate: updatedClient.follow_up_date

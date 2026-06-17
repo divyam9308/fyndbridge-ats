@@ -38,13 +38,28 @@ export default function NotificationBell() {
   const [toastPaused, setToastPaused] = useState(false)
   const [clearingRead, setClearingRead] = useState(false)
   const rootRef = useRef(null)
+  const toastedIdsRef = useRef(new Set())
+
+  const showNotificationToast = useCallback((notification) => {
+    if (!notification?.id || notification.status !== 'pending') return
+    if (toastedIdsRef.current.has(notification.id)) return
+    toastedIdsRef.current.add(notification.id)
+    setToast(notification)
+    playPing()
+  }, [])
 
   const loadNotifications = useCallback(async () => {
     if (!isAuthenticated) return
     const res = await fetch('/api/notifications', { headers: await authHeaders() })
     const data = await res.json().catch(() => ({}))
-    if (res.ok) setNotifications(data.data || [])
-  }, [isAuthenticated])
+    if (res.ok) {
+      const rows = data.data || []
+      setNotifications(rows)
+      rows
+        .filter(item => item.action_type === 'client_follow_up_due')
+        .forEach(showNotificationToast)
+    }
+  }, [isAuthenticated, showNotificationToast])
 
   useEffect(() => {
     loadNotifications()
@@ -56,14 +71,13 @@ export default function NotificationBell() {
       .channel(`notifications:${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `recipient_user_id=eq.${user.id}` }, payload => {
         if (payload.eventType === 'INSERT' && payload.new) {
-          setToast(payload.new)
-          playPing()
+          showNotificationToast(payload.new)
         }
         loadNotifications()
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [loadNotifications, user?.id])
+  }, [loadNotifications, showNotificationToast, user?.id])
 
   useEffect(() => {
     if (!open) return

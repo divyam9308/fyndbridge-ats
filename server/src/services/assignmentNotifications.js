@@ -17,7 +17,7 @@ async function findProfileUser({ userId = '', name = '' } = {}) {
       .eq('user_id', id)
       .maybeSingle()
     if (error) throw error
-    if (clean(data?.name)) return { id: data.user_id, name: clean(data.name), email: data.email || '' }
+    if (data?.user_id) return { id: data.user_id, name: clean(data.name), email: data.email || '' }
   }
 
   const profileName = clean(name)
@@ -56,22 +56,52 @@ async function createConsultantAssignmentNotification({ type, senderId, consulta
   if (error && error.code !== '23505' && error.code !== '42P01') throw error
 }
 
-async function createClientFollowUpDueNotification({ recipientUserId, clientId, clientName, followUpDate }) {
-  const recipient = clean(recipientUserId)
+async function createClientFollowUpDueNotification({ recipientUserId, consultantUserId = '', consultantName = '', clientId, clientName, followUpDate }) {
+  const recipientProfile = clean(recipientUserId)
+    ? { id: clean(recipientUserId) }
+    : await findProfileUser({ userId: consultantUserId, name: consultantName })
+  const recipient = clean(recipientProfile?.id)
   const dueDate = clean(followUpDate)
   const name = clean(clientName)
   if (!recipient || !clientId || !dueDate || dueDate !== todayLocal() || !name) return
-  const { error } = await supabase.from('notifications').insert({
+  const message = `You have a follow up scheduled today for ${name}.`
+  let existingQuery = supabase
+    .from('notifications')
+    .select('id')
+    .eq('recipient_user_id', recipient)
+    .eq('client_id', clientId)
+    .eq('action_type', 'client_follow_up_due')
+    .limit(1)
+  let { data: existing, error: existingError } = await existingQuery.eq('follow_up_date', dueDate)
+  if (existingError?.code === '42703' || existingError?.code === 'PGRST204') {
+    const fallback = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('recipient_user_id', recipient)
+      .eq('client_id', clientId)
+      .eq('action_type', 'client_follow_up_due')
+      .eq('message', message)
+      .limit(1)
+    existing = fallback.data
+    existingError = fallback.error
+  }
+  if (existingError && existingError.code !== '42P01' && existingError.code !== '42703' && existingError.code !== 'PGRST204') throw existingError
+  if ((existing || []).length) return
+  const row = {
     recipient_user_id: recipient,
     sender_user_id: null,
     client_id: clientId,
-    follow_up_date: dueDate,
     role_type: 'system',
     title: 'Client Follow Up Due',
-    message: `Today you have a follow up with ${name}`,
+    message,
     status: 'pending',
     action_type: 'client_follow_up_due'
-  })
+  }
+  let { error } = await supabase.from('notifications').insert({ ...row, follow_up_date: dueDate })
+  if (error?.code === '42703' || error?.code === 'PGRST204') {
+    const fallback = await supabase.from('notifications').insert(row)
+    error = fallback.error
+  }
   if (error && error.code !== '23505' && error.code !== '42P01') throw error
 }
 
