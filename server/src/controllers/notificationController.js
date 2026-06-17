@@ -67,19 +67,31 @@ async function markNotificationRead(req, res) {
     }
 
     if (
+      notification.status !== 'read' &&
       notification.sender_user_id &&
       notification.sender_user_id !== req.user.id &&
       notification.sender_user_id !== notification.recipient_user_id &&
       notification.role_type !== 'system'
     ) {
+      const isCandidateAssignment = notification.action_type === 'candidate_assignment'
+      const isClientAssignment = notification.action_type === 'client_assignment'
       const [{ data: job }, { data: client }, profiles] = await Promise.all([
-        supabase.from('jobs').select('title').eq('id', notification.mandate_id).maybeSingle(),
+        notification.mandate_id ? supabase.from('jobs').select('title').eq('id', notification.mandate_id).maybeSingle() : Promise.resolve({ data: null }),
         notification.client_id ? supabase.from('clients').select('name, client_name').eq('id', notification.client_id).maybeSingle() : Promise.resolve({ data: null }),
         profileMap([req.user.id])
       ])
       const recipientName = preferredName(profiles.get(req.user.id), req.user.email)
       const role = clean(job?.title) || 'Mandate'
       const clientName = clean(client?.client_name || client?.name) || 'Client'
+      const candidateName = clean(String(notification.message || '').match(/candidate\s+(.+?)\.$/i)?.[1]) || 'Candidate'
+      const message = isCandidateAssignment
+        ? `${recipientName} has read the candidate assignment notification for ${candidateName}.`
+        : isClientAssignment
+          ? `${recipientName} has read the client assignment notification for ${clientName}.`
+          : `${recipientName} has read the mandate assignment notification for ${role} - ${clientName}.`
+      const actionType = isCandidateAssignment || isClientAssignment
+        ? `${notification.action_type}_read_confirmation`
+        : 'assignment_read_confirmation'
       const { error: insertError } = await supabase.from('notifications').insert({
         recipient_user_id: notification.sender_user_id,
         sender_user_id: req.user.id,
@@ -87,9 +99,9 @@ async function markNotificationRead(req, res) {
         client_id: notification.client_id,
         role_type: 'system',
         title: 'Notification Read',
-        message: `${recipientName} has read the mandate assignment notification for ${role} - ${clientName}.`,
+        message,
         status: 'pending',
-        action_type: 'assignment_read_confirmation'
+        action_type: actionType
       })
       if (insertError && insertError.code !== '23505' && insertError.code !== '42P01') throw insertError
     }

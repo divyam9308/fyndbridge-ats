@@ -5,6 +5,7 @@ const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../s
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { applyQueryFilters } = require('../services/queryFilters')
+const { createConsultantAssignmentNotification } = require('../services/assignmentNotifications')
 
 const CLIENT_STATUSES = [
   'Active',
@@ -518,6 +519,18 @@ async function buildClientFilters(req, res) {
   }
 }
 
+async function notifyClientConsultantAssignment(req, client, previousConsultantName = undefined) {
+  await createConsultantAssignmentNotification({
+    type: 'client',
+    senderId: req.user?.id,
+    consultantUserId: req.body.consultant_user_id,
+    consultantName: client.consultant_name || client.consultant,
+    previousConsultantName,
+    entityName: client.client_name || client.name,
+    clientId: client.id
+  })
+}
+
 async function getClient(req, res) {
   try {
     const { data, error } = await supabase.from('clients').select('*').eq('id', req.params.id).maybeSingle()
@@ -551,6 +564,7 @@ if (req.file) {
     if (duplicate && duplicateAction === 'update_current') {
       const { data, error } = await updateClientRow(duplicate.id, { ...payload, client_group_id: duplicate.client_group_id || duplicate.id, updated_at: new Date().toISOString() })
       if (error) throw error
+      await notifyClientConsultantAssignment(req, data, duplicate.consultant_name || duplicate.consultant)
       return res.json(normalizeClient(data))
     }
 
@@ -606,14 +620,17 @@ const result = await insertClient(insertPayload)
         .single()
       if (missingClientColumn(groupError) === 'client_group_id') {
         releaseClientDisplayId(payload.client_display_id)
+        await notifyClientConsultantAssignment(req, data)
         return res.status(201).json(normalizeClient(data))
       }
       if (groupError) throw groupError
       releaseClientDisplayId(payload.client_display_id)
+      await notifyClientConsultantAssignment(req, grouped)
       return res.status(201).json(normalizeClient(grouped))
     }
 
     releaseClientDisplayId(payload.client_display_id)
+    await notifyClientConsultantAssignment(req, data)
     return res.status(201).json(normalizeClient(data))
   } catch (err) {
     if (err.code === '23505' && /clients_name_key/i.test(err.message || '')) {
@@ -646,6 +663,7 @@ async function updateClient(req, res) {
     const { data, error } = await updateClientRow(req.params.id, { ...payload, updated_at: new Date().toISOString() })
 
     if (error) throw error
+    await notifyClientConsultantAssignment(req, data, existing.consultant_name || existing.consultant)
     return res.json(normalizeClient(data))
   } catch (err) {
     if (isClientDisplayIdUniqueError(err)) {

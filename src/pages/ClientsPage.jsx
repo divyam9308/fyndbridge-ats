@@ -33,6 +33,7 @@ const EMPTY_FORM = {
   client_group_id: '',
   client_display_id: '',
   consultant_name: '',
+  consultant_user_id: '',
   client_name: '',
   location: '',
   region: '',
@@ -221,6 +222,9 @@ export default function ClientsPage() {
   const [addingContactPerson, setAddingContactPerson] = useState(false)
   const [sectorSearch, setSectorSearch] = useState('')
   const [sectorOpen, setSectorOpen] = useState(false)
+  const [consultantOptions, setConsultantOptions] = useState([])
+  const [consultantSearch, setConsultantSearch] = useState('')
+  const [consultantOpen, setConsultantOpen] = useState(false)
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
   const statusDropdownRef = useRef(null)
@@ -384,6 +388,30 @@ export default function ClientsPage() {
       .filter(client => normalizeText(client.client_name || client.name).includes(normalizeText(form.client_name)))
   ), [canonicalClients, form.client_name])
   const matchingSectors = useMemo(() => SECTOR_OPTIONS.filter(value => value.toLowerCase().includes(sectorSearch.trim().toLowerCase())), [sectorSearch])
+  const consultantByName = useMemo(() => new Map(consultantOptions.map(user => [String(user.name || '').trim(), user])), [consultantOptions])
+  const matchingConsultants = useMemo(() => {
+    const query = consultantSearch.trim().toLowerCase()
+    return consultantOptions.filter(user => !query || user.name.toLowerCase().includes(query))
+  }, [consultantOptions, consultantSearch])
+
+  const fetchConsultantOptions = useCallback(async () => {
+    const res = await fetch('/api/user-profiles/options')
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return []
+    const users = (Array.isArray(data.data) ? data.data : [])
+      .map(user => ({ id: user.id || user.user_id || '', name: String(user.name || user.display_name || '').trim(), email: user.email || '' }))
+      .filter(user => user.name)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    setConsultantOptions(users)
+    return users
+  }, [])
+
+  const selectConsultant = (name) => {
+    const user = consultantByName.get(name)
+    setConsultantSearch(name)
+    setForm(current => ({ ...current, consultant_name: name, consultant_user_id: user?.id || '' }))
+    setConsultantOpen(false)
+  }
 
   const selectExistingClient = (client) => {
     clientIdRequestRef.current += 1
@@ -468,9 +496,15 @@ export default function ClientsPage() {
   }
 
   const openModal = useCallback(async () => {
-    const profile = await loadProfile({ force: true }).catch(() => null)
+    const [profile, users] = await Promise.all([
+      loadProfile({ force: true }).catch(() => null),
+      fetchConsultantOptions().catch(() => [])
+    ])
     const consultantName = String(profile?.name || profile?.display_name || '').trim()
-    setForm({ ...EMPTY_FORM, consultant_name: consultantName, connected_on_date: todayLocal(), follow_up_date: todayLocal() })
+    const consultantUser = users.find(user => user.id && user.id === profile?.user_id) || users.find(user => user.name === consultantName)
+    setForm({ ...EMPTY_FORM, consultant_name: consultantName, consultant_user_id: consultantUser?.id || '', connected_on_date: todayLocal(), follow_up_date: todayLocal() })
+    setConsultantSearch(consultantName)
+    setConsultantOpen(false)
     setErrors({})
     setContractFile(null)
     setEditingClient(null)
@@ -480,7 +514,7 @@ export default function ClientsPage() {
     setSectorSearch('')
     setClientSuggestionsOpen(false)
     setIsOpen(true)
-  }, [loadProfile])
+  }, [fetchConsultantOptions, loadProfile])
 
   useEffect(() => {
     const action = location.state?.action
@@ -494,6 +528,9 @@ export default function ClientsPage() {
 
   const openEditModal = (client) => {
     setForm(clientToForm(client))
+    setConsultantSearch(client.consultant_name || client.consultant || '')
+    setConsultantOpen(false)
+    fetchConsultantOptions().catch(() => {})
     setErrors({})
     setContractFile(null)
     setEditingClient(client)
@@ -535,6 +572,9 @@ export default function ClientsPage() {
       designation: '',
       linkedin: ''
     })
+    setConsultantSearch(client.consultant_name || client.consultant || '')
+    setConsultantOpen(false)
+    fetchConsultantOptions().catch(() => {})
     setErrors({})
     setContractFile(null)
     setEditingClient(null)
@@ -1205,6 +1245,24 @@ export default function ClientsPage() {
                             </button>
                           ))}
                         </div>
+                        )}
+                      </div>
+                    ) : name === 'consultant_name' ? (
+                      <div className="client-search-wrap">
+                        <input className={`form-control${errors[name] ? ' is-error' : ''}`} value={consultantSearch || form.consultant_name} onChange={e => {
+                          setConsultantSearch(e.target.value)
+                          setForm(current => ({ ...current, consultant_name: e.target.value, consultant_user_id: '' }))
+                          setConsultantOpen(true)
+                        }} onFocus={() => { setConsultantSearch(current => current || form.consultant_name); setConsultantOpen(true) }} onBlur={() => window.setTimeout(() => setConsultantOpen(false), 120)} disabled={saving} autoComplete="off" />
+                        {consultantOpen && (
+                          <div className="client-suggestions manual-suggestions is-open">
+                            {matchingConsultants.length ? matchingConsultants.map(user => (
+                              <button type="button" key={user.id || user.name} onMouseDown={event => {
+                                event.preventDefault()
+                                selectConsultant(user.name)
+                              }}><span>{user.name}</span></button>
+                            )) : <div className="candidate-column-option">No results found</div>}
+                          </div>
                         )}
                       </div>
                     ) : name === 'region' ? (

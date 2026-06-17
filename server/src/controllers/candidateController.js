@@ -8,6 +8,7 @@ const { RESUME_BUCKET, prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplic
 const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
+const { createConsultantAssignmentNotification } = require('../services/assignmentNotifications')
 
 const VALID_STATUSES = [
   'Interested',
@@ -1066,6 +1067,18 @@ async function getCandidate(req, res) {
   }
 }
 
+async function notifyCandidateConsultantAssignment(req, candidate, association, previousConsultantName = undefined) {
+  await createConsultantAssignmentNotification({
+    type: 'candidate',
+    senderId: req.user?.id,
+    consultantUserId: req.body.consultant_user_id,
+    consultantName: association?.consultant_name || req.body.consultant_name,
+    previousConsultantName,
+    entityName: candidate?.full_name || association?.candidates?.full_name,
+    clientId: association?.client_id || null
+  })
+}
+
 async function createCandidate(req, res) {
   let cvResult = null
   try {
@@ -1189,6 +1202,7 @@ async function createCandidate(req, res) {
     const hasAssociation = hasClient || hasJob;
 
     if (!hasAssociation) {
+      await notifyCandidateConsultantAssignment(req, candidate, { consultant_name: associationPayload.consultant_name }, undefined)
       return res.status(201).json({ ...flattenCandidateOnly(candidate), cv_duplicate: Boolean(cvResult?.duplicate) })
     }
 
@@ -1207,6 +1221,7 @@ const { data: association, error: associationError } = await insertAssociation(a
     }
 
     await syncMandateStatusForJob(association.job_id || assocInsert.job_id)
+    await notifyCandidateConsultantAssignment(req, candidate, association, undefined)
 
     return res.status(201).json({ ...flattenAssociation(association), cv_duplicate: Boolean(cvResult?.duplicate) })
   } catch (err) {
@@ -1261,7 +1276,7 @@ async function updateCandidate(req, res) {
 
     const { data: existingAssoc, error: lookupError } = await supabase
       .from('candidate_associations')
-      .select('id, candidate_id, job_id')
+      .select('id, candidate_id, job_id, consultant_name')
       .eq('id', associationId)
       .maybeSingle()
 
@@ -1365,6 +1380,7 @@ const { data: inserted, error: insertError } = await insertAssociation(assocInse
         throw error
       }
 
+      await notifyCandidateConsultantAssignment(req, data.candidates, data, existingAssociation?.consultant_name)
       return res.json({ ...flattenAssociation(data), cv_duplicate: Boolean(cvResult?.duplicate) })
     } else {
       const { data, error } = await supabase

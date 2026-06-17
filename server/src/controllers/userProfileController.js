@@ -77,9 +77,17 @@ async function saveProfile(req, res) {
 
 async function listProfileOptions(req, res) {
   try {
-    const { data, error } = await supabase.from('user_profiles').select('name, email').order('name')
+    const { data, error } = await supabase.from('user_profiles').select('user_id, name, email').not('name', 'is', null).order('name')
     if (error) throw error
-    const users = [...new Set((data || []).map(row => clean(row.name) || clean(row.email)).filter(Boolean))]
+    const seen = new Set()
+    const users = []
+    for (const row of data || []) {
+      const name = clean(row.name)
+      const key = row.user_id || name.toLowerCase()
+      if (!name || seen.has(key)) continue
+      seen.add(key)
+      users.push({ id: row.user_id, name, email: row.email || '' })
+    }
     return res.json({ data: users })
   } catch (err) {
     console.error('listProfileOptions error:', err.message || err)

@@ -146,7 +146,7 @@ const EMPTY_CAND = {
   noticePeriod:'', openToRelocate:'',
   offeredCtc:'', dateOfJoining:'',
   client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', status:'',
-  cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', cvOriginalName:'', cvMimetype:'', linkedinUrl:'', notes:'', consultantName:'', candidateId:'', candidateDisplayId:'', associationId:'',
+  cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', cvOriginalName:'', cvMimetype:'', linkedinUrl:'', notes:'', consultantName:'', consultantUserId:'', candidateId:'', candidateDisplayId:'', associationId:'',
 }
 
 const apiCandidateToUi = (row) => ({
@@ -263,6 +263,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     linkedin_url: f.linkedinUrl,
     notes: f.notes,
     consultant_name: f.consultantName || consultantName || '',
+    consultant_user_id: f.consultantUserId || '',
     source: f.source,
   }
 }
@@ -315,16 +316,25 @@ export default function CandidatesPage() {
 
   const [dbClients, setDbClients] = useState([])
   const [dbJobs, setDbJobs] = useState([])
+  const [consultantOptions, setConsultantOptions] = useState([])
+  const [consultantSearch, setConsultantSearch] = useState('')
+  const [consultantOpen, setConsultantOpen] = useState(false)
 
   const refreshOptionData = useCallback(async () => {
-    const [clientsRes, jobsRes] = await Promise.all([
+    const [clientsRes, jobsRes, usersRes] = await Promise.all([
       fetch('/api/clients?all=true'),
-      fetch('/api/jobs?all=true')
+      fetch('/api/jobs?all=true'),
+      fetch('/api/user-profiles/options')
     ])
     const clientsData = await clientsRes.json().catch(() => ({}))
     const jobsData = await jobsRes.json().catch(() => ({}))
+    const usersData = await usersRes.json().catch(() => ({}))
     if (clientsRes.ok) setDbClients(clientsData.data || [])
     if (jobsRes.ok) setDbJobs((jobsData.data || []).sort((a, b) => (a?.title || a?.role || '').localeCompare(b?.title || b?.role || '', undefined, { sensitivity: 'base' })))
+    if (usersRes.ok) setConsultantOptions((Array.isArray(usersData.data) ? usersData.data : [])
+      .map(user => ({ id: user.id || user.user_id || '', name: String(user.name || user.display_name || '').trim(), email: user.email || '' }))
+      .filter(user => user.name)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })))
   }, [])
 
   useEffect(() => {
@@ -332,19 +342,37 @@ export default function CandidatesPage() {
     return () => window.clearTimeout(timer)
   }, [refreshOptionData])
 
+  const consultantByName = useMemo(() => new Map(consultantOptions.map(user => [user.name, user])), [consultantOptions])
+  const matchingConsultants = useMemo(() => {
+    const query = consultantSearch.trim().toLowerCase()
+    return consultantOptions.filter(user => !query || user.name.toLowerCase().includes(query))
+  }, [consultantOptions, consultantSearch])
+
+  const fetchConsultantOptions = useCallback(async () => {
+    const res = await fetch('/api/user-profiles/options')
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return []
+    const users = (Array.isArray(data.data) ? data.data : [])
+      .map(user => ({ id: user.id || user.user_id || '', name: String(user.name || user.display_name || '').trim(), email: user.email || '' }))
+      .filter(user => user.name)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    setConsultantOptions(users)
+    return users
+  }, [])
+
   const getFreshActiveConsultantName = useCallback(async () => {
     const profile = await loadProfile({ force: true }).catch(() => null)
     const nextName = String(profile?.name || profile?.display_name || '').trim()
     setActiveConsultantName(nextName || '-')
-    return nextName
+    return { name: nextName, userId: profile?.user_id || '' }
   }, [loadProfile])
 
   useEffect(() => {
     let cancelled = false
     const syncConsultant = async () => {
-      const nextName = await getFreshActiveConsultantName()
+      const profile = await getFreshActiveConsultantName()
       if (cancelled) return
-      setActiveConsultantName(nextName || '-')
+      setActiveConsultantName(profile.name || '-')
     }
     syncConsultant()
     return () => { cancelled = true }
@@ -792,8 +820,14 @@ export default function CandidatesPage() {
   }, [])
 
   const openAddModal = async () => {
-    const consultantName = await getFreshActiveConsultantName()
-    setForm({ ...EMPTY_CAND, skills: [], consultantName, candidateDisplayId: 'Loading...' })
+    const [profile, users] = await Promise.all([
+      getFreshActiveConsultantName(),
+      fetchConsultantOptions().catch(() => [])
+    ])
+    const consultantUser = users.find(user => user.id && user.id === profile.userId) || users.find(user => user.name === profile.name)
+    setConsultantSearch(profile.name)
+    setConsultantOpen(false)
+    setForm({ ...EMPTY_CAND, skills: [], consultantName: profile.name, consultantUserId: consultantUser?.id || '', candidateDisplayId: 'Loading...' })
     setEditing(false)
     setErrors({})
     setDuplicateBypass(null)
@@ -814,8 +848,11 @@ export default function CandidatesPage() {
       navigate(location.pathname, { replace: true, state: {} })
       if (action === 'upload-resumes') fileInputRef.current?.click()
       if (action === 'add-candidate') {
-        getFreshActiveConsultantName().then((consultantName) => {
-          setForm({ ...EMPTY_CAND, skills: [], consultantName, candidateDisplayId: 'Loading...' })
+        Promise.all([getFreshActiveConsultantName(), fetchConsultantOptions().catch(() => [])]).then(([profile, users]) => {
+          const consultantUser = users.find(user => user.id && user.id === profile.userId) || users.find(user => user.name === profile.name)
+          setConsultantSearch(profile.name)
+          setConsultantOpen(false)
+          setForm({ ...EMPTY_CAND, skills: [], consultantName: profile.name, consultantUserId: consultantUser?.id || '', candidateDisplayId: 'Loading...' })
           setEditing(false)
           setErrors({})
           setDuplicateBypass(null)
@@ -828,14 +865,15 @@ export default function CandidatesPage() {
       }
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [fetchNextCandidateDisplayId, getFreshActiveConsultantName, location.pathname, location.state, navigate])
+  }, [fetchConsultantOptions, fetchNextCandidateDisplayId, getFreshActiveConsultantName, location.pathname, location.state, navigate])
 
   const candidateToForm = (candidate) => {
     const matchedClient = dbClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
     return {
       ...EMPTY_CAND,
       ...candidate,
-      consultantName: candidate.consultantName || candidate.consultant || activeConsultantName,
+      consultantName: candidate.consultantName || candidate.consultant || '',
+      consultantUserId: '',
       associationId: candidate.associationId,
       candidateId: candidate.candidateId,
       clientId: candidate.clientId || matchedClient?.id || '',
@@ -847,6 +885,9 @@ export default function CandidatesPage() {
 
   const openEditCandidate = (candidate) => {
     setForm(candidateToForm(candidate))
+    setConsultantSearch(candidate.consultantName || candidate.consultant || '')
+    setConsultantOpen(false)
+    fetchConsultantOptions().catch(() => {})
     setEditing(true)
     setErrors({})
     setDuplicateBypass(null)
@@ -1024,12 +1065,13 @@ export default function CandidatesPage() {
     return ''
   }
 
-  const mapBulkResumeRowToForm = (row, consultantName = activeConsultantName) => {
+  const mapBulkResumeRowToForm = (row, consultantName = activeConsultantName, consultantUserId = '') => {
     const parsedClient = row.client_name || ''
     const matchedClient = findClientByName(parsedClient)
     return {
       ...EMPTY_CAND,
       consultantName,
+      consultantUserId,
       name: row.candidate_name || '',
       email: row.email || '',
       mobile: row.phone_number || '',
@@ -1059,10 +1101,15 @@ export default function CandidatesPage() {
 
   const startResumeReview = async (rows) => {
     const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
-    const consultantName = await getFreshActiveConsultantName()
+    const [profile, users] = await Promise.all([
+      getFreshActiveConsultantName(),
+      fetchConsultantOptions().catch(() => [])
+    ])
+    const consultantUser = users.find(user => user.id && user.id === profile.userId) || users.find(user => user.name === profile.name)
+    setConsultantSearch(profile.name)
     setImportQueue(rows)
     setCurrentImportIndex(0)
-    setParsedForm({ ...mapBulkResumeRowToForm(rows[0], consultantName), candidateDisplayId })
+    setParsedForm({ ...mapBulkResumeRowToForm(rows[0], profile.name, consultantUser?.id || ''), candidateDisplayId })
     setParsed(true)
     setReviewNotice(rows[0]?.error ? `Parsing warning: ${rows[0].error}` : '')
     if (rows[0]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
@@ -1124,9 +1171,14 @@ export default function CandidatesPage() {
       return
     }
     const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
-    const consultantName = await getFreshActiveConsultantName()
+    const [profile, users] = await Promise.all([
+      getFreshActiveConsultantName(),
+      fetchConsultantOptions().catch(() => [])
+    ])
+    const consultantUser = users.find(user => user.id && user.id === profile.userId) || users.find(user => user.name === profile.name)
+    setConsultantSearch(profile.name)
     setCurrentImportIndex(nextIndex)
-    setParsedForm({ ...mapBulkResumeRowToForm(importQueue[nextIndex], consultantName), candidateDisplayId })
+    setParsedForm({ ...mapBulkResumeRowToForm(importQueue[nextIndex], profile.name, consultantUser?.id || ''), candidateDisplayId })
     setParsedSkillInput('')
     setReviewNotice(importQueue[nextIndex]?.error ? `Parsing warning: ${importQueue[nextIndex].error}` : notice)
     if (importQueue[nextIndex]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
@@ -1353,8 +1405,29 @@ export default function CandidatesPage() {
 
         <div className="form-group">
           <label className="form-label">Consultant</label>
-          <input name="consultantName" value={f.consultantName || ''} onChange={handleLocalChange}
-            className="form-control" />
+          <div className="client-search-wrap">
+            <input name="consultantName" value={consultantSearch || f.consultantName || ''} onChange={e => {
+              setConsultantSearch(e.target.value)
+              setF(prev => ({ ...prev, consultantName: e.target.value, consultantUserId: '' }))
+              setConsultantOpen(true)
+            }} onFocus={() => {
+              setConsultantSearch(current => current || f.consultantName || '')
+              setConsultantOpen(true)
+            }} onBlur={() => window.setTimeout(() => setConsultantOpen(false), 120)}
+              className="form-control" autoComplete="off" />
+            {consultantOpen && (
+              <div className="client-suggestions manual-suggestions is-open">
+                {matchingConsultants.length ? matchingConsultants.map(user => (
+                  <button type="button" key={user.id || user.name} onMouseDown={event => {
+                    event.preventDefault()
+                    setConsultantSearch(user.name)
+                    setF(prev => ({ ...prev, consultantName: user.name, consultantUserId: consultantByName.get(user.name)?.id || '' }))
+                    setConsultantOpen(false)
+                  }}><span>{user.name}</span></button>
+                )) : <div className="candidate-column-option">No results found</div>}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="form-group">
