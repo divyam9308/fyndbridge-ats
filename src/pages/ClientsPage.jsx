@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText, Search } from 'lucide-react'
+import { useAuth } from '../context/useAuth'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
@@ -175,6 +176,7 @@ function clientToForm(client) {
 }
 
 export default function ClientsPage() {
+  const { loadProfile } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [clients, setClients] = useState([])
@@ -441,8 +443,10 @@ export default function ClientsPage() {
     return next
   }
 
-  const openModal = useCallback(() => {
-    setForm({ ...EMPTY_FORM, consultant_name: getConsultantNameFromUser(getCurrentUser()), connected_on_date: todayLocal(), follow_up_date: todayLocal() })
+  const openModal = useCallback(async () => {
+    const profile = await loadProfile({ force: true }).catch(() => null)
+    const consultantName = String(profile?.name || profile?.display_name || '').trim() || '-'
+    setForm({ ...EMPTY_FORM, consultant_name: consultantName, connected_on_date: todayLocal(), follow_up_date: todayLocal() })
     setErrors({})
     setContractFile(null)
     setEditingClient(null)
@@ -452,7 +456,7 @@ export default function ClientsPage() {
     setSectorSearch('')
     setClientSuggestionsOpen(false)
     setIsOpen(true)
-  }, [])
+  }, [loadProfile])
 
   useEffect(() => {
     const action = location.state?.action
@@ -795,7 +799,8 @@ export default function ClientsPage() {
         <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{highlightText(displayText, aiFilters)}</div>
         {isLong && (
           <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(client.id, 'comments', event)}>
-            <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'View less' : 'View more'}
+            <ChevronDown size={12} className={expanded ? 'is-open' : ''} />
+            {expanded ? <span>Show less</span> : <span><span>View full</span><span>comment</span></span>}
           </button>
         )}
       </div>

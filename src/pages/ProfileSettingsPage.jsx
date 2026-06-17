@@ -98,6 +98,7 @@ export default function ProfileSettingsPage() {
       setForm(nextProfile)
       setOriginalProfile(nextProfile)
       setProfile(nextProfile)
+      await loadProfile({ force: true })
       try {
         const current = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
         window.sessionStorage.setItem('fb_user', JSON.stringify({ ...current, name: data.data?.name || current.name || '' }))

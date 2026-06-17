@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
+import { useAuth } from '../context/useAuth'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
@@ -111,25 +112,6 @@ const getReadableClientId = (candidate, dbClients) => {
   }
   return 'Client not found'
 }
-const getCurrentUser = () => {
-  if (typeof window === 'undefined') return {}
-  try {
-    return JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
-  } catch {
-    return {}
-  }
-}
-
-const getConsultantNameFromUser = (user) => {
-  const profileName = String(user?.name || user?.profile_name || '').trim()
-  if (profileName) return profileName
-  const metadataName = String(user?.full_name || user?.user_metadata?.full_name || user?.user_metadata?.name || '').trim()
-  if (metadataName) return metadataName
-  const email = String(user?.email || user?.id || '').trim()
-  const prefix = email.includes('@') ? email.split('@')[0] : ''
-  return prefix || user?.name || 'hr'
-}
-
 const AI_FILTER_FIELDS = [
   'candidate_id',
   'name',
@@ -285,6 +267,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
 }
 
 export default function CandidatesPage() {
+  const { loadProfile } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [candidates, setCandidates] = useState([])
@@ -307,7 +290,7 @@ export default function CandidatesPage() {
   const [pageSize, setPageSize] = useState(50)
   const [totalCandidates, setTotalCandidates] = useState(0)
   const [openingDocument, setOpeningDocument] = useState('')
-  const activeConsultantName = getConsultantNameFromUser(getCurrentUser())
+  const [activeConsultantName, setActiveConsultantName] = useState('-')
 
   // Filters
   const [filterJob, setFilterJob]       = useState('All')
@@ -346,6 +329,18 @@ export default function CandidatesPage() {
     const timer = window.setTimeout(refreshOptionData, 0)
     return () => window.clearTimeout(timer)
   }, [refreshOptionData])
+
+  useEffect(() => {
+    let cancelled = false
+    const syncConsultant = async () => {
+      const profile = await loadProfile({ force: true }).catch(() => null)
+      if (cancelled) return
+      const nextName = String(profile?.name || profile?.display_name || '').trim() || '-'
+      setActiveConsultantName(nextName)
+    }
+    syncConsultant()
+    return () => { cancelled = true }
+  }, [loadProfile])
 
   useEffect(() => {
     window.addEventListener('ats:clients-updated', refreshOptionData)

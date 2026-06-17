@@ -120,6 +120,15 @@
   font-size: 12px;
   font-weight: 700;
 }
+.table-view-more > span {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+.table-view-more > span > span {
+  display: block;
+}
 .table-view-more svg {
   transition: transform var(--transition-fast);
 }
