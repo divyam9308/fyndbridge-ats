@@ -264,6 +264,7 @@ function normalizeClient(row, activeJobs = 0, followUps = [], jobs = []) {
   const region = row.region || row.state || ''
   const comments = row.comments || row.notes || ''
   const consultant = row.consultant_name || row.consultant || ''
+  const latestFollowUp = followUps[followUps.length - 1] || null
 
   return {
     ...row,
@@ -291,6 +292,7 @@ function normalizeClient(row, activeJobs = 0, followUps = [], jobs = []) {
     contract_pdf_url: documentOpenUrl('contract', row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document),
     contract_pdf_storage_path: normalizeStoragePath(row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document, STORAGE_BUCKETS.CONTRACT),
     activeJobs,
+    follow_up_date: latestFollowUp?.follow_up_date || '',
     follow_ups: followUps
   }
 }
@@ -365,7 +367,6 @@ function clientPayload(body) {
     connected_on_date: body.connected_on_date || null,
     comments: nullable(body.comments || body.notes),
     notes: nullable(body.comments || body.notes),
-    follow_up_date: body.follow_up_date || null,
     status: status || '',
     terms_signed_type: contractSigned ? nullable(termsType) : null,
     terms_signed_custom: contractSigned && termsType === 'Any Other' ? nullable(body.terms_signed_custom) : null,
@@ -437,6 +438,8 @@ async function followUpScope(clientId) {
 function mergeFollowUps(followUpsMap, clientIds) {
   return clientIds.flatMap((id) => followUpsMap[id] || [])
     .sort((a, b) => {
+      const dateDiff = String(a.follow_up_date || '').localeCompare(String(b.follow_up_date || ''))
+      if (dateDiff) return dateDiff
       const numberDiff = (a.follow_up_number || 0) - (b.follow_up_number || 0)
       if (numberDiff) return numberDiff
       return String(a.created_at || '').localeCompare(String(b.created_at || ''))
@@ -488,30 +491,18 @@ async function syncEditedClientFollowUp(clientId, body) {
   }
 
   if (target) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('client_follow_ups')
       .update({ follow_up_date: followUpDate, updated_at: new Date().toISOString() })
       .eq('id', target.id)
+      .select('*')
+      .single()
     if (error) throw error
-    await syncClientLatestFollowUp(scope)
+    await notifyClientFollowUpDue(scope.ownerId, data)
     return
   }
 
-  const { data: existing, error: existingError } = await supabase
-    .from('client_follow_ups')
-    .select('follow_up_number')
-    .eq('client_id', scope.ownerId)
-    .order('follow_up_number', { ascending: false })
-    .limit(1)
-  if (existingError) throw existingError
-  const { error } = await supabase.from('client_follow_ups').insert({
-    client_id: scope.ownerId,
-    follow_up_number: ((existing || [])[0]?.follow_up_number || 0) + 1,
-    follow_up_date: followUpDate,
-    follow_up_comments: nullable(body.comments || body.notes)
-  })
-  if (error) throw error
-  await syncClientLatestFollowUp(scope)
+  await createClientFollowUp(scope.ownerId, followUpDate, body.comments || body.notes)
 }
 
 function missingClientColumn(error) {
@@ -548,7 +539,7 @@ async function updateClientRow(id, payload) {
 }
 
 async function loadClientFollowUpNotificationTarget(clientId) {
-  let selectFields = 'id, consultant_user_id, consultant_name, consultant, client_name, name, follow_up_date'
+  let selectFields = 'id, consultant_user_id, consultant_name, consultant, client_name, name'
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const result = await supabase
       .from('clients')
@@ -563,11 +554,62 @@ async function loadClientFollowUpNotificationTarget(clientId) {
   return { data: null, error: new Error('Unable to load client follow-up notification target') }
 }
 
+async function nextFollowUpNumber(clientId) {
+  const { data, error } = await supabase
+    .from('client_follow_ups')
+    .select('follow_up_number')
+    .eq('client_id', clientId)
+    .order('follow_up_number', { ascending: false })
+    .limit(1)
+  if (error) throw error
+  return ((data || [])[0]?.follow_up_number || 0) + 1
+}
+
+async function notifyClientFollowUpDue(clientId, followUp) {
+  if (!followUp?.follow_up_date) return
+  const { data: client, error } = await loadClientFollowUpNotificationTarget(clientId)
+  if (error) throw error
+  if (!client) return
+  await createClientFollowUpDueNotification({
+    consultantUserId: client.consultant_user_id,
+    consultantName: client.consultant_name || client.consultant,
+    clientId: client.id,
+    clientName: client.client_name || client.name,
+    followUpDate: followUp.follow_up_date,
+    followUpId: followUp.id
+  })
+}
+
+async function createClientFollowUp(clientId, followUpDate, followUpComments = '') {
+  const normalizedDate = normalizeFollowUpDateValue(followUpDate)
+  if (!normalizedDate) return null
+  const scope = await followUpScope(clientId)
+  const duplicate = await findFollowUpDateDuplicate(scope.ids, normalizedDate)
+  if (duplicate) {
+    const err = new Error('A follow up already exists for this date.')
+    err.statusCode = 409
+    throw err
+  }
+  const { data, error } = await supabase
+    .from('client_follow_ups')
+    .insert({
+      client_id: scope.ownerId,
+      follow_up_number: await nextFollowUpNumber(scope.ownerId),
+      follow_up_date: normalizedDate,
+      follow_up_comments: nullable(followUpComments)
+    })
+    .select('*')
+    .single()
+  if (error) throw error
+  await notifyClientFollowUpDue(scope.ownerId, data)
+  return data
+}
+
 async function listClients(req, res) {
   try {
     const sort = normalizeSort(req.query)
     const aiFilters = parseJsonFilter(req.query.ai_filters)
-    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.conditions || []).some(condition => ['consultant', 'value'].includes(condition.field))
+    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.conditions || []).some(condition => ['consultant', 'value', 'follow_up_date'].includes(condition.field))
     const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
@@ -685,12 +727,14 @@ async function getClient(req, res) {
 
 async function createClient(req, res) {
   try {
-if (req.file) {
+    if (req.file) {
       const contract = await uploadContractPdf(req.file)
       req.body.contract_document = contract.path
       req.body.contract_pdf_url = contract.path
       req.body.contract_pdf_storage_path = contract.path
     }
+    const initialFollowUpDate = normalizeFollowUpDateValue(req.body.follow_up_date)
+    const initialFollowUpComments = req.body.comments || req.body.notes
     const payload = clientPayload(req.body)
     const duplicateAction = req.body.duplicate_action
     const duplicate = await findClientDuplicate(payload.client_name)
@@ -702,8 +746,9 @@ if (req.file) {
     if (duplicate && duplicateAction === 'update_current') {
       const { data, error } = await updateClientRow(duplicate.id, { ...payload, client_group_id: duplicate.client_group_id || duplicate.id, updated_at: new Date().toISOString() })
       if (error) throw error
+      if (initialFollowUpDate) await createClientFollowUp(data.id, initialFollowUpDate, initialFollowUpComments)
       await notifyClientConsultantAssignment(req, data, duplicate.consultant_name || duplicate.consultant)
-      return res.json(normalizeClient(data))
+      return res.json(await loadClientWithRelations(data.id))
     }
 
     if (payload.client_group_id) {
@@ -729,7 +774,7 @@ if (req.file) {
         insertPayload.id = randomUUID()
         insertPayload.client_group_id = insertPayload.id
       }
-const result = await insertClient(insertPayload)
+      const result = await insertClient(insertPayload)
       data = result.data
       error = result.error
       if (!error) {
@@ -758,21 +803,21 @@ const result = await insertClient(insertPayload)
         .single()
       if (missingClientColumn(groupError) === 'client_group_id') {
         releaseClientDisplayId(payload.client_display_id)
+        if (initialFollowUpDate) await createClientFollowUp(data.id, initialFollowUpDate, initialFollowUpComments)
         await notifyClientConsultantAssignment(req, data)
-        await createClientFollowUpDueNotification({ recipientUserId: data.consultant_user_id, clientId: data.id, clientName: data.client_name || data.name, followUpDate: data.follow_up_date })
-        return res.status(201).json(normalizeClient(data))
+        return res.status(201).json(await loadClientWithRelations(data.id))
       }
       if (groupError) throw groupError
       releaseClientDisplayId(payload.client_display_id)
+      if (initialFollowUpDate) await createClientFollowUp(grouped.id, initialFollowUpDate, initialFollowUpComments)
       await notifyClientConsultantAssignment(req, grouped)
-      await createClientFollowUpDueNotification({ recipientUserId: grouped.consultant_user_id, clientId: grouped.id, clientName: grouped.client_name || grouped.name, followUpDate: grouped.follow_up_date })
-      return res.status(201).json(normalizeClient(grouped))
+      return res.status(201).json(await loadClientWithRelations(grouped.id))
     }
 
     releaseClientDisplayId(payload.client_display_id)
+    if (initialFollowUpDate) await createClientFollowUp(data.id, initialFollowUpDate, initialFollowUpComments)
     await notifyClientConsultantAssignment(req, data)
-    await createClientFollowUpDueNotification({ recipientUserId: data.consultant_user_id, clientId: data.id, clientName: data.client_name || data.name, followUpDate: data.follow_up_date })
-    return res.status(201).json(normalizeClient(data))
+    return res.status(201).json(await loadClientWithRelations(data.id))
   } catch (err) {
     if (err.code === '23505' && /clients_name_key/i.test(err.message || '')) {
       return res.status(400).json({ error: 'Client name is still unique in Supabase. Run server/supabase-clients-module-upgrade.sql once.' })
@@ -807,7 +852,6 @@ async function updateClient(req, res) {
 
     if (error) throw error
     await notifyClientConsultantAssignment(req, data, existing.consultant_name || existing.consultant)
-    await createClientFollowUpDueNotification({ recipientUserId: data.consultant_user_id, clientId: data.id, clientName: data.client_name || data.name, followUpDate: data.follow_up_date })
     return res.json(await loadClientWithRelations(data.id))
   } catch (err) {
     if (isClientDisplayIdUniqueError(err)) {
@@ -824,96 +868,14 @@ async function addFollowUp(req, res) {
     const { follow_up_comments } = req.body
     if (!follow_up_date) return res.status(400).json({ error: 'Follow Up Date is required' })
     const scope = await followUpScope(req.params.id)
-    const duplicate = await findFollowUpDateDuplicate(scope.ids, follow_up_date)
-    if (duplicate) return res.status(409).json({ error: 'A follow up already exists for this date.' })
-
-    const { data: existing, error: existingError } = await supabase
-      .from('client_follow_ups')
-      .select('follow_up_number')
-      .eq('client_id', scope.ownerId)
-      .order('follow_up_number', { ascending: false })
-      .limit(1)
-
-    if (existingError) throw existingError
-    const followUpNumber = ((existing || [])[0]?.follow_up_number || 0) + 1
-
-    const { data, error } = await supabase
-      .from('client_follow_ups')
-      .insert({
-        client_id: scope.ownerId,
-        follow_up_number: followUpNumber,
-        follow_up_date,
-        follow_up_comments: nullable(follow_up_comments)
-      })
-
-      .select('*')
-      .single()
-
-    if (error) throw error
-
-    const { error: updateError } = await updateClientRow(scope.ownerId, {
-      follow_up_date,
-      comments: nullable(follow_up_comments),
-      notes: nullable(follow_up_comments),
-      updated_at: new Date().toISOString()
-    })
-
-    if (updateError) throw updateError
-    const { data: updatedClient, error: notifyTargetError } = await loadClientFollowUpNotificationTarget(scope.ownerId)
-    if (notifyTargetError) throw notifyTargetError
-
-    if (updatedClient) {
-      await createClientFollowUpDueNotification({
-        consultantUserId: updatedClient.consultant_user_id,
-        consultantName: updatedClient.consultant_name || updatedClient.consultant,
-        clientId: updatedClient.id,
-        clientName: updatedClient.client_name || updatedClient.name,
-        followUpDate: updatedClient.follow_up_date,
-        followUpId: data.id
-      })
-    }
-
+    const data = await createClientFollowUp(scope.ownerId, follow_up_date, follow_up_comments)
     const client = await loadClientWithRelations(scope.ownerId)
     return res.status(201).json({ data, client, follow_ups: client?.follow_ups || [] })
   } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     if (err.code === '23505') return res.status(409).json({ error: 'A follow up already exists for this date.' })
     return logAndSendInternal(res, 'addFollowUp', err)
   }
-}
-
-async function syncClientLatestFollowUp(scope) {
-  const { data: latest, error } = await supabase
-    .from('client_follow_ups')
-    .select('*')
-    .in('client_id', scope.ids)
-    .order('follow_up_number', { ascending: false })
-    .limit(1)
-  if (error) throw error
-
-  const row = latest?.[0] || null
-  const { error: updateError } = await updateClientRow(scope.ownerId, {
-    follow_up_date: row?.follow_up_date || null,
-    comments: nullable(row?.follow_up_comments),
-    notes: nullable(row?.follow_up_comments),
-    updated_at: new Date().toISOString()
-  })
-  
-  if (updateError) throw updateError
-  const { data: updatedClient, error: notifyTargetError } = await loadClientFollowUpNotificationTarget(scope.ownerId)
-  if (notifyTargetError) throw notifyTargetError
-
-  if (updatedClient) {
-    await createClientFollowUpDueNotification({
-      consultantUserId: updatedClient.consultant_user_id,
-      consultantName: updatedClient.consultant_name || updatedClient.consultant,
-      clientId: updatedClient.id,
-      clientName: updatedClient.client_name || updatedClient.name,
-      followUpDate: updatedClient.follow_up_date,
-      followUpId: row?.id
-    })
-  }
-
-  return row
 }
 
 async function updateFollowUp(req, res) {
@@ -944,7 +906,7 @@ async function updateFollowUp(req, res) {
       .single()
 
     if (error) throw error
-    await syncClientLatestFollowUp(scope)
+    await notifyClientFollowUpDue(scope.ownerId, data)
     const client = await loadClientWithRelations(scope.ownerId)
     return res.json({ data, client, follow_ups: client?.follow_ups || [] })
   } catch (err) {
@@ -967,7 +929,6 @@ async function deleteFollowUp(req, res) {
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Follow-up not found' })
 
-    await syncClientLatestFollowUp(scope)
     const { data: remaining, error: remainingError } = await supabase
       .from('client_follow_ups')
       .select('*')

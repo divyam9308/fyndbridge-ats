@@ -541,7 +541,7 @@ export default function ClientsPage() {
 
   const openEditModal = (client) => {
     const followUp = selectedFollowUp(client)
-    setForm({ ...clientToForm(client), follow_up_id: followUp?.id || '', follow_up_date: followUp?.follow_up_date || client.follow_up_date || '' })
+    setForm({ ...clientToForm(client), follow_up_id: followUp?.id || '', follow_up_date: followUp?.follow_up_date || '' })
     setConsultantSearch(client.consultant_name || client.consultant || '')
     setConsultantOpen(false)
     fetchConsultantOptions().catch(() => {})
@@ -579,7 +579,7 @@ export default function ClientsPage() {
       client_group_id: client.client_group_id || client.id,
       client_display_id: client.client_display_id || source.client_display_id || '',
       follow_up_id: followUp?.id || '',
-      follow_up_date: followUp?.follow_up_date || source.follow_up_date || client.follow_up_date || '',
+      follow_up_date: followUp?.follow_up_date || '',
       comments: followUp?.follow_up_comments || source.comments || client.comments || '',
       contact_person: '',
       mobile: '',
@@ -1037,7 +1037,7 @@ export default function ClientsPage() {
       case 'followUpDate':
         {
           const followUps = client.follow_ups || []
-          const followUpText = formatDateDDMMYYYY(followUp?.follow_up_date || client.follow_up_date)
+          const followUpText = formatDateDDMMYYYY(followUp?.follow_up_date)
           const hasMultipleFollowUps = followUps.length > 1
           return (
             <td key={key}>
