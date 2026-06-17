@@ -102,6 +102,33 @@ async function createClientFollowUpDueNotification({ recipientUserId, consultant
     ? { ...row, follow_up_date: dueDate, follow_up_id: clean(followUpId) }
     : { ...row, follow_up_date: dueDate }
   let { error } = await supabase.from('notifications').insert(withFollowUpFields)
+  if (error?.code === '23505' && clean(followUpId)) {
+    const { data: existingRows, error: lookupError } = await supabase
+      .from('notifications')
+      .select('id, follow_up_id, title')
+      .eq('recipient_user_id', recipient)
+      .eq('client_id', clientId)
+      .eq('follow_up_date', dueDate)
+      .eq('action_type', 'client_follow_up_due')
+      .limit(1)
+    if (lookupError && lookupError.code !== '42703' && lookupError.code !== 'PGRST204') throw lookupError
+    const existingRow = existingRows?.[0]
+    if (existingRow?.follow_up_id && existingRow.follow_up_id !== clean(followUpId)) {
+      const restoredTitle = String(existingRow.title || '').replace(/^\[cleared\]\s*/i, '') || row.title
+      let restored = await supabase
+        .from('notifications')
+        .update({ ...row, title: restoredTitle, status: 'pending', read_at: null, cleared_at: null, follow_up_id: clean(followUpId), follow_up_date: dueDate })
+        .eq('id', existingRow.id)
+      if (restored.error?.code === '42703' || restored.error?.code === 'PGRST204') {
+        restored = await supabase
+          .from('notifications')
+          .update({ ...row, title: restoredTitle, status: 'pending', read_at: null })
+          .eq('id', existingRow.id)
+      }
+      if (restored.error) throw restored.error
+      return
+    }
+  }
   if (error?.code === '42703' || error?.code === 'PGRST204') {
     const fallback = await supabase.from('notifications').insert(row)
     error = fallback.error
