@@ -210,6 +210,7 @@ export default function ClientsPage() {
   const [statusOpen, setStatusOpen] = useState(false)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
+  const [statusUpdateError, setStatusUpdateError] = useState('')
   const [expandedCells, setExpandedCells] = useState({})
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
   const [selectedExistingClientId, setSelectedExistingClientId] = useState(null)
@@ -689,6 +690,7 @@ export default function ClientsPage() {
     const previousClients = clients
     const previousAllClients = allClients
     const nextStatus = status === '-' ? '' : status
+    setStatusUpdateError('')
     setClients(current => current.map(row => row.id === client.id ? { ...row, status: nextStatus } : row))
     setAllClients(current => current.map(row => row.id === client.id ? { ...row, status: nextStatus } : row))
     setStatusSaving(current => ({ ...current, [client.id]: true }))
@@ -704,11 +706,10 @@ export default function ClientsPage() {
       if (!response.ok) throw new Error(data.detail || data.error || 'Unable to update client status.')
       setClients(current => current.map(row => row.id === client.id ? { ...row, ...data } : row))
       setAllClients(current => current.map(row => row.id === client.id ? { ...row, ...data } : row))
-      setError(null)
     } catch (err) {
       setClients(previousClients)
       setAllClients(previousAllClients)
-      setError(err.message)
+      setStatusUpdateError(err.message)
     } finally {
       setStatusSaving(current => ({ ...current, [client.id]: false }))
     }
@@ -853,14 +854,10 @@ export default function ClientsPage() {
         return (
           <td key={key}>
             <span className="inline-action-cell">
-              {(client.follow_ups || []).length ? (
-                <select className="filter-select compact-select" value={followUp?.id || ''} onChange={(event) => setSelectedFollowUps((current) => ({ ...current, [client.id]: event.target.value }))}>
-                  {client.follow_ups.map((item) => <option key={item.id} value={item.id}>Follow Up {item.follow_up_number}</option>)}
-                </select>
-              ) : (
-                <span>{formatDateDDMMYYYY(client.follow_up_date)}</span>
-              )}
-              <span>{formatDateDDMMYYYY(followUp?.follow_up_date)}</span>
+              <button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('client-follow-up', client.id, event.currentTarget)}>
+                <span>{formatDateDDMMYYYY(followUp?.follow_up_date || client.follow_up_date)}</span>
+                <ChevronDown size={12} strokeWidth={2} />
+              </button>
               <button className="row-action-btn" type="button" title="Add Follow Up" onClick={() => { setFollowUpClient(client); setFollowUpForm({ follow_up_date: todayLocal(), follow_up_comments: '' }) }}><Plus size={12} /></button>
             </span>
           </td>
@@ -998,6 +995,11 @@ export default function ClientsPage() {
           {aiFilterError}
         </div>
       )}
+      {statusUpdateError && (
+        <div className="form-error" style={{ display:'block', marginBottom:12 }}>
+          {statusUpdateError}
+        </div>
+      )}
       {aiFilters && (
         <div className="ai-filter-pills">
           {filterPills(aiFilters).map(label => <span className="ai-filter-pill" key={label}>🔍 {label}</span>)}
@@ -1057,6 +1059,27 @@ export default function ClientsPage() {
             {STATUSES.map(status => (
               <button className="candidate-columns-action" type="button" key={status} onClick={() => updateClientStatus(client, status)}>
                 {status}
+              </button>
+            ))}
+          </TablePopover>
+        )
+      })()}
+      {tablePopover?.type === 'client-follow-up' && (() => {
+        const client = groupedClients.find(item => item.id === tablePopover.id)
+        if (!client || !(client.follow_ups || []).length) return null
+        return (
+          <TablePopover anchorRect={tablePopover.anchorRect} width={180} onClose={() => setTablePopover(null)}>
+            {client.follow_ups.map((item) => (
+              <button
+                className="candidate-columns-action"
+                type="button"
+                key={item.id}
+                onClick={() => {
+                  setSelectedFollowUps((current) => ({ ...current, [client.id]: item.id }))
+                  setTablePopover(null)
+                }}
+              >
+                {formatDateDDMMYYYY(item.follow_up_date)}
               </button>
             ))}
           </TablePopover>

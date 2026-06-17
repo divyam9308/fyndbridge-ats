@@ -634,22 +634,23 @@ const result = await insertClient(insertPayload)
 
 async function updateClient(req, res) {
   try {
+    const { data: existing, error: existingError } = await supabase.from('clients').select('*').eq('id', req.params.id).maybeSingle()
+    if (existingError) throw existingError
+    if (!existing) return res.status(404).json({ error: 'Client not found' })
+
     if (req.file) {
       const contract = await uploadContractPdf(req.file)
       req.body.contract_document = contract.path
       req.body.contract_pdf_url = contract.path
       req.body.contract_pdf_storage_path = contract.path
     }
-    const payload = clientPayload(req.body)
+    const payload = clientPayload({ ...existing, ...req.body })
     if (!payload.client_display_id) {
-      const { data: existing, error: existingError } = await supabase.from('clients').select('client_display_id').eq('id', req.params.id).maybeSingle()
-      if (existingError) throw existingError
       payload.client_display_id = existing?.client_display_id || await nextClientDisplayId(payload.client_name)
     }
     const { data, error } = await updateClientRow(req.params.id, { ...payload, updated_at: new Date().toISOString() })
 
     if (error) throw error
-    if (!data) return res.status(404).json({ error: 'Client not found' })
     return res.json(normalizeClient(data))
   } catch (err) {
     if (isClientDisplayIdUniqueError(err)) {
