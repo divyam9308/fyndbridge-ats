@@ -700,10 +700,10 @@ export default function ClientDetailPage() {
           <div className="section-title"><Briefcase size={18} /><h3>{selectedGroup.jobTitle} Candidates{selectedGroup.status ? ` - ${statusLabelForValue(selectedGroup.status)}` : ''}</h3></div>
           <div className="candidate-columns-toolbar">
             <div className="candidate-columns-control" ref={columnsDropdownRef}>
-              <button className="filter-select candidate-columns-btn" type="button" onClick={(event) => { setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect() }); setColumnsOpen(open => !open) }}><span>Columns</span><ChevronDown size={13} /></button>
+              <button className="filter-select candidate-columns-btn" type="button" onClick={(event) => { setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setColumnsOpen(open => !open) }}><span>Columns</span><ChevronDown size={13} /></button>
               <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
               {columnsOpen && (
-                <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
+                <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
                   <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)}>Select All</button>
                   <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
                   <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>

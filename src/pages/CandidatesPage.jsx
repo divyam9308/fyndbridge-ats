@@ -1759,7 +1759,7 @@ export default function CandidatesPage() {
             Proceed
           </button>
           {columnsOpen && (
-            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
+            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)}>
                 Select All
               </button>
@@ -1823,7 +1823,7 @@ export default function CandidatesPage() {
             <ChevronDown size={13} strokeWidth={2} />
           </button>
           {sortOpen && (
-            <FloatingDropdown anchorRect={sortAnchor?.rect} ignoreElement={sortDropdownRef.current} className="candidate-sort-dropdown" minWidth={180} onClose={() => setSortOpen(false)}>
+            <FloatingDropdown anchorRect={sortAnchor?.rect} ignoreElement={sortAnchor?.element} className="candidate-sort-dropdown" minWidth={180} onClose={() => setSortOpen(false)}>
               {SORT_OPTIONS.map(option => (
                 <button className="candidate-columns-action" type="button" key={option.field} onClick={() => selectSort(option.field)}>
                   {option.toggle ? `${option.label} ${sortField === option.field && sortDirection === 'desc' ? '↑' : '↓'}` : option.label}

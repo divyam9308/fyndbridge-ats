@@ -1,11 +1,19 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 export default function FloatingDropdown({ anchorRect, ignoreElement, onClose, className = '', width, minWidth = 180, children }) {
   const ref = useRef(null)
-  const [style, setStyle] = useState({ visibility: 'hidden' })
   const canUseDom = typeof document !== 'undefined' && Boolean(document.body)
   const validRect = anchorRect && Number.isFinite(anchorRect.left) && Number.isFinite(anchorRect.bottom)
+  const nextWidth = validRect ? width || Math.max(anchorRect.width || 0, minWidth) : minWidth
+  const style = validRect && canUseDom ? {
+    position: 'fixed',
+    top: anchorRect.bottom + 6,
+    left: Math.max(8, Math.min(anchorRect.left, window.innerWidth - nextWidth - 8)),
+    width: nextWidth,
+    zIndex: 10050,
+    visibility: 'visible',
+  } : { visibility: 'hidden' }
 
   useEffect(() => {
     if (!canUseDom) return undefined
@@ -29,22 +37,7 @@ export default function FloatingDropdown({ anchorRect, ignoreElement, onClose, c
       document.removeEventListener('keydown', closeOnEscape)
       window.removeEventListener('scroll', closeOnScroll, true)
     }
-  }, [canUseDom, onClose])
-
-  useLayoutEffect(() => {
-    if (!canUseDom || !validRect) return
-    const margin = 8
-    const nextWidth = width || Math.max(anchorRect.width || 0, minWidth)
-    const maxLeft = window.innerWidth - nextWidth - margin
-    setStyle({
-      position: 'fixed',
-      top: anchorRect.bottom + 6,
-      left: Math.max(margin, Math.min(anchorRect.left, maxLeft)),
-      width: nextWidth,
-      zIndex: 10050,
-      visibility: 'visible',
-    })
-  }, [anchorRect, canUseDom, minWidth, validRect, width])
+  }, [canUseDom, ignoreElement, onClose])
 
   if (!canUseDom || !validRect) return null
 

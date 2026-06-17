@@ -133,13 +133,6 @@ const getCanonicalClients = (clients) => {
   return [...map.values()].sort((a, b) => String(a.client_name || a.name || '').localeCompare(String(b.client_name || b.name || ''), undefined, { sensitivity: 'base' }))
 }
 
-const getConsultantNameFromUser = (user) => {
-  const profileName = String(user?.name || user?.profile_name || '').trim()
-  if (profileName) return profileName
-  const metadataName = String(user?.full_name || user?.user_metadata?.full_name || user?.user_metadata?.name || '').trim()
-  if (metadataName) return metadataName
-  return ''
-}
 const formatLocationRegion = (location, region) => {
   const parts = [location, region].map(value => String(value || '').trim()).filter(Boolean)
   return parts.join(', ')
@@ -926,7 +919,7 @@ export default function ClientsPage() {
           </button>
           <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
           {columnsOpen && (
-            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
+            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CLIENT_COLUMN_KEYS)}>Select All</button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
@@ -986,7 +979,7 @@ export default function ClientsPage() {
             <ChevronDown size={13} strokeWidth={2} />
           </button>
           {sortOpen && (
-            <FloatingDropdown anchorRect={sortAnchor?.rect} ignoreElement={sortDropdownRef.current} className="candidate-sort-dropdown" minWidth={180} onClose={() => setSortOpen(false)}>
+            <FloatingDropdown anchorRect={sortAnchor?.rect} ignoreElement={sortAnchor?.element} className="candidate-sort-dropdown" minWidth={180} onClose={() => setSortOpen(false)}>
               {SORT_OPTIONS.map(option => (
                 <button className="candidate-columns-action" type="button" key={option.field} onClick={() => selectSort(option.field)}>
                   {`${option.label} ${sortField === option.field && sortDirection === 'desc' ? '↑' : '↓'}`}
