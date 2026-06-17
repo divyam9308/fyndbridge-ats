@@ -433,11 +433,12 @@ async function findFollowUpDateDuplicate(clientId, followUpDate, excludeFollowUp
     .select('id, follow_up_date')
     .eq('client_id', clientId)
     .eq('follow_up_date', normalizedDate)
+    .limit(1)
 
   if (excludeFollowUpId) query = query.neq('id', excludeFollowUpId)
-  const { data, error } = await query.maybeSingle()
+  const { data, error } = await query
   if (error) throw error
-  return data || null
+  return data?.[0] || null
 }
 
 function missingClientColumn(error) {
@@ -763,6 +764,7 @@ async function addFollowUp(req, res) {
     const client = await loadClientWithRelations(req.params.id)
     return res.status(201).json({ data, client, follow_ups: client?.follow_ups || [] })
   } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A follow up already exists for this date.' })
     return logAndSendInternal(res, 'addFollowUp', err)
   }
 }
@@ -834,6 +836,7 @@ async function updateFollowUp(req, res) {
     const client = await loadClientWithRelations(req.params.id)
     return res.json({ data, client, follow_ups: client?.follow_ups || [] })
   } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A follow up already exists for this date.' })
     return logAndSendInternal(res, 'updateFollowUp', err)
   }
 }
