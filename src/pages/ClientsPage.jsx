@@ -197,6 +197,7 @@ export default function ClientsPage() {
   const [selectedContacts, setSelectedContacts] = useState({})
   const [followUpClient, setFollowUpClient] = useState(null)
   const [followUpForm, setFollowUpForm] = useState({ follow_up_date: '', follow_up_comments: '' })
+  const [followUpError, setFollowUpError] = useState('')
   const [editingFollowUp, setEditingFollowUp] = useState(null)
   const [deletingFollowUp, setDeletingFollowUp] = useState(null)
   const [clientDuplicate, setClientDuplicate] = useState(null)
@@ -717,12 +718,14 @@ export default function ClientsPage() {
     setEditingFollowUp(null)
     setFollowUpClient(client)
     setFollowUpForm({ follow_up_date: todayLocal(), follow_up_comments: '' })
+    setFollowUpError('')
   }
 
   const openEditFollowUp = (client, followUp) => {
     setTablePopover(null)
     setEditingFollowUp(followUp)
     setFollowUpClient(client)
+    setFollowUpError('')
     setFollowUpForm({
       follow_up_date: followUp.follow_up_date || '',
       follow_up_comments: followUp.follow_up_comments || ''
@@ -737,12 +740,13 @@ export default function ClientsPage() {
       item.id !== editingFollowUp?.id
     ))
     if (duplicate) {
-      setError('A follow up already exists for this date.')
+      setFollowUpError('A follow up already exists for this date.')
       return
     }
     setSaving(true)
     try {
       setError(null)
+      setFollowUpError('')
       const res = await fetch(editingFollowUp ? `/api/clients/${followUpClient.id}/follow-ups/${editingFollowUp.id}` : `/api/clients/${followUpClient.id}/follow-ups`, {
         method: editingFollowUp ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -758,7 +762,7 @@ export default function ClientsPage() {
       setEditingFollowUp(null)
       setFollowUpForm({ follow_up_date: '', follow_up_comments: '' })
     } catch (err) {
-      setError(err.message)
+      setFollowUpError(err.message)
     } finally {
       setSaving(false)
     }
@@ -1544,13 +1548,14 @@ export default function ClientsPage() {
           <div className="modal-card" ref={followUpModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingFollowUp ? 'Edit Follow Up' : 'Add Follow Up'}>
             <div className="modal-header">
               <span className="modal-title">{editingFollowUp ? 'Edit Follow Up' : `Add Follow Up ${(followUpClient.follow_ups || []).length + 1}`}</span>
-              <button className="modal-close" onClick={() => { setFollowUpClient(null); setEditingFollowUp(null) }} aria-label="Close"><X size={16} /></button>
+              <button className="modal-close" onClick={() => { setFollowUpClient(null); setEditingFollowUp(null); setFollowUpError('') }} aria-label="Close"><X size={16} /></button>
             </div>
             <div className="modal-body">
+              {followUpError && <div className="form-error" style={{ display:'block', marginBottom:12 }}>{followUpError}</div>}
               <div className="form-grid-2">
                 <div className="form-group">
                   <label className="form-label">Follow Up Date <span className="req">*</span></label>
-                  <FormattedDateInput value={followUpForm.follow_up_date} onChange={(value) => setFollowUpForm((current) => ({ ...current, follow_up_date: value }))} />
+                  <FormattedDateInput value={followUpForm.follow_up_date} onChange={(value) => { setFollowUpError(''); setFollowUpForm((current) => ({ ...current, follow_up_date: value })) }} />
                 </div>
                 <div className="form-group full">
                   <label className="form-label">Follow Up Comments</label>
@@ -1559,7 +1564,7 @@ export default function ClientsPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => { setFollowUpClient(null); setEditingFollowUp(null) }} disabled={saving}>Cancel</button>
+              <button className="btn-secondary" onClick={() => { setFollowUpClient(null); setEditingFollowUp(null); setFollowUpError('') }} disabled={saving}>Cancel</button>
               <button className="btn-primary" onClick={saveFollowUp} disabled={saving || !followUpForm.follow_up_date}>{editingFollowUp ? 'Save Follow Up' : 'Save Follow Up'}</button>
             </div>
           </div>

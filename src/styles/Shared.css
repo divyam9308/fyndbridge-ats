@@ -167,13 +167,13 @@
   align-items: center;
   gap: 4px;
 }
-.follow-up-date-action {
+.candidate-columns-action.follow-up-date-action {
   justify-content: flex-start;
   min-width: 0;
   color: var(--navy-darkest);
   font-weight: 600;
 }
-.follow-up-date-action:hover {
+.candidate-columns-action.follow-up-date-action:hover {
   background: var(--gray-50);
 }
 .client-follow-up-date-text {
