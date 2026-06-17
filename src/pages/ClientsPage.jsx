@@ -777,6 +777,8 @@ export default function ClientsPage() {
       const latestFollowUps = Array.isArray(data.client?.follow_ups) ? data.client.follow_ups : []
       const selectedId = data.data?.id || editingFollowUp?.id || latestFollowUps[latestFollowUps.length - 1]?.id || ''
       setSelectedFollowUps((current) => ({ ...current, [clientId]: selectedId }))
+      await fetchClients({ showLoading: false })
+      await fetchClientOptions()
       setFollowUpClient(null)
       setEditingFollowUp(null)
       setFollowUpForm({ follow_up_date: '', follow_up_comments: '' })
@@ -866,6 +868,8 @@ export default function ClientsPage() {
       const remaining = Array.isArray(data.client?.follow_ups) ? data.client.follow_ups : (Array.isArray(data.follow_ups) ? data.follow_ups : [])
       const latest = remaining[remaining.length - 1] || null
       setSelectedFollowUps((current) => ({ ...current, [clientId]: current[clientId] === followUp.id ? latest?.id || '' : current[clientId] || latest?.id || '' }))
+      await fetchClients({ showLoading: false })
+      await fetchClientOptions()
       setDeletingFollowUp(null)
     } catch (err) {
       setError(err.message)
