@@ -475,6 +475,10 @@ function parsePrompt(page, prompt) {
   if (config.fields.mandate_status) MANDATE_STATUSES.forEach(status => {
     if (new RegExp(`\\b${status.toLowerCase()}\\b`).test(lower(text)) || (status === 'Scrapped' && /\bscrapped?\b/i.test(text)) || (status === 'Completed' && /\b(completed|closed)\b/i.test(text)) || (status === 'Ongoing' && /\b(ongoing|open|active)\b/i.test(text))) add('mandate_status', 'equals', status)
   })
+  if (config.fields.status) {
+    const statusAs = text.match(/\b([a-z][\w\s.-]*?)\s+as\s+status\b/i)
+    if (statusAs) add('status', 'equals', statusAs[1].replace(/^(?:the\s+)?(?:client|candidate|mandate|job)\s+(?:has|is|with)?\s*/i, '').trim())
+  }
   if (config.fields.budget) {
     const budget = text.match(/(?:budget|salary range)\s*(>=|>|<=|<|=|below|above|under|over|more than|less than|greater than|at least)?\s*(\d+(?:\.\d+)?\s*(?:-|to)\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*(?:lac|lpa|lakh|lakhs))?/i)
     if (budget) {
@@ -508,6 +512,7 @@ function parsePrompt(page, prompt) {
   ]
   explicit.forEach(([field, regex]) => {
     if (!config.fields[field]) return
+    if (field === 'client_name' && /\bas\s+status\b/i.test(text)) return
     const match = text.match(regex)
     if (match) add(field, /contains/i.test(match[0]) ? 'contains' : 'contains', match[1] || match[2])
   })
@@ -559,6 +564,7 @@ function parsePrompt(page, prompt) {
     ['sector', /sector\s+(?:is\s+|equals\s+)?([a-z0-9][\w\s&.-]*?)$/i]
   ].forEach(([field, regex]) => {
     if (!config.fields[field]) return
+    if (field === 'client_name' && /\bas\s+status\b/i.test(text)) return
     const match = text.match(regex)
     if (match) add(field, 'contains', match[1])
   })

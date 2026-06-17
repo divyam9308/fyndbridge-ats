@@ -1,8 +1,8 @@
 const { callAiJson } = require('./aiProvider')
-const { aiFilterSchema, buildAiFilterPrompt, validateAiFilters, buildKeywordFilters, isSimpleKeywordPrompt } = require('./filterEngine')
+const { aiFilterSchema, buildAiFilterPrompt, validateAiFilters, isSimpleKeywordPrompt } = require('./filterEngine')
 
 async function parseAiFilters(page, prompt) {
-  const fallback = buildKeywordFilters(page, prompt)
+  const fallback = validateAiFilters(page, null, prompt)
   try {
     const parsed = await callAiJson({
       prompt: buildAiFilterPrompt(page, prompt),
@@ -15,7 +15,7 @@ async function parseAiFilters(page, prompt) {
     return filters ? { filters, ai: true } : { filters: fallback, fallback: true }
   } catch (err) {
     console.warn('AI filter fallback:', { page, message: err.message, code: err.code || err.statusCode })
-    return { filters: fallback, fallback: true, error: 'AI filter unavailable, using normal search.' }
+    return { filters: fallback, fallback: true, error: 'AI filter unavailable, using normal parser.' }
   }
 }
 
