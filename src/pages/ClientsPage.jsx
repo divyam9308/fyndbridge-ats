@@ -247,6 +247,7 @@ export default function ClientsPage() {
   const followUpModalRef = useRef(null)
   const duplicateModalRef = useRef(null)
   const pendingRealtimeRefreshRef = useRef(false)
+  const suppressRealtimeUntilRef = useRef(0)
 
   const focusPopup = useCallback((ref) => {
     window.requestAnimationFrame(() => {
@@ -298,6 +299,7 @@ export default function ClientsPage() {
   }, [aiFilters, page, pageSize, sortDirection, sortField, statusFilter])
 
   const refreshClientsRealtime = useCallback(() => {
+    if (Date.now() < suppressRealtimeUntilRef.current) return
     if (isOpen || followUpClient || clientDuplicate || clientAlreadyAdded) {
       pendingRealtimeRefreshRef.current = true
       return
@@ -766,6 +768,7 @@ export default function ClientsPage() {
       setError(null)
       setFollowUpError('')
       const clientId = followUpClientKey(followUpClient)
+      suppressRealtimeUntilRef.current = Date.now() + 2500
       const res = await fetch(editingFollowUp ? `/api/clients/${clientId}/follow-ups/${editingFollowUp.id}` : `/api/clients/${clientId}/follow-ups`, {
         method: editingFollowUp ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -777,8 +780,8 @@ export default function ClientsPage() {
       const latestFollowUps = Array.isArray(data.client?.follow_ups) ? data.client.follow_ups : []
       const selectedId = data.data?.id || editingFollowUp?.id || latestFollowUps[latestFollowUps.length - 1]?.id || ''
       setSelectedFollowUps((current) => ({ ...current, [clientId]: selectedId }))
-      await fetchClients({ showLoading: false })
-      await fetchClientOptions()
+      pendingRealtimeRefreshRef.current = false
+      suppressRealtimeUntilRef.current = Date.now() + 2500
       setFollowUpClient(null)
       setEditingFollowUp(null)
       setFollowUpForm({ follow_up_date: '', follow_up_comments: '' })
@@ -861,6 +864,7 @@ export default function ClientsPage() {
       setError(null)
       const { client, followUp } = deletingFollowUp
       const clientId = followUpClientKey(client)
+      suppressRealtimeUntilRef.current = Date.now() + 2500
       const res = await fetch(`/api/clients/${clientId}/follow-ups/${followUp.id}`, { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to delete follow-up.')
@@ -868,8 +872,8 @@ export default function ClientsPage() {
       const remaining = Array.isArray(data.client?.follow_ups) ? data.client.follow_ups : (Array.isArray(data.follow_ups) ? data.follow_ups : [])
       const latest = remaining[remaining.length - 1] || null
       setSelectedFollowUps((current) => ({ ...current, [clientId]: current[clientId] === followUp.id ? latest?.id || '' : current[clientId] || latest?.id || '' }))
-      await fetchClients({ showLoading: false })
-      await fetchClientOptions()
+      pendingRealtimeRefreshRef.current = false
+      suppressRealtimeUntilRef.current = Date.now() + 2500
       setDeletingFollowUp(null)
     } catch (err) {
       setError(err.message)

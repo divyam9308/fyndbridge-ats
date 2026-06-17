@@ -35,31 +35,28 @@ async function ensureClientFollowUpDueNotifications(req) {
   if (profileError) throw profileError
 
   const profileName = clean(profile?.name)
+  if (!profileName) return
   const dueDate = todayLocal()
-  const { data: followUps, error: followUpsError } = await supabase
-    .from('client_follow_ups')
-    .select('*')
-    .eq('follow_up_date', dueDate)
-  if (followUpsError) throw followUpsError
-
-  const clientIds = [...new Set((followUps || []).map(row => row.client_id).filter(Boolean))]
-  if (!clientIds.length) return
-
   const { data: clients, error: clientsError } = await supabase
     .from('clients')
-    .select('*')
-    .in('id', clientIds)
+    .select('id, client_name, name, consultant_name')
+    .ilike('consultant_name', profileName)
   if (clientsError) throw clientsError
+
+  const clientIds = [...new Set((clients || []).map(row => row.id).filter(Boolean))]
+  if (!clientIds.length) return
+  const { data: followUps, error: followUpsError } = await supabase
+    .from('client_follow_ups')
+    .select('id, client_id, follow_up_date')
+    .in('client_id', clientIds)
+    .eq('follow_up_date', dueDate)
+  if (followUpsError) throw followUpsError
 
   const clientsById = new Map((clients || []).map(client => [client.id, client]))
   for (const followUp of followUps || []) {
     const client = clientsById.get(followUp.client_id)
     if (!client) continue
-    const consultantName = clean(client.consultant_name)
-    const consultantUserId = clean(client.consultant_user_id)
-    if (!consultantName || consultantName === '-') continue
-    if (consultantUserId && consultantUserId !== userId) continue
-    if (!consultantUserId && (!profileName || !sameName(consultantName, profileName))) continue
+    if (!sameName(client.consultant_name, profileName)) continue
     await createClientFollowUpDueNotification({
       recipientUserId: userId,
       clientId: client.id,
@@ -113,60 +110,58 @@ async function listNotifications(req, res) {
 async function markNotificationRead(req, res) {
   try {
     if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' })
-    const { data: notification, error: fetchError } = await supabase
+    const readAt = new Date().toISOString()
+    const { data, error } = await supabase
       .from('notifications')
-      .select('*')
+      .update({ status: 'read', read_at: readAt })
       .eq('id', req.params.id)
       .eq('recipient_user_id', req.user.id)
+      .neq('status', 'read')
+      .select('*')
       .maybeSingle()
-    if (fetchError) throw fetchError
-    if (!notification) return res.status(404).json({ error: 'Notification not found' })
-
-    let data = notification
-    if (notification.status !== 'read') {
-      const readAt = new Date().toISOString()
-      const { data: updated, error } = await supabase
+    if (error) throw error
+    if (!data) {
+      const { data: existing, error: fetchError } = await supabase
         .from('notifications')
-        .update({ status: 'read', read_at: readAt })
-        .eq('id', notification.id)
-        .eq('recipient_user_id', req.user.id)
         .select('*')
-        .single()
-      if (error) throw error
-      data = updated
+        .eq('id', req.params.id)
+        .eq('recipient_user_id', req.user.id)
+        .maybeSingle()
+      if (fetchError) throw fetchError
+      if (!existing) return res.status(404).json({ error: 'Notification not found' })
+      return res.json({ data: existing })
     }
 
     if (
-      notification.status !== 'read' &&
-      notification.sender_user_id &&
-      notification.sender_user_id !== req.user.id &&
-      notification.sender_user_id !== notification.recipient_user_id &&
-      notification.role_type !== 'system'
+      data.sender_user_id &&
+      data.sender_user_id !== req.user.id &&
+      data.sender_user_id !== data.recipient_user_id &&
+      data.role_type !== 'system'
     ) {
-      const isCandidateAssignment = notification.action_type === 'candidate_assignment'
-      const isClientAssignment = notification.action_type === 'client_assignment'
+      const isCandidateAssignment = data.action_type === 'candidate_assignment'
+      const isClientAssignment = data.action_type === 'client_assignment'
       const [{ data: job }, { data: client }, profiles] = await Promise.all([
-        notification.mandate_id ? supabase.from('jobs').select('title').eq('id', notification.mandate_id).maybeSingle() : Promise.resolve({ data: null }),
-        notification.client_id ? supabase.from('clients').select('name, client_name').eq('id', notification.client_id).maybeSingle() : Promise.resolve({ data: null }),
+        data.mandate_id ? supabase.from('jobs').select('title').eq('id', data.mandate_id).maybeSingle() : Promise.resolve({ data: null }),
+        data.client_id ? supabase.from('clients').select('name, client_name').eq('id', data.client_id).maybeSingle() : Promise.resolve({ data: null }),
         profileMap([req.user.id])
       ])
       const recipientName = preferredName(profiles.get(req.user.id), req.user.email)
       const role = clean(job?.title) || 'Mandate'
       const clientName = clean(client?.client_name || client?.name) || 'Client'
-      const candidateName = clean(String(notification.message || '').match(/candidate\s+(.+?)\.$/i)?.[1]) || 'Candidate'
+      const candidateName = clean(String(data.message || '').match(/candidate\s+(.+?)\.$/i)?.[1]) || 'Candidate'
       const message = isCandidateAssignment
         ? `${recipientName} has read the candidate assignment notification for ${candidateName}.`
         : isClientAssignment
           ? `${recipientName} has read the client assignment notification for ${clientName}.`
           : `${recipientName} has read the mandate assignment notification for ${role} - ${clientName}.`
       const actionType = isCandidateAssignment || isClientAssignment
-        ? `${notification.action_type}_read_confirmation`
+        ? `${data.action_type}_read_confirmation`
         : 'assignment_read_confirmation'
       const { error: insertError } = await supabase.from('notifications').insert({
-        recipient_user_id: notification.sender_user_id,
+        recipient_user_id: data.sender_user_id,
         sender_user_id: req.user.id,
-        mandate_id: notification.mandate_id,
-        client_id: notification.client_id,
+        mandate_id: data.mandate_id,
+        client_id: data.client_id,
         role_type: 'system',
         title: 'Notification Read',
         message,

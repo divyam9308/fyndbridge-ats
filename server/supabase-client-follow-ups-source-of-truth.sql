@@ -42,6 +42,9 @@ where not exists (
 create unique index if not exists client_follow_ups_client_date_unique_idx
   on public.client_follow_ups(client_id, follow_up_date);
 
+create index if not exists client_follow_ups_client_id_idx
+  on public.client_follow_ups(client_id);
+
 delete from public.notifications n
 using (
   select id
@@ -67,3 +70,15 @@ create unique index if not exists notifications_client_follow_up_due_follow_up_u
   on public.notifications(recipient_user_id, client_id, follow_up_id, follow_up_date, action_type)
   where action_type = 'client_follow_up_due'
     and follow_up_id is not null;
+
+create index if not exists notifications_recipient_status_idx
+  on public.notifications(recipient_user_id, status);
+
+create index if not exists notifications_recipient_action_idx
+  on public.notifications(recipient_user_id, action_type);
+
+create index if not exists notifications_recipient_cleared_idx
+  on public.notifications(recipient_user_id, cleared_at);
+
+create index if not exists notifications_action_recipient_follow_up_idx
+  on public.notifications(action_type, recipient_user_id, client_id, follow_up_id, follow_up_date);
