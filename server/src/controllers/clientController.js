@@ -700,6 +700,87 @@ async function addFollowUp(req, res) {
   }
 }
 
+async function syncClientLatestFollowUp(clientId) {
+  const { data: latest, error } = await supabase
+    .from('client_follow_ups')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('follow_up_number', { ascending: false })
+    .limit(1)
+  if (error) throw error
+
+  const row = latest?.[0] || null
+  await supabase
+    .from('clients')
+    .update({
+      follow_up_date: row?.follow_up_date || null,
+      comments: nullable(row?.follow_up_comments),
+      notes: nullable(row?.follow_up_comments),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', clientId)
+
+  return row
+}
+
+async function updateFollowUp(req, res) {
+  try {
+    const { follow_up_date, follow_up_comments } = req.body
+    if (!follow_up_date) return res.status(400).json({ error: 'Follow Up Date is required' })
+
+    const { data: existing, error: existingError } = await supabase
+      .from('client_follow_ups')
+      .select('*')
+      .eq('id', req.params.followUpId)
+      .eq('client_id', req.params.id)
+      .maybeSingle()
+
+    if (existingError) throw existingError
+    if (!existing) return res.status(404).json({ error: 'Follow-up not found' })
+
+    const { data, error } = await supabase
+      .from('client_follow_ups')
+      .update({ follow_up_date, follow_up_comments: nullable(follow_up_comments) })
+      .eq('id', req.params.followUpId)
+      .eq('client_id', req.params.id)
+      .select('*')
+      .single()
+
+    if (error) throw error
+    await syncClientLatestFollowUp(req.params.id)
+    return res.json(data)
+  } catch (err) {
+    return logAndSendInternal(res, 'updateFollowUp', err)
+  }
+}
+
+async function deleteFollowUp(req, res) {
+  try {
+    const { data, error } = await supabase
+      .from('client_follow_ups')
+      .delete()
+      .eq('id', req.params.followUpId)
+      .eq('client_id', req.params.id)
+      .select('*')
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data) return res.status(404).json({ error: 'Follow-up not found' })
+
+    await syncClientLatestFollowUp(req.params.id)
+    const { data: remaining, error: remainingError } = await supabase
+      .from('client_follow_ups')
+      .select('*')
+      .eq('client_id', req.params.id)
+      .order('follow_up_number', { ascending: true })
+
+    if (remainingError) throw remainingError
+    return res.json({ data, follow_ups: remaining || [] })
+  } catch (err) {
+    return logAndSendInternal(res, 'deleteFollowUp', err)
+  }
+}
+
 async function deleteClient(req, res) {
   try {
     const { data, error } = await supabase.from('clients').delete().eq('id', req.params.id).select('*').maybeSingle()
@@ -720,6 +801,8 @@ module.exports = {
   createClient,
   updateClient,
   addFollowUp,
+  updateFollowUp,
+  deleteFollowUp,
   deleteClient
 }
 

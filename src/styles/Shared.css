@@ -161,6 +161,16 @@
   padding: 0 8px;
   font-size: 12px;
 }
+.follow-up-popover-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
+  align-items: center;
+  gap: 4px;
+}
+.follow-up-date-action {
+  justify-content: flex-start;
+  min-width: 0;
+}
 
 /* ===== Filter Bar ===== */
 .filter-bar {

@@ -54,10 +54,11 @@ export default function NotificationBell() {
     if (!supabase || !user?.id) return
     const channel = supabase
       .channel(`notifications:${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_user_id=eq.${user.id}` }, payload => {
-        setNotifications(current => [payload.new, ...current].slice(0, 30))
-        setToast(payload.new)
-        playPing()
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `recipient_user_id=eq.${user.id}` }, payload => {
+        if (payload.eventType === 'INSERT' && payload.new) {
+          setToast(payload.new)
+          playPing()
+        }
         loadNotifications()
       })
       .subscribe()

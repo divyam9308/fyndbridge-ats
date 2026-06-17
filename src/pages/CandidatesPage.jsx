@@ -7,6 +7,7 @@ import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
+import FormattedDateInput from '../components/FormattedDateInput'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
@@ -279,6 +280,7 @@ export default function CandidatesPage() {
   const duplicateModalRef = useRef(null)
   const cvLinkCheckTimerRef = useRef(null)
   const importCancelledRef = useRef(false)
+  const pendingRealtimeRefreshRef = useRef(false)
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -507,6 +509,38 @@ export default function CandidatesPage() {
     window.addEventListener('ats:candidates-updated', refreshCandidates)
     return () => window.removeEventListener('ats:candidates-updated', refreshCandidates)
   }, [loadCandidates, page])
+
+  const refreshCandidatesRealtime = useCallback(() => {
+    if (addOpen || importOpen || candidateDuplicate || editing) {
+      pendingRealtimeRefreshRef.current = true
+      return
+    }
+    loadCandidates(page, { showLoading: false })
+  }, [addOpen, candidateDuplicate, editing, importOpen, loadCandidates, page])
+
+  useEffect(() => {
+    if ((addOpen || importOpen || candidateDuplicate || editing) || !pendingRealtimeRefreshRef.current) return
+    pendingRealtimeRefreshRef.current = false
+    loadCandidates(page, { showLoading: false })
+  }, [addOpen, candidateDuplicate, editing, importOpen, loadCandidates, page])
+
+  useEffect(() => {
+    if (!supabase) return
+    const channel = supabase
+      .channel('realtime:candidates-page')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidates' }, refreshCandidatesRealtime)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidate_associations' }, refreshCandidatesRealtime)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
+        refreshOptionData()
+        refreshCandidatesRealtime()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, () => {
+        refreshOptionData()
+        refreshCandidatesRealtime()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [refreshCandidatesRealtime, refreshOptionData])
 
   const saveCandidateToApi = async (candidate, { update = false, duplicateAction = '' } = {}) => {
     const prepared = await ensureCandidateClient(candidate)
@@ -1401,7 +1435,7 @@ export default function CandidatesPage() {
             </div>
             <div className="form-group">
               <label className="form-label">Date of Joining</label>
-              <input name="dateOfJoining" type="date" value={f.dateOfJoining || ''} onChange={handleLocalChange} className="form-control" />
+              <FormattedDateInput name="dateOfJoining" value={f.dateOfJoining || ''} onChange={(value) => setF(prev => ({ ...prev, dateOfJoining: value }))} className="form-control" />
             </div>
           </>
         )}

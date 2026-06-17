@@ -151,6 +151,7 @@ export default function ClientDetailPage() {
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
   const editModalRef = useRef(null)
+  const pendingRealtimeRefreshRef = useRef(false)
 
   const focusPopup = useCallback((ref) => {
     window.requestAnimationFrame(() => {
@@ -205,38 +206,62 @@ export default function ClientDetailPage() {
     return [...candidateMap.values()].map(apiCandidateToUi)
   }, [clientId])
 
-  useEffect(() => {
-    let active = true
-    const fetchData = async () => {
-      try {
-        setLoading(true)
-        const clientRes = await fetch(`/api/clients/${clientId}`)
-        if (clientRes.status === 404) {
-          setClient(null)
-          return
-        }
-        if (!clientRes.ok) throw new Error('Failed to fetch client details.')
-        const clientData = await clientRes.json()
-        const [jobsRes, candidateRows] = await Promise.all([
-          fetch(`/api/jobs?client_id=${clientId}&all=true`),
-          fetchAllCandidates(clientData),
-        ])
-        if (!jobsRes.ok) throw new Error('Failed to fetch client jobs.')
-        const jobsPayload = await jobsRes.json()
-        if (!active) return
-        setClient(clientData)
-        setClientJobs(jobsPayload.data || [])
-        setCandidates(candidateRows)
-        setError(null)
-      } catch (err) {
-        if (active) setError(err.message)
-      } finally {
-        if (active) setLoading(false)
+  const refreshDetailData = useCallback(async ({ showLoading = true } = {}) => {
+    try {
+      if (showLoading) setLoading(true)
+      const clientRes = await fetch(`/api/clients/${clientId}`)
+      if (clientRes.status === 404) {
+        setClient(null)
+        return
       }
+      if (!clientRes.ok) throw new Error('Failed to fetch client details.')
+      const clientData = await clientRes.json()
+      const [jobsRes, candidateRows] = await Promise.all([
+        fetch(`/api/jobs?client_id=${clientId}&all=true`),
+        fetchAllCandidates(clientData),
+      ])
+      if (!jobsRes.ok) throw new Error('Failed to fetch client jobs.')
+      const jobsPayload = await jobsRes.json()
+      setClient(clientData)
+      setClientJobs(jobsPayload.data || [])
+      setCandidates(candidateRows)
+      setError(null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      if (showLoading) setLoading(false)
     }
-    fetchData()
-    return () => { active = false }
   }, [clientId, fetchAllCandidates])
+
+  useEffect(() => {
+    refreshDetailData()
+  }, [refreshDetailData])
+
+  const refreshDetailRealtime = useCallback(() => {
+    if (editCandidate) {
+      pendingRealtimeRefreshRef.current = true
+      return
+    }
+    refreshDetailData({ showLoading: false })
+  }, [editCandidate, refreshDetailData])
+
+  useEffect(() => {
+    if (editCandidate || !pendingRealtimeRefreshRef.current) return
+    pendingRealtimeRefreshRef.current = false
+    refreshDetailData({ showLoading: false })
+  }, [editCandidate, refreshDetailData])
+
+  useEffect(() => {
+    if (!supabase) return
+    const channel = supabase
+      .channel(`realtime:client-detail:${clientId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, refreshDetailRealtime)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, refreshDetailRealtime)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidates' }, refreshDetailRealtime)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidate_associations' }, refreshDetailRealtime)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [clientId, refreshDetailRealtime])
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {

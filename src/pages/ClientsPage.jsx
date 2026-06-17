@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText, Search } from 'lucide-react'
+import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText, Search, Trash2 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
 import TablePopover from '../components/TablePopover'
 import CompactPagination from '../components/CompactPagination'
+import FormattedDateInput from '../components/FormattedDateInput'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'
@@ -185,6 +186,8 @@ export default function ClientsPage() {
   const [selectedContacts, setSelectedContacts] = useState({})
   const [followUpClient, setFollowUpClient] = useState(null)
   const [followUpForm, setFollowUpForm] = useState({ follow_up_date: '', follow_up_comments: '' })
+  const [editingFollowUp, setEditingFollowUp] = useState(null)
+  const [deletingFollowUp, setDeletingFollowUp] = useState(null)
   const [clientDuplicate, setClientDuplicate] = useState(null)
   const [clientAlreadyAdded, setClientAlreadyAdded] = useState(false)
   const [duplicateMoreOpen, setDuplicateMoreOpen] = useState(false)
@@ -226,6 +229,7 @@ export default function ClientsPage() {
   const clientIdRequestRef = useRef(0)
   const followUpModalRef = useRef(null)
   const duplicateModalRef = useRef(null)
+  const pendingRealtimeRefreshRef = useRef(false)
 
   const focusPopup = useCallback((ref) => {
     window.requestAnimationFrame(() => {
@@ -237,11 +241,11 @@ export default function ClientsPage() {
   }, [])
 
   useEffect(() => {
-    if (!isOpen && !followUpClient && !clientDuplicate && !clientAlreadyAdded) return
+    if (!isOpen && !followUpClient && !deletingFollowUp && !clientDuplicate && !clientAlreadyAdded) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = previous }
-  }, [isOpen, followUpClient, clientDuplicate, clientAlreadyAdded])
+  }, [isOpen, followUpClient, deletingFollowUp, clientDuplicate, clientAlreadyAdded])
 
   const fetchClientOptions = useCallback(async () => {
     const res = await fetch('/api/clients?all=true')
@@ -276,6 +280,15 @@ export default function ClientsPage() {
     }
   }, [aiFilters, page, pageSize, sortDirection, sortField, statusFilter])
 
+  const refreshClientsRealtime = useCallback(() => {
+    if (isOpen || followUpClient || clientDuplicate || clientAlreadyAdded) {
+      pendingRealtimeRefreshRef.current = true
+      return
+    }
+    fetchClients({ showLoading: false })
+    fetchClientOptions()
+  }, [clientAlreadyAdded, clientDuplicate, fetchClientOptions, fetchClients, followUpClient, isOpen])
+
   const openDocument = useCallback(async (key, url) => {
     setOpeningDocument(key)
     try {
@@ -289,6 +302,23 @@ export default function ClientsPage() {
     const timer = window.setTimeout(fetchClients, 0)
     return () => window.clearTimeout(timer)
   }, [fetchClients])
+
+  useEffect(() => {
+    if (isOpen || followUpClient || clientDuplicate || clientAlreadyAdded || !pendingRealtimeRefreshRef.current) return
+    pendingRealtimeRefreshRef.current = false
+    fetchClients({ showLoading: false })
+    fetchClientOptions()
+  }, [clientAlreadyAdded, clientDuplicate, fetchClientOptions, fetchClients, followUpClient, isOpen])
+
+  useEffect(() => {
+    if (!supabase) return
+    const channel = supabase
+      .channel('realtime:clients-page')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, refreshClientsRealtime)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'client_follow_ups' }, refreshClientsRealtime)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [refreshClientsRealtime])
 
   useEffect(() => {
     const timer = window.setTimeout(fetchClientOptions, 0)
@@ -627,21 +657,38 @@ export default function ClientsPage() {
     return contacts.find((item) => item.id === selected) || contacts[0]
   }
 
+  const openAddFollowUp = (client) => {
+    setEditingFollowUp(null)
+    setFollowUpClient(client)
+    setFollowUpForm({ follow_up_date: todayLocal(), follow_up_comments: '' })
+  }
+
+  const openEditFollowUp = (client, followUp) => {
+    setTablePopover(null)
+    setEditingFollowUp(followUp)
+    setFollowUpClient(client)
+    setFollowUpForm({
+      follow_up_date: followUp.follow_up_date || '',
+      follow_up_comments: followUp.follow_up_comments || ''
+    })
+  }
+
   const saveFollowUp = async () => {
     if (!followUpForm.follow_up_date) return
     setSaving(true)
     try {
-      const res = await fetch(`/api/clients/${followUpClient.id}/follow-ups`, {
-        method: 'POST',
+      const res = await fetch(editingFollowUp ? `/api/clients/${followUpClient.id}/follow-ups/${editingFollowUp.id}` : `/api/clients/${followUpClient.id}/follow-ups`, {
+        method: editingFollowUp ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(followUpForm)
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to save follow-up.')
-      setSelectedFollowUps((current) => ({ ...current, [followUpClient.id]: data.id }))
+      setSelectedFollowUps((current) => ({ ...current, [followUpClient.id]: data.id || editingFollowUp?.id || '' }))
       setFollowUpClient(null)
+      setEditingFollowUp(null)
       setFollowUpForm({ follow_up_date: '', follow_up_comments: '' })
-      await fetchClients()
+      await fetchClients({ showLoading: false })
       await fetchClientOptions()
     } catch (err) {
       setError(err.message)
@@ -712,6 +759,27 @@ export default function ClientsPage() {
       setStatusUpdateError(err.message)
     } finally {
       setStatusSaving(current => ({ ...current, [client.id]: false }))
+    }
+  }
+
+  const confirmDeleteFollowUp = async () => {
+    if (!deletingFollowUp?.client?.id || !deletingFollowUp?.followUp?.id) return
+    setSaving(true)
+    try {
+      const { client, followUp } = deletingFollowUp
+      const res = await fetch(`/api/clients/${client.id}/follow-ups/${followUp.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Unable to delete follow-up.')
+      const remaining = Array.isArray(data.follow_ups) ? data.follow_ups : []
+      const latest = remaining[remaining.length - 1] || null
+      setSelectedFollowUps((current) => ({ ...current, [client.id]: current[client.id] === followUp.id ? latest?.id || '' : current[client.id] || latest?.id || '' }))
+      setDeletingFollowUp(null)
+      await fetchClients({ showLoading: false })
+      await fetchClientOptions()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -858,7 +926,7 @@ export default function ClientsPage() {
                 <span>{formatDateDDMMYYYY(followUp?.follow_up_date || client.follow_up_date)}</span>
                 <ChevronDown size={12} strokeWidth={2} />
               </button>
-              <button className="row-action-btn" type="button" title="Add Follow Up" onClick={() => { setFollowUpClient(client); setFollowUpForm({ follow_up_date: todayLocal(), follow_up_comments: '' }) }}><Plus size={12} /></button>
+              <button className="row-action-btn" type="button" title="Add Follow Up" onClick={() => openAddFollowUp(client)}><Plus size={12} /></button>
             </span>
           </td>
         )
@@ -1068,19 +1136,22 @@ export default function ClientsPage() {
         const client = groupedClients.find(item => item.id === tablePopover.id)
         if (!client || !(client.follow_ups || []).length) return null
         return (
-          <TablePopover anchorRect={tablePopover.anchorRect} width={180} onClose={() => setTablePopover(null)}>
+          <TablePopover anchorRect={tablePopover.anchorRect} width={220} onClose={() => setTablePopover(null)}>
             {client.follow_ups.map((item) => (
-              <button
-                className="candidate-columns-action"
-                type="button"
-                key={item.id}
-                onClick={() => {
-                  setSelectedFollowUps((current) => ({ ...current, [client.id]: item.id }))
-                  setTablePopover(null)
-                }}
-              >
-                {formatDateDDMMYYYY(item.follow_up_date)}
-              </button>
+              <div className="follow-up-popover-row" key={item.id}>
+                <button
+                  className="candidate-columns-action follow-up-date-action"
+                  type="button"
+                  onClick={() => {
+                    setSelectedFollowUps((current) => ({ ...current, [client.id]: item.id }))
+                    setTablePopover(null)
+                  }}
+                >
+                  {formatDateDDMMYYYY(item.follow_up_date)}
+                </button>
+                <button className="row-action-btn" type="button" title="Edit Follow Up" onClick={(event) => { event.stopPropagation(); openEditFollowUp(client, item) }}><Pencil size={12} /></button>
+                <button className="row-action-btn" type="button" title="Delete Follow Up" onClick={(event) => { event.stopPropagation(); setTablePopover(null); setDeletingFollowUp({ client, followUp: item }) }}><Trash2 size={12} /></button>
+              </div>
             ))}
           </TablePopover>
         )
@@ -1165,6 +1236,8 @@ export default function ClientsPage() {
                           </div>
                         )}
                       </div>
+                    ) : type === 'date' ? (
+                      <FormattedDateInput name={name} value={form[name]} onChange={(value) => setForm(current => ({ ...current, [name]: value }))} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} />
                     ) : (
                       <input name={name} type={type} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} />
                     )}
@@ -1337,18 +1410,36 @@ export default function ClientsPage() {
         )
       })(), document.body)}
 
+      {deletingFollowUp && createPortal((
+        <div className="modal-overlay">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Delete Follow Up">
+            <div className="modal-header">
+              <span className="modal-title">Delete Follow Up</span>
+              <button className="modal-close" onClick={() => setDeletingFollowUp(null)} aria-label="Close"><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="form-error">Delete this follow-up?</div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setDeletingFollowUp(null)} disabled={saving}>Cancel</button>
+              <button className="btn-primary" onClick={confirmDeleteFollowUp} disabled={saving}>{saving ? 'Deleting...' : 'Delete'}</button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
       {followUpClient && createPortal((
         <div className="modal-overlay">
-          <div className="modal-card" ref={followUpModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Add Follow Up">
+          <div className="modal-card" ref={followUpModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingFollowUp ? 'Edit Follow Up' : 'Add Follow Up'}>
             <div className="modal-header">
-              <span className="modal-title">Add Follow Up {(followUpClient.follow_ups || []).length + 1}</span>
-              <button className="modal-close" onClick={() => setFollowUpClient(null)} aria-label="Close"><X size={16} /></button>
+              <span className="modal-title">{editingFollowUp ? 'Edit Follow Up' : `Add Follow Up ${(followUpClient.follow_ups || []).length + 1}`}</span>
+              <button className="modal-close" onClick={() => { setFollowUpClient(null); setEditingFollowUp(null) }} aria-label="Close"><X size={16} /></button>
             </div>
             <div className="modal-body">
               <div className="form-grid-2">
                 <div className="form-group">
                   <label className="form-label">Follow Up Date <span className="req">*</span></label>
-                  <input type="date" className="form-control" value={followUpForm.follow_up_date} onChange={(event) => setFollowUpForm((current) => ({ ...current, follow_up_date: event.target.value }))} />
+                  <FormattedDateInput value={followUpForm.follow_up_date} onChange={(value) => setFollowUpForm((current) => ({ ...current, follow_up_date: value }))} />
                 </div>
                 <div className="form-group full">
                   <label className="form-label">Follow Up Comments</label>
@@ -1357,8 +1448,8 @@ export default function ClientsPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setFollowUpClient(null)} disabled={saving}>Cancel</button>
-              <button className="btn-primary" onClick={saveFollowUp} disabled={saving || !followUpForm.follow_up_date}>Save Follow Up</button>
+              <button className="btn-secondary" onClick={() => { setFollowUpClient(null); setEditingFollowUp(null) }} disabled={saving}>Cancel</button>
+              <button className="btn-primary" onClick={saveFollowUp} disabled={saving || !followUpForm.follow_up_date}>{editingFollowUp ? 'Save Follow Up' : 'Save Follow Up'}</button>
             </div>
           </div>
         </div>

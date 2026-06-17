@@ -7,6 +7,7 @@ import PaginationBar from '../components/PaginationBar'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
+import FormattedDateInput from '../components/FormattedDateInput'
 import { supabase } from '../services/supabaseClient'
 import { openProtectedUrl } from '../services/apiClient'
 import '../styles/Shared.css'
@@ -146,6 +147,7 @@ export default function JobsPage() {
   const roleInputRef = useRef(null)
   const sortRef = useRef(null)
   const columnsDropdownRef = useRef(null)
+  const pendingRealtimeRefreshRef = useRef(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -196,6 +198,43 @@ export default function JobsPage() {
     return () => window.clearTimeout(timer)
   }, [fetchData])
 
+  const refreshClientOptions = useCallback(async () => {
+    const [clientsRes, jobsRes] = await Promise.all([
+      fetch('/api/clients?all=true'),
+      fetch('/api/jobs?all=true')
+    ])
+    const clientsData = await clientsRes.json().catch(() => ({}))
+    const jobsData = await jobsRes.json().catch(() => ({}))
+    if (clientsRes.ok) setDbClients(clientsData.data || [])
+    if (jobsRes.ok) setAllJobs(jobsData.data || [])
+  }, [])
+
+  const refreshJobsRealtime = useCallback(() => {
+    if (isOpen || editingJob) {
+      pendingRealtimeRefreshRef.current = true
+      return
+    }
+    fetchData()
+    refreshClientOptions()
+  }, [editingJob, fetchData, isOpen, refreshClientOptions])
+
+  useEffect(() => {
+    if ((isOpen || editingJob) || !pendingRealtimeRefreshRef.current) return
+    pendingRealtimeRefreshRef.current = false
+    fetchData()
+    refreshClientOptions()
+  }, [editingJob, fetchData, isOpen, refreshClientOptions])
+
+  useEffect(() => {
+    if (!supabase) return
+    const channel = supabase
+      .channel('realtime:jobs-page')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, refreshJobsRealtime)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, refreshJobsRealtime)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [refreshJobsRealtime])
+
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
@@ -217,17 +256,6 @@ export default function JobsPage() {
       }
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [])
-
-  const refreshClientOptions = useCallback(async () => {
-    const [clientsRes, jobsRes] = await Promise.all([
-      fetch('/api/clients?all=true'),
-      fetch('/api/jobs?all=true')
-    ])
-    const clientsData = await clientsRes.json().catch(() => ({}))
-    const jobsData = await jobsRes.json().catch(() => ({}))
-    if (clientsRes.ok) setDbClients(clientsData.data || [])
-    if (jobsRes.ok) setAllJobs(jobsData.data || [])
   }, [])
 
   useEffect(() => {
@@ -772,7 +800,7 @@ export default function JobsPage() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Date of Allocation</label>
-                  <input className="form-control" type="date" value={form.allocation_date} onChange={e => setForm(current => ({ ...current, allocation_date: e.target.value }))} disabled={saving} />
+                  <FormattedDateInput value={form.allocation_date} onChange={(value) => setForm(current => ({ ...current, allocation_date: value }))} className="form-control" disabled={saving} />
                 </div>
                 <div className="form-group full">
                   <label className="form-label">Consultant</label>
