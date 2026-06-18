@@ -90,30 +90,15 @@
 .login-brand {
   position: relative;
   z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 0;
   flex: 0 0 auto;
   animation: fadeSlideDown 0.5s ease both;
 }
 
-.login-brand-name {
-  color: var(--navy);
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: 2.2px;
-  line-height: 1.15;
-  margin: 0;
-}
-
-.login-brand-tagline {
-  color: var(--navy);
-  font-size: 14px;
-  letter-spacing: 1.9px;
-  line-height: 1.3;
-  opacity: 0.38;
-  margin: 0;
-  text-transform: uppercase;
+.login-brand-logo {
+  display: block;
+  width: clamp(320px, 34vw, 380px);
+  height: auto;
+  object-fit: contain;
 }
 
 .login-left-content {
@@ -400,12 +385,8 @@
     margin-top: 42px;
   }
 
-  .login-brand-name {
-    font-size: 24px;
-  }
-
-  .login-brand-tagline {
-    font-size: 11px;
+  .login-brand-logo {
+    width: min(320px, 100%);
   }
 
   .login-hero-title {

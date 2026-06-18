@@ -3,7 +3,6 @@ import {
   LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
-import FyndbridgeLogo from './FyndbridgeLogo'
 import './Sidebar.css'
 
 const navItems = [
@@ -24,7 +23,12 @@ export default function Sidebar() {
     <aside className="sidebar" role="navigation" aria-label="Main navigation">
       {/* Logo */}
       <div className="sidebar-logo">
-        <FyndbridgeLogo size="md" theme="light" showTagline={true} />
+        <img
+          src="/assets/fyndbridge-official-logo.jpeg"
+          alt="FYNDBRIDGE"
+          className="sidebar-logo-image"
+          onError={() => console.error('FYNDBRIDGE logo failed to load: /assets/fyndbridge-official-logo.jpeg')}
+        />
       </div>
 
       {/* Nav links */}

@@ -31,9 +31,12 @@
   flex-shrink: 0;
 }
 
-.sidebar-logo .fynd-logo {
-  transform: scale(0.74);
-  transform-origin: left center;
+.sidebar-logo-image {
+  display: block;
+  width: 170px;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 /* Nav */
