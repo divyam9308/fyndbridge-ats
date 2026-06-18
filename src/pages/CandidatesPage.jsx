@@ -826,7 +826,17 @@ export default function CandidatesPage() {
     return payload.candidate_display_id || ''
   }, [])
 
-  const openAddModal = async () => {
+  const openAddModal = useCallback(async () => {
+    setConsultantSearch('')
+    setConsultantOpen(false)
+    setForm({ ...EMPTY_CAND, skills: [], candidateDisplayId: 'Loading...' })
+    setEditing(false)
+    setAssigningAnother(false)
+    setErrors({})
+    setDuplicateBypass(null)
+    setSkillInput('')
+    setAddOpen(true)
+
     const [profile, users] = await Promise.all([
       getFreshActiveConsultantName(),
       fetchConsultantOptions().catch(() => [])
@@ -834,47 +844,28 @@ export default function CandidatesPage() {
     const consultantUser = users.find(user => user.id && user.id === profile.userId) || users.find(user => user.name === profile.name)
     setConsultantSearch(profile.name)
     setConsultantOpen(false)
-    setForm({ ...EMPTY_CAND, skills: [], consultantName: profile.name, consultantUserId: consultantUser?.id || '', candidateDisplayId: 'Loading...' })
-    setEditing(false)
-    setAssigningAnother(false)
-    setErrors({})
-    setDuplicateBypass(null)
-    setSkillInput('')
-    setAddOpen(true)
+    setForm(current => ({
+      ...current,
+      consultantName: profile.name,
+      consultantUserId: consultantUser?.id || ''
+    }))
     try {
       const candidateDisplayId = await fetchNextCandidateDisplayId()
       setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId } : current)
     } catch {
       setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current)
     }
-  }
+  }, [fetchConsultantOptions, fetchNextCandidateDisplayId, getFreshActiveConsultantName])
 
   useEffect(() => {
     const action = location.state?.action
     if (!action) return
-    const timer = window.setTimeout(() => {
-      navigate(location.pathname, { replace: true, state: {} })
-      if (action === 'upload-resumes') fileInputRef.current?.click()
-      if (action === 'add-candidate') {
-        Promise.all([getFreshActiveConsultantName(), fetchConsultantOptions().catch(() => [])]).then(([profile, users]) => {
-          const consultantUser = users.find(user => user.id && user.id === profile.userId) || users.find(user => user.name === profile.name)
-          setConsultantSearch(profile.name)
-          setConsultantOpen(false)
-          setForm({ ...EMPTY_CAND, skills: [], consultantName: profile.name, consultantUserId: consultantUser?.id || '', candidateDisplayId: 'Loading...' })
-          setEditing(false)
-          setAssigningAnother(false)
-          setErrors({})
-          setDuplicateBypass(null)
-          setSkillInput('')
-          setAddOpen(true)
-          fetchNextCandidateDisplayId()
-            .then(candidateDisplayId => setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId } : current))
-            .catch(() => setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current))
-        })
-      }
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [fetchConsultantOptions, fetchNextCandidateDisplayId, getFreshActiveConsultantName, location.pathname, location.state, navigate])
+    navigate(location.pathname, { replace: true, state: null })
+    if (action === 'upload-resumes') {
+      window.requestAnimationFrame(() => fileInputRef.current?.click())
+    }
+    if (action === 'add-candidate') openAddModal()
+  }, [location.pathname, location.state?.action, navigate, openAddModal])
 
   const candidateToForm = (candidate) => {
     const matchedClient = dbClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)

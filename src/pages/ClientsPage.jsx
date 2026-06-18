@@ -511,14 +511,8 @@ export default function ClientsPage() {
   }
 
   const openModal = useCallback(async () => {
-    const [profile, users] = await Promise.all([
-      loadProfile({ force: true }).catch(() => null),
-      fetchConsultantOptions().catch(() => [])
-    ])
-    const consultantName = String(profile?.name || profile?.display_name || '').trim()
-    const consultantUser = users.find(user => user.id && user.id === profile?.user_id) || users.find(user => user.name === consultantName)
-    setForm({ ...EMPTY_FORM, consultant_name: consultantName, consultant_user_id: consultantUser?.id || '', connected_on_date: todayLocal(), follow_up_date: todayLocal() })
-    setConsultantSearch(consultantName)
+    setForm({ ...EMPTY_FORM, connected_on_date: todayLocal(), follow_up_date: todayLocal() })
+    setConsultantSearch('')
     setConsultantOpen(false)
     setErrors({})
     setContractFile(null)
@@ -529,17 +523,27 @@ export default function ClientsPage() {
     setSectorSearch('')
     setClientSuggestionsOpen(false)
     setIsOpen(true)
+
+    const [profile, users] = await Promise.all([
+      loadProfile({ force: true }).catch(() => null),
+      fetchConsultantOptions().catch(() => [])
+    ])
+    const consultantName = String(profile?.name || profile?.display_name || '').trim()
+    const consultantUser = users.find(user => user.id && user.id === profile?.user_id) || users.find(user => user.name === consultantName)
+    setForm(current => ({
+      ...current,
+      consultant_name: consultantName,
+      consultant_user_id: consultantUser?.id || ''
+    }))
+    setConsultantSearch(consultantName)
   }, [fetchConsultantOptions, loadProfile])
 
   useEffect(() => {
     const action = location.state?.action
     if (!action) return
-    const timer = window.setTimeout(() => {
-      navigate(location.pathname, { replace: true, state: {} })
-      if (action === 'add-client') openModal()
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [location.pathname, location.state, navigate, openModal])
+    navigate(location.pathname, { replace: true, state: null })
+    if (action === 'add-client') openModal()
+  }, [location.pathname, location.state?.action, navigate, openModal])
 
   const openEditModal = (client) => {
     const followUp = selectedFollowUp(client)

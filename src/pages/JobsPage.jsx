@@ -346,12 +346,9 @@ export default function JobsPage() {
   useEffect(() => {
     const action = location.state?.action
     if (!action) return
-    const timer = window.setTimeout(() => {
-      navigate(location.pathname, { replace: true, state: {} })
-      if (action === 'add-job') openModal()
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [location.pathname, location.state, navigate, openModal])
+    navigate(location.pathname, { replace: true, state: null })
+    if (action === 'add-job') openModal()
+  }, [location.pathname, location.state?.action, navigate, openModal])
 
   const editJob = (job) => {
     const consultantFields = normalizeConsultantFields(Array.isArray(job.consultants) ? job.consultants : [])
