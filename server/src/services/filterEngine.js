@@ -405,6 +405,91 @@ function buildAiFilterPrompt(page, prompt) {
   ].filter(Boolean).join('\n')
 }
 
+function semanticAiFilterSchema() {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      intent: { type: 'string' },
+      logic: { type: 'string', enum: ['AND', 'OR'] },
+      conditions: aiFilterSchema().properties.conditions,
+      rankingHints: { type: 'array', items: { type: 'string' } },
+      semantic: {
+        type: 'object',
+        additionalProperties: true,
+        properties: {
+          targetEntity: { type: 'string' },
+          similarityTarget: { type: 'string' },
+          fitmentSignals: { type: 'array', items: { type: 'string' } },
+          qualitySignals: { type: 'array', items: { type: 'string' } }
+        }
+      },
+      confidence: { type: 'number' }
+    },
+    required: ['intent', 'logic', 'conditions', 'rankingHints', 'confidence']
+  }
+}
+
+function buildSemanticAiFilterPrompt(page, prompt) {
+  const config = configs[page]
+  const fields = Object.entries(config.fields)
+    .map(([field, meta]) => `${field}: type=${meta.type}; aliases=${(meta.aliases || []).join(', ')}`)
+    .join('\n')
+  return [
+    'Convert this recruiter intent search into JSON only.',
+    'Infer semantic recruiting meaning, not simple keyword matching.',
+    'Return {"intent":"short_snake_case","logic":"AND","conditions":[],"rankingHints":[],"semantic":{"targetEntity":"","similarityTarget":"","fitmentSignals":[],"qualitySignals":[]},"confidence":0.0}.',
+    'Use only canonical fields. Never invent fields. Keep hard filters narrow and high-confidence; put softer concepts in rankingHints and semantic metadata.',
+    'Use contains for text, greater_than_or_equal for seniority/experience, less_than_or_equal for short notice, equals for booleans and exact statuses.',
+    'Seniority hints: senior usually experience >= 5, leadership/VP/CXO usually experience >= 10 unless the query names a stricter level.',
+    'Role similarity examples: backend -> designation/role/skills plus ranking hints node, java, python, api, microservices; frontend/react -> skills/designation/role plus ranking hints react, javascript, typescript, frontend.',
+    'Fitment examples: startup/product/consulting/enterprise/industry/client-facing/stakeholder/leadership should become rankingHints and comments/organisation/role/sector/vertical conditions only when strongly implied.',
+    'Relocation and joining likelihood: use open_to_relocate equals true and notice_period less_than_or_equal 30 when directly requested; include city as ranking hint if named.',
+    'Similarity requests: identify similarityTarget, add broad target fields only if named entity fits an ID or name field, and put the comparable background in rankingHints.',
+    page === 'candidates' ? 'Candidate semantic fields include designation, organisation, experience, skills, current_location, notice_period, open_to_relocate, comments, role, client_name, status, education.' : '',
+    page === 'clients' ? 'Client semantic fields include client_name, sector, status, value, follow_up_date, comments, location, region, contact_person, designation.' : '',
+    page === 'mandates' ? 'Mandate semantic fields include role, client_name, location, budget, experience, mandate_status, vertical, comments, date_of_allocation.' : '',
+    `Allowed fields:\n${fields}`,
+    `Request: ${clean(prompt)}`
+  ].filter(Boolean).join('\n')
+}
+
+function normalizeHints(values) {
+  return [...new Set((Array.isArray(values) ? values : [])
+    .flatMap(value => keywordTerms(value))
+    .filter(term => term.length > 1))]
+}
+
+function withSemanticMetadata(filters, data, prompt) {
+  if (!filters) return null
+  const rankingHints = normalizeHints(data?.rankingHints)
+  const semantic = data?.semantic && typeof data.semantic === 'object' ? data.semantic : {}
+  return {
+    ...filters,
+    mode: filters.mode || 'structured_filter',
+    intent: clean(data?.intent) || normalizeSearch(prompt).replace(/\s+/g, '_').slice(0, 80),
+    rankingHints,
+    semantic: {
+      ...semantic,
+      originalPrompt: clean(prompt),
+      confidence: Number(data?.confidence) || 0
+    }
+  }
+}
+
+function semanticRankRows(page, rows, filters, valueGetter) {
+  const hints = normalizeHints([...(filters?.rankingHints || []), filters?.semantic?.similarityTarget])
+  if (!hints.length) return rows
+  const fields = keywordFields(page)
+  const scored = rows.map((row, index) => {
+    const haystack = normalizeSearch(fields.map(field => valueGetter(row, field)).flat().join(' '))
+    const score = hints.reduce((sum, hint) => sum + (haystack.includes(hint) ? 1 : 0), 0)
+    return { row, index, score }
+  })
+  if (!scored.some(item => item.score > 0)) return rows
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).map(item => item.row)
+}
+
 function isExactPrompt(prompt) {
   return /\b(exact|exactly|equals?|equal to)\b/i.test(clean(prompt))
 }
@@ -754,15 +839,16 @@ function applyFilters(page, rows, filters, valueGetter) {
     })
   }
   const normalized = (filters?.conditions || []).map(condition => normalizeCondition(config, condition)).filter(Boolean)
-  if (!normalized.length) return rows
+  if (!normalized.length) return semanticRankRows(page, rows, filters, valueGetter)
   const match = (row, condition) => {
     const meta = config.fields[condition.field]
     return compareValue(valueGetter(row, condition.field), condition.operator, condition.value, meta.type)
   }
-  return rows.filter(row => filters?.mode === 'any'
+  const filtered = rows.filter(row => filters?.mode === 'any'
     ? normalized.some(condition => match(row, condition))
     : normalized.every(condition => match(row, condition)))
+  return semanticRankRows(page, filtered, filters, valueGetter)
 }
 
-module.exports = { configs, parsePrompt, applyFilters, normalizeCondition, buildAiFilterPrompt, validateAiFilters, aiFilterSchema, OPERATORS, isSimpleKeywordPrompt, buildKeywordFilters }
+module.exports = { configs, parsePrompt, applyFilters, normalizeCondition, buildAiFilterPrompt, buildSemanticAiFilterPrompt, validateAiFilters, aiFilterSchema, semanticAiFilterSchema, withSemanticMetadata, OPERATORS, isSimpleKeywordPrompt, buildKeywordFilters }
 
