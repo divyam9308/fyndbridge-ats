@@ -17,13 +17,15 @@ import {
 import {
   Bar,
   BarChart,
-  CartesianGrid,
   Cell,
+  CartesianGrid,
   Legend,
   Line,
   LineChart,
   Pie,
   PieChart,
+  RadialBar,
+  RadialBarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -69,13 +71,16 @@ function SectionTitle({ icon: Icon, title, subtitle, right }) {
 function DashboardTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
   const rows = payload.filter(item => item.value !== undefined && item.value !== null)
+  const raw = rows[0]?.payload?.raw || {}
   return (
     <div className="ats-dashboard-tooltip">
       {label ? <strong>{label}</strong> : null}
       {rows.map(item => (
         <span key={item.name || item.dataKey}>
           <i style={{ background: item.color || item.fill }} />
-          {item.name || item.dataKey}: {Number(item.value || 0).toLocaleString('en-IN')}
+          <b>{item.name || item.dataKey}</b>
+          <em>{Number(item.value || 0).toLocaleString('en-IN')} total</em>
+          {Object.prototype.hasOwnProperty.call(raw, item.dataKey) ? <small>{Number(raw[item.dataKey] || 0).toLocaleString('en-IN')} added</small> : null}
         </span>
       ))}
     </div>
@@ -85,6 +90,7 @@ function DashboardTooltip({ active, payload, label }) {
 function Sparkline({ color = 'rgba(255,255,255,0.95)' }) {
   return (
     <svg className="ats-dashboard-sparkline" viewBox="0 0 280 64" preserveAspectRatio="none" aria-hidden="true">
+      <path className="ats-dashboard-sparkline-fill" d="M0 46 C28 34 52 38 78 32 C106 25 132 34 158 23 C190 10 210 28 238 18 C258 12 270 10 280 7 L280 64 L0 64 Z" />
       <path d="M0 46 C28 34 52 38 78 32 C106 25 132 34 158 23 C190 10 210 28 238 18 C258 12 270 10 280 7" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
     </svg>
   )
@@ -152,11 +158,11 @@ function DonutChart({ data, centerLabel, centerValue }) {
 function StatusTrendLines({ data, statuses }) {
   return (
     <ResponsiveContainer>
-      <LineChart data={data}>
+      <LineChart data={data} margin={{ top: 12, right: 16, bottom: 12, left: 0 }}>
         <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="m" interval="preserveStartEnd" minTickGap={18} />
         <YAxis allowDecimals={false} />
-        <Tooltip content={<DashboardTooltip />} />
+        <Tooltip content={<DashboardTooltip />} wrapperStyle={{ zIndex: 9999 }} />
         <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
         {statuses.map((status, index) => (
           <Line
@@ -165,9 +171,13 @@ function StatusTrendLines({ data, statuses }) {
             dataKey={status}
             name={status}
             stroke={seriesColor(index)}
-            strokeWidth={2.5}
+            strokeWidth={3}
             dot={false}
             activeDot={{ r: 4, stroke: 'var(--white)', strokeWidth: 2 }}
+            filter={`drop-shadow(0 5px 8px ${seriesColor(index)})`}
+            isAnimationActive
+            animationDuration={2000}
+            animationEasing="ease-out"
           />
         ))}
       </LineChart>
@@ -201,6 +211,12 @@ export default function DashboardHome() {
   const recentActivity = data?.recentActivity || []
   const maxCandidatesAdded = Math.max(1, ...consultantPerformance.map(item => Number(item.candidatesAdded) || 0))
   const maxCandidatesHired = Math.max(1, ...consultantPerformance.map(item => Number(item.candidatesHired) || 0))
+  const mandateTotal = Math.max(1, mandateStatusData.reduce((sum, item) => sum + Number(item.value || 0), 0))
+  const mandateRadialData = mandateStatusData.map((item, index) => ({
+    ...item,
+    fill: seriesColor(index),
+    share: Math.round((Number(item.value || 0) / mandateTotal) * 100)
+  }))
 
   return (
     <div className="ats-dashboard-page modern-dashboard" id="page-dashboard">
@@ -353,18 +369,7 @@ export default function DashboardHome() {
           <SectionTitle icon={TrendingUp} title="Mandates Trend" subtitle="Ongoing, completed, and scrapped mandates" />
           <div className="ats-dashboard-chart">
             {mandateTrend.length ? (
-              <ResponsiveContainer>
-                <BarChart data={mandateTrend}>
-                  <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="m" interval="preserveStartEnd" minTickGap={18} />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip content={<DashboardTooltip />} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                  {MANDATE_STATUSES.map((status, index) => (
-                    <Bar key={status} dataKey={status} name={status} fill={seriesColor(index)} radius={[6, 6, 0, 0]} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+              <StatusTrendLines data={mandateTrend} statuses={MANDATE_STATUSES} />
             ) : <EmptyChart label="No mandate trend data." />}
           </div>
         </section>
@@ -378,6 +383,19 @@ export default function DashboardHome() {
                 <strong>{Number(mandateStatusData.find(item => item.name === status)?.value || 0).toLocaleString('en-IN')}</strong>
                 <small><TrendingUp size={12} /> {status === 'Ongoing' ? 'Active mandates' : 'Finalized mandates'}</small>
               </div>
+            ))}
+          </div>
+          <div className="ats-dashboard-radial">
+            <ResponsiveContainer>
+              <RadialBarChart innerRadius="36%" outerRadius="96%" data={mandateRadialData} startAngle={90} endAngle={-270}>
+                <RadialBar dataKey="share" cornerRadius={12} background={{ fill: 'rgba(238, 238, 248, 0.9)' }} />
+                <Tooltip content={<DashboardTooltip />} wrapperStyle={{ zIndex: 9999 }} />
+              </RadialBarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="ats-dashboard-radial-share">
+            {mandateRadialData.map(item => (
+              <span key={item.name}><i style={{ background: item.fill }} />{item.name} share <b>{item.share}%</b></span>
             ))}
           </div>
         </section>
@@ -423,11 +441,11 @@ export default function DashboardHome() {
                   <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" />
                   <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="Candidates Added" fill="var(--modern-chart-1)" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="Candidates Hired" fill="var(--modern-chart-3)" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="Mandates Managed" fill="var(--modern-chart-4)" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="Active Clients" fill="var(--modern-chart-6)" radius={[6, 6, 0, 0]} />
+                  <Tooltip content={<DashboardTooltip />} cursor={false} wrapperStyle={{ zIndex: 9999 }} />
+                  <Bar dataKey="Candidates Added" fill="var(--modern-chart-1)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
+                  <Bar dataKey="Candidates Hired" fill="var(--modern-chart-3)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
+                  <Bar dataKey="Mandates Managed" fill="var(--modern-chart-4)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
+                  <Bar dataKey="Active Clients" fill="var(--modern-chart-6)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
                 </BarChart>
               </ResponsiveContainer>
             ) : <EmptyChart label="No consultant data." />}

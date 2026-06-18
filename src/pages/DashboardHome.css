@@ -128,6 +128,8 @@
 }
 
 .ats-dashboard-filter-row {
+  position: relative;
+  z-index: 50;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -160,7 +162,7 @@
 
 .ats-dashboard-select {
   position: relative;
-  z-index: 20;
+  z-index: 2000;
 }
 
 .ats-dashboard-select > button,
@@ -193,6 +195,7 @@
 
 .ats-dashboard-select-menu {
   position: absolute;
+  z-index: 3000;
   top: calc(100% + 6px);
   right: 0;
   width: 240px;
@@ -394,6 +397,20 @@
   filter: drop-shadow(0 8px 16px rgba(255,255,255,0.16));
 }
 
+.ats-dashboard-sparkline-fill {
+  fill: rgba(255,255,255,0.16);
+}
+
+.ats-dashboard-sparkline path:last-child {
+  stroke-dasharray: 360;
+  stroke-dashoffset: 360;
+  animation: dashboard-line-draw 2s ease-out forwards;
+}
+
+@keyframes dashboard-line-draw {
+  to { stroke-dashoffset: 0; }
+}
+
 .ats-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -402,6 +419,8 @@
 }
 
 .ats-dashboard-card {
+  position: relative;
+  overflow: visible;
   min-width: 0;
   padding: 18px;
   border-radius: 18px;
@@ -475,12 +494,17 @@
 }
 
 .ats-dashboard-chart {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  height: 280px;
+  height: 260px;
   min-width: 0;
+  overflow: visible;
 }
 
 .ats-dashboard-tooltip {
+  position: relative;
+  z-index: 9999;
   display: grid;
   gap: 7px;
   min-width: 150px;
@@ -498,12 +522,29 @@
 }
 
 .ats-dashboard-tooltip span {
-  display: flex;
+  display: grid;
+  grid-template-columns: 9px minmax(90px, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   color: var(--gray-700);
   font-size: 12px;
   font-weight: 700;
+}
+
+.ats-dashboard-tooltip b,
+.ats-dashboard-tooltip em,
+.ats-dashboard-tooltip small {
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.ats-dashboard-tooltip em {
+  color: var(--navy-darkest);
+  font-weight: 800;
+}
+
+.ats-dashboard-tooltip small {
+  color: var(--gray-500);
 }
 
 .ats-dashboard-tooltip i {
@@ -527,7 +568,7 @@
 }
 
 .ats-dashboard-chart.is-small {
-  height: 230px;
+  height: 210px;
 }
 
 .ats-dashboard-status-list {
@@ -663,8 +704,38 @@
 }
 
 .ats-dashboard-radial {
-  height: 140px;
+  height: 150px;
+  margin-top: 14px;
+}
+
+.ats-dashboard-radial-share {
+  display: grid;
+  gap: 7px;
   margin-top: 10px;
+}
+
+.ats-dashboard-radial-share span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(247,247,252,0.82);
+  color: var(--gray-700);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.ats-dashboard-radial-share i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+}
+
+.ats-dashboard-radial-share b {
+  margin-left: auto;
+  color: var(--navy-darkest);
 }
 
 .ats-dashboard-consultants {
@@ -766,6 +837,38 @@
 
 .ats-dashboard-bars em.is-green {
   background: linear-gradient(90deg, #188a42, #32c76d);
+}
+
+.modern-dashboard .recharts-line-curve {
+  filter: drop-shadow(0 8px 10px rgba(98, 83, 229, 0.22));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.modern-dashboard .recharts-legend-wrapper {
+  z-index: 5;
+}
+
+.modern-dashboard .recharts-default-legend {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 10px;
+  line-height: 1.2 !important;
+}
+
+.modern-dashboard .recharts-tooltip-wrapper {
+  z-index: 9999 !important;
+  pointer-events: none;
+}
+
+.modern-dashboard .recharts-tooltip-cursor {
+  display: none;
+}
+
+.modern-dashboard .ats-dashboard-bar-glow .recharts-rectangle,
+.modern-dashboard .recharts-bar-rectangle path {
+  filter: drop-shadow(0 8px 12px rgba(98, 83, 229, 0.18));
 }
 
 .ats-dashboard-activity {

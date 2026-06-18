@@ -147,15 +147,17 @@ function buildBuckets(period, range, rows, getDate, statuses) {
   const end = range.end || now
   const buckets = []
   while (cursor <= end) {
+    const raw = Object.fromEntries(statuses.map((status) => [status, 0]))
     buckets.push({
       key: bucketKey(cursor, period),
       m: bucketLabel(cursor, period),
+      raw,
       ...Object.fromEntries(statuses.map((status) => [status, 0]))
     })
     const next = period === 'This Month' ? addDays(cursor, 1) : addMonths(cursor, 1)
     cursor.setTime(next.getTime())
   }
-  return buckets.length ? buckets : [{ key: bucketKey(now, period), m: bucketLabel(now, period), ...Object.fromEntries(statuses.map((status) => [status, 0])) }]
+  return buckets.length ? buckets : [{ key: bucketKey(now, period), m: bucketLabel(now, period), raw: Object.fromEntries(statuses.map((status) => [status, 0])), ...Object.fromEntries(statuses.map((status) => [status, 0])) }]
 }
 
 function statusTrend(rows, statuses, getStatus, getDate, period, range) {
@@ -166,7 +168,14 @@ function statusTrend(rows, statuses, getStatus, getDate, period, range) {
     const status = getStatus(row)
     if (!date || !statuses.includes(status)) continue
     const bucket = map.get(bucketKey(date, period))
-    if (bucket) bucket[status] += 1
+    if (bucket) bucket.raw[status] += 1
+  }
+  const running = Object.fromEntries(statuses.map((status) => [status, 0]))
+  for (const bucket of buckets) {
+    for (const status of statuses) {
+      running[status] += bucket.raw[status] || 0
+      bucket[status] = running[status]
+    }
   }
   return buckets
 }
@@ -305,7 +314,7 @@ async function getDashboardStats(req, res) {
     ]
 
     const clientTrend = statusTrend(uniqueClients, CLIENT_STATUSES, (row) => normalizeClientStatus(row.status), (row) => row.connected_on_date || row.created_at, period, range)
-    const candidateTrend = statusTrend(filteredAssociations, CANDIDATE_STATUSES, (row) => normalizeCandidateStatus(row.status), (row) => row.updated_at || row.created_at || row.candidate_created_at, period, range)
+    const candidateTrend = statusTrend(filteredAssociations, CANDIDATE_STATUSES, (row) => normalizeCandidateStatus(row.status), (row) => row.created_at || row.candidate_created_at, period, range)
     const mandateTrend = statusTrend(filteredMandates, MANDATE_STATUSES, (row) => normalizeMandateStatus(row.mandate_status || row.status), (row) => row.allocation_date || row.created_at, period, range)
 
     const consultantPerformance = consultantOptions.map((name) => {
