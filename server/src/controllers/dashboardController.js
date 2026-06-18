@@ -3,6 +3,21 @@ const supabase = require('../services/supabaseAdmin')
 const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Rejected by Recruiter', 'Client Submission', 'Interview', 'Rejected by Client', 'Offered', 'Offer Declined', 'Dropout', 'Hired']
 const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
+const EMPTY_DASHBOARD = {
+  consultantOptions: [],
+  kpis: { totalClients: 0, totalCandidates: 0, totalMandates: 0, activeClients: 0, placements: 0 },
+  clientStatusData: CLIENT_STATUSES.map((name) => ({ name, value: 0 })),
+  candidateStatusData: CANDIDATE_STATUSES.map((name) => ({ name, value: 0 })),
+  mandateStatusData: MANDATE_STATUSES.map((name) => ({ name, value: 0 })),
+  billingEntityData: [{ label: 'FCS Billing Entity', value: 0 }, { label: 'FCAPL Billing Entity', value: 0 }],
+  clientTrend: [],
+  candidateTrend: [],
+  mandateTrend: [],
+  candidateFunnel: ['Interested', 'Client Submission', 'Interview', 'Offered', 'Hired'].map((name) => ({ name, value: 0 })),
+  consultantPerformance: [],
+  recentActivity: [],
+  sectionErrors: {}
+}
 
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 const same = (a, b) => clean(a).toLowerCase() === clean(b).toLowerCase()
@@ -107,6 +122,26 @@ function groupByMonth(rows, getDate, counters) {
   return [...map.values()]
 }
 
+function monthBuckets(range, counters) {
+  const now = new Date()
+  const start = range.start || new Date(now.getFullYear(), Math.max(0, now.getMonth() - 5), 1)
+  const end = range.end || now
+  const buckets = []
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1)
+  while (cursor <= end && buckets.length < 12) {
+    buckets.push({
+      m: cursor.toLocaleString('en-US', { month: 'short' }),
+      ...Object.fromEntries(counters.map((key) => [key, 0]))
+    })
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
+  return buckets.length ? buckets : [{ m: now.toLocaleString('en-US', { month: 'short' }), ...Object.fromEntries(counters.map((key) => [key, 0])) }]
+}
+
+function withMonthFallback(rows, range, counters) {
+  return rows.length ? rows : monthBuckets(range, counters)
+}
+
 function dedupeClients(rows) {
   const map = new Map()
   for (const row of rows || []) {
@@ -114,7 +149,7 @@ function dedupeClients(rows) {
     const current = map.get(key) || { ...row, ids: [] }
     current.ids.push(row.id)
     current.status = clean(current.status) ? current.status : row.status
-    current.consultant_name = clean(current.consultant_name) ? current.consultant_name : row.consultant_name || row.consultant
+    current.consultant_name = clean(current.consultant_name) ? current.consultant_name : row.consultant_name
     current.connected_on_date = current.connected_on_date || row.connected_on_date || row.created_at
     current.contract_signed = current.contract_signed || row.contract_signed
     current.billing_entity = clean(current.billing_entity) ? current.billing_entity : row.billing_entity
@@ -162,34 +197,52 @@ function buildRecentActivity({ clients, candidates, mandates }) {
 }
 
 async function getDashboardStats(req, res) {
-  try {
-    const consultant = clean(req.query.consultant) || 'Overall (All Consultants)'
-    const period = clean(req.query.period) || 'This Month'
-    const range = periodRange(period)
+  const consultant = clean(req.query.consultant) || 'Overall (All Consultants)'
+  const period = clean(req.query.period) || 'This Month'
+  const range = periodRange(period)
+  const sectionErrors = {}
 
-    const [profilesRes, clientsRes, candidatesRes, associationsRes, jobsRes] = await Promise.all([
-      supabase.from('user_profiles').select('user_id, name, email').not('name', 'is', null).order('name'),
-      supabase.from('clients').select('id, client_group_id, client_name, name, status, consultant_name, consultant, connected_on_date, created_at, updated_at, contract_signed, billing_entity'),
-      supabase.from('candidates').select('id, full_name, created_at, updated_at'),
-      supabase.from('candidate_associations').select('id, candidate_id, consultant_name, status, job_title, client_name, created_at, updated_at'),
-      supabase.from('jobs').select('id, title, role, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at')
-    ])
+  const settled = await Promise.allSettled([
+    supabase.from('user_profiles').select('user_id, name, email').not('name', 'is', null).order('name'),
+    supabase.from('clients').select('id, client_group_id, client_name, name, status, consultant_name, connected_on_date, created_at, updated_at, contract_signed, billing_entity'),
+    supabase.from('candidates').select('id, full_name, created_at, updated_at'),
+    supabase.from('candidate_associations').select('id, candidate_id, consultant_name, status, job_title, client_name, created_at, updated_at'),
+    supabase.from('jobs').select('id, title, role, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at')
+  ])
 
-    for (const result of [profilesRes, clientsRes, candidatesRes, associationsRes, jobsRes]) {
-      if (result.error) throw result.error
+  const readResult = (index, key) => {
+    const result = settled[index]
+    if (result.status === 'rejected') {
+      sectionErrors[key] = result.reason?.message || 'Unable to load data.'
+      return []
     }
+    if (result.value.error) {
+      sectionErrors[key] = result.value.error.message || 'Unable to load data.'
+      return []
+    }
+    return result.value.data || []
+  }
 
-    const consultantOptions = (profilesRes.data || [])
+  try {
+    const profiles = readResult(0, 'consultants')
+    const clients = readResult(1, 'clients')
+    const candidates = readResult(2, 'candidates')
+    const associations = readResult(3, 'candidates')
+    const jobs = readResult(4, 'mandates')
+
+    const consultantOptions = profiles
       .map((row) => clean(row.name))
       .filter(Boolean)
       .filter((name, index, list) => list.findIndex((item) => same(item, name)) === index)
 
-    const candidateById = new Map((candidatesRes.data || []).map((row) => [row.id, row]))
-    const uniqueClients = dedupeClients(clientsRes.data || [])
+    const candidateById = new Map(candidates.map((row) => [row.id, row]))
+    const allUniqueClients = dedupeClients(clients)
+    const clientOwnershipAvailable = allUniqueClients.length > 0 && allUniqueClients.every((row) => clean(row.consultant_name))
+    const uniqueClients = allUniqueClients
       .filter((client) => withinPeriod(client.connected_on_date || client.created_at, range))
-      .filter((client) => matchesConsultant(client, consultant, ['consultant_name', 'consultant']))
+      .filter((client) => !clientOwnershipAvailable || matchesConsultant(client, consultant, ['consultant_name']))
 
-    const allAssociations = (associationsRes.data || []).map((row) => ({
+    const allAssociations = associations.map((row) => ({
       ...row,
       full_name: candidateById.get(row.candidate_id)?.full_name || '',
       candidate_created_at: candidateById.get(row.candidate_id)?.created_at || row.created_at
@@ -201,11 +254,11 @@ async function getDashboardStats(req, res) {
     const filteredCandidateIds = new Set(
       filteredAssociations.map((row) => row.candidate_id).filter(Boolean)
     )
-    const filteredCandidates = (candidatesRes.data || [])
+    const filteredCandidates = candidates
       .filter((row) => withinPeriod(row.created_at, range))
       .filter((row) => isOverall(consultant) || filteredCandidateIds.has(row.id))
 
-    const filteredMandates = (jobsRes.data || [])
+    const filteredMandates = jobs
       .filter((row) => withinPeriod(row.allocation_date || row.created_at, range))
       .filter((row) => matchesConsultant(row, consultant, ['consultants', 'team_lead']))
 
@@ -222,35 +275,35 @@ async function getDashboardStats(req, res) {
       }
     ]
 
-    const clientTrend = groupByMonth(
+    const clientTrend = withMonthFallback(groupByMonth(
       uniqueClients.map((row) => ({ ...row, __clients: 1, __active: normalizeClientStatus(row.status) === 'Active' ? 1 : 0 })),
       (row) => row.connected_on_date || row.created_at,
       ['clients', 'active']
-    )
-    const candidateTrend = groupByMonth(
+    ), range, ['clients', 'active'])
+    const candidateTrend = withMonthFallback(groupByMonth(
       filteredAssociations.map((row) => ({ ...row, __added: 1, __hired: normalizeCandidateStatus(row.status) === 'Hired' ? 1 : 0 })),
       (row) => row.created_at,
       ['added', 'hired']
-    )
-    const mandateTrend = groupByMonth(
+    ), range, ['added', 'hired'])
+    const mandateTrend = withMonthFallback(groupByMonth(
       filteredMandates.map((row) => {
         const status = normalizeMandateStatus(row.mandate_status || row.status)
         return { ...row, __ongoing: status === 'Ongoing' ? 1 : 0, __completed: status === 'Completed' ? 1 : 0, __scrapped: status === 'Scrapped' ? 1 : 0 }
       }),
       (row) => row.allocation_date || row.created_at,
       ['ongoing', 'completed', 'scrapped']
-    )
+    ), range, ['ongoing', 'completed', 'scrapped'])
 
     const consultantPerformance = consultantOptions.map((name) => {
       const candidateRows = allAssociations.filter((row) => withinPeriod(row.created_at || row.candidate_created_at, range) && matchesConsultant(row, name, ['consultant_name']))
-      const mandateRows = (jobsRes.data || []).filter((row) => withinPeriod(row.allocation_date || row.created_at, range) && matchesConsultant(row, name, ['consultants', 'team_lead']))
-      const clientRows = dedupeClients(clientsRes.data || []).filter((row) => withinPeriod(row.connected_on_date || row.created_at, range) && matchesConsultant(row, name, ['consultant_name', 'consultant']))
+      const mandateRows = jobs.filter((row) => withinPeriod(row.allocation_date || row.created_at, range) && matchesConsultant(row, name, ['consultants', 'team_lead']))
+      const clientRows = clientOwnershipAvailable ? allUniqueClients.filter((row) => withinPeriod(row.connected_on_date || row.created_at, range) && matchesConsultant(row, name, ['consultant_name'])) : []
       return {
         name,
         candidatesAdded: new Set(candidateRows.map((row) => row.candidate_id).filter(Boolean)).size,
         candidatesHired: candidateRows.filter((row) => normalizeCandidateStatus(row.status) === 'Hired').length,
         mandatesManaged: mandateRows.length,
-        activeClients: clientRows.filter((row) => normalizeClientStatus(row.status) === 'Active').length
+        activeClients: clientOwnershipAvailable ? clientRows.filter((row) => normalizeClientStatus(row.status) === 'Active').length : null
       }
     })
 
@@ -276,12 +329,14 @@ async function getDashboardStats(req, res) {
       })),
       consultantPerformance,
       recentActivity: buildRecentActivity({ clients: uniqueClients, candidates: filteredAssociations, mandates: filteredMandates }),
+      sectionErrors,
+      clientOwnershipAvailable,
       period,
       consultant
     })
   } catch (err) {
     console.error('getDashboardStats error:', err.message || err)
-    return res.status(500).json({ error: err.message || 'Internal server error' })
+    return res.json({ ...EMPTY_DASHBOARD, sectionErrors: { dashboard: err.message || 'Unable to load dashboard data.' }, period, consultant })
   }
 }
 

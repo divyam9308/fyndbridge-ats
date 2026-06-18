@@ -1,4 +1,28 @@
 .ats-dashboard-page {
+  --modern-background: oklch(0.985 0.005 270);
+  --modern-foreground: oklch(0.22 0.04 270);
+  --modern-card: oklch(1 0 0);
+  --modern-muted: oklch(0.5 0.03 270);
+  --modern-border: oklch(0.92 0.01 270);
+  --modern-secondary: oklch(0.96 0.02 280);
+  --modern-chart-1: oklch(0.65 0.22 285);
+  --modern-chart-2: oklch(0.72 0.18 195);
+  --modern-chart-3: oklch(0.75 0.19 145);
+  --modern-chart-4: oklch(0.78 0.18 60);
+  --modern-chart-5: oklch(0.68 0.22 25);
+  --modern-chart-6: oklch(0.7 0.2 340);
+  --modern-chart-7: oklch(0.68 0.18 250);
+  --modern-chart-8: oklch(0.78 0.16 100);
+  --modern-gradient-primary: linear-gradient(135deg, oklch(0.62 0.24 285), oklch(0.72 0.2 320));
+  --modern-gradient-success: linear-gradient(135deg, oklch(0.68 0.2 155), oklch(0.78 0.18 180));
+  --modern-gradient-warning: linear-gradient(135deg, oklch(0.78 0.2 60), oklch(0.74 0.22 30));
+  --modern-gradient-info: linear-gradient(135deg, oklch(0.66 0.2 230), oklch(0.72 0.2 260));
+  --modern-gradient-pink: linear-gradient(135deg, oklch(0.72 0.22 340), oklch(0.7 0.22 10));
+  --modern-gradient-teal: linear-gradient(135deg, oklch(0.7 0.18 195), oklch(0.74 0.18 165));
+  --modern-gradient-surface: linear-gradient(180deg, oklch(1 0 0), oklch(0.985 0.01 280));
+  --modern-shadow-soft: 0 1px 2px oklch(0.3 0.05 270 / 0.04), 0 8px 24px -8px oklch(0.3 0.1 280 / 0.12);
+  --modern-shadow-card: 0 1px 3px oklch(0.3 0.05 270 / 0.06), 0 12px 32px -12px oklch(0.3 0.1 280 / 0.18);
+  --modern-shadow-pop: 0 20px 60px -20px oklch(0.4 0.2 290 / 0.4);
   --dash-blue: var(--brand-blue);
   --dash-gold: var(--brand-gold);
   --dash-green: #28A745;
@@ -9,14 +33,98 @@
   gap: 18px;
   min-width: 0;
   color: var(--gray-700);
+  padding-bottom: 18px;
+  background-image:
+    radial-gradient(circle at 0% 0%, oklch(0.95 0.05 290 / 0.42), transparent 38%),
+    radial-gradient(circle at 100% 0%, oklch(0.95 0.05 200 / 0.34), transparent 38%);
+}
+
+.modern-dashboard .gradient-primary { background-image: var(--modern-gradient-primary); }
+.modern-dashboard .gradient-success { background-image: var(--modern-gradient-success); }
+.modern-dashboard .gradient-warning { background-image: var(--modern-gradient-warning); }
+.modern-dashboard .gradient-info { background-image: var(--modern-gradient-info); }
+.modern-dashboard .gradient-pink { background-image: var(--modern-gradient-pink); }
+.modern-dashboard .gradient-teal { background-image: var(--modern-gradient-teal); }
+.modern-dashboard .shadow-soft { box-shadow: var(--modern-shadow-soft); }
+.modern-dashboard .shadow-card { box-shadow: var(--modern-shadow-card); }
+.modern-dashboard .shadow-pop { box-shadow: var(--modern-shadow-pop); }
+
+.modern-dashboard .card-3d {
+  background: var(--modern-gradient-surface);
+  box-shadow:
+    0 1px 0 oklch(1 0 0) inset,
+    0 -1px 0 oklch(0.9 0.02 280 / 0.5) inset,
+    0 1px 3px oklch(0.3 0.05 270 / 0.05),
+    0 18px 40px -20px oklch(0.3 0.15 285 / 0.25);
+  transition: transform .35s ease, box-shadow .35s ease;
+}
+
+.modern-dashboard .card-3d:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 1px 0 oklch(1 0 0) inset,
+    0 -1px 0 oklch(0.9 0.02 280 / 0.5) inset,
+    0 24px 50px -20px oklch(0.3 0.18 285 / 0.4);
+}
+
+.modern-dashboard .kpi-3d {
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 0.5) inset,
+    0 -8px 20px -8px oklch(0 0 0 / 0.25) inset,
+    0 14px 30px -12px oklch(0.3 0.2 285 / 0.45);
+  transition: transform .35s ease;
+}
+
+.modern-dashboard .kpi-3d::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 80% at 0% 0%, oklch(1 0 0 / 0.35), transparent 50%);
+  pointer-events: none;
+}
+
+.modern-dashboard .kpi-3d::after {
+  content: "";
+  position: absolute;
+  right: -30px;
+  bottom: -40px;
+  width: 140px;
+  height: 140px;
+  border-radius: 9999px;
+  background: oklch(1 0 0 / 0.12);
+  filter: blur(2px);
+}
+
+.modern-dashboard .kpi-3d:hover {
+  transform: translateY(-4px) rotateX(2deg);
+}
+
+@keyframes modern-float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.modern-dashboard .animate-float {
+  animation: modern-float-y 4s ease-in-out infinite;
+}
+
+@keyframes modern-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.modern-dashboard .shimmer {
+  background-image: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.25), transparent);
+  background-size: 200% 100%;
+  animation: modern-shimmer 3s linear infinite;
 }
 
 .ats-dashboard-filter-row,
 .ats-dashboard-card,
 .ats-dashboard-kpi {
-  border: 1px solid rgba(var(--brand-blue-rgb), 0.1);
-  background: linear-gradient(180deg, #fff 0%, #fbfbf8 100%);
-  box-shadow: 0 1px 0 rgba(255,255,255,0.9) inset, var(--shadow-card);
+  border: 1px solid var(--modern-border);
 }
 
 .ats-dashboard-filter-row {
@@ -130,10 +238,10 @@
 }
 
 .ats-dashboard-periods button.is-active {
-  border-color: var(--dash-gold);
-  background: linear-gradient(135deg, var(--dash-gold), #f4ce38);
-  color: var(--navy-darkest);
-  box-shadow: 0 8px 18px rgba(var(--brand-gold-rgb),0.24);
+  border-color: transparent;
+  background-image: var(--modern-gradient-primary);
+  color: var(--white);
+  box-shadow: var(--modern-shadow-pop);
 }
 
 .ats-dashboard-state {
@@ -192,6 +300,17 @@
 .ats-dashboard-kpi.is-blue,
 .ats-dashboard-billing-card.is-blue {
   background: linear-gradient(135deg, #001264, #233a91);
+}
+
+.ats-dashboard-section-error {
+  margin: -4px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(220, 53, 69, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 245, 245, 0.8);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .ats-dashboard-kpi.is-gold,
@@ -303,9 +422,7 @@
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--dash-blue), #253d9b);
   color: var(--white);
-  box-shadow: 0 12px 24px rgba(var(--brand-blue-rgb),0.16);
   flex: 0 0 auto;
 }
 
