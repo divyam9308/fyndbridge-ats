@@ -23,6 +23,7 @@ const RELOCATE_OPTIONS = ['', 'Yes', 'No']
 const MAX_RESUME_FILES = 10
 const MAX_RESUME_SIZE = 10 * 1024 * 1024
 const ACCEPTED_RESUME_EXTENSIONS = ['pdf', 'doc', 'docx']
+const consumedRouteActions = new Set()
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
 const CANDIDATES_TABLE_COLUMNS_PREFERENCE_KEY = 'candidatesTableColumns'
@@ -860,7 +861,10 @@ export default function CandidatesPage() {
   useEffect(() => {
     const action = location.state?.action
     if (!action) return
+    const actionKey = `${location.key}:${action}`
     navigate(location.pathname, { replace: true, state: null })
+    if (consumedRouteActions.has(actionKey)) return
+    consumedRouteActions.add(actionKey)
     if (action === 'upload-resumes') {
       window.requestAnimationFrame(() => fileInputRef.current?.click())
     }
