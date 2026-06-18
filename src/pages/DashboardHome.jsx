@@ -15,18 +15,15 @@ import {
   Users
 } from 'lucide-react'
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   Line,
   LineChart,
   Pie,
   PieChart,
-  RadialBar,
-  RadialBarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -48,6 +45,11 @@ const chartColors = [
   'var(--modern-chart-5)',
   'var(--modern-chart-3)'
 ]
+const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
+const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Rejected by Recruiter', 'Client Submission', 'Interview', 'Rejected by Client', 'Offered', 'Offer Declined', 'Dropout', 'Hired']
+const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
+
+const seriesColor = (index) => chartColors[index % chartColors.length]
 
 function SectionTitle({ icon: Icon, title, subtitle, right }) {
   return (
@@ -64,6 +66,30 @@ function SectionTitle({ icon: Icon, title, subtitle, right }) {
   )
 }
 
+function DashboardTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  const rows = payload.filter(item => item.value !== undefined && item.value !== null)
+  return (
+    <div className="ats-dashboard-tooltip">
+      {label ? <strong>{label}</strong> : null}
+      {rows.map(item => (
+        <span key={item.name || item.dataKey}>
+          <i style={{ background: item.color || item.fill }} />
+          {item.name || item.dataKey}: {Number(item.value || 0).toLocaleString('en-IN')}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function Sparkline({ color = 'rgba(255,255,255,0.95)' }) {
+  return (
+    <svg className="ats-dashboard-sparkline" viewBox="0 0 280 64" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 46 C28 34 52 38 78 32 C106 25 132 34 158 23 C190 10 210 28 238 18 C258 12 270 10 280 7" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function StatCard({ icon: Icon, label, value, accent }) {
   return (
     <article className={`ats-dashboard-kpi kpi-3d ${accent}`}>
@@ -73,6 +99,7 @@ function StatCard({ icon: Icon, label, value, accent }) {
       </div>
       <strong>{Number(value || 0).toLocaleString('en-IN')}</strong>
       <span>{label}</span>
+      <Sparkline />
     </article>
   )
 }
@@ -97,6 +124,57 @@ function EmptyChart({ label }) {
   return <div className="ats-dashboard-empty-chart">{label}</div>
 }
 
+function DonutChart({ data, centerLabel, centerValue }) {
+  return (
+    <ResponsiveContainer>
+      <PieChart>
+        <Pie
+          data={data}
+          dataKey="value"
+          nameKey="name"
+          innerRadius={58}
+          outerRadius={96}
+          paddingAngle={2}
+          stroke="none"
+          activeShape={false}
+          isAnimationActive
+        >
+          {data.map((item, index) => <Cell key={item.name} fill={seriesColor(index)} stroke="transparent" />)}
+        </Pie>
+        <Tooltip content={<DashboardTooltip />} cursor={false} />
+        <text x="50%" y="46%" textAnchor="middle" className="ats-dashboard-donut-label">{centerLabel}</text>
+        <text x="50%" y="58%" textAnchor="middle" className="ats-dashboard-donut-value">{Number(centerValue || 0).toLocaleString('en-IN')}</text>
+      </PieChart>
+    </ResponsiveContainer>
+  )
+}
+
+function StatusTrendLines({ data, statuses }) {
+  return (
+    <ResponsiveContainer>
+      <LineChart data={data}>
+        <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="m" interval="preserveStartEnd" minTickGap={18} />
+        <YAxis allowDecimals={false} />
+        <Tooltip content={<DashboardTooltip />} />
+        <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+        {statuses.map((status, index) => (
+          <Line
+            key={status}
+            type="monotone"
+            dataKey={status}
+            name={status}
+            stroke={seriesColor(index)}
+            strokeWidth={2.5}
+            dot={false}
+            activeDot={{ r: 4, stroke: 'var(--white)', strokeWidth: 2 }}
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
 export default function DashboardHome() {
   const [consultant, setConsultant] = useState(OVERALL)
   const [period, setPeriod] = useState(DASHBOARD_PERIODS[0])
@@ -109,9 +187,7 @@ export default function DashboardHome() {
   const kpis = [
     { label: 'Total Clients', value: data?.kpis?.totalClients, icon: Building2, accent: 'gradient-primary' },
     { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info' },
-    { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning' },
-    { label: 'Active Clients', value: data?.kpis?.activeClients, icon: CheckCircle2, accent: 'gradient-success' },
-    { label: 'Placements', value: data?.kpis?.placements, icon: Award, accent: 'gradient-pink' }
+    { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning' }
   ]
   const clientStatusData = data?.clientStatusData || []
   const candidateStatusData = data?.candidateStatusData || []
@@ -186,20 +262,13 @@ export default function DashboardHome() {
       </div>
 
       <div className="ats-dashboard-grid">
-        <section className="ats-dashboard-card card-3d is-wide">
-          <SectionTitle icon={Building2} title="Clients Analytics" subtitle="Client status distribution" />
+        <section className="ats-dashboard-card card-3d">
+          <SectionTitle icon={Building2} title="Clients Analytics" subtitle="Clients by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalClients || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.clients ? <div className="ats-dashboard-section-error">{data.sectionErrors.clients}</div> : null}
           <div className="ats-dashboard-split">
             <div className="ats-dashboard-chart">
               {clientStatusData.some(item => item.value) ? (
-                <ResponsiveContainer>
-                  <PieChart>
-                    <Pie data={clientStatusData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={98} paddingAngle={2} stroke="none">
-                      {clientStatusData.map((item, index) => <Cell key={item.name} fill={chartColors[index % chartColors.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                <DonutChart data={clientStatusData} centerLabel="CLIENTS" centerValue={data?.kpis?.totalClients} />
               ) : <EmptyChart label="No client data for this period." />}
             </div>
             <StatusList data={clientStatusData} />
@@ -219,29 +288,10 @@ export default function DashboardHome() {
         </section>
 
         <section className="ats-dashboard-card card-3d">
-          <SectionTitle icon={TrendingUp} title="Client Acquisition Trend" subtitle="Clients and active clients by month" />
+          <SectionTitle icon={TrendingUp} title="Client Acquisition Trend" subtitle="Client statuses over time" />
           <div className="ats-dashboard-chart">
             {clientTrend.length ? (
-              <ResponsiveContainer>
-                <AreaChart data={clientTrend}>
-                  <defs>
-                    <linearGradient id="clientTrendA" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--modern-chart-1)" stopOpacity={0.45} />
-                      <stop offset="100%" stopColor="var(--modern-chart-1)" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="clientTrendB" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--modern-chart-3)" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="var(--modern-chart-3)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="m" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="clients" name="Clients" stroke="var(--modern-chart-1)" fill="url(#clientTrendA)" strokeWidth={3} />
-                  <Area type="monotone" dataKey="active" name="Active" stroke="var(--modern-chart-3)" fill="url(#clientTrendB)" strokeWidth={3} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <StatusTrendLines data={clientTrend} statuses={CLIENT_STATUSES} />
             ) : <EmptyChart label="No client trend data." />}
           </div>
         </section>
@@ -249,25 +299,23 @@ export default function DashboardHome() {
 
       <div className="ats-dashboard-grid">
         <section className="ats-dashboard-card card-3d">
-          <SectionTitle icon={Users} title="Candidates Analytics" subtitle="Candidates by Status" />
+          <SectionTitle icon={Users} title="Candidates Analytics" subtitle="Candidates by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalCandidates || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.candidates ? <div className="ats-dashboard-section-error">{data.sectionErrors.candidates}</div> : null}
-          <StatusList data={candidateStatusData} />
+          <div className="ats-dashboard-split is-vertical">
+            <div className="ats-dashboard-chart is-small">
+              {candidateStatusData.some(item => item.value) ? (
+                <DonutChart data={candidateStatusData} centerLabel="CANDIDATES" centerValue={data?.kpis?.totalCandidates} />
+              ) : <EmptyChart label="No candidate data for this period." />}
+            </div>
+            <StatusList data={candidateStatusData} />
+          </div>
         </section>
 
         <section className="ats-dashboard-card card-3d">
-          <SectionTitle icon={Activity} title="Candidate Movement Trend" subtitle="Candidates added and hired by month" />
+          <SectionTitle icon={Activity} title="Candidate Movement Trend" subtitle="Candidate statuses over time" />
           <div className="ats-dashboard-chart">
             {candidateTrend.length ? (
-              <ResponsiveContainer>
-                <LineChart data={candidateTrend}>
-                  <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="m" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="added" name="Candidates Added" stroke="var(--modern-chart-2)" strokeWidth={3} dot={{ r: 3, fill: 'var(--modern-chart-2)' }} />
-                  <Line type="monotone" dataKey="hired" name="Hired" stroke="var(--modern-chart-6)" strokeWidth={3} dot={{ r: 3, fill: 'var(--modern-chart-6)' }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <StatusTrendLines data={candidateTrend} statuses={CANDIDATE_STATUSES} />
             ) : <EmptyChart label="No candidate trend data." />}
           </div>
         </section>
@@ -289,19 +337,12 @@ export default function DashboardHome() {
 
       <div className="ats-dashboard-grid">
         <section className="ats-dashboard-card card-3d">
-          <SectionTitle icon={Briefcase} title="Mandates Analytics" subtitle="Mandates by Status" />
+          <SectionTitle icon={Briefcase} title="Mandates Analytics" subtitle="Mandates by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalMandates || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.mandates ? <div className="ats-dashboard-section-error">{data.sectionErrors.mandates}</div> : null}
           <div className="ats-dashboard-split is-compact">
             <div className="ats-dashboard-chart is-small">
               {mandateStatusData.some(item => item.value) ? (
-                <ResponsiveContainer>
-                  <PieChart>
-                    <Pie data={mandateStatusData} dataKey="value" nameKey="name" innerRadius={48} outerRadius={82} paddingAngle={3} stroke="none">
-                      {mandateStatusData.map((item, index) => <Cell key={item.name} fill={chartColors[index % chartColors.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                <DonutChart data={mandateStatusData} centerLabel="MANDATES" centerValue={data?.kpis?.totalMandates} />
               ) : <EmptyChart label="No mandate data." />}
             </div>
             <StatusList data={mandateStatusData} />
@@ -315,12 +356,13 @@ export default function DashboardHome() {
               <ResponsiveContainer>
                 <BarChart data={mandateTrend}>
                   <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="m" />
+                  <XAxis dataKey="m" interval="preserveStartEnd" minTickGap={18} />
                   <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="ongoing" name="Ongoing" fill="var(--modern-chart-1)" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="completed" name="Completed" fill="var(--modern-chart-3)" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="scrapped" name="Scrapped" fill="var(--modern-chart-5)" radius={[6, 6, 0, 0]} />
+                  <Tooltip content={<DashboardTooltip />} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                  {MANDATE_STATUSES.map((status, index) => (
+                    <Bar key={status} dataKey={status} name={status} fill={seriesColor(index)} radius={[6, 6, 0, 0]} />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             ) : <EmptyChart label="No mandate trend data." />}
@@ -328,26 +370,15 @@ export default function DashboardHome() {
         </section>
 
         <section className="ats-dashboard-card card-3d">
-          <SectionTitle icon={CheckCircle2} title="Open vs Closed Mandates" subtitle="Open = Ongoing, Closed = Completed + Scrapped" />
-          <div className="ats-dashboard-mandate-split">
-            <div className="ats-dashboard-billing-card kpi-3d gradient-primary">
-              <span>Open</span>
-              <strong>{Number(mandateStatusData.find(item => item.name === 'Ongoing')?.value || 0).toLocaleString('en-IN')}</strong>
-            </div>
-            <div className="ats-dashboard-billing-card kpi-3d gradient-success">
-              <span>Closed</span>
-              <strong>{Number((mandateStatusData.find(item => item.name === 'Completed')?.value || 0) + (mandateStatusData.find(item => item.name === 'Scrapped')?.value || 0)).toLocaleString('en-IN')}</strong>
-            </div>
-          </div>
-          <div className="ats-dashboard-radial">
-            <ResponsiveContainer>
-              <RadialBarChart innerRadius="42%" outerRadius="100%" data={[
-                { name: 'Finalized', value: (mandateStatusData.find(item => item.name === 'Completed')?.value || 0) + (mandateStatusData.find(item => item.name === 'Scrapped')?.value || 0), fill: 'var(--modern-chart-3)' },
-                { name: 'Ongoing', value: mandateStatusData.find(item => item.name === 'Ongoing')?.value || 0, fill: 'var(--modern-chart-1)' }
-              ]}>
-                <RadialBar dataKey="value" cornerRadius={8} background={{ fill: '#F0F0EE' }} />
-              </RadialBarChart>
-            </ResponsiveContainer>
+          <SectionTitle icon={CheckCircle2} title="Mandates Status Split" subtitle="Current mandate pipeline" />
+          <div className="ats-dashboard-status-cards">
+            {MANDATE_STATUSES.map((status, index) => (
+              <div className={`ats-dashboard-billing-card kpi-3d ${['gradient-primary', 'gradient-success', 'gradient-pink'][index]}`} key={status}>
+                <span>{status}</span>
+                <strong>{Number(mandateStatusData.find(item => item.name === status)?.value || 0).toLocaleString('en-IN')}</strong>
+                <small><TrendingUp size={12} /> {status === 'Ongoing' ? 'Active mandates' : 'Finalized mandates'}</small>
+              </div>
+            ))}
           </div>
         </section>
       </div>
@@ -358,6 +389,7 @@ export default function DashboardHome() {
           <div className="ats-dashboard-consultants">
             {consultantPerformance.map(item => (
               <div className="ats-dashboard-consultant-row" key={item.name}>
+                <b className="ats-dashboard-rank">#{consultantPerformance.indexOf(item) + 1}</b>
                 <span className="ats-dashboard-avatar">{item.name.split(/\s+/).map(part => part[0]).slice(0, 2).join('')}</span>
                 <div className="ats-dashboard-consultant-main">
                   <div className="ats-dashboard-consultant-head">
@@ -409,7 +441,7 @@ export default function DashboardHome() {
           <div className="ats-dashboard-activity">
             {recentActivity.map((item, index) => (
               <div className="ats-dashboard-activity-row" key={`${item.text}-${index}`}>
-                <span><UserCheck size={15} /></span>
+                <span style={{ background: seriesColor(index) }}><UserCheck size={15} /></span>
                 <p>{item.text}</p>
                 <time>{item.date}</time>
               </div>

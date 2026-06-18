@@ -73,6 +73,12 @@ function monthLabel(value) {
   return date.toLocaleString('en-US', { month: 'short' })
 }
 
+function dayLabel(value) {
+  const date = toDate(value)
+  if (!date) return ''
+  return date.toLocaleString('en-US', { day: 'numeric', month: 'short' })
+}
+
 function normalizeClientStatus(value) {
   const text = clean(value)
   return CLIENT_STATUSES.includes(text) ? text : '-'
@@ -110,36 +116,59 @@ function countByStatus(rows, statuses, getStatus) {
   return statuses.map((name) => ({ name, value: counts[name] || 0 }))
 }
 
-function groupByMonth(rows, getDate, counters) {
-  const map = new Map()
-  for (const row of rows) {
-    const label = monthLabel(getDate(row))
-    if (!label) continue
-    if (!map.has(label)) map.set(label, { m: label, ...Object.fromEntries(counters.map((key) => [key, 0])) })
-    const bucket = map.get(label)
-    for (const key of counters) bucket[key] += Number(row[`__${key}`] || 0)
-  }
-  return [...map.values()]
+function bucketKey(date, period) {
+  if (period === 'This Month') return date.toISOString().slice(0, 10)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
-function monthBuckets(range, counters) {
+function bucketLabel(date, period) {
+  return period === 'This Month' ? dayLabel(date) : monthLabel(date)
+}
+
+function addMonths(date, count) {
+  const next = new Date(date)
+  next.setMonth(next.getMonth() + count)
+  return next
+}
+
+function addDays(date, count) {
+  const next = new Date(date)
+  next.setDate(next.getDate() + count)
+  return next
+}
+
+function buildBuckets(period, range, rows, getDate, statuses) {
   const now = new Date()
-  const start = range.start || new Date(now.getFullYear(), Math.max(0, now.getMonth() - 5), 1)
+  const rowDates = rows.map((row) => toDate(getDate(row))).filter(Boolean).sort((a, b) => a - b)
+  const startDate = range.start || rowDates[0] || new Date(now.getFullYear(), now.getMonth(), 1)
+  const cursor = period === 'This Month'
+    ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+    : new Date(startDate.getFullYear(), startDate.getMonth(), 1)
   const end = range.end || now
   const buckets = []
-  const cursor = new Date(start.getFullYear(), start.getMonth(), 1)
-  while (cursor <= end && buckets.length < 12) {
+  while (cursor <= end) {
     buckets.push({
-      m: cursor.toLocaleString('en-US', { month: 'short' }),
-      ...Object.fromEntries(counters.map((key) => [key, 0]))
+      key: bucketKey(cursor, period),
+      m: bucketLabel(cursor, period),
+      ...Object.fromEntries(statuses.map((status) => [status, 0]))
     })
-    cursor.setMonth(cursor.getMonth() + 1)
+    const next = period === 'This Month' ? addDays(cursor, 1) : addMonths(cursor, 1)
+    cursor.setTime(next.getTime())
   }
-  return buckets.length ? buckets : [{ m: now.toLocaleString('en-US', { month: 'short' }), ...Object.fromEntries(counters.map((key) => [key, 0])) }]
+  return buckets.length ? buckets : [{ key: bucketKey(now, period), m: bucketLabel(now, period), ...Object.fromEntries(statuses.map((status) => [status, 0])) }]
 }
 
-function withMonthFallback(rows, range, counters) {
-  return rows.length ? rows : monthBuckets(range, counters)
+function statusTrend(rows, statuses, getStatus, getDate, period, range) {
+  const buckets = buildBuckets(period, range, rows, getDate, statuses)
+  const map = new Map(buckets.map((bucket) => [bucket.key, bucket]))
+  for (const row of rows) {
+    const date = toDate(getDate(row))
+    const status = getStatus(row)
+    if (!date || !statuses.includes(status)) continue
+    const bucket = map.get(bucketKey(date, period))
+    if (bucket) bucket[status] += 1
+  }
+  return buckets
 }
 
 function dedupeClients(rows) {
@@ -185,7 +214,7 @@ function buildRecentActivity({ clients, candidates, mandates }) {
     if (normalizeMandateStatus(mandate.mandate_status || mandate.status) === 'Completed') {
       events.push({
         date: mandate.updated_at || mandate.allocation_date || mandate.created_at,
-        text: `Mandate completed: ${mandate.title || mandate.role || 'Untitled mandate'}`
+        text: `Mandate completed: ${mandate.title || 'Untitled mandate'}`
       })
     }
   }
@@ -207,7 +236,7 @@ async function getDashboardStats(req, res) {
     supabase.from('clients').select('id, client_group_id, client_name, name, status, consultant_name, connected_on_date, created_at, updated_at, contract_signed, billing_entity'),
     supabase.from('candidates').select('id, full_name, created_at, updated_at'),
     supabase.from('candidate_associations').select('id, candidate_id, consultant_name, status, job_title, client_name, created_at, updated_at'),
-    supabase.from('jobs').select('id, title, role, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at')
+    supabase.from('jobs').select('id, title, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at')
   ])
 
   const readResult = (index, key) => {
@@ -275,24 +304,9 @@ async function getDashboardStats(req, res) {
       }
     ]
 
-    const clientTrend = withMonthFallback(groupByMonth(
-      uniqueClients.map((row) => ({ ...row, __clients: 1, __active: normalizeClientStatus(row.status) === 'Active' ? 1 : 0 })),
-      (row) => row.connected_on_date || row.created_at,
-      ['clients', 'active']
-    ), range, ['clients', 'active'])
-    const candidateTrend = withMonthFallback(groupByMonth(
-      filteredAssociations.map((row) => ({ ...row, __added: 1, __hired: normalizeCandidateStatus(row.status) === 'Hired' ? 1 : 0 })),
-      (row) => row.created_at,
-      ['added', 'hired']
-    ), range, ['added', 'hired'])
-    const mandateTrend = withMonthFallback(groupByMonth(
-      filteredMandates.map((row) => {
-        const status = normalizeMandateStatus(row.mandate_status || row.status)
-        return { ...row, __ongoing: status === 'Ongoing' ? 1 : 0, __completed: status === 'Completed' ? 1 : 0, __scrapped: status === 'Scrapped' ? 1 : 0 }
-      }),
-      (row) => row.allocation_date || row.created_at,
-      ['ongoing', 'completed', 'scrapped']
-    ), range, ['ongoing', 'completed', 'scrapped'])
+    const clientTrend = statusTrend(uniqueClients, CLIENT_STATUSES, (row) => normalizeClientStatus(row.status), (row) => row.connected_on_date || row.created_at, period, range)
+    const candidateTrend = statusTrend(filteredAssociations, CANDIDATE_STATUSES, (row) => normalizeCandidateStatus(row.status), (row) => row.updated_at || row.created_at || row.candidate_created_at, period, range)
+    const mandateTrend = statusTrend(filteredMandates, MANDATE_STATUSES, (row) => normalizeMandateStatus(row.mandate_status || row.status), (row) => row.allocation_date || row.created_at, period, range)
 
     const consultantPerformance = consultantOptions.map((name) => {
       const candidateRows = allAssociations.filter((row) => withinPeriod(row.created_at || row.candidate_created_at, range) && matchesConsultant(row, name, ['consultant_name']))
