@@ -18,7 +18,7 @@
 /* Logo area — white background, matches the sidebar notch exactly */
 .sidebar-logo {
   height: var(--topbar-height);
-  padding: 4px 12px;
+  padding: 6px 14px;
   background: var(--white);           /* kept white as requested */
   border-bottom: 1px solid var(--gray-200);
 
@@ -33,9 +33,9 @@
 
 .sidebar-logo-image {
   display: block;
-  width: 216px;
+  width: 212px;
   max-width: 100%;
-  max-height: 56px;
+  max-height: 52px;
   height: auto;
   object-fit: contain;
 }
