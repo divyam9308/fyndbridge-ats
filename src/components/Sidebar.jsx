@@ -24,10 +24,10 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="sidebar-logo">
         <img
-          src="/assets/fyndbridge-official-logo.jpeg"
+          src="/assets/fyndbridge-official-logo.png"
           alt="FYNDBRIDGE"
           className="sidebar-logo-image"
-          onError={() => console.error('FYNDBRIDGE logo failed to load: /assets/fyndbridge-official-logo.jpeg')}
+          onError={() => console.error('FYNDBRIDGE logo failed to load: /assets/fyndbridge-official-logo.png')}
         />
       </div>
 

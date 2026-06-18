@@ -80,10 +80,10 @@ export default function LoginPage() {
 
         <div className="login-brand" role="banner">
           <img
-            src="/assets/fyndbridge-official-logo.jpeg"
+            src="/assets/fyndbridge-official-logo.png"
             alt="FYNDBRIDGE"
             className="login-brand-logo"
-            onError={() => console.error('FYNDBRIDGE logo failed to load: /assets/fyndbridge-official-logo.jpeg')}
+            onError={() => console.error('FYNDBRIDGE logo failed to load: /assets/fyndbridge-official-logo.png')}
           />
         </div>
 
