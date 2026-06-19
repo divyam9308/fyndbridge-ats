@@ -36,22 +36,49 @@ import './DashboardHome.css'
 
 const OVERALL = 'Overall (All Consultants)'
 const chartColors = [
-  'var(--modern-chart-1)',
-  'var(--modern-chart-2)',
-  'var(--modern-chart-3)',
-  'var(--modern-chart-4)',
-  'var(--modern-chart-5)',
-  'var(--modern-chart-6)',
-  'var(--modern-chart-7)',
-  'var(--modern-chart-8)',
-  'var(--modern-chart-5)',
-  'var(--modern-chart-3)'
+  '#001264',
+  '#DAB111',
+  '#0F766E',
+  '#16A34A',
+  '#2563EB',
+  '#7C3AED',
+  '#DC2626',
+  '#64748B',
+  '#F59E0B'
 ]
 const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Rejected by Recruiter', 'Client Submission', 'Interview', 'Rejected by Client', 'Offered', 'Offer Declined', 'Dropout', 'Hired']
 const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
+const STATUS_COLORS = {
+  '-': '#64748B',
+  Active: '#0F766E',
+  Ongoing: '#0F766E',
+  Inactive: '#64748B',
+  Converted: '#16A34A',
+  Completed: '#16A34A',
+  Hired: '#16A34A',
+  'Not Converted': '#DC2626',
+  'Rejected by Recruiter': '#DC2626',
+  Scrapped: '#DC2626',
+  'Follow Up Required': '#DAB111',
+  Offered: '#DAB111',
+  'Not Hiring': '#F59E0B',
+  'Offer Declined': '#F59E0B',
+  'Offered Declined': '#F59E0B',
+  'Not Adding Consultants': '#2563EB',
+  'Client Submission': '#2563EB',
+  Interested: '#0F766E',
+  'Not Interested': '#64748B',
+  Interview: '#7C3AED',
+  'Rejected by Client': '#B91C1C',
+  Dropout: '#B91C1C'
+}
 
-const seriesColor = (index) => chartColors[index % chartColors.length]
+const seriesColor = (statusOrIndex, fallbackIndex = 0) => (
+  typeof statusOrIndex === 'string'
+    ? STATUS_COLORS[statusOrIndex] || chartColors[fallbackIndex % chartColors.length]
+    : chartColors[statusOrIndex % chartColors.length]
+)
 
 function SectionTitle({ icon: Icon, title, subtitle, right }) {
   return (
@@ -116,7 +143,7 @@ function StatusList({ data }) {
       {data.map((item, index) => (
         <div className="ats-dashboard-status-row" key={item.name}>
           <span className="ats-dashboard-status-name">
-            <i style={{ background: chartColors[index % chartColors.length] }} />
+            <i style={{ background: seriesColor(item.name, index) }} />
             {item.name}
           </span>
           <strong>{Number(item.value || 0).toLocaleString('en-IN')}</strong>
@@ -145,7 +172,7 @@ function DonutChart({ data, centerLabel, centerValue }) {
           activeShape={false}
           isAnimationActive
         >
-          {data.map((item, index) => <Cell key={item.name} fill={seriesColor(index)} stroke="transparent" />)}
+          {data.map((item, index) => <Cell key={item.name} fill={seriesColor(item.name, index)} stroke="transparent" />)}
         </Pie>
         <Tooltip content={<DashboardTooltip />} cursor={false} />
         <text x="50%" y="46%" textAnchor="middle" className="ats-dashboard-donut-label">{centerLabel}</text>
@@ -170,11 +197,11 @@ function StatusTrendLines({ data, statuses }) {
             type="monotone"
             dataKey={status}
             name={status}
-            stroke={seriesColor(index)}
+            stroke={seriesColor(status, index)}
             strokeWidth={3}
             dot={false}
             activeDot={{ r: 4, stroke: 'var(--white)', strokeWidth: 2 }}
-            filter={`drop-shadow(0 5px 8px ${seriesColor(index)})`}
+            filter={`drop-shadow(0 5px 8px ${seriesColor(status, index)})`}
             isAnimationActive
             animationDuration={2000}
             animationEasing="ease-out"
@@ -214,7 +241,7 @@ export default function DashboardHome() {
   const mandateTotal = Math.max(1, mandateStatusData.reduce((sum, item) => sum + Number(item.value || 0), 0))
   const mandateRadialData = mandateStatusData.map((item, index) => ({
     ...item,
-    fill: seriesColor(index),
+    fill: seriesColor(item.name, index),
     share: Math.round((Number(item.value || 0) / mandateTotal) * 100)
   }))
 
@@ -295,7 +322,7 @@ export default function DashboardHome() {
           <SectionTitle icon={FileSignature} title="Active Clients with Contract Signed" subtitle="Billing entity split" />
           <div className="ats-dashboard-billing-grid">
             {billingEntityData.map((item, index) => (
-              <div className={`ats-dashboard-billing-card kpi-3d ${index === 0 ? 'gradient-info' : 'gradient-pink'}`} key={item.label}>
+              <div className={`ats-dashboard-billing-card kpi-3d ${index === 0 ? 'gradient-info' : 'gradient-warning'}`} key={item.label}>
                 <span>{item.label}</span>
                 <strong>{Number(item.value || 0).toLocaleString('en-IN')}</strong>
               </div>
@@ -342,7 +369,7 @@ export default function DashboardHome() {
             {candidateFunnel.map((item, index) => (
               <div className="ats-dashboard-funnel-row" key={item.name}>
                 <span>{item.name}</span>
-                <div style={{ width: `${Math.max(28, 100 - index * 13)}%`, background: chartColors[index % chartColors.length] }}>
+                <div style={{ width: `${Math.max(28, 100 - index * 13)}%`, background: seriesColor(item.name, index) }}>
                   {Number(item.value || 0).toLocaleString('en-IN')}
                 </div>
               </div>
@@ -378,7 +405,7 @@ export default function DashboardHome() {
           <SectionTitle icon={CheckCircle2} title="Mandates Status Split" subtitle="Current mandate pipeline" />
           <div className="ats-dashboard-status-cards">
             {MANDATE_STATUSES.map((status, index) => (
-              <div className={`ats-dashboard-billing-card kpi-3d ${['gradient-primary', 'gradient-success', 'gradient-pink'][index]}`} key={status}>
+              <div className={`ats-dashboard-billing-card kpi-3d ${['gradient-teal', 'gradient-success', 'gradient-critical'][index]}`} key={status}>
                 <span>{status}</span>
                 <strong>{Number(mandateStatusData.find(item => item.name === status)?.value || 0).toLocaleString('en-IN')}</strong>
                 <small><TrendingUp size={12} /> {status === 'Ongoing' ? 'Active mandates' : 'Finalized mandates'}</small>
@@ -443,9 +470,9 @@ export default function DashboardHome() {
                   <YAxis allowDecimals={false} />
                   <Tooltip content={<DashboardTooltip />} cursor={false} wrapperStyle={{ zIndex: 9999 }} />
                   <Bar dataKey="Candidates Added" fill="var(--modern-chart-1)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
-                  <Bar dataKey="Candidates Hired" fill="var(--modern-chart-3)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
-                  <Bar dataKey="Mandates Managed" fill="var(--modern-chart-4)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
-                  <Bar dataKey="Active Clients" fill="var(--modern-chart-6)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
+                  <Bar dataKey="Candidates Hired" fill="var(--modern-chart-4)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
+                  <Bar dataKey="Mandates Managed" fill="var(--modern-chart-2)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
+                  <Bar dataKey="Active Clients" fill="var(--modern-chart-3)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
                 </BarChart>
               </ResponsiveContainer>
             ) : <EmptyChart label="No consultant data." />}
