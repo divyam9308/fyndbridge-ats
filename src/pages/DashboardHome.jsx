@@ -5,12 +5,10 @@ import {
   Award,
   Briefcase,
   Building2,
-  CheckCircle2,
   ChevronDown,
   Clock,
   FileSignature,
   Loader2,
-  Target,
   TrendingUp,
   UserCheck,
   Users,
@@ -26,8 +24,6 @@ import {
   LineChart,
   Pie,
   PieChart,
-  RadialBar,
-  RadialBarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -423,7 +419,6 @@ export default function DashboardHome() {
   const clientTrend = data?.clientTrend || []
   const candidateTrend = data?.candidateTrend || []
   const mandateTrend = data?.mandateTrend || []
-  const candidateFunnel = data?.candidateFunnel || []
   const consultantPerformance = data?.consultantPerformance || []
   const recentActivity = data?.recentActivity || []
   const maxCandidatesAdded = Math.max(1, ...consultantPerformance.map(item => Number(item.candidatesAdded) || 0))
@@ -433,13 +428,6 @@ export default function DashboardHome() {
     { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info', sparkline: sparklineValues(candidateTrend, CANDIDATE_STATUSES), breakdown: candidateStatusData },
     { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning', sparkline: sparklineValues(mandateTrend, MANDATE_STATUSES), breakdown: mandateStatusData }
   ]
-  const mandateTotal = Math.max(1, mandateStatusData.reduce((sum, item) => sum + Number(item.value || 0), 0))
-  const mandateRadialData = mandateStatusData.map((item, index) => ({
-    ...item,
-    fill: seriesColor(index),
-    share: Math.round((Number(item.value || 0) / mandateTotal) * 100)
-  }))
-
   useEffect(() => {
     if (!selectedCard) return undefined
     const previousOverflow = document.body.style.overflow
@@ -604,21 +592,6 @@ export default function DashboardHome() {
         </section>
         </ExpandableCard>
 
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'candidate-funnel', title: 'Candidate Funnel', subtitle: 'ATS stage progression', icon: Target, breakdown: candidateFunnel })}>
-        <section className="ats-dashboard-card card-3d">
-          <SectionTitle icon={Target} title="Candidate Funnel" subtitle="ATS stage progression" />
-          <div className="ats-dashboard-funnel">
-            {candidateFunnel.map((item, index) => (
-              <div className="ats-dashboard-funnel-row" key={item.name}>
-                <span>{item.name}</span>
-                <div style={{ width: `${Math.max(28, 100 - index * 13)}%`, background: chartColors[index % chartColors.length] }}>
-                  {Number(item.value || 0).toLocaleString('en-IN')}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-        </ExpandableCard>
       </div>
 
       <div className="ats-dashboard-grid">
@@ -648,33 +621,6 @@ export default function DashboardHome() {
         </section>
         </ExpandableCard>
 
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'mandates-status-split', chart: 'donut', title: 'Mandates Status Split', subtitle: 'Current mandate pipeline', icon: CheckCircle2, centerLabel: 'Mandates', centerValue: data?.kpis?.totalMandates, breakdown: mandateStatusData })}>
-        <section className="ats-dashboard-card card-3d">
-          <SectionTitle icon={CheckCircle2} title="Mandates Status Split" subtitle="Current mandate pipeline" />
-          <div className="ats-dashboard-status-cards">
-            {MANDATE_STATUSES.map((status, index) => (
-              <div className={`ats-dashboard-billing-card kpi-3d ${['gradient-primary', 'gradient-success', 'gradient-pink'][index]}`} key={status}>
-                <span>{status}</span>
-                <strong>{Number(mandateStatusData.find(item => item.name === status)?.value || 0).toLocaleString('en-IN')}</strong>
-                <small><TrendingUp size={12} /> {status === 'Ongoing' ? 'Active mandates' : 'Finalized mandates'}</small>
-              </div>
-            ))}
-          </div>
-          <div className="ats-dashboard-radial">
-            <ResponsiveContainer>
-              <RadialBarChart innerRadius="36%" outerRadius="96%" data={mandateRadialData} startAngle={90} endAngle={-270}>
-                <RadialBar dataKey="share" cornerRadius={12} background={{ fill: 'rgba(238, 238, 248, 0.9)' }} />
-                <Tooltip content={<DashboardTooltip />} wrapperStyle={{ zIndex: 9999 }} />
-              </RadialBarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="ats-dashboard-radial-share">
-            {mandateRadialData.map(item => (
-              <span key={item.name}><i style={{ background: item.fill }} />{item.name} share <b>{item.share}%</b></span>
-            ))}
-          </div>
-        </section>
-        </ExpandableCard>
       </div>
 
       <div className="ats-dashboard-grid">
