@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Activity,
   Award,
@@ -12,7 +12,8 @@ import {
   Target,
   TrendingUp,
   UserCheck,
-  Users
+  Users,
+  X
 } from 'lucide-react'
 import {
   Bar,
@@ -189,6 +190,25 @@ function StatCard({ icon: Icon, label, value, accent, sparkline }) {
   )
 }
 
+function ExpandableCard({ children, onOpen, className = '' }) {
+  return (
+    <div
+      className={`ats-dashboard-expandable${className ? ` ${className}` : ''}`}
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onOpen(event)
+        }
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
 function StatusList({ data }) {
   return (
     <div className="ats-dashboard-status-list">
@@ -264,10 +284,76 @@ function StatusTrendLines({ data, statuses }) {
   )
 }
 
+function DashboardCardModal({ card, context, onClose }) {
+  if (!card) return null
+  const rect = card.rect || { left: 0, top: 0, width: 1, height: 1 }
+  const viewportWidth = typeof window === 'undefined' ? 1200 : window.innerWidth
+  const viewportHeight = typeof window === 'undefined' ? 800 : window.innerHeight
+  const modalWidth = Math.min(1080, viewportWidth - 48)
+  const modalHeight = Math.min(740, viewportHeight - 48)
+  const modalStyle = {
+    '--origin-x': `${Math.round(rect.left + rect.width / 2 - viewportWidth / 2)}px`,
+    '--origin-y': `${Math.round(rect.top + rect.height / 2 - viewportHeight / 2)}px`,
+    '--origin-scale-x': Math.max(0.18, rect.width / modalWidth),
+    '--origin-scale-y': Math.max(0.18, rect.height / modalHeight)
+  }
+  const Icon = card.icon || Activity
+
+  return (
+    <div className="ats-dashboard-modal-layer" role="dialog" aria-modal="true" aria-label={card.title}>
+      <div className="ats-dashboard-modal-backdrop" aria-hidden="true" />
+      <section className="ats-dashboard-modal-card" style={modalStyle} onClick={(event) => event.stopPropagation()}>
+        <header className="ats-dashboard-modal-head">
+          <div className="ats-dashboard-title-left">
+            <span className={`ats-dashboard-title-icon ${card.accent || 'gradient-primary'} shadow-pop`}><Icon size={20} /></span>
+            <span>
+              <h3>{card.title}</h3>
+              <p>{card.subtitle || `${context.consultant} - ${context.period}`}</p>
+            </span>
+          </div>
+          <button type="button" className="ats-dashboard-modal-close" onClick={onClose} aria-label="Close expanded dashboard card">
+            <X size={18} />
+          </button>
+        </header>
+        <div className="ats-dashboard-modal-body">
+          {card.type === 'summary' ? (
+            <>
+              <div className={`ats-dashboard-modal-summary ${card.accent || 'gradient-primary'}`}>
+                <span>{card.title}</span>
+                <strong>{Number(card.value || 0).toLocaleString('en-IN')}</strong>
+                <Sparkline values={card.sparkline} />
+              </div>
+              <div className="ats-dashboard-modal-context">
+                <span>Filter</span>
+                <b>{context.consultant}</b>
+                <span>Period</span>
+                <b>{context.period}</b>
+              </div>
+              {card.breakdown?.length ? <StatusList data={card.breakdown} /> : null}
+            </>
+          ) : null}
+          {card.type === 'trend' ? (
+            <div className="ats-dashboard-modal-chart">
+              <StatusTrendLines data={card.trend || []} statuses={card.statuses || []} />
+            </div>
+          ) : null}
+          {card.type === 'breakdown' ? (
+            <div className="ats-dashboard-modal-breakdown">
+              {card.value !== undefined ? <strong>{Number(card.value || 0).toLocaleString('en-IN')}</strong> : null}
+              {card.breakdown?.length ? <StatusList data={card.breakdown} /> : null}
+            </div>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export default function DashboardHome() {
   const [consultant, setConsultant] = useState(OVERALL)
   const [period, setPeriod] = useState(DASHBOARD_PERIODS[0])
   const [consultantOpen, setConsultantOpen] = useState(false)
+  const [selectedCard, setSelectedCard] = useState(null)
   const { loading, error, data } = useDashboardStats({ consultant, period })
 
   const names = Array.isArray(data?.consultantOptions) ? data.consultantOptions : []
@@ -286,9 +372,9 @@ export default function DashboardHome() {
   const maxCandidatesAdded = Math.max(1, ...consultantPerformance.map(item => Number(item.candidatesAdded) || 0))
   const maxCandidatesHired = Math.max(1, ...consultantPerformance.map(item => Number(item.candidatesHired) || 0))
   const kpis = [
-    { label: 'Total Clients', value: data?.kpis?.totalClients, icon: Building2, accent: 'gradient-primary', sparkline: sparklineValues(clientTrend, CLIENT_STATUSES) },
-    { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info', sparkline: sparklineValues(candidateTrend, CANDIDATE_STATUSES) },
-    { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning', sparkline: sparklineValues(mandateTrend, MANDATE_STATUSES) }
+    { label: 'Total Clients', value: data?.kpis?.totalClients, icon: Building2, accent: 'gradient-primary', sparkline: sparklineValues(clientTrend, CLIENT_STATUSES), breakdown: clientStatusData },
+    { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info', sparkline: sparklineValues(candidateTrend, CANDIDATE_STATUSES), breakdown: candidateStatusData },
+    { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning', sparkline: sparklineValues(mandateTrend, MANDATE_STATUSES), breakdown: mandateStatusData }
   ]
   const mandateTotal = Math.max(1, mandateStatusData.reduce((sum, item) => sum + Number(item.value || 0), 0))
   const mandateRadialData = mandateStatusData.map((item, index) => ({
@@ -296,6 +382,25 @@ export default function DashboardHome() {
     fill: seriesColor(index),
     share: Math.round((Number(item.value || 0) / mandateTotal) * 100)
   }))
+
+  useEffect(() => {
+    if (!selectedCard) return undefined
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setSelectedCard(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [selectedCard])
+
+  const openCard = (event, card) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setSelectedCard({ ...card, rect })
+  }
 
   return (
     <div className="ats-dashboard-page modern-dashboard" id="page-dashboard">
@@ -353,10 +458,26 @@ export default function DashboardHome() {
       ) : null}
 
       <div className="ats-dashboard-kpi-grid">
-        {kpis.map(item => <StatCard key={item.label} {...item} />)}
+        {kpis.map(item => (
+          <ExpandableCard
+            key={item.label}
+            onOpen={(event) => openCard(event, {
+              type: 'summary',
+              title: item.label,
+              value: item.value,
+              icon: item.icon,
+              accent: item.accent,
+              sparkline: item.sparkline,
+              breakdown: item.breakdown
+            })}
+          >
+            <StatCard {...item} />
+          </ExpandableCard>
+        ))}
       </div>
 
       <div className="ats-dashboard-grid">
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Clients Analytics', subtitle: 'Clients by Status', icon: Building2, value: data?.kpis?.totalClients, breakdown: clientStatusData })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Building2} title="Clients Analytics" subtitle="Clients by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalClients || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.clients ? <div className="ats-dashboard-section-error">{data.sectionErrors.clients}</div> : null}
@@ -369,7 +490,9 @@ export default function DashboardHome() {
             <StatusList data={clientStatusData} />
           </div>
         </section>
+        </ExpandableCard>
 
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Active Clients with Contract Signed', subtitle: 'Billing entity split', icon: FileSignature, breakdown: billingEntityData.map(item => ({ name: item.label, value: item.value })) })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={FileSignature} title="Active Clients with Contract Signed" subtitle="Billing entity split" />
           <div className="ats-dashboard-billing-grid">
@@ -381,7 +504,9 @@ export default function DashboardHome() {
             ))}
           </div>
         </section>
+        </ExpandableCard>
 
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', title: 'Client Acquisition Trend', subtitle: `${consultant} - ${period}`, icon: TrendingUp, trend: clientTrend, statuses: CLIENT_STATUSES })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={TrendingUp} title="Client Acquisition Trend" subtitle="Client statuses over time" />
           <div className="ats-dashboard-chart">
@@ -390,9 +515,11 @@ export default function DashboardHome() {
             ) : <EmptyChart label="No client trend data." />}
           </div>
         </section>
+        </ExpandableCard>
       </div>
 
       <div className="ats-dashboard-grid">
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Candidates Analytics', subtitle: 'Candidates by Status', icon: Users, value: data?.kpis?.totalCandidates, breakdown: candidateStatusData })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Users} title="Candidates Analytics" subtitle="Candidates by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalCandidates || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.candidates ? <div className="ats-dashboard-section-error">{data.sectionErrors.candidates}</div> : null}
@@ -405,7 +532,9 @@ export default function DashboardHome() {
             <StatusList data={candidateStatusData} />
           </div>
         </section>
+        </ExpandableCard>
 
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', title: 'Candidate Movement Trend', subtitle: `${consultant} - ${period}`, icon: Activity, trend: candidateTrend, statuses: CANDIDATE_STATUSES })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Activity} title="Candidate Movement Trend" subtitle="Candidate statuses over time" />
           <div className="ats-dashboard-chart">
@@ -414,7 +543,9 @@ export default function DashboardHome() {
             ) : <EmptyChart label="No candidate trend data." />}
           </div>
         </section>
+        </ExpandableCard>
 
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Candidate Funnel', subtitle: 'ATS stage progression', icon: Target, breakdown: candidateFunnel })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Target} title="Candidate Funnel" subtitle="ATS stage progression" />
           <div className="ats-dashboard-funnel">
@@ -428,9 +559,11 @@ export default function DashboardHome() {
             ))}
           </div>
         </section>
+        </ExpandableCard>
       </div>
 
       <div className="ats-dashboard-grid">
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Mandates Analytics', subtitle: 'Mandates by Status', icon: Briefcase, value: data?.kpis?.totalMandates, breakdown: mandateStatusData })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Briefcase} title="Mandates Analytics" subtitle="Mandates by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalMandates || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.mandates ? <div className="ats-dashboard-section-error">{data.sectionErrors.mandates}</div> : null}
@@ -443,7 +576,9 @@ export default function DashboardHome() {
             <StatusList data={mandateStatusData} />
           </div>
         </section>
+        </ExpandableCard>
 
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', title: 'Mandates Trend', subtitle: `${consultant} - ${period}`, icon: TrendingUp, trend: mandateTrend, statuses: MANDATE_STATUSES })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={TrendingUp} title="Mandates Trend" subtitle="Ongoing, completed, and scrapped mandates" />
           <div className="ats-dashboard-chart">
@@ -452,7 +587,9 @@ export default function DashboardHome() {
             ) : <EmptyChart label="No mandate trend data." />}
           </div>
         </section>
+        </ExpandableCard>
 
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Mandates Status Split', subtitle: 'Current mandate pipeline', icon: CheckCircle2, breakdown: mandateStatusData })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={CheckCircle2} title="Mandates Status Split" subtitle="Current mandate pipeline" />
           <div className="ats-dashboard-status-cards">
@@ -478,9 +615,11 @@ export default function DashboardHome() {
             ))}
           </div>
         </section>
+        </ExpandableCard>
       </div>
 
       <div className="ats-dashboard-grid">
+        <ExpandableCard className="is-wide" onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Consultant Performance', subtitle: 'Candidates Added, Candidates Hired, Mandates Managed, Active Clients', icon: Award, breakdown: consultantPerformance.map(item => ({ name: item.name, value: item.candidatesAdded })) })}>
         <section className="ats-dashboard-card card-3d is-wide">
           <SectionTitle icon={Award} title="Consultant Performance" subtitle="Candidates Added, Candidates Hired, Mandates Managed, Active Clients" />
           <div className="ats-dashboard-consultants">
@@ -504,7 +643,9 @@ export default function DashboardHome() {
             ))}
           </div>
         </section>
+        </ExpandableCard>
 
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Consultant Performance', subtitle: 'Comparison chart', icon: Activity, breakdown: consultantPerformance.map(item => ({ name: item.name, value: item.candidatesAdded })) })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Activity} title="Consultant Performance" subtitle="Comparison chart" />
           <div className="ats-dashboard-chart">
@@ -530,8 +671,10 @@ export default function DashboardHome() {
             ) : <EmptyChart label="No consultant data." />}
           </div>
         </section>
+        </ExpandableCard>
       </div>
 
+      <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Recent Activity', subtitle: 'Latest client, candidate, and mandate updates', icon: Clock, breakdown: recentActivity.map((item, index) => ({ name: item.text, value: index + 1 })) })}>
       <section className="ats-dashboard-card card-3d">
         <SectionTitle icon={Clock} title="Recent Activity" subtitle="Latest client, candidate, and mandate updates" />
         {recentActivity.length ? (
@@ -548,6 +691,8 @@ export default function DashboardHome() {
           <div className="ats-dashboard-empty-chart">No recent activity for this period.</div>
         )}
       </section>
+      </ExpandableCard>
+      <DashboardCardModal card={selectedCard} context={{ consultant, period }} onClose={() => setSelectedCard(null)} />
     </div>
   )
 }
