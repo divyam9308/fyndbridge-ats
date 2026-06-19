@@ -1,40 +1,33 @@
 .ats-dashboard-page {
-  --modern-background: #F6F8FC;
-  --modern-foreground: #0F172A;
-  --modern-card: #FFFFFF;
-  --modern-muted: #64748B;
-  --modern-border: #E2E8F0;
-  --modern-secondary: #F9FAFF;
-  --modern-navy: #001264;
-  --modern-deep-navy: #000B3D;
-  --modern-soft-navy: #13277A;
-  --modern-gold: #DAB111;
-  --modern-gold-hover: #C29B0D;
-  --modern-gold-soft: #FFF7D6;
-  --modern-chart-1: #001264;
-  --modern-chart-2: #DAB111;
-  --modern-chart-3: #0F766E;
-  --modern-chart-4: #16A34A;
-  --modern-chart-5: #2563EB;
-  --modern-chart-6: #7C3AED;
-  --modern-chart-7: #DC2626;
-  --modern-chart-8: #64748B;
-  --modern-chart-9: #F59E0B;
-  --modern-gradient-primary: linear-gradient(135deg, #001264 0%, #13277A 55%, #3046A3 100%);
-  --modern-gradient-success: linear-gradient(135deg, #0F766E 0%, #16A34A 60%, #5EEAD4 100%);
-  --modern-gradient-warning: linear-gradient(135deg, #DAB111 0%, #FACC15 55%, #FFE58A 100%);
-  --modern-gradient-info: linear-gradient(135deg, #0F766E 0%, #14B8A6 55%, #5EEAD4 100%);
-  --modern-gradient-critical: linear-gradient(135deg, #B91C1C 0%, #DC2626 60%, #F87171 100%);
-  --modern-gradient-teal: linear-gradient(135deg, #001264 0%, #0F766E 100%);
-  --modern-gradient-surface: linear-gradient(180deg, #FFFFFF 0%, #F9FAFF 100%);
-  --modern-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -8px rgba(0, 18, 100, 0.12);
-  --modern-shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 14px 34px -14px rgba(0, 18, 100, 0.2);
-  --modern-shadow-pop: 0 20px 60px -22px rgba(0, 18, 100, 0.38);
-  --dash-blue: #001264;
-  --dash-gold: #DAB111;
-  --dash-green: #16A34A;
-  --dash-red: #DC2626;
-  --dash-teal: #0F766E;
+  --modern-background: oklch(0.985 0.005 270);
+  --modern-foreground: oklch(0.22 0.04 270);
+  --modern-card: oklch(1 0 0);
+  --modern-muted: oklch(0.5 0.03 270);
+  --modern-border: oklch(0.92 0.01 270);
+  --modern-secondary: oklch(0.96 0.02 280);
+  --modern-chart-1: oklch(0.65 0.22 285);
+  --modern-chart-2: oklch(0.72 0.18 195);
+  --modern-chart-3: oklch(0.75 0.19 145);
+  --modern-chart-4: oklch(0.78 0.18 60);
+  --modern-chart-5: oklch(0.68 0.22 25);
+  --modern-chart-6: oklch(0.7 0.2 340);
+  --modern-chart-7: oklch(0.68 0.18 250);
+  --modern-chart-8: oklch(0.78 0.16 100);
+  --modern-gradient-primary: linear-gradient(135deg, oklch(0.62 0.24 285), oklch(0.72 0.2 320));
+  --modern-gradient-success: linear-gradient(135deg, oklch(0.68 0.2 155), oklch(0.78 0.18 180));
+  --modern-gradient-warning: linear-gradient(135deg, oklch(0.78 0.2 60), oklch(0.74 0.22 30));
+  --modern-gradient-info: linear-gradient(135deg, oklch(0.66 0.2 230), oklch(0.72 0.2 260));
+  --modern-gradient-pink: linear-gradient(135deg, oklch(0.72 0.22 340), oklch(0.7 0.22 10));
+  --modern-gradient-teal: linear-gradient(135deg, oklch(0.7 0.18 195), oklch(0.74 0.18 165));
+  --modern-gradient-surface: linear-gradient(180deg, oklch(1 0 0), oklch(0.985 0.01 280));
+  --modern-shadow-soft: 0 1px 2px oklch(0.3 0.05 270 / 0.04), 0 8px 24px -8px oklch(0.3 0.1 280 / 0.12);
+  --modern-shadow-card: 0 1px 3px oklch(0.3 0.05 270 / 0.06), 0 12px 32px -12px oklch(0.3 0.1 280 / 0.18);
+  --modern-shadow-pop: 0 20px 60px -20px oklch(0.4 0.2 290 / 0.4);
+  --dash-blue: var(--brand-blue);
+  --dash-gold: var(--brand-gold);
+  --dash-green: #28A745;
+  --dash-red: #DC3545;
+  --dash-teal: #17A2B8;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -42,15 +35,15 @@
   color: var(--gray-700);
   padding-bottom: 18px;
   background-image:
-    radial-gradient(circle at 0% 0%, rgba(0, 18, 100, 0.08), transparent 38%),
-    radial-gradient(circle at 100% 0%, rgba(218, 177, 17, 0.12), transparent 38%);
+    radial-gradient(circle at 0% 0%, oklch(0.95 0.05 290 / 0.42), transparent 38%),
+    radial-gradient(circle at 100% 0%, oklch(0.95 0.05 200 / 0.34), transparent 38%);
 }
 
 .modern-dashboard .gradient-primary { background-image: var(--modern-gradient-primary); }
 .modern-dashboard .gradient-success { background-image: var(--modern-gradient-success); }
 .modern-dashboard .gradient-warning { background-image: var(--modern-gradient-warning); }
 .modern-dashboard .gradient-info { background-image: var(--modern-gradient-info); }
-.modern-dashboard .gradient-critical { background-image: var(--modern-gradient-critical); }
+.modern-dashboard .gradient-pink { background-image: var(--modern-gradient-pink); }
 .modern-dashboard .gradient-teal { background-image: var(--modern-gradient-teal); }
 .modern-dashboard .shadow-soft { box-shadow: var(--modern-shadow-soft); }
 .modern-dashboard .shadow-card { box-shadow: var(--modern-shadow-card); }
@@ -59,28 +52,28 @@
 .modern-dashboard .card-3d {
   background: var(--modern-gradient-surface);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.96) inset,
-    0 -1px 0 rgba(226, 232, 240, 0.8) inset,
-    0 1px 3px rgba(15, 23, 42, 0.05),
-    0 18px 40px -20px rgba(0, 18, 100, 0.24);
+    0 1px 0 oklch(1 0 0) inset,
+    0 -1px 0 oklch(0.9 0.02 280 / 0.5) inset,
+    0 1px 3px oklch(0.3 0.05 270 / 0.05),
+    0 18px 40px -20px oklch(0.3 0.15 285 / 0.25);
   transition: transform .35s ease, box-shadow .35s ease;
 }
 
 .modern-dashboard .card-3d:hover {
   transform: translateY(-3px);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.96) inset,
-    0 -1px 0 rgba(226, 232, 240, 0.8) inset,
-    0 24px 50px -20px rgba(0, 18, 100, 0.34);
+    0 1px 0 oklch(1 0 0) inset,
+    0 -1px 0 oklch(0.9 0.02 280 / 0.5) inset,
+    0 24px 50px -20px oklch(0.3 0.18 285 / 0.4);
 }
 
 .modern-dashboard .kpi-3d {
   position: relative;
   overflow: hidden;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.5) inset,
-    0 -8px 20px -8px rgba(0, 0, 0, 0.24) inset,
-    0 14px 30px -12px rgba(0, 18, 100, 0.36);
+    0 1px 0 oklch(1 0 0 / 0.5) inset,
+    0 -8px 20px -8px oklch(0 0 0 / 0.25) inset,
+    0 14px 30px -12px oklch(0.3 0.2 285 / 0.45);
   transition: transform .35s ease;
 }
 
@@ -88,7 +81,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, 0.34), transparent 50%);
+  background: radial-gradient(120% 80% at 0% 0%, oklch(1 0 0 / 0.35), transparent 50%);
   pointer-events: none;
 }
 
@@ -100,7 +93,7 @@
   width: 140px;
   height: 140px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: oklch(1 0 0 / 0.12);
   filter: blur(2px);
 }
 
@@ -123,7 +116,7 @@
 }
 
 .modern-dashboard .shimmer {
-  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  background-image: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.25), transparent);
   background-size: 200% 100%;
   animation: modern-shimmer 3s linear infinite;
 }
@@ -289,10 +282,6 @@
   transition: transform var(--transition-normal), box-shadow var(--transition-normal);
 }
 
-.ats-dashboard-kpi.gradient-warning {
-  color: var(--modern-navy);
-}
-
 .ats-dashboard-kpi::after,
 .ats-dashboard-billing-card::after {
   content: '';
@@ -313,7 +302,7 @@
 
 .ats-dashboard-kpi.is-blue,
 .ats-dashboard-billing-card.is-blue {
-  background: var(--modern-gradient-primary);
+  background: linear-gradient(135deg, #001264, #233a91);
 }
 
 .ats-dashboard-section-error {
@@ -329,21 +318,21 @@
 
 .ats-dashboard-kpi.is-gold,
 .ats-dashboard-billing-card.is-gold {
-  background: var(--modern-gradient-warning);
-  color: var(--modern-navy);
+  background: linear-gradient(135deg, #d1a90d, #f3cc3d);
+  color: var(--navy-darkest);
 }
 
 .ats-dashboard-kpi.is-green,
 .ats-dashboard-billing-card.is-green {
-  background: var(--modern-gradient-success);
+  background: linear-gradient(135deg, #188a42, #32c76d);
 }
 
 .ats-dashboard-kpi.is-teal {
-  background: var(--modern-gradient-info);
+  background: linear-gradient(135deg, #117a8b, #38c7d9);
 }
 
 .ats-dashboard-kpi.is-red {
-  background: var(--modern-gradient-critical);
+  background: linear-gradient(135deg, #b72f40, #ef6f7d);
 }
 
 .ats-dashboard-kpi-top {
@@ -843,15 +832,15 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #001264, #13277A);
+  background: linear-gradient(90deg, var(--dash-blue), #344bb0);
 }
 
 .ats-dashboard-bars em.is-green {
-  background: linear-gradient(90deg, #0F766E, #16A34A);
+  background: linear-gradient(90deg, #188a42, #32c76d);
 }
 
 .modern-dashboard .recharts-line-curve {
-  filter: drop-shadow(0 8px 10px rgba(0, 18, 100, 0.18));
+  filter: drop-shadow(0 8px 10px rgba(98, 83, 229, 0.22));
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -879,7 +868,7 @@
 
 .modern-dashboard .ats-dashboard-bar-glow .recharts-rectangle,
 .modern-dashboard .recharts-bar-rectangle path {
-  filter: drop-shadow(0 8px 12px rgba(0, 18, 100, 0.16));
+  filter: drop-shadow(0 8px 12px rgba(98, 83, 229, 0.18));
 }
 
 .ats-dashboard-activity {
