@@ -507,9 +507,10 @@
   z-index: 9999;
   display: grid;
   gap: 6px;
-  width: 236px;
-  max-height: 180px;
-  overflow-y: auto;
+  width: max-content;
+  min-width: 150px;
+  max-width: 300px;
+  overflow: visible;
   padding: 10px 12px;
   border: 1px solid var(--modern-border);
   border-radius: 14px;
@@ -519,9 +520,15 @@
   backdrop-filter: blur(10px);
   opacity: 1;
   pointer-events: none;
-  transform: translate3d(var(--tooltip-x, 14px), var(--tooltip-y, 14px), 0);
   transition: transform 120ms ease-out, opacity 120ms ease-out;
   will-change: transform, opacity;
+}
+
+.ats-dashboard-tooltip.is-floating {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate3d(var(--tooltip-left, 6px), var(--tooltip-top, 6px), 0);
 }
 
 .ats-dashboard-tooltip strong {

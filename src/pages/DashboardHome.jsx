@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import {
   Activity,
   Award,
@@ -52,35 +52,35 @@ const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Rejected by Recruit
 const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
 
 const seriesColor = (index) => chartColors[index % chartColors.length]
-const TOOLTIP_WIDTH = 236
-const TOOLTIP_HEIGHT = 180
-const TOOLTIP_GAP = 14
+const TOOLTIP_GAP = 6
 
-function floatingTooltipStyle(coordinate, viewBox) {
+function floatingTooltipStyle(coordinate, viewBox, size) {
   const x = Number(coordinate?.x) || 0
   const y = Number(coordinate?.y) || 0
   const width = Number(viewBox?.width) || 0
   const height = Number(viewBox?.height) || 0
-  const padding = 10
-  let tooltipX = x + TOOLTIP_GAP + TOOLTIP_WIDTH <= width - padding
+  const tooltipWidth = size.width || 260
+  const tooltipHeight = size.height || 120
+  const padding = 4
+  let tooltipX = x + TOOLTIP_GAP + tooltipWidth <= width - padding
     ? TOOLTIP_GAP
-    : -TOOLTIP_WIDTH - TOOLTIP_GAP
-  let tooltipY = y + TOOLTIP_GAP + TOOLTIP_HEIGHT <= height - padding
+    : -tooltipWidth - TOOLTIP_GAP
+  let tooltipY = y + TOOLTIP_GAP + tooltipHeight <= height - padding
     ? TOOLTIP_GAP
-    : -TOOLTIP_HEIGHT - TOOLTIP_GAP
+    : -tooltipHeight - TOOLTIP_GAP
 
   if (width) {
     if (x + tooltipX < padding) tooltipX = padding - x
-    if (x + tooltipX + TOOLTIP_WIDTH > width - padding) tooltipX = width - padding - TOOLTIP_WIDTH - x
+    if (x + tooltipX + tooltipWidth > width - padding) tooltipX = width - padding - tooltipWidth - x
   }
   if (height) {
     if (y + tooltipY < padding) tooltipY = padding - y
-    if (y + tooltipY + TOOLTIP_HEIGHT > height - padding) tooltipY = height - padding - TOOLTIP_HEIGHT - y
+    if (y + tooltipY + tooltipHeight > height - padding) tooltipY = height - padding - tooltipHeight - y
   }
 
   return {
-    '--tooltip-x': `${Math.round(tooltipX)}px`,
-    '--tooltip-y': `${Math.round(tooltipY)}px`
+    '--tooltip-left': `${Math.max(padding, Math.round(x + tooltipX))}px`,
+    '--tooltip-top': `${Math.max(padding, Math.round(y + tooltipY))}px`
   }
 }
 
@@ -99,7 +99,19 @@ function SectionTitle({ icon: Icon, title, subtitle, right }) {
   )
 }
 
-function DashboardTooltip({ active, payload, label, coordinate, viewBox }) {
+function DashboardTooltip({ active, payload, label, coordinate, viewBox, floating = false }) {
+  const tooltipRef = useRef(null)
+  const [size, setSize] = useState({ width: 260, height: 120 })
+  useLayoutEffect(() => {
+    if (!floating || !active || !tooltipRef.current) return
+    const rect = tooltipRef.current.getBoundingClientRect()
+    setSize(current => (
+      Math.round(current.width) === Math.round(rect.width) && Math.round(current.height) === Math.round(rect.height)
+        ? current
+        : { width: rect.width, height: rect.height }
+    ))
+  }, [active, floating, payload])
+
   if (!active || !payload?.length) return null
   const rows = payload.filter(item => {
     const value = Number(item.value || 0)
@@ -109,7 +121,11 @@ function DashboardTooltip({ active, payload, label, coordinate, viewBox }) {
   const raw = rows[0]?.payload?.raw || {}
   if (!rows.length) return null
   return (
-    <div className="ats-dashboard-tooltip" style={floatingTooltipStyle(coordinate, viewBox)}>
+    <div
+      ref={tooltipRef}
+      className={`ats-dashboard-tooltip${floating ? ' is-floating' : ''}`}
+      style={floating ? floatingTooltipStyle(coordinate, viewBox, size) : undefined}
+    >
       {label ? <strong>{label}</strong> : null}
       {rows.map(item => (
         <span key={item.name || item.dataKey}>
@@ -198,7 +214,7 @@ function StatusTrendLines({ data, statuses }) {
         <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="m" interval="preserveStartEnd" minTickGap={18} />
         <YAxis allowDecimals={false} />
-        <Tooltip content={<DashboardTooltip />} wrapperStyle={{ zIndex: 9999 }} />
+        <Tooltip content={<DashboardTooltip floating />} position={{ x: 0, y: 0 }} wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }} />
         <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
         {statuses.map((status, index) => (
           <Line
