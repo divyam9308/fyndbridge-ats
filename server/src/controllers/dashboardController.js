@@ -52,10 +52,10 @@ function periodRange(period) {
   const year = now.getFullYear()
   const end = new Date(year, now.getMonth(), now.getDate(), 23, 59, 59, 999)
   if (period === 'This Month') return { start: new Date(year, now.getMonth(), 1), end }
-  if (period === 'Q1') return { start: new Date(year, 0, 1), end: new Date(year, 2, 31, 23, 59, 59, 999) }
-  if (period === 'Q2') return { start: new Date(year, 3, 1), end: new Date(year, 5, 30, 23, 59, 59, 999) }
-  if (period === 'Q3') return { start: new Date(year, 6, 1), end: new Date(year, 8, 30, 23, 59, 59, 999) }
-  if (period === 'Q4') return { start: new Date(year, 9, 1), end: new Date(year, 11, 31, 23, 59, 59, 999) }
+  if (period === 'Q1') return { start: new Date(year, 3, 1), end: new Date(year, 5, 30, 23, 59, 59, 999) }
+  if (period === 'Q2') return { start: new Date(year, 6, 1), end: new Date(year, 8, 30, 23, 59, 59, 999) }
+  if (period === 'Q3') return { start: new Date(year, 9, 1), end: new Date(year, 11, 31, 23, 59, 59, 999) }
+  if (period === 'Q4') return { start: new Date(year + 1, 0, 1), end: new Date(year + 1, 2, 31, 23, 59, 59, 999) }
   if (period === 'Till This Date') return { start: null, end }
   return { start: new Date(year, 0, 1), end }
 }

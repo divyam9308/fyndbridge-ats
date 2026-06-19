@@ -52,6 +52,37 @@ const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Rejected by Recruit
 const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
 
 const seriesColor = (index) => chartColors[index % chartColors.length]
+const TOOLTIP_WIDTH = 310
+const TOOLTIP_HEIGHT = 260
+const TOOLTIP_GAP = 22
+
+function floatingTooltipStyle(coordinate, viewBox) {
+  const x = Number(coordinate?.x) || 0
+  const y = Number(coordinate?.y) || 0
+  const width = Number(viewBox?.width) || 0
+  const height = Number(viewBox?.height) || 0
+  const padding = 10
+  let tooltipX = x + TOOLTIP_GAP + TOOLTIP_WIDTH <= width - padding
+    ? TOOLTIP_GAP
+    : -TOOLTIP_WIDTH - TOOLTIP_GAP
+  let tooltipY = y + TOOLTIP_GAP + TOOLTIP_HEIGHT <= height - padding
+    ? TOOLTIP_GAP
+    : -TOOLTIP_HEIGHT - TOOLTIP_GAP
+
+  if (width) {
+    if (x + tooltipX < padding) tooltipX = padding - x
+    if (x + tooltipX + TOOLTIP_WIDTH > width - padding) tooltipX = width - padding - TOOLTIP_WIDTH - x
+  }
+  if (height) {
+    if (y + tooltipY < padding) tooltipY = padding - y
+    if (y + tooltipY + TOOLTIP_HEIGHT > height - padding) tooltipY = height - padding - TOOLTIP_HEIGHT - y
+  }
+
+  return {
+    '--tooltip-x': `${Math.round(tooltipX)}px`,
+    '--tooltip-y': `${Math.round(tooltipY)}px`
+  }
+}
 
 function SectionTitle({ icon: Icon, title, subtitle, right }) {
   return (
@@ -68,12 +99,12 @@ function SectionTitle({ icon: Icon, title, subtitle, right }) {
   )
 }
 
-function DashboardTooltip({ active, payload, label }) {
+function DashboardTooltip({ active, payload, label, coordinate, viewBox }) {
   if (!active || !payload?.length) return null
   const rows = payload.filter(item => item.value !== undefined && item.value !== null)
   const raw = rows[0]?.payload?.raw || {}
   return (
-    <div className="ats-dashboard-tooltip">
+    <div className="ats-dashboard-tooltip" style={floatingTooltipStyle(coordinate, viewBox)}>
       {label ? <strong>{label}</strong> : null}
       {rows.map(item => (
         <span key={item.name || item.dataKey}>
