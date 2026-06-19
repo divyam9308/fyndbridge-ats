@@ -139,16 +139,43 @@ function DashboardTooltip({ active, payload, label, coordinate, viewBox, floatin
   )
 }
 
-function Sparkline({ color = 'rgba(255,255,255,0.95)' }) {
+function sparklineValues(trend, statuses) {
+  const values = (trend || []).map(row => statuses.reduce((sum, status) => sum + Number(row?.[status] || 0), 0))
+  return values.length ? values : []
+}
+
+function sparklinePath(values, { width = 280, height = 64, padding = 6 } = {}) {
+  const points = values.length > 1 ? values : [values[0] || 0, values[0] || 0]
+  const min = Math.min(...points)
+  const max = Math.max(...points)
+  const span = max - min
+  const innerHeight = height - padding * 2
+  const step = points.length > 1 ? width / (points.length - 1) : width
+  const coords = points.map((value, index) => ({
+    x: index * step,
+    y: span ? padding + ((max - value) / span) * innerHeight : height * 0.58
+  }))
+  const line = coords.reduce((path, point, index) => {
+    if (index === 0) return `M${point.x.toFixed(1)} ${point.y.toFixed(1)}`
+    const previous = coords[index - 1]
+    const control = (point.x - previous.x) / 2
+    return `${path} C${(previous.x + control).toFixed(1)} ${previous.y.toFixed(1)} ${(point.x - control).toFixed(1)} ${point.y.toFixed(1)} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`
+  }, '')
+  const area = `${line} L${width} ${height} L0 ${height} Z`
+  return { line, area }
+}
+
+function Sparkline({ values, color = 'rgba(255,255,255,0.95)' }) {
+  const { line, area } = sparklinePath(values || [])
   return (
     <svg className="ats-dashboard-sparkline" viewBox="0 0 280 64" preserveAspectRatio="none" aria-hidden="true">
-      <path className="ats-dashboard-sparkline-fill" d="M0 46 C28 34 52 38 78 32 C106 25 132 34 158 23 C190 10 210 28 238 18 C258 12 270 10 280 7 L280 64 L0 64 Z" />
-      <path d="M0 46 C28 34 52 38 78 32 C106 25 132 34 158 23 C190 10 210 28 238 18 C258 12 270 10 280 7" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
+      <path className="ats-dashboard-sparkline-fill" d={area} />
+      <path d={line} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
     </svg>
   )
 }
 
-function StatCard({ icon: Icon, label, value, accent }) {
+function StatCard({ icon: Icon, label, value, accent, sparkline }) {
   return (
     <article className={`ats-dashboard-kpi kpi-3d ${accent}`}>
       <div className="ats-dashboard-kpi-top">
@@ -157,7 +184,7 @@ function StatCard({ icon: Icon, label, value, accent }) {
       </div>
       <strong>{Number(value || 0).toLocaleString('en-IN')}</strong>
       <span>{label}</span>
-      <Sparkline />
+      <Sparkline values={sparkline} />
     </article>
   )
 }
@@ -246,11 +273,6 @@ export default function DashboardHome() {
   const names = Array.isArray(data?.consultantOptions) ? data.consultantOptions : []
   const consultantOptions = [OVERALL, ...names.filter(Boolean)]
 
-  const kpis = [
-    { label: 'Total Clients', value: data?.kpis?.totalClients, icon: Building2, accent: 'gradient-primary' },
-    { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info' },
-    { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning' }
-  ]
   const clientStatusData = data?.clientStatusData || []
   const candidateStatusData = data?.candidateStatusData || []
   const mandateStatusData = data?.mandateStatusData || []
@@ -263,6 +285,11 @@ export default function DashboardHome() {
   const recentActivity = data?.recentActivity || []
   const maxCandidatesAdded = Math.max(1, ...consultantPerformance.map(item => Number(item.candidatesAdded) || 0))
   const maxCandidatesHired = Math.max(1, ...consultantPerformance.map(item => Number(item.candidatesHired) || 0))
+  const kpis = [
+    { label: 'Total Clients', value: data?.kpis?.totalClients, icon: Building2, accent: 'gradient-primary', sparkline: sparklineValues(clientTrend, CLIENT_STATUSES) },
+    { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info', sparkline: sparklineValues(candidateTrend, CANDIDATE_STATUSES) },
+    { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning', sparkline: sparklineValues(mandateTrend, MANDATE_STATUSES) }
+  ]
   const mandateTotal = Math.max(1, mandateStatusData.reduce((sum, item) => sum + Number(item.value || 0), 0))
   const mandateRadialData = mandateStatusData.map((item, index) => ({
     ...item,
