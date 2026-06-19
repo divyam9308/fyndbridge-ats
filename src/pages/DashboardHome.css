@@ -506,11 +506,11 @@
   position: relative;
   z-index: 9999;
   display: grid;
-  gap: 7px;
-  width: 310px;
-  max-height: 260px;
+  gap: 6px;
+  width: 236px;
+  max-height: 180px;
   overflow-y: auto;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--modern-border);
   border-radius: 14px;
   background: rgba(255,255,255,0.96);
@@ -519,22 +519,23 @@
   backdrop-filter: blur(10px);
   opacity: 1;
   pointer-events: none;
-  transform: translate3d(var(--tooltip-x, 22px), var(--tooltip-y, 22px), 0);
+  transform: translate3d(var(--tooltip-x, 14px), var(--tooltip-y, 14px), 0);
   transition: transform 120ms ease-out, opacity 120ms ease-out;
   will-change: transform, opacity;
 }
 
 .ats-dashboard-tooltip strong {
-  font-size: 13px;
+  font-size: 12.5px;
+  line-height: 1.2;
 }
 
 .ats-dashboard-tooltip span {
   display: grid;
-  grid-template-columns: 9px minmax(90px, 1fr) auto auto;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   color: var(--gray-700);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
 }
 
@@ -551,7 +552,9 @@
 }
 
 .ats-dashboard-tooltip small {
+  grid-column: 2 / -1;
   color: var(--gray-500);
+  font-size: 10.5px;
 }
 
 .ats-dashboard-tooltip i {

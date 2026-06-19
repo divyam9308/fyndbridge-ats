@@ -52,9 +52,9 @@ const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Rejected by Recruit
 const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
 
 const seriesColor = (index) => chartColors[index % chartColors.length]
-const TOOLTIP_WIDTH = 310
-const TOOLTIP_HEIGHT = 260
-const TOOLTIP_GAP = 22
+const TOOLTIP_WIDTH = 236
+const TOOLTIP_HEIGHT = 180
+const TOOLTIP_GAP = 14
 
 function floatingTooltipStyle(coordinate, viewBox) {
   const x = Number(coordinate?.x) || 0
@@ -101,8 +101,13 @@ function SectionTitle({ icon: Icon, title, subtitle, right }) {
 
 function DashboardTooltip({ active, payload, label, coordinate, viewBox }) {
   if (!active || !payload?.length) return null
-  const rows = payload.filter(item => item.value !== undefined && item.value !== null)
+  const rows = payload.filter(item => {
+    const value = Number(item.value || 0)
+    const added = Number(item.payload?.raw?.[item.dataKey] || 0)
+    return value > 0 || added > 0
+  })
   const raw = rows[0]?.payload?.raw || {}
+  if (!rows.length) return null
   return (
     <div className="ats-dashboard-tooltip" style={floatingTooltipStyle(coordinate, viewBox)}>
       {label ? <strong>{label}</strong> : null}
@@ -110,8 +115,8 @@ function DashboardTooltip({ active, payload, label, coordinate, viewBox }) {
         <span key={item.name || item.dataKey}>
           <i style={{ background: item.color || item.fill }} />
           <b>{item.name || item.dataKey}</b>
-          <em>{Number(item.value || 0).toLocaleString('en-IN')} total</em>
-          {Object.prototype.hasOwnProperty.call(raw, item.dataKey) ? <small>{Number(raw[item.dataKey] || 0).toLocaleString('en-IN')} added</small> : null}
+          <em>{Number(item.value || 0).toLocaleString('en-IN')}</em>
+          {Number(raw[item.dataKey] || 0) > 0 ? <small>(+{Number(raw[item.dataKey] || 0).toLocaleString('en-IN')} added)</small> : null}
         </span>
       ))}
     </div>
