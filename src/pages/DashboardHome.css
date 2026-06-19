@@ -428,6 +428,22 @@
   animation: dashboard-line-draw 2s ease-out forwards;
 }
 
+.ats-dashboard-sparkline-skeleton {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 20px;
+  z-index: 1;
+  height: 66px;
+  overflow: hidden;
+  border-radius: 18px;
+  background:
+    linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent),
+    rgba(255,255,255,0.14);
+  background-size: 160px 100%, 100% 100%;
+  animation: dashboard-chart-shimmer 950ms ease-in-out infinite;
+}
+
 @keyframes dashboard-line-draw {
   to { stroke-dashoffset: 0; }
 }
@@ -697,105 +713,64 @@
   line-height: 1;
 }
 
-.ats-dashboard-consultants {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.ats-dashboard-consultant-row {
-  display: grid;
-  grid-template-columns: 32px 52px minmax(0, 1fr);
-  align-items: center;
-  gap: 14px;
-  padding: 14px;
-  border: 1px solid rgba(255,255,255,0.8);
-  border-radius: 18px;
-  background:
-    linear-gradient(135deg, rgba(255,255,255,0.88), rgba(245,244,255,0.78)),
-    radial-gradient(circle at 0% 0%, rgba(154,93,255,0.16), transparent 42%);
-  box-shadow: var(--modern-shadow-soft);
-}
-
-.ats-dashboard-rank {
-  color: var(--modern-chart-1);
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.ats-dashboard-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: var(--modern-gradient-primary);
-  color: var(--white);
-  font-size: 12px;
-  font-weight: 900;
-  box-shadow: var(--modern-shadow-pop);
-}
-
-.ats-dashboard-consultant-main {
-  min-width: 0;
-}
-
-.ats-dashboard-consultant-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.ats-dashboard-consultant-head strong {
-  color: var(--navy-darkest);
-  font-size: 13px;
-}
-
-.ats-dashboard-consultant-head span {
-  color: var(--gray-500);
-  font-size: 12px;
-}
-
-.ats-dashboard-bars {
-  display: grid;
-  grid-template-columns: minmax(120px, 1fr) 1.2fr;
-  gap: 6px 10px;
-  margin-top: 9px;
-  align-items: center;
-}
-
-.ats-dashboard-bars span {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--gray-500);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.ats-dashboard-bars b {
-  color: var(--navy-darkest);
-}
-
-.ats-dashboard-bars i {
+.ats-dashboard-billing-progress {
+  position: relative;
+  z-index: 1;
   display: block;
-  height: 7px;
   overflow: hidden;
+  height: 8px;
+  margin-top: 14px;
   border-radius: 999px;
-  background: var(--gray-100);
+  background: rgba(255,255,255,0.35);
 }
 
-.ats-dashboard-bars em {
+.ats-dashboard-billing-progress em {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--dash-blue), #344bb0);
+  background: rgba(255,255,255,0.82);
 }
 
-.ats-dashboard-bars em.is-green {
-  background: linear-gradient(90deg, #188a42, #32c76d);
+.ats-dashboard-total-row,
+.ats-dashboard-share-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--modern-border);
+  border-radius: 14px;
+  background: rgba(247,247,252,0.82);
+  color: var(--gray-700);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ats-dashboard-total-row {
+  margin-top: 12px;
+}
+
+.ats-dashboard-total-row strong,
+.ats-dashboard-share-row strong {
+  color: var(--navy-darkest);
+}
+
+.ats-dashboard-share-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ats-dashboard-share-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ats-dashboard-share-row i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
 }
 
 .modern-dashboard .recharts-line-curve {
@@ -1368,10 +1343,4 @@
     grid-template-columns: 1fr;
   }
 
-  .ats-dashboard-consultant-head,
-  .ats-dashboard-bars {
-    grid-template-columns: 1fr;
-    flex-direction: column;
-    align-items: flex-start;
-  }
 }

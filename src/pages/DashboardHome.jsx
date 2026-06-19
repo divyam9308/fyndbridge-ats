@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Activity,
-  Award,
   Briefcase,
   Building2,
   ChevronDown,
@@ -15,8 +14,6 @@ import {
   X
 } from 'lucide-react'
 import {
-  Bar,
-  BarChart,
   Cell,
   CartesianGrid,
   Legend,
@@ -163,17 +160,21 @@ function sparklinePath(values, { width = 280, height = 64, padding = 6 } = {}) {
   return { line, area }
 }
 
-function Sparkline({ values, color = 'rgba(255,255,255,0.95)' }) {
+function Sparkline({ values, color = 'rgba(255,255,255,0.95)', animationKey = 'sparkline' }) {
   const { line, area } = sparklinePath(values || [])
   return (
-    <svg className="ats-dashboard-sparkline" viewBox="0 0 280 64" preserveAspectRatio="none" aria-hidden="true">
+    <svg key={animationKey} className="ats-dashboard-sparkline" viewBox="0 0 280 64" preserveAspectRatio="none" aria-hidden="true">
       <path className="ats-dashboard-sparkline-fill" d={area} />
       <path d={line} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
     </svg>
   )
 }
 
-function StatCard({ icon: Icon, label, value, accent, sparkline }) {
+function SparklineSkeleton() {
+  return <div className="ats-dashboard-sparkline-skeleton" aria-hidden="true" />
+}
+
+function StatCard({ icon: Icon, label, value, accent, sparkline, isReady, animationKey }) {
   return (
     <article className={`ats-dashboard-kpi kpi-3d ${accent}`}>
       <div className="ats-dashboard-kpi-top">
@@ -182,7 +183,7 @@ function StatCard({ icon: Icon, label, value, accent, sparkline }) {
       </div>
       <strong>{Number(value || 0).toLocaleString('en-IN')}</strong>
       <span>{label}</span>
-      <Sparkline values={sparkline} />
+      {isReady ? <Sparkline values={sparkline} animationKey={animationKey} /> : <SparklineSkeleton />}
     </article>
   )
 }
@@ -222,8 +223,29 @@ function StatusList({ data }) {
   )
 }
 
+function StatusShareRows({ data, total }) {
+  const denominator = Number(total || 0)
+  return (
+    <div className="ats-dashboard-share-list">
+      {(data || []).map((item, index) => {
+        const percent = denominator > 0 ? Math.round((Number(item.value || 0) / denominator) * 100) : 0
+        return (
+          <div className="ats-dashboard-share-row" key={item.name}>
+            <span><i style={{ background: chartColors[index % chartColors.length] }} />{item.name} share</span>
+            <strong>{percent}%</strong>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function EmptyChart({ label }) {
   return <div className="ats-dashboard-empty-chart">{label}</div>
+}
+
+function ChartSkeleton() {
+  return <div className="ats-dashboard-chart-skeleton"><span>Loading chart</span></div>
 }
 
 function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
@@ -243,8 +265,9 @@ function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
           stroke="none"
           activeShape={false}
           isAnimationActive
-          animationBegin={modalMode ? 100 : 0}
-          animationDuration={modalMode ? 900 : 400}
+          animationBegin={modalMode ? 100 : 100}
+          animationDuration={modalMode ? 1000 : 1000}
+          animationEasing="ease-out"
         >
           {chartData.map((item, index) => <Cell key={item.name} fill={seriesColor(index)} stroke="transparent" />)}
         </Pie>
@@ -391,6 +414,7 @@ function DashboardCardModal({ card, context, onClose }) {
                 </div>
               ) : null}
               {card.breakdown?.length ? <StatusList data={card.breakdown} /> : null}
+              {card.shareRows ? <StatusShareRows data={card.breakdown || []} total={card.centerValue ?? card.value} /> : null}
             </div>
           ) : null}
         </div>
@@ -419,10 +443,10 @@ export default function DashboardHome() {
   const clientTrend = data?.clientTrend || []
   const candidateTrend = data?.candidateTrend || []
   const mandateTrend = data?.mandateTrend || []
-  const consultantPerformance = data?.consultantPerformance || []
   const recentActivity = data?.recentActivity || []
-  const maxCandidatesAdded = Math.max(1, ...consultantPerformance.map(item => Number(item.candidatesAdded) || 0))
-  const maxCandidatesHired = Math.max(1, ...consultantPerformance.map(item => Number(item.candidatesHired) || 0))
+  const dashboardDataReady = !loading && Boolean(data)
+  const billingTotal = billingEntityData.reduce((sum, item) => sum + Number(item.value || 0), 0)
+  const mandateTotal = Number(data?.kpis?.totalMandates || 0)
   const kpis = [
     { label: 'Total Clients', value: data?.kpis?.totalClients, icon: Building2, accent: 'gradient-primary', sparkline: sparklineValues(clientTrend, CLIENT_STATUSES), breakdown: clientStatusData },
     { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info', sparkline: sparklineValues(candidateTrend, CANDIDATE_STATUSES), breakdown: candidateStatusData },
@@ -518,7 +542,7 @@ export default function DashboardHome() {
               breakdown: item.breakdown
             })}
           >
-            <StatCard {...item} />
+            <StatCard {...item} isReady={dashboardDataReady} animationKey={`${item.label}-${consultant}-${period}-${item.sparkline.join(',')}`} />
           </ExpandableCard>
         ))}
       </div>
@@ -530,7 +554,7 @@ export default function DashboardHome() {
           {data?.sectionErrors?.clients ? <div className="ats-dashboard-section-error">{data.sectionErrors.clients}</div> : null}
           <div className="ats-dashboard-split">
             <div className="ats-dashboard-chart">
-              {clientStatusData.some(item => item.value) ? (
+              {!dashboardDataReady ? <ChartSkeleton /> : clientStatusData.some(item => item.value) ? (
                 <DonutChart data={clientStatusData} centerLabel="CLIENTS" centerValue={data?.kpis?.totalClients} />
               ) : <EmptyChart label="No client data for this period." />}
             </div>
@@ -539,7 +563,7 @@ export default function DashboardHome() {
         </section>
         </ExpandableCard>
 
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'billing-entity', title: 'Active Clients with Contract Signed', subtitle: 'Billing entity split', icon: FileSignature, breakdown: billingEntityData.map(item => ({ name: item.label, value: item.value })) })}>
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'billing-entity', title: 'Active Clients with Contract Signed', subtitle: 'Billing entity split', icon: FileSignature, value: billingTotal, breakdown: billingEntityData.map(item => ({ name: item.label, value: item.value })) })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={FileSignature} title="Active Clients with Contract Signed" subtitle="Billing entity split" />
           <div className="ats-dashboard-billing-grid">
@@ -547,9 +571,12 @@ export default function DashboardHome() {
               <div className={`ats-dashboard-billing-card kpi-3d ${index === 0 ? 'gradient-info' : 'gradient-pink'}`} key={item.label}>
                 <span>{item.label}</span>
                 <strong>{Number(item.value || 0).toLocaleString('en-IN')}</strong>
+                <small>{billingTotal ? Math.round((Number(item.value || 0) / billingTotal) * 100) : 0}% of signed</small>
+                <i className="ats-dashboard-billing-progress"><em style={{ width: `${billingTotal ? Math.round((Number(item.value || 0) / billingTotal) * 100) : 0}%` }} /></i>
               </div>
             ))}
           </div>
+          <div className="ats-dashboard-total-row"><span>Total contracts signed</span><strong>{billingTotal.toLocaleString('en-IN')}</strong></div>
         </section>
         </ExpandableCard>
 
@@ -572,7 +599,7 @@ export default function DashboardHome() {
           {data?.sectionErrors?.candidates ? <div className="ats-dashboard-section-error">{data.sectionErrors.candidates}</div> : null}
           <div className="ats-dashboard-split is-vertical">
             <div className="ats-dashboard-chart is-small">
-              {candidateStatusData.some(item => item.value) ? (
+              {!dashboardDataReady ? <ChartSkeleton /> : candidateStatusData.some(item => item.value) ? (
                 <DonutChart data={candidateStatusData} centerLabel="CANDIDATES" centerValue={data?.kpis?.totalCandidates} />
               ) : <EmptyChart label="No candidate data for this period." />}
             </div>
@@ -595,18 +622,19 @@ export default function DashboardHome() {
       </div>
 
       <div className="ats-dashboard-grid">
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'mandates-analytics', chart: 'donut', title: 'Mandates Analytics', subtitle: 'Mandates by Status', icon: Briefcase, value: data?.kpis?.totalMandates, centerLabel: 'Mandates', centerValue: data?.kpis?.totalMandates, breakdown: mandateStatusData })}>
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'mandates-analytics', chart: 'donut', title: 'Mandates Analytics', subtitle: 'Mandates by Status', icon: Briefcase, value: data?.kpis?.totalMandates, centerLabel: 'Mandates', centerValue: data?.kpis?.totalMandates, breakdown: mandateStatusData, shareRows: true })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Briefcase} title="Mandates Analytics" subtitle="Mandates by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalMandates || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.mandates ? <div className="ats-dashboard-section-error">{data.sectionErrors.mandates}</div> : null}
           <div className="ats-dashboard-split is-compact">
             <div className="ats-dashboard-chart is-small">
-              {mandateStatusData.some(item => item.value) ? (
+              {!dashboardDataReady ? <ChartSkeleton /> : mandateStatusData.some(item => item.value) ? (
                 <DonutChart data={mandateStatusData} centerLabel="MANDATES" centerValue={data?.kpis?.totalMandates} />
               ) : <EmptyChart label="No mandate data." />}
             </div>
             <StatusList data={mandateStatusData} />
           </div>
+          <StatusShareRows data={mandateStatusData} total={mandateTotal} />
         </section>
         </ExpandableCard>
 
@@ -621,62 +649,6 @@ export default function DashboardHome() {
         </section>
         </ExpandableCard>
 
-      </div>
-
-      <div className="ats-dashboard-grid">
-        <ExpandableCard className="is-wide" onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Consultant Performance', subtitle: 'Candidates Added, Candidates Hired, Mandates Managed, Active Clients', icon: Award, breakdown: consultantPerformance.map(item => ({ name: item.name, value: item.candidatesAdded })) })}>
-        <section className="ats-dashboard-card card-3d is-wide">
-          <SectionTitle icon={Award} title="Consultant Performance" subtitle="Candidates Added, Candidates Hired, Mandates Managed, Active Clients" />
-          <div className="ats-dashboard-consultants">
-            {consultantPerformance.map(item => (
-              <div className="ats-dashboard-consultant-row" key={item.name}>
-                <b className="ats-dashboard-rank">#{consultantPerformance.indexOf(item) + 1}</b>
-                <span className="ats-dashboard-avatar">{item.name.split(/\s+/).map(part => part[0]).slice(0, 2).join('')}</span>
-                <div className="ats-dashboard-consultant-main">
-                  <div className="ats-dashboard-consultant-head">
-                    <strong>{item.name}</strong>
-                    <span>{item.mandatesManaged} mandates - {item.activeClients ?? '-'} active clients</span>
-                  </div>
-                  <div className="ats-dashboard-bars">
-                    <span>Candidates Added <b>{item.candidatesAdded}</b></span>
-                    <i><em className="shimmer" style={{ width: `${(Number(item.candidatesAdded || 0) / maxCandidatesAdded) * 100}%` }} /></i>
-                    <span>Candidates Hired <b>{item.candidatesHired}</b></span>
-                    <i><em className="is-green shimmer" style={{ width: `${(Number(item.candidatesHired || 0) / maxCandidatesHired) * 100}%` }} /></i>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-        </ExpandableCard>
-
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Consultant Performance', subtitle: 'Comparison chart', icon: Activity, breakdown: consultantPerformance.map(item => ({ name: item.name, value: item.candidatesAdded })) })}>
-        <section className="ats-dashboard-card card-3d">
-          <SectionTitle icon={Activity} title="Consultant Performance" subtitle="Comparison chart" />
-          <div className="ats-dashboard-chart">
-            {consultantPerformance.length ? (
-              <ResponsiveContainer>
-                <BarChart data={consultantPerformance.map(item => ({
-                  name: item.name.split(' ')[0],
-                  'Candidates Added': item.candidatesAdded,
-                  'Candidates Hired': item.candidatesHired,
-                  'Mandates Managed': item.mandatesManaged,
-                  'Active Clients': item.activeClients
-                }))}>
-                  <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip content={<DashboardTooltip />} cursor={false} wrapperStyle={{ zIndex: 9999 }} />
-                  <Bar dataKey="Candidates Added" fill="var(--modern-chart-1)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
-                  <Bar dataKey="Candidates Hired" fill="var(--modern-chart-3)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
-                  <Bar dataKey="Mandates Managed" fill="var(--modern-chart-4)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
-                  <Bar dataKey="Active Clients" fill="var(--modern-chart-6)" radius={[10, 10, 0, 0]} barSize={14} className="ats-dashboard-bar-glow" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : <EmptyChart label="No consultant data." />}
-          </div>
-        </section>
-        </ExpandableCard>
       </div>
 
       <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Recent Activity', subtitle: 'Latest client, candidate, and mandate updates', icon: Clock, breakdown: recentActivity.map((item, index) => ({ name: item.text, value: index + 1 })) })}>
