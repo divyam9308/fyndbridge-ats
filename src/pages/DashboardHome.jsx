@@ -247,8 +247,8 @@ function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
           stroke="none"
           activeShape={false}
           isAnimationActive
-          animationBegin={0}
-          animationDuration={modalMode ? 700 : 400}
+          animationBegin={modalMode ? 100 : 0}
+          animationDuration={modalMode ? 900 : 400}
         >
           {chartData.map((item, index) => <Cell key={item.name} fill={seriesColor(index)} stroke="transparent" />)}
         </Pie>
@@ -257,6 +257,22 @@ function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
         <text x="50%" y="58%" textAnchor="middle" className="ats-dashboard-donut-value">{Number(centerValue || 0).toLocaleString('en-IN')}</text>
       </PieChart>
     </ResponsiveContainer>
+  )
+}
+
+function AnimatedChartDot({ cx, cy, stroke, index }) {
+  if (cx === undefined || cy === undefined) return null
+  return (
+    <circle
+      className="ats-dashboard-modal-dot"
+      cx={cx}
+      cy={cy}
+      r={3}
+      fill={stroke}
+      stroke="var(--white)"
+      strokeWidth={2}
+      style={{ animationDelay: `${180 + (Number(index) || 0) * 35}ms` }}
+    />
   )
 }
 
@@ -277,11 +293,12 @@ function StatusTrendLines({ data, statuses, modalMode = false }) {
             name={status}
             stroke={seriesColor(index)}
             strokeWidth={3}
-            dot={modalMode ? { r: 3, stroke: 'var(--white)', strokeWidth: 2 } : false}
+            dot={modalMode ? <AnimatedChartDot /> : false}
             activeDot={{ r: 4, stroke: 'var(--white)', strokeWidth: 2 }}
             filter={`drop-shadow(0 5px 8px ${seriesColor(index)})`}
             isAnimationActive
-            animationDuration={modalMode ? 850 : 2000}
+            animationBegin={modalMode ? 100 : 0}
+            animationDuration={modalMode ? 1400 : 2000}
             animationEasing="ease-out"
           />
         ))}
@@ -300,7 +317,7 @@ function DashboardCardModal({ card, context, onClose }) {
     let frame = 0
     const timer = window.setTimeout(() => {
       frame = window.requestAnimationFrame(() => setReadyKey(card.openKey))
-    }, 180)
+    }, 360)
     return () => {
       window.clearTimeout(timer)
       if (frame) window.cancelAnimationFrame(frame)

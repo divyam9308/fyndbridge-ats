@@ -1036,8 +1036,9 @@
   left: 50%;
   width: min(1080px, calc(100vw - 48px));
   max-height: min(740px, calc(100vh - 48px));
-  overflow: auto;
-  padding: 22px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   border: 1px solid rgba(226, 232, 240, 0.92);
   border-radius: 26px;
   background:
@@ -1053,11 +1054,12 @@
 }
 
 .ats-dashboard-modal-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  padding: 22px 22px 18px;
 }
 
 .ats-dashboard-modal-head h3 {
@@ -1090,8 +1092,31 @@
 .ats-dashboard-modal-body {
   display: grid;
   gap: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(min(740px, calc(100vh - 48px)) - 82px);
+  padding: 0 14px 22px 22px;
+  scrollbar-gutter: stable;
   opacity: 0;
   animation: dashboard-modal-content-in 420ms ease-out 160ms forwards;
+}
+
+.ats-dashboard-modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ats-dashboard-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ats-dashboard-modal-body::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(255,255,255,0.92);
+  border-radius: 999px;
+  background: rgba(var(--brand-blue-rgb), 0.22);
+}
+
+.ats-dashboard-modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--brand-blue-rgb), 0.34);
 }
 
 .ats-dashboard-modal-summary {
@@ -1147,12 +1172,13 @@
 .ats-dashboard-modal-chart {
   position: relative;
   width: 100%;
-  height: min(460px, calc(100vh - 220px));
-  min-height: 360px;
+  height: 420px;
+  min-height: 420px;
 }
 
 .ats-dashboard-modal-chart.is-donut {
   height: 420px;
+  min-height: 420px;
 }
 
 .ats-dashboard-chart-skeleton {
@@ -1182,6 +1208,19 @@
   filter: drop-shadow(0 8px 10px rgba(98, 83, 229, 0.22));
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.ats-dashboard-modal-chart .recharts-cartesian-grid,
+.ats-dashboard-modal-chart .recharts-cartesian-axis,
+.ats-dashboard-modal-chart .recharts-legend-wrapper {
+  animation: dashboard-chart-fade-in 420ms ease-out both;
+}
+
+.ats-dashboard-modal-dot {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dashboard-dot-in 360ms ease-out forwards;
 }
 
 .ats-dashboard-modal-layer .recharts-legend-wrapper {
@@ -1269,6 +1308,28 @@
   to { background-position: calc(100% + 220px) 0, 0 0; }
 }
 
+@keyframes dashboard-chart-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dashboard-dot-in {
+  from {
+    opacity: 0;
+    transform: scale(.72);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @keyframes dashboard-modal-reduced {
   from {
     opacity: 0;
@@ -1289,6 +1350,13 @@
 
   .ats-dashboard-modal-card {
     animation-name: dashboard-modal-reduced;
+  }
+
+  .ats-dashboard-modal-dot,
+  .ats-dashboard-modal-chart .recharts-cartesian-grid,
+  .ats-dashboard-modal-chart .recharts-cartesian-axis,
+  .ats-dashboard-modal-chart .recharts-legend-wrapper {
+    animation-duration: 120ms;
   }
 }
 
