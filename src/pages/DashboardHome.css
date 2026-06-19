@@ -982,6 +982,14 @@
 }
 
 .ats-dashboard-modal-layer {
+  --modern-chart-1: oklch(0.65 0.22 285);
+  --modern-chart-2: oklch(0.72 0.18 195);
+  --modern-chart-3: oklch(0.75 0.19 145);
+  --modern-chart-4: oklch(0.78 0.18 60);
+  --modern-chart-5: oklch(0.68 0.22 25);
+  --modern-chart-6: oklch(0.7 0.2 340);
+  --modern-chart-7: oklch(0.68 0.18 250);
+  --modern-chart-8: oklch(0.78 0.16 100);
   --modern-card: oklch(1 0 0);
   --modern-border: oklch(0.92 0.01 270);
   --modern-gradient-primary: linear-gradient(135deg, oklch(0.62 0.24 285), oklch(0.72 0.2 320));
@@ -1137,8 +1145,81 @@
 }
 
 .ats-dashboard-modal-chart {
-  height: min(520px, calc(100vh - 220px));
+  position: relative;
+  width: 100%;
+  height: min(460px, calc(100vh - 220px));
   min-height: 360px;
+}
+
+.ats-dashboard-modal-chart.is-donut {
+  height: 420px;
+}
+
+.ats-dashboard-chart-skeleton {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--modern-border);
+  border-radius: 20px;
+  background:
+    linear-gradient(90deg, transparent, rgba(255,255,255,0.7), transparent),
+    linear-gradient(180deg, rgba(248,250,255,0.92), rgba(241,245,255,0.82));
+  background-size: 220px 100%, 100% 100%;
+  animation: dashboard-chart-shimmer 720ms ease-in-out infinite;
+}
+
+.ats-dashboard-chart-skeleton span {
+  color: var(--gray-500);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ats-dashboard-modal-layer .recharts-line-curve {
+  filter: drop-shadow(0 8px 10px rgba(98, 83, 229, 0.22));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ats-dashboard-modal-layer .recharts-legend-wrapper {
+  z-index: 5;
+}
+
+.ats-dashboard-modal-layer .recharts-default-legend {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 10px;
+}
+
+.ats-dashboard-modal-layer .recharts-tooltip-wrapper {
+  z-index: 9999 !important;
+  pointer-events: none;
+}
+
+.ats-dashboard-modal-layer .recharts-tooltip-cursor {
+  display: none;
+}
+
+.ats-dashboard-modal-layer .recharts-sector {
+  outline: none;
+}
+
+.ats-dashboard-modal-layer .recharts-sector:focus,
+.ats-dashboard-modal-layer .recharts-surface:focus {
+  outline: none;
+}
+
+.ats-dashboard-modal-layer .recharts-pie-sector path {
+  outline: none;
+  transition: opacity .2s ease, filter .2s ease;
+}
+
+.ats-dashboard-modal-layer .recharts-pie-sector path:hover {
+  filter: brightness(1.05);
 }
 
 .ats-dashboard-modal-breakdown {
@@ -1181,6 +1262,11 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes dashboard-chart-shimmer {
+  from { background-position: -220px 0, 0 0; }
+  to { background-position: calc(100% + 220px) 0, 0 0; }
 }
 
 @keyframes dashboard-modal-reduced {
