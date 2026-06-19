@@ -982,26 +982,50 @@
 }
 
 .ats-dashboard-modal-layer {
+  --modern-card: oklch(1 0 0);
+  --modern-border: oklch(0.92 0.01 270);
+  --modern-gradient-primary: linear-gradient(135deg, oklch(0.62 0.24 285), oklch(0.72 0.2 320));
+  --modern-gradient-success: linear-gradient(135deg, oklch(0.68 0.2 155), oklch(0.78 0.18 180));
+  --modern-gradient-warning: linear-gradient(135deg, oklch(0.78 0.2 60), oklch(0.74 0.22 30));
+  --modern-gradient-info: linear-gradient(135deg, oklch(0.66 0.2 230), oklch(0.72 0.2 260));
+  --modern-gradient-pink: linear-gradient(135deg, oklch(0.72 0.22 340), oklch(0.7 0.22 10));
+  --modern-gradient-teal: linear-gradient(135deg, oklch(0.7 0.18 195), oklch(0.74 0.18 165));
+  --modern-shadow-soft: 0 1px 2px oklch(0.3 0.05 270 / 0.04), 0 8px 24px -8px oklch(0.3 0.1 280 / 0.12);
+  --modern-shadow-card: 0 1px 3px oklch(0.3 0.05 270 / 0.06), 0 12px 32px -12px oklch(0.3 0.1 280 / 0.18);
+  --modern-shadow-pop: 0 20px 60px -20px oklch(0.4 0.2 290 / 0.4);
   position: fixed;
   inset: 0;
-  z-index: 10000;
-  display: grid;
-  place-items: center;
+  z-index: 9000;
   padding: 24px;
+  pointer-events: none;
 }
 
 .ats-dashboard-modal-backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 9000;
   border: 0;
   background: rgba(0, 11, 61, 0.46);
   backdrop-filter: blur(10px);
+  pointer-events: auto;
   animation: dashboard-backdrop-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.ats-dashboard-modal-layer .gradient-primary { background-image: var(--modern-gradient-primary); }
+.ats-dashboard-modal-layer .gradient-success { background-image: var(--modern-gradient-success); }
+.ats-dashboard-modal-layer .gradient-warning { background-image: var(--modern-gradient-warning); }
+.ats-dashboard-modal-layer .gradient-info { background-image: var(--modern-gradient-info); }
+.ats-dashboard-modal-layer .gradient-pink { background-image: var(--modern-gradient-pink); }
+.ats-dashboard-modal-layer .gradient-teal { background-image: var(--modern-gradient-teal); }
+.ats-dashboard-modal-layer .shadow-soft { box-shadow: var(--modern-shadow-soft); }
+.ats-dashboard-modal-layer .shadow-card { box-shadow: var(--modern-shadow-card); }
+.ats-dashboard-modal-layer .shadow-pop { box-shadow: var(--modern-shadow-pop); }
+
 .ats-dashboard-modal-card {
-  position: relative;
-  z-index: 1;
+  position: fixed;
+  z-index: 9010;
+  top: 50%;
+  left: 50%;
   width: min(1080px, calc(100vw - 48px));
   max-height: min(740px, calc(100vh - 48px));
   overflow: auto;
@@ -1013,6 +1037,9 @@
     linear-gradient(180deg, rgba(255,255,255,0.98), rgba(249,250,255,0.96));
   box-shadow: 0 30px 90px -30px rgba(0, 18, 100, 0.48), 0 1px 0 rgba(255,255,255,0.9) inset;
   transform-origin: center;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
   will-change: transform, opacity;
   animation: dashboard-premium-zoom 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -1133,15 +1160,15 @@
 @keyframes dashboard-premium-zoom {
   0% {
     opacity: 0.35;
-    transform: translate3d(var(--origin-x), var(--origin-y), 0) scale(var(--origin-scale-x), var(--origin-scale-y)) rotate(5deg);
+    transform: translate(calc(-50% + var(--origin-x, 0px)), calc(-50% + var(--origin-y, 0px))) scale(var(--origin-scale-x, .92), var(--origin-scale-y, .92)) rotate(5deg);
   }
   68% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1.018) rotate(-0.6deg);
+    transform: translate(-50%, -50%) scale(1.018) rotate(-0.6deg);
   }
   100% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
   }
 }
 
@@ -1159,11 +1186,11 @@
 @keyframes dashboard-modal-reduced {
   from {
     opacity: 0;
-    transform: scale(.98);
+    transform: translate(-50%, -50%) scale(.98);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 

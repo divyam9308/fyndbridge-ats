@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Activity,
   Award,
@@ -299,7 +300,7 @@ function DashboardCardModal({ card, context, onClose }) {
   }
   const Icon = card.icon || Activity
 
-  return (
+  const modal = (
     <div className="ats-dashboard-modal-layer" role="dialog" aria-modal="true" aria-label={card.title}>
       <div className="ats-dashboard-modal-backdrop" aria-hidden="true" />
       <section className="ats-dashboard-modal-card" style={modalStyle} onClick={(event) => event.stopPropagation()}>
@@ -347,6 +348,8 @@ function DashboardCardModal({ card, context, onClose }) {
       </section>
     </div>
   )
+
+  return typeof document === 'undefined' ? modal : createPortal(modal, document.body)
 }
 
 export default function DashboardHome() {
@@ -398,7 +401,7 @@ export default function DashboardHome() {
   }, [selectedCard])
 
   const openCard = (event, card) => {
-    const rect = event.currentTarget.getBoundingClientRect()
+    const rect = event?.currentTarget?.getBoundingClientRect?.()
     setSelectedCard({ ...card, rect })
   }
 
