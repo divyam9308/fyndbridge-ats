@@ -14,11 +14,11 @@ export async function fetchAdminUsers() {
   return json(await apiFetch('/api/admin/users', { cache: 'no-store' }))
 }
 
-export async function addAdminUser(email) {
+export async function addAdminUser(email, isSuperAdmin = false) {
   return json(await apiFetch('/api/admin/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email })
+    body: JSON.stringify({ email, isSuperAdmin })
   }))
 }
 

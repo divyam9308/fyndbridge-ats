@@ -4,8 +4,11 @@ create table if not exists admin_users (
   user_id uuid null,
   name text null,
   added_by uuid null,
+  is_super_admin boolean default false,
   created_at timestamptz default now()
 );
+
+alter table admin_users add column if not exists is_super_admin boolean default false;
 
 create table if not exists column_permissions (
   id uuid primary key default gen_random_uuid(),
@@ -29,11 +32,12 @@ alter table jobs add column if not exists is_locked boolean default false;
 alter table jobs add column if not exists locked_by uuid null;
 alter table jobs add column if not exists locked_at timestamptz null;
 
-insert into admin_users (email, name)
-values
-  ('divyam@fyndbridge.in', 'Divyam'),
-  ('rajneesh@fyndbridge.in', 'Rajneesh')
-on conflict (email) do nothing;
+insert into admin_users (email, name, is_super_admin)
+values ('divyam@fyndbridge.in', 'Divyam', true)
+on conflict (email) do update set is_super_admin = true;
+
+delete from admin_users
+where email = 'rajneesh@fyndbridge.in';
 
 do $$
 begin
@@ -65,6 +69,7 @@ grant select on public.client_follow_ups to authenticated;
 grant select on public.candidates to authenticated;
 grant select on public.candidate_associations to authenticated;
 grant select on public.jobs to authenticated;
+grant select on public.admin_users to authenticated;
 grant select on public.column_permissions to authenticated;
 
 do $$
@@ -83,6 +88,9 @@ begin
   end if;
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'jobs' and policyname = 'jobs_realtime_select_authenticated') then
     create policy jobs_realtime_select_authenticated on public.jobs for select to authenticated using (true);
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'admin_users' and policyname = 'admin_users_realtime_select_authenticated') then
+    create policy admin_users_realtime_select_authenticated on public.admin_users for select to authenticated using (true);
   end if;
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'column_permissions' and policyname = 'column_permissions_realtime_select_authenticated') then
     create policy column_permissions_realtime_select_authenticated on public.column_permissions for select to authenticated using (true);

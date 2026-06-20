@@ -2,6 +2,7 @@ const supabase = require('../services/supabaseAdmin')
 const {
   normalizeEmail,
   isAdmin,
+  isSuperAdmin,
   listAdminUsers,
   serializeColumnDefs,
   getAllColumnPermissions
@@ -17,7 +18,7 @@ function validEmail(email) {
 
 async function me(req, res) {
   try {
-    return res.json({ isAdmin: await isAdmin(req.user), user: req.user })
+    return res.json({ isAdmin: await isAdmin(req.user), isSuperAdmin: await isSuperAdmin(req.user), user: req.user })
   } catch (err) {
     return sendError(res, err)
   }
@@ -36,9 +37,10 @@ async function addUser(req, res) {
     const email = normalizeEmail(req.body.email)
     if (!validEmail(email)) return res.status(400).json({ error: 'Valid email is required' })
     const name = email.split('@')[0]
+    const superAdmin = Boolean(req.body.isSuperAdmin) && (await isSuperAdmin(req.user))
     const { data, error } = await supabase
       .from('admin_users')
-      .insert({ email, name, added_by: req.user.id })
+      .insert({ email, name, added_by: req.user.id, is_super_admin: superAdmin })
       .select('*')
       .single()
     if (error?.code === '23505') return res.status(409).json({ error: 'Admin already exists' })
@@ -54,6 +56,11 @@ async function removeUser(req, res) {
     const email = normalizeEmail(req.params.email)
     const admins = await listAdminUsers()
     if (admins.length <= 1) return res.status(400).json({ error: 'Cannot remove the last admin' })
+    const target = admins.find(admin => normalizeEmail(admin.email) === email)
+    if (!target) return res.status(404).json({ error: 'Admin not found' })
+    const requesterSuperAdmin = await isSuperAdmin(req.user)
+    if (target.is_super_admin && !requesterSuperAdmin) return res.status(403).json({ error: 'Only super admins can remove a super admin' })
+    if (target.is_super_admin && admins.filter(admin => admin.is_super_admin).length <= 1) return res.status(400).json({ error: 'Cannot remove the last super admin' })
     const { error } = await supabase.from('admin_users').delete().eq('email', email)
     if (error) throw error
     return res.json({ ok: true })

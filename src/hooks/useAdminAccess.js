@@ -4,7 +4,8 @@ import { supabase } from '../services/supabaseClient'
 import { useRealtimeRefresh } from './useRealtimeRefresh'
 
 const EMPTY = { clients: {}, candidates: {}, jobs: {} }
-const SEEDED_ADMIN_EMAILS = new Set(['divyam@fyndbridge.in', 'rajneesh@fyndbridge.in'])
+const SEEDED_ADMIN_EMAILS = new Set(['divyam@fyndbridge.in'])
+const SEEDED_SUPER_ADMIN_EMAILS = new Set(['divyam@fyndbridge.in'])
 
 async function currentEmailFallback() {
   try {
@@ -20,6 +21,7 @@ async function currentEmailFallback() {
 
 export function useAdminAccess({ loadPermissions = true } = {}) {
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [columns, setColumns] = useState({})
   const [permissions, setPermissions] = useState(EMPTY)
@@ -27,7 +29,9 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
   const refresh = useCallback(async () => {
     try {
       const me = await fetchAdminMe()
-      const nextIsAdmin = Boolean(me.isAdmin) || SEEDED_ADMIN_EMAILS.has(await currentEmailFallback())
+      const fallbackEmail = await currentEmailFallback()
+      const nextIsAdmin = Boolean(me.isAdmin) || SEEDED_ADMIN_EMAILS.has(fallbackEmail)
+      setIsSuperAdmin(Boolean(me.isSuperAdmin) || SEEDED_SUPER_ADMIN_EMAILS.has(fallbackEmail))
       setIsAdmin(nextIsAdmin)
       if (!loadPermissions) return
       try {
@@ -39,7 +43,9 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
         setPermissions(EMPTY)
       }
     } catch {
-      setIsAdmin(SEEDED_ADMIN_EMAILS.has(await currentEmailFallback()))
+      const fallbackEmail = await currentEmailFallback()
+      setIsAdmin(SEEDED_ADMIN_EMAILS.has(fallbackEmail))
+      setIsSuperAdmin(SEEDED_SUPER_ADMIN_EMAILS.has(fallbackEmail))
     } finally {
       setLoading(false)
     }
@@ -59,7 +65,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
     onChange: refresh
   })
 
-  return useMemo(() => ({ isAdmin, loading, columns, permissions, refresh, setPermissions }), [columns, isAdmin, loading, permissions, refresh])
+  return useMemo(() => ({ isAdmin, isSuperAdmin, loading, columns, permissions, refresh, setPermissions }), [columns, isAdmin, isSuperAdmin, loading, permissions, refresh])
 }
 
 export function isColumnHidden(permissions, tableName, columnKey, isAdmin) {

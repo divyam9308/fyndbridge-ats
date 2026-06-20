@@ -40,6 +40,10 @@ function adminName(admin) {
   return admin.name || admin.email?.split('@')[0] || 'Admin'
 }
 
+function adminIsSuper(admin) {
+  return Boolean(admin?.is_super_admin || admin?.isSuperAdmin)
+}
+
 function formatDate(value) {
   if (!value) return '-'
   const date = new Date(value)
@@ -136,10 +140,11 @@ function LockedRecordsTable({ records, onUnlock, emptyText = 'No records are cur
 }
 
 export default function AdminPage() {
-  const { isAdmin, loading, columns, permissions, refresh, setPermissions } = useAdminAccess()
+  const { isAdmin, isSuperAdmin, loading, columns, permissions, refresh, setPermissions } = useAdminAccess()
   const [activeTab, setActiveTab] = useState('clients')
   const [admins, setAdmins] = useState([])
   const [email, setEmail] = useState('')
+  const [newAdminSuper, setNewAdminSuper] = useState(false)
   const [lockedRecords, setLockedRecords] = useState([])
   const [error, setError] = useState('')
   const [columnSearch, setColumnSearch] = useState('')
@@ -209,7 +214,7 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="admin-section-body">
-            <div className="admin-error">Sign in with divyam@fyndbridge.in or rajneesh@fyndbridge.in, then refresh this page.</div>
+            <div className="admin-error">Sign in with divyam@fyndbridge.in, then refresh this page.</div>
           </div>
         </section>
       </div>
@@ -253,8 +258,9 @@ export default function AdminPage() {
     setError('')
     setSavingAdmin(true)
     try {
-      await addAdminUser(email)
+      await addAdminUser(email, newAdminSuper)
       setEmail('')
+      setNewAdminSuper(false)
       await loadAdminData()
       await refresh()
     } catch (err) {
@@ -292,11 +298,17 @@ export default function AdminPage() {
         icon={ShieldCheck}
         action={<span className="admin-count-pill">{admins.length} active</span>}
       >
-        <form className="admin-invite-card" onSubmit={submitAdmin}>
+        <form className={`admin-invite-card${isSuperAdmin ? ' has-super-check' : ''}`} onSubmit={submitAdmin}>
           <div className="admin-email-field">
             <Mail size={17} />
             <input value={email} onChange={event => setEmail(event.target.value)} placeholder="Enter admin email address" />
           </div>
+          {isSuperAdmin && (
+            <label className="admin-super-check">
+              <input type="checkbox" checked={newAdminSuper} onChange={event => setNewAdminSuper(event.target.checked)} />
+              <span><ShieldCheck size={15} />Make Super Admin</span>
+            </label>
+          )}
           <button className="admin-add-btn" type="submit" disabled={savingAdmin}>
             <UserPlus size={16} />
             {savingAdmin ? 'Adding...' : 'Add Admin'}
@@ -305,23 +317,26 @@ export default function AdminPage() {
         </form>
 
         <div className="admin-user-grid">
-          {admins.map((admin, index) => (
-            <div className="admin-user-card" key={admin.email}>
+          {admins.map((admin) => {
+            const superAdmin = adminIsSuper(admin)
+            const canRevoke = isSuperAdmin || !superAdmin
+            return (
+            <div className={`admin-user-card${superAdmin ? ' is-super' : ''}`} key={admin.email}>
               <div className="admin-avatar">{initials(adminName(admin))}</div>
               <div className="admin-user-main">
                 <div className="admin-user-title">
                   <strong>{adminName(admin)}</strong>
-                  <span><ShieldCheck size={12} />{index === 0 ? 'Super Admin' : 'Admin'}</span>
+                  <span><ShieldCheck size={12} />{superAdmin ? 'Super Admin' : 'Admin'}</span>
                 </div>
                 <p>{admin.email}</p>
                 <small>Added {formatDate(admin.created_at)}</small>
               </div>
               <div className="admin-user-footer">
                 <span><i />Active session</span>
-                <button type="button" onClick={() => revokeAdmin(admin.email)}><Trash2 size={14} />Revoke</button>
+                <button type="button" onClick={() => revokeAdmin(admin.email)} disabled={!canRevoke} title={canRevoke ? 'Revoke' : 'Only a super admin can revoke a super admin'}><Trash2 size={14} />Revoke</button>
               </div>
             </div>
-          ))}
+          )})}
         </div>
       </Section>
 
