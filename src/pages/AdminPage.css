@@ -763,20 +763,21 @@
 .admin-unsaved-dock {
   position: fixed;
   left: 50%;
-  bottom: 28px;
-  z-index: 60;
+  bottom: 24px;
+  z-index: 900;
   display: flex;
   justify-content: center;
-  width: min(860px, calc(100vw - 32px));
+  width: min(880px, calc(100vw - 32px));
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, calc(100% + 32px)) scale(0.96);
-  transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 220ms ease;
+  transform: translate3d(-50%, calc(100% + 48px), 0) scale(0.96);
+  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
 }
 
 .admin-unsaved-dock.is-visible {
   opacity: 1;
-  transform: translate(-50%, 0) scale(1);
+  pointer-events: auto;
+  transform: translate3d(-50%, 0, 0) scale(1);
 }
 
 .admin-unsaved-dock-inner {
@@ -790,7 +791,6 @@
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 22px 52px rgba(0, 18, 100, 0.22);
   padding: 14px 16px;
-  pointer-events: auto;
 }
 
 .admin-unsaved-dock-inner > span {
@@ -833,7 +833,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .admin-unsaved-dock {
-    transform: translate(-50%, 0) scale(1);
+    transform: translate3d(-50%, 0, 0) scale(1);
     transition: opacity 160ms ease;
   }
 }

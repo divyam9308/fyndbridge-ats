@@ -356,7 +356,7 @@ export default function AdminPage() {
             <UserPlus size={16} />
             {savingAdmin ? 'Adding...' : 'Add Admin'}
           </button>
-          <p>{isSuperAdmin ? 'New users are added as Admin by default.' : 'Super Admin required to add or change admin users.'}</p>
+          <p>{isSuperAdmin ? 'Users added here receive Admin access.' : 'Super Admin required to add or change admin users.'}</p>
         </form>
 
         <div className="admin-advanced-card">
@@ -485,7 +485,8 @@ export default function AdminPage() {
         </div>
       </Section>
 
-      <div className={`admin-unsaved-dock${dirty && !lockModalType ? ' is-visible' : ''}${savingPermissions ? ' is-saving' : ''}`} aria-hidden={!dirty || Boolean(lockModalType)}>
+      {createPortal((
+        <div className={`admin-unsaved-dock${dirty && !lockModalType ? ' is-visible' : ''}${savingPermissions ? ' is-saving' : ''}`} aria-hidden={!dirty || Boolean(lockModalType)}>
           <div className="admin-unsaved-dock-inner">
             <span><AlertTriangle size={18} /></span>
             <div>
@@ -496,6 +497,7 @@ export default function AdminPage() {
             <button className="admin-footer-save" type="button" onClick={savePermissionChanges} disabled={savingPermissions || !dirty}><Save size={16} />{savingPermissions ? 'Saving...' : 'Save Changes'}</button>
           </div>
         </div>
+      ), document.body)}
 
       {lockModalType && createPortal((
         <div className="modal-overlay">
