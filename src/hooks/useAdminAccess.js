@@ -4,7 +4,7 @@ import { supabase } from '../services/supabaseClient'
 import { useRealtimeRefresh } from './useRealtimeRefresh'
 
 const EMPTY = { clients: {}, candidates: {}, jobs: {} }
-const SEEDED_ADMIN_EMAIL = 'divyam@fyndbridge.in'
+const SEEDED_ADMIN_EMAILS = new Set(['divyam@fyndbridge.in', 'rajneesh@fyndbridge.in'])
 
 async function currentEmailFallback() {
   try {
@@ -27,7 +27,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
   const refresh = useCallback(async () => {
     try {
       const me = await fetchAdminMe()
-      const nextIsAdmin = Boolean(me.isAdmin) || await currentEmailFallback() === SEEDED_ADMIN_EMAIL
+      const nextIsAdmin = Boolean(me.isAdmin) || SEEDED_ADMIN_EMAILS.has(await currentEmailFallback())
       setIsAdmin(nextIsAdmin)
       if (!loadPermissions) return
       try {
@@ -39,7 +39,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
         setPermissions(EMPTY)
       }
     } catch {
-      setIsAdmin(await currentEmailFallback() === SEEDED_ADMIN_EMAIL)
+      setIsAdmin(SEEDED_ADMIN_EMAILS.has(await currentEmailFallback()))
     } finally {
       setLoading(false)
     }

@@ -30,7 +30,9 @@ alter table jobs add column if not exists locked_by uuid null;
 alter table jobs add column if not exists locked_at timestamptz null;
 
 insert into admin_users (email, name)
-values ('divyam@fyndbridge.in', 'Divyam')
+values
+  ('divyam@fyndbridge.in', 'Divyam'),
+  ('rajneesh@fyndbridge.in', 'Rajneesh')
 on conflict (email) do nothing;
 
 do $$

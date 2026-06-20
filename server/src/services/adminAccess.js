@@ -1,6 +1,6 @@
 const supabase = require('./supabaseAdmin')
 
-const ADMIN_EMAIL = 'divyam@fyndbridge.in'
+const ADMIN_EMAILS = new Set(['divyam@fyndbridge.in', 'rajneesh@fyndbridge.in'])
 const ACCESS = {
   EVERYONE: 'everyone',
   DISABLED: 'admin_disabled',
@@ -100,7 +100,7 @@ function serializeColumnDefs() {
 async function isAdmin(user) {
   const email = normalizeEmail(user?.email)
   if (!email) return false
-  if (email === ADMIN_EMAIL) return true
+  if (ADMIN_EMAILS.has(email)) return true
   const { data, error } = await supabase.from('admin_users').select('id').eq('email', email).limit(1).maybeSingle()
   if (error && error.code !== '42P01') throw error
   return Boolean(data)

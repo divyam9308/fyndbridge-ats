@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Navigate } from 'react-router-dom'
 import { AlertTriangle, Briefcase, Building2, Eye, EyeOff, Lock, Mail, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
@@ -196,7 +195,26 @@ export default function AdminPage() {
   const limitedLocks = Object.keys(TYPE_META).flatMap(type => sortedLocks.filter(record => record.type === type).slice(0, 2))
 
   if (loading && !Object.keys(permissions || {}).length) return null
-  if (!isAdmin) return <Navigate to="/dashboard" replace />
+  if (!isAdmin) {
+    return (
+      <div className="admin-page">
+        <section className="admin-section">
+          <div className="admin-section-header">
+            <div className="admin-section-title-wrap">
+              <div className="admin-section-icon"><ShieldCheck size={21} /></div>
+              <div>
+                <h2>Admin Access Control</h2>
+                <p>Admin access could not be confirmed for this session.</p>
+              </div>
+            </div>
+          </div>
+          <div className="admin-section-body">
+            <div className="admin-error">Sign in with divyam@fyndbridge.in or rajneesh@fyndbridge.in, then refresh this page.</div>
+          </div>
+        </section>
+      </div>
+    )
+  }
 
   const setDraftPermission = (tableName, columnKey, accessMode) => {
     setDraftPermissions(current => ({
