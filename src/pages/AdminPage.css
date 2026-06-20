@@ -254,31 +254,18 @@
   background: #fff;
   padding: 22px;
   box-shadow: 0 6px 18px rgba(0, 18, 100, 0.06);
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
 
-.admin-user-card:hover,
-.admin-lock-summary:hover {
+.admin-user-card:hover {
+  border-color: rgba(0, 18, 100, 0.28);
   transform: translateY(-2px);
   box-shadow: 0 18px 36px rgba(0, 18, 100, 0.12);
 }
 
-.admin-user-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 4px;
-  background: linear-gradient(90deg, #e4bd1b, #cfa40e);
-  opacity: 0;
-  transition: opacity 180ms ease;
-}
-
-.admin-user-card:hover::before {
-  opacity: 1;
-}
-
-.admin-user-card.is-super::before {
-  opacity: 1;
+.admin-lock-summary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(0, 18, 100, 0.12);
 }
 
 .admin-avatar {
