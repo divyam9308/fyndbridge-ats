@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2, Eye, Pencil, Lock } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
-import { useAdminAccess, isColumnHidden } from '../hooks/useAdminAccess'
+import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
@@ -769,6 +769,35 @@ export default function CandidatesPage() {
   const allowedCandidateColumnKeys = () => CANDIDATE_TABLE_COLUMNS
     .filter(column => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
     .map(column => column.key)
+  const candidateFieldPermission = {
+    name: 'full_name',
+    email: 'email',
+    mobile: 'mobile_number',
+    designation: 'current_designation',
+    currentOrganisation: 'current_organisation',
+    location: 'location',
+    exp: 'experience_years',
+    noticePeriod: 'notice_period',
+    status: 'status',
+    salary: 'current_salary',
+    expectedSalary: 'expected_salary',
+    openToRelocate: 'open_to_relocate',
+    offeredCtc: 'current_salary',
+    dateOfJoining: 'created_at',
+    linkedinUrl: 'linkedin_url',
+    cvLink: 'cv_link',
+    cvFile: 'cv_link',
+    notes: 'notes',
+    consultantName: 'consultant_name',
+    skills: 'skills',
+    education: 'education',
+    client: 'client_name',
+    clientId: 'client_id',
+    job: 'job_title',
+    jobId: 'job_id'
+  }
+  const isCandidateFieldHidden = (name) => isColumnHidden(permissions, 'candidates', candidateFieldPermission[name] || name, isAdmin)
+  const isCandidateFieldDisabled = (name) => isColumnDisabled(permissions, 'candidates', candidateFieldPermission[name] || name, isAdmin)
 
   const proceedColumns = () => {
     const allowed = allowedCandidateColumnKeys()
@@ -1492,31 +1521,34 @@ export default function CandidatesPage() {
           <label className="form-label">Candidate ID</label>
           <input value={f.candidateDisplayId || 'Auto-generated'} className="form-control" disabled readOnly />
         </div>
-        <div className="form-group">
+        {!isCandidateFieldHidden('name') && <div className="form-group">
           <label className="form-label">Full Name <span className="req">*</span></label>
           <input name="name" value={f.name} onChange={handleLocalChange}
             className={`form-control${errs?.name ? ' is-error' : ''}${low('name')}`}
+            disabled={isCandidateFieldDisabled('name')}
             />
           {errs?.name && <span className="form-error">{errs.name}</span>}
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('email') && <div className="form-group">
           <label className="form-label">Email</label>
           <input name="email" type="email" value={f.email} onChange={handleLocalChange}
             className={`form-control${errs?.email ? ' is-error' : ''}${low('email')}`}
+            disabled={isCandidateFieldDisabled('email')}
             />
           {errs?.email && <span className="form-error">{errs.email}</span>}
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('mobile') && <div className="form-group">
           <label className="form-label">Mobile Number <span className="req">*</span></label>
           <input name="mobile" value={f.mobile} onChange={handleLocalChange}
             className={`form-control${errs?.mobile ? ' is-error' : ''}${low('mobile')}`}
+            disabled={isCandidateFieldDisabled('mobile')}
             />
           {errs?.mobile && <span className="form-error">{errs.mobile}</span>}
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('consultantName') && <div className="form-group">
           <label className="form-label">Consultant</label>
           <div className="client-search-wrap">
             <input name="consultantName" value={consultantSearch || f.consultantName || ''} onChange={e => {
@@ -1527,7 +1559,7 @@ export default function CandidatesPage() {
               setConsultantSearch(current => current || f.consultantName || '')
               setConsultantOpen(true)
             }} onBlur={() => window.setTimeout(() => setConsultantOpen(false), 120)}
-              className="form-control" autoComplete="off" />
+              className="form-control" disabled={isCandidateFieldDisabled('consultantName')} autoComplete="off" />
             {consultantOpen && (
               <div className="client-suggestions manual-suggestions is-open">
                 {matchingConsultants.length ? matchingConsultants.map(user => (
@@ -1541,73 +1573,75 @@ export default function CandidatesPage() {
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('designation') && <div className="form-group">
           <label className="form-label">Current Designation</label>
           <input name="designation" value={f.designation} onChange={handleLocalChange}
             className={`form-control${low('designation')}`}
+            disabled={isCandidateFieldDisabled('designation')}
             />
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('currentOrganisation') && <div className="form-group">
           <label className="form-label">Current Organisation</label>
           <input name="currentOrganisation" value={f.currentOrganisation || ''} onChange={handleLocalChange}
-            className={`form-control${low('currentOrganisation')}`} />
-        </div>
+            className={`form-control${low('currentOrganisation')}`} disabled={isCandidateFieldDisabled('currentOrganisation')} />
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('location') && <div className="form-group">
           <label className="form-label">Current Location</label>
           <input name="location" value={f.location || ''} onChange={handleLocalChange}
-            className="form-control" />
-        </div>
+            className="form-control" disabled={isCandidateFieldDisabled('location')} />
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('exp') && <div className="form-group">
           <label className="form-label">Experience (years)</label>
           <input name="exp" type="number" min="0" value={f.exp} onChange={handleLocalChange}
-            className="form-control" />
-        </div>
+            className="form-control" disabled={isCandidateFieldDisabled('exp')} />
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('noticePeriod') && <div className="form-group">
           <label className="form-label">Notice Period (days)</label>
           <input name="noticePeriod" type="number" min="0" value={f.noticePeriod || ''} onChange={handleLocalChange}
-            className="form-control" />
-        </div>
+            className="form-control" disabled={isCandidateFieldDisabled('noticePeriod')} />
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('status') && <div className="form-group">
           <label className="form-label">Status</label>
-          <select name="status" value={f.status} onChange={handleLocalChange} className="form-control">
+          <select name="status" value={f.status} onChange={handleLocalChange} className="form-control" disabled={isCandidateFieldDisabled('status')}>
             {STATUS_OPTIONS.map(s => <option key={s || '-'} value={s}>{s || '-'}</option>)}
           </select>
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('salary') && <div className="form-group">
           <label className="form-label">Current CTC</label>
           <div className="input-with-adornment">
             <span className="input-adornment">₹</span>
             <input name="salary" type="text" inputMode="decimal" value={normalizeCtcInputValue(f.salary)} onChange={handleLocalChange}
               className={`form-control${low('salary')}`}
+              disabled={isCandidateFieldDisabled('salary')}
             />
             <span className="input-adornment input-adornment-end">LPA</span>
           </div>
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('expectedSalary') && <div className="form-group">
           <label className="form-label">Expected CTC</label>
           <div className="input-with-adornment">
             <span className="input-adornment">₹</span>
             <input name="expectedSalary" type="text" inputMode="decimal" value={normalizeCtcInputValue(f.expectedSalary)} onChange={handleLocalChange}
-              className="form-control" />
+              className="form-control" disabled={isCandidateFieldDisabled('expectedSalary')} />
             <span className="input-adornment input-adornment-end">LPA</span>
           </div>
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('openToRelocate') && <div className="form-group">
           <label className="form-label">Open to Relocate</label>
-          <select name="openToRelocate" value={f.openToRelocate} onChange={handleLocalChange} className="form-control">
+          <select name="openToRelocate" value={f.openToRelocate} onChange={handleLocalChange} className="form-control" disabled={isCandidateFieldDisabled('openToRelocate')}>
             {RELOCATE_OPTIONS.map(value => <option key={value || '-'} value={value}>{value || '-'}</option>)}
           </select>
-        </div>
+        </div>}
 
         {f.status === 'Hired' && (
           <>
@@ -1628,7 +1662,7 @@ export default function CandidatesPage() {
 
         <div className="form-section-title">Mandate Assignment</div>
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('client') && <div className="form-group">
           <label className="form-label">Client</label>
           <div className="client-search-wrap">
             <input
@@ -1642,6 +1676,7 @@ export default function CandidatesPage() {
               onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)}
               className={`form-control${errs?.client ? ' is-error' : ''}`}
               placeholder={dbClients.length ? 'Search client...' : 'Loading clients...'}
+              disabled={isCandidateFieldDisabled('client')}
               autoComplete="off"
             />
             {clientSuggestionsOpen && (
@@ -1656,14 +1691,14 @@ export default function CandidatesPage() {
             )}
           </div>
           {errs?.client && <span className="form-error">{errs.client}</span>}
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('clientId') && <div className="form-group">
           <label className="form-label">Client ID</label>
           <input value={clientDisplayIdForForm(f)} placeholder="Auto-filled after selecting client" className="form-control" readOnly />
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('job') && <div className="form-group">
           <label className="form-label">Role Name</label>
           <div className="client-search-wrap">
             <input
@@ -1677,6 +1712,7 @@ export default function CandidatesPage() {
               onBlur={() => window.setTimeout(() => setJobSuggestionsOpen(false), 120)}
               className={`form-control${errs?.job ? ' is-error' : ''}`}
               placeholder={dbJobs.length ? 'Search mandate...' : 'Loading mandates...'}
+              disabled={isCandidateFieldDisabled('job')}
               autoComplete="off"
             />
             {jobSuggestionsOpen && (
@@ -1691,21 +1727,22 @@ export default function CandidatesPage() {
             )}
           </div>
           {errs?.job && <span className="form-error">{errs.job}</span>}
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('jobId') && <div className="form-group">
           <label className="form-label">Role ID</label>
           <input value={jobDisplayIdForForm(f)} placeholder="Auto-filled after selecting mandate" className="form-control" readOnly />
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('linkedinUrl') && <div className="form-group">
           <label className="form-label">LinkedIn URL</label>
           <input name="linkedinUrl" value={f.linkedinUrl || ''} onChange={handleLocalChange}
             className="form-control"
+            disabled={isCandidateFieldDisabled('linkedinUrl')}
             />
-        </div>
+        </div>}
 
-        <div className="form-group">
+        {!isCandidateFieldHidden('cvLink') && <div className="form-group">
           <label className="form-label">CV
             {f.cvLink && <span style={{ marginLeft:6, fontSize:10, color:'var(--success)', fontWeight:600, background:'rgba(40,167,69,0.1)', padding:'1px 6px', borderRadius:4 }}>Auto-filled</span>}
           </label>
@@ -1714,7 +1751,7 @@ export default function CandidatesPage() {
               <div>
                 <span className="sub-text">{parsedResumeAttached ? `Parsed resume attached: ${f.cvOriginalName || f.sourceFile?.name || 'Resume'}` : (f.cvOriginalName ? `Resume: ${f.cvOriginalName}` : 'Choose File')}</span>
                 {!parsedResumeAttached && (
-                  <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => handleCvFileChange(setF, event.target.files?.[0] || null)} className="form-control" />
+                  <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => handleCvFileChange(setF, event.target.files?.[0] || null)} className="form-control" disabled={isCandidateFieldDisabled('cvFile')} />
                 )}
               </div>
             )}
@@ -1728,42 +1765,44 @@ export default function CandidatesPage() {
                 <span className="sub-text">Enter CV Link</span>
                 <input name="cvLink" value={f.cvLink || ''} onChange={event => handleCvLinkChange(setF, event.target.value)}
                   className={`form-control${low('cvLink')}`}
+                  disabled={isCandidateFieldDisabled('cvLink')}
                   />
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
-        <div className="form-group full">
+        {!isCandidateFieldHidden('skills') && <div className="form-group full">
           <label className="form-label">Skills</label>
           <div className="tag-input-wrap" onClick={e => e.currentTarget.querySelector('input').focus()}>
             {f.skills.map(s => (
               <span className="tag-chip" key={s}>
                 {s}
-                <button className="tag-chip-remove" type="button" onClick={() => rmSkill(s)}><X size={10} /></button>
+                <button className="tag-chip-remove" type="button" onClick={() => rmSkill(s)} disabled={isCandidateFieldDisabled('skills')}><X size={10} /></button>
               </span>
             ))}
             <input className="tag-input-field" value={sInput}
               onChange={e => onSkillInputChange(e.target.value)} onKeyDown={onSkillKey}
-              aria-label="Add skill" />
-            <button className="tag-add-btn" type="button" onClick={() => onAddSkill()} disabled={!sInput.trim()}>
+              aria-label="Add skill" disabled={isCandidateFieldDisabled('skills')} />
+            <button className="tag-add-btn" type="button" onClick={() => onAddSkill()} disabled={!sInput.trim() || isCandidateFieldDisabled('skills')}>
               <Plus size={12} strokeWidth={2.4} /> Add
             </button>
           </div>
-        </div>
+        </div>}
 
-        <div className="form-group full">
+        {!isCandidateFieldHidden('notes') && <div className="form-group full">
           <label className="form-label">Comments</label>
           <textarea name="notes" value={f.notes} onChange={handleLocalChange}
-            className="form-control" rows={3} style={{ minHeight: 84, lineHeight: 1.5 }} />
-        </div>
+            className="form-control" rows={3} style={{ minHeight: 84, lineHeight: 1.5 }} disabled={isCandidateFieldDisabled('notes')} />
+        </div>}
 
-        <div className="form-group full">
+        {!isCandidateFieldHidden('education') && <div className="form-group full">
           <label className="form-label">Education</label>
           <textarea name="education" value={f.education} onChange={handleLocalChange}
             className="form-control" rows={4} style={{ minHeight: 96, lineHeight: 1.5 }}
+            disabled={isCandidateFieldDisabled('education')}
             />
-        </div>
+        </div>}
       </div>
     )
   }
@@ -2134,10 +2173,10 @@ export default function CandidatesPage() {
 
             <div className="candidate-drawer-actions">
               <button className="btn-primary" onClick={() => openEditCandidate(selectedCandidate)}>Edit</button>
-              {resolveCandidateCvHref(selectedCandidate) && (
+              {!isCandidateFieldHidden('cvLink') && resolveCandidateCvHref(selectedCandidate) && (
                 <a className="btn-secondary" href="#" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); event.nativeEvent?.stopImmediatePropagation?.(); logCandidateCvOpen(selectedCandidate); openDocument(`cv-detail-${selectedCandidate.associationId || selectedCandidate.id}`, resolveCandidateCvHref(selectedCandidate)) }}>{openingDocument === `cv-detail-${selectedCandidate.associationId || selectedCandidate.id}` ? <Loader2 size={14} className="spin" /> : <FileText size={14} />} CV</a>
               )}
-              {normalizeExternalUrl(selectedCandidate.linkedinUrl) && (
+              {!isCandidateFieldHidden('linkedinUrl') && normalizeExternalUrl(selectedCandidate.linkedinUrl) && (
                 <a className="btn-secondary" href={normalizeExternalUrl(selectedCandidate.linkedinUrl)} target="_blank" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); openExternalUrl(selectedCandidate.linkedinUrl) }}>LinkedIn</a>
               )}
             </div>
@@ -2166,7 +2205,10 @@ export default function CandidatesPage() {
                 ['Month', formatMonth(selectedCandidate.createdAt)],
                 ['Education', selectedCandidate.education || '-'],
                 ['Skills', Array.isArray(selectedCandidate.skills) && selectedCandidate.skills.length ? selectedCandidate.skills.join(', ') : '-'],
-              ].map(([label, value]) => (
+              ].filter(([label]) => {
+                const map = { 'Current CTC': 'salary', 'Expected CTC': 'expectedSalary', Email: 'email', Mobile: 'mobile' }
+                return !map[label] || !isCandidateFieldHidden(map[label])
+              }).map(([label, value]) => (
                 <div className="candidate-detail-item" key={label}>
                   <span>{label}</span>
                   <strong>{value}</strong>

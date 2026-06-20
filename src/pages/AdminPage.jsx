@@ -147,7 +147,7 @@ function LockedRecordsTable({ records, onUnlock, emptyText = 'No records are cur
 
 export default function AdminPage() {
   const navigate = useNavigate()
-  const { isAdmin, isSuperAdmin, loading, columns, permissions, refresh, setPermissions } = useAdminAccess()
+  const { isAdmin, isSuperAdmin, loading, columns, permissions, refresh, refreshPermissions, setPermissions } = useAdminAccess()
   const hadAdminAccessRef = useRef(false)
   const [activeTab, setActiveTab] = useState('clients')
   const [admins, setAdmins] = useState([])
@@ -171,11 +171,13 @@ export default function AdminPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setSavedPermissions(permissions || {})
-      setDraftPermissions(current => isSamePermissions(current, savedPermissions) || !Object.keys(current || {}).length ? (permissions || {}) : current)
+      setSavedPermissions(currentSaved => {
+        setDraftPermissions(currentDraft => isSamePermissions(currentDraft, currentSaved) || !Object.keys(currentDraft || {}).length ? (permissions || {}) : currentDraft)
+        return permissions || {}
+      })
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [permissions, savedPermissions])
+  }, [permissions])
 
   useEffect(() => {
     let active = true
@@ -270,9 +272,11 @@ export default function AdminPage() {
       }
       setSavedPermissions(draftPermissions)
       setPermissions(draftPermissions)
+      await refreshPermissions()
       await refresh()
     } catch (err) {
       setError(err.message)
+      await refreshPermissions().catch(() => null)
       await refresh()
     } finally {
       setSavingPermissions(false)
@@ -480,19 +484,17 @@ export default function AdminPage() {
         </div>
       </Section>
 
-      {dirty && (
-        <div className="admin-save-footer">
-          <div className="admin-save-footer-inner">
+      <div className={`admin-unsaved-dock${dirty && !lockModalType ? ' is-visible' : ''}${savingPermissions ? ' is-saving' : ''}`} aria-hidden={!dirty || Boolean(lockModalType)}>
+          <div className="admin-unsaved-dock-inner">
             <span><AlertTriangle size={18} /></span>
             <div>
               <strong>Unsaved permission changes</strong>
               <p>Review your edits and apply them across the workspace.</p>
             </div>
-            <button className="admin-footer-cancel" type="button" onClick={cancelPermissionChanges} disabled={savingPermissions}><X size={16} />Cancel</button>
-            <button className="admin-footer-save" type="button" onClick={savePermissionChanges} disabled={savingPermissions}><Save size={16} />{savingPermissions ? 'Saving...' : 'Save Changes'}</button>
+            <button className="admin-footer-cancel" type="button" onClick={cancelPermissionChanges} disabled={savingPermissions || !dirty}><X size={16} />Cancel</button>
+            <button className="admin-footer-save" type="button" onClick={savePermissionChanges} disabled={savingPermissions || !dirty}><Save size={16} />{savingPermissions ? 'Saving...' : 'Save Changes'}</button>
           </div>
         </div>
-      )}
 
       {lockModalType && createPortal((
         <div className="modal-overlay">

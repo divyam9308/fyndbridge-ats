@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X, Lock } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
-import { useAdminAccess, isColumnHidden } from '../hooks/useAdminAccess'
+import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import PaginationBar from '../components/PaginationBar'
@@ -468,6 +468,7 @@ export default function JobsPage() {
     comments: 'comments'
   }
   const isJobFieldHidden = (name) => isColumnHidden(permissions, 'jobs', jobFieldPermission[name] || name, isAdmin)
+  const isJobFieldDisabled = (name) => isColumnDisabled(permissions, 'jobs', jobFieldPermission[name] || name, isAdmin)
 
   const updateJobLockState = async (record) => {
     setJobs(current => current.map(job => job.id === record.id ? { ...job, ...record } : job))
@@ -863,16 +864,16 @@ export default function JobsPage() {
             <div className="modal-body">
               {errors.form && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{errors.form}</div>}
               <div className="form-grid-2">
-                <div className="form-group">
+                {!isJobFieldHidden('job_display_id') && <div className="form-group">
                   <label className="form-label">Job ID <span className="req">*</span></label>
                   <input className={`form-control${errors.job_display_id ? ' is-error' : ''}`} value={form.job_display_id || 'Auto-generated'} disabled readOnly />
                   {errors.job_display_id && <span className="form-error">{errors.job_display_id}</span>}
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isJobFieldHidden('allocation_date') && <div className="form-group">
                   <label className="form-label">Date of Allocation</label>
-                  <FormattedDateInput value={form.allocation_date} onChange={(value) => setForm(current => ({ ...current, allocation_date: value }))} className="form-control" disabled={saving} />
-                </div>
-                <div className="form-group full">
+                  <FormattedDateInput value={form.allocation_date} onChange={(value) => setForm(current => ({ ...current, allocation_date: value }))} className="form-control" disabled={saving || isJobFieldDisabled('allocation_date')} />
+                </div>}
+                {!isJobFieldHidden('consultants') && <div className="form-group full">
                   <label className="form-label">Consultant</label>
                   <div className="consultant-picker-list">
                     {consultantFields.map((name, index) => (
@@ -889,7 +890,7 @@ export default function JobsPage() {
                             setConsultantPickerOpen(current => ({ ...current, [index]: true }))
                           }}
                           onBlur={() => window.setTimeout(() => setConsultantPickerOpen(current => ({ ...current, [index]: false })), 120)}
-                          disabled={saving}
+                          disabled={saving || isJobFieldDisabled('consultants')}
                           autoComplete="off"
                         />
                         {consultantPickerOpen[index] && (
@@ -906,18 +907,18 @@ export default function JobsPage() {
                         )}
                       </div>
                     ))}
-                    <button className="row-action-btn" type="button" title="Add Consultant" onClick={addConsultant} disabled={saving}><Plus size={13} /></button>
+                    <button className="row-action-btn" type="button" title="Add Consultant" onClick={addConsultant} disabled={saving || isJobFieldDisabled('consultants')}><Plus size={13} /></button>
                   </div>
                   {errors.consultants && <span className="form-error">{errors.consultants}</span>}
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isJobFieldHidden('team_lead') && <div className="form-group">
                   <label className="form-label">Team Lead</label>
                   <div className="client-search-wrap">
                     <input className="form-control" value={teamLeadSearch || form.team_lead} onChange={e => {
                       setTeamLeadSearch(e.target.value)
                       setForm(current => ({ ...current, team_lead: '', team_lead_user_id: '' }))
                       setTeamLeadOpen(true)
-                    }} onFocus={() => setTeamLeadOpen(true)} onBlur={() => window.setTimeout(() => setTeamLeadOpen(false), 120)} disabled={saving} autoComplete="off" />
+                    }} onFocus={() => setTeamLeadOpen(true)} onBlur={() => window.setTimeout(() => setTeamLeadOpen(false), 120)} disabled={saving || isJobFieldDisabled('team_lead')} autoComplete="off" />
                     {teamLeadOpen && (
                       <div className="client-suggestions manual-suggestions is-open">
                         {matchingTeamLeads.length ? matchingTeamLeads.map(user => (
@@ -931,8 +932,8 @@ export default function JobsPage() {
                       </div>
                     )}
                   </div>
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isJobFieldHidden('client_name') && <div className="form-group">
                   <label className="form-label">Client Name <span className="req">*</span></label>
                   <div className="client-search-wrap">
                     <input
@@ -949,7 +950,7 @@ export default function JobsPage() {
                       }}
                       onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)}
                       placeholder={dbClients.length ? 'Search client...' : 'Loading clients...'}
-                      disabled={saving}
+                      disabled={saving || isJobFieldDisabled('client_name')}
                       autoComplete="off"
                     />
                     {clientSuggestionsOpen && (
@@ -969,12 +970,12 @@ export default function JobsPage() {
                     )}
                   </div>
                   {errors.client_id && <span className="form-error">{errors.client_id}</span>}
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isJobFieldHidden('client_id') && <div className="form-group">
                   <label className="form-label">Client ID</label>
                   <input className="form-control" value={clientOptions.find(client => client.id === form.client_id)?.client_display_id || ''} placeholder="Auto-filled after selecting client" disabled readOnly />
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isJobFieldHidden('title') && <div className="form-group">
                   <label className="form-label">Role <span className="req">*</span></label>
                   <div className="client-search-wrap">
                     {addingNewRole && (
@@ -1000,7 +1001,7 @@ export default function JobsPage() {
                       }}
                       onFocus={() => !addingNewRole && setRoleSuggestionsOpen(true)}
                       onBlur={() => window.setTimeout(() => setRoleSuggestionsOpen(false), 120)}
-                      disabled={saving}
+                      disabled={saving || isJobFieldDisabled('title')}
                       autoComplete="off"
                     />
                     {roleSuggestionsOpen && !addingNewRole && (
@@ -1031,33 +1032,33 @@ export default function JobsPage() {
                     )}
                   </div>
                   {errors.role && <span className="form-error">{errors.role}</span>}
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isJobFieldHidden('location') && <div className="form-group">
                   <label className="form-label">Location</label>
-                  <input className="form-control" value={form.location} onChange={e => setForm(current => ({ ...current, location: e.target.value }))} disabled={saving} />
-                </div>
-                <div className="form-group">
+                  <input className="form-control" value={form.location} onChange={e => setForm(current => ({ ...current, location: e.target.value }))} disabled={saving || isJobFieldDisabled('location')} />
+                </div>}
+                {!isJobFieldHidden('budget') && <div className="form-group">
                   <label className="form-label">Budget</label>
-                  <select className="form-control" value={form.budget} onChange={e => setForm(current => ({ ...current, budget: e.target.value }))} disabled={saving}>
+                  <select className="form-control" value={form.budget} onChange={e => setForm(current => ({ ...current, budget: e.target.value }))} disabled={saving || isJobFieldDisabled('budget')}>
                     <option value="">-</option>
                     {BUDGETS.map(value => <option key={value}>{value}</option>)}
                   </select>
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isJobFieldHidden('mandate_status') && <div className="form-group">
                   <label className="form-label">Mandate Status</label>
-                  <select className="form-control" value={form.mandate_status} onChange={e => setForm(current => ({ ...current, mandate_status: e.target.value }))} disabled={saving}>
+                  <select className="form-control" value={form.mandate_status} onChange={e => setForm(current => ({ ...current, mandate_status: e.target.value }))} disabled={saving || isJobFieldDisabled('mandate_status')}>
                     <option value="">-</option>
                     {MANDATE_STATUSES.map(value => <option key={value}>{value}</option>)}
                   </select>
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isJobFieldHidden('vertical') && <div className="form-group">
                   <label className="form-label">Sector</label>
                   <div className="client-search-wrap">
                     <input className="form-control" value={sectorSearch || form.vertical} onChange={e => {
                       setSectorSearch(e.target.value)
                       setForm(current => ({ ...current, vertical: '' }))
                       setSectorOpen(true)
-                    }} onFocus={() => setSectorOpen(true)} onBlur={() => window.setTimeout(() => setSectorOpen(false), 120)} disabled={saving} autoComplete="off" />
+                    }} onFocus={() => setSectorOpen(true)} onBlur={() => window.setTimeout(() => setSectorOpen(false), 120)} disabled={saving || isJobFieldDisabled('vertical')} autoComplete="off" />
                     {sectorOpen && (
                       <div className="client-suggestions manual-suggestions is-open">
                         {matchingSectors.length ? matchingSectors.map(value => (
@@ -1071,12 +1072,12 @@ export default function JobsPage() {
                       </div>
                     )}
                   </div>
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isJobFieldHidden('jd_file') && <div className="form-group">
                   <label className="form-label">JD File</label>
-                  <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="form-control" onChange={e => setJdFile(e.target.files?.[0] || null)} disabled={saving} />
+                  <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="form-control" onChange={e => setJdFile(e.target.files?.[0] || null)} disabled={saving || isJobFieldDisabled('jd_file')} />
                   {form.jd_url && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('jd-form', form.jd_url) }}>{openingDocument === 'jd-form' ? <Loader2 size={13} className="spin" /> : <FileText size={13} />} Current JD</a>}
-                </div>
+                </div>}
               </div>
             </div>
             <div className="modal-footer">

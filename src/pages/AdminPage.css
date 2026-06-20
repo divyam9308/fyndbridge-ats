@@ -760,23 +760,32 @@
   font-weight: 800;
 }
 
-.admin-save-footer {
+.admin-unsaved-dock {
   position: fixed;
-  inset: auto 0 0;
+  left: 50%;
+  bottom: 28px;
   z-index: 60;
   display: flex;
   justify-content: center;
-  padding: 0 18px 20px;
+  width: min(860px, calc(100vw - 32px));
+  opacity: 0;
   pointer-events: none;
+  transform: translate(-50%, calc(100% + 32px)) scale(0.96);
+  transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 220ms ease;
 }
 
-.admin-save-footer-inner {
+.admin-unsaved-dock.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.admin-unsaved-dock-inner {
   display: grid;
-  width: min(780px, 100%);
+  width: 100%;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 14px;
-  border: 1px solid var(--admin-border);
+  border: 1px solid rgba(0, 18, 100, 0.18);
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 22px 52px rgba(0, 18, 100, 0.22);
@@ -784,7 +793,7 @@
   pointer-events: auto;
 }
 
-.admin-save-footer-inner > span {
+.admin-unsaved-dock-inner > span {
   display: grid;
   width: 42px;
   height: 42px;
@@ -794,11 +803,11 @@
   color: var(--admin-navy);
 }
 
-.admin-save-footer strong {
+.admin-unsaved-dock strong {
   color: var(--admin-navy);
 }
 
-.admin-save-footer p {
+.admin-unsaved-dock p {
   margin: 3px 0 0;
   color: var(--admin-muted);
   font-size: 13px;
@@ -820,6 +829,13 @@
   background: #fff;
   color: var(--admin-navy);
   font-weight: 800;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-unsaved-dock {
+    transform: translate(-50%, 0) scale(1);
+    transition: opacity 160ms ease;
+  }
 }
 
 .admin-lock-modal .modal-body {
@@ -850,7 +866,7 @@
   }
 
   .admin-invite-card,
-  .admin-save-footer-inner {
+  .admin-unsaved-dock-inner {
     grid-template-columns: 1fr;
   }
 

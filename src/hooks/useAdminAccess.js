@@ -12,6 +12,13 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
   const [columns, setColumns] = useState({})
   const [permissions, setPermissions] = useState(EMPTY)
 
+  const refreshPermissions = useCallback(async () => {
+    const data = await fetchColumnPermissions()
+    setColumns(data.columns || {})
+    setPermissions(data.permissions || EMPTY)
+    return data
+  }, [])
+
   const refresh = useCallback(async () => {
     try {
       const me = await fetchAdminMe()
@@ -20,9 +27,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
       setRole(me.role || null)
       if (!loadPermissions) return
       try {
-        const data = await fetchColumnPermissions()
-        setColumns(data.columns || {})
-        setPermissions(data.permissions || EMPTY)
+        await refreshPermissions()
       } catch {
         setColumns({})
         setPermissions(EMPTY)
@@ -34,7 +39,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
     } finally {
       setLoading(false)
     }
-  }, [loadPermissions])
+  }, [loadPermissions, refreshPermissions])
 
   useEffect(() => {
     let active = true
@@ -50,7 +55,17 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
     onChange: refresh
   })
 
-  return useMemo(() => ({ isAdmin, isSuperAdmin, role, loading, columns, permissions, refresh, setPermissions }), [columns, isAdmin, isSuperAdmin, role, loading, permissions, refresh])
+  const helpers = useMemo(() => {
+    const canViewColumn = (tableName, columnKey) => !isColumnHidden(permissions, tableName, columnKey, isAdmin)
+    const canEditColumn = (tableName, columnKey) => !isColumnDisabled(permissions, tableName, columnKey, isAdmin) && canViewColumn(tableName, columnKey)
+    const hidden = (tableName, columnKey) => isColumnHidden(permissions, tableName, columnKey, isAdmin)
+    const disabled = (tableName, columnKey) => isColumnDisabled(permissions, tableName, columnKey, isAdmin)
+    const getVisibleColumns = (tableName, columnList, keyMapper = column => column.key) => columnList.filter(column => canViewColumn(tableName, keyMapper(column)))
+    const getEditableColumns = (tableName, columnList, keyMapper = column => column.key) => columnList.filter(column => canEditColumn(tableName, keyMapper(column)))
+    return { canViewColumn, canEditColumn, isColumnHidden: hidden, isColumnDisabled: disabled, getVisibleColumns, getEditableColumns }
+  }, [isAdmin, permissions])
+
+  return useMemo(() => ({ isAdmin, isSuperAdmin, role, loading, columns, permissions, refresh, refreshPermissions, setPermissions, ...helpers }), [columns, helpers, isAdmin, isSuperAdmin, role, loading, permissions, refresh, refreshPermissions])
 }
 
 export function isColumnHidden(permissions, tableName, columnKey, isAdmin) {

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText, Search, Trash2, Lock } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
-import { useAdminAccess, isColumnHidden } from '../hooks/useAdminAccess'
+import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
@@ -474,6 +474,7 @@ export default function ClientsPage() {
     address_on_invoice: 'address_on_invoice'
   }
   const isClientFieldHidden = (name) => isColumnHidden(permissions, 'clients', clientFieldPermission[name] || name, isAdmin)
+  const isClientFieldDisabled = (name) => isColumnDisabled(permissions, 'clients', clientFieldPermission[name] || name, isAdmin)
   const canonicalClients = useMemo(() => getCanonicalClients(allClients), [allClients])
   const matchingClients = useMemo(() => (
     canonicalClients
@@ -1409,7 +1410,7 @@ export default function ClientsPage() {
                             <button type="button" className="filter-clear" style={{ marginLeft: 8 }} onMouseDown={(event) => { event.preventDefault(); clientIdRequestRef.current += 1; setAddingNewClient(false); setSelectedExistingClientId(null); setForm(current => ({ ...current, client_group_id: '', client_display_id: '', client_name: '' })); setClientSuggestionsOpen(true) }}>Switch</button>
                           </div>
                         )}
-                        <input ref={clientNameInputRef} name={name} type={type} value={form[name]} onChange={handleChange} onFocus={() => !addingNewClient && setClientSuggestionsOpen(true)} onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} autoComplete="off" />
+                        <input ref={clientNameInputRef} name={name} type={type} value={form[name]} onChange={handleChange} onFocus={() => !addingNewClient && setClientSuggestionsOpen(true)} onBlur={() => window.setTimeout(() => setClientSuggestionsOpen(false), 120)} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving || isClientFieldDisabled(name)} autoComplete="off" />
                         {clientSuggestionsOpen && !addingNewClient && (
                         <div className="client-suggestions manual-suggestions is-open">
                           <button type="button" onMouseDown={(event) => { event.preventDefault(); selectNewClient() }}>
@@ -1430,7 +1431,7 @@ export default function ClientsPage() {
                           setConsultantSearch(e.target.value)
                           setForm(current => ({ ...current, consultant_name: e.target.value, consultant_user_id: '' }))
                           setConsultantOpen(true)
-                        }} onFocus={() => { setConsultantSearch(current => current || form.consultant_name); setConsultantOpen(true) }} onBlur={() => window.setTimeout(() => setConsultantOpen(false), 120)} disabled={saving} autoComplete="off" />
+                        }} onFocus={() => { setConsultantSearch(current => current || form.consultant_name); setConsultantOpen(true) }} onBlur={() => window.setTimeout(() => setConsultantOpen(false), 120)} disabled={saving || isClientFieldDisabled(name)} autoComplete="off" />
                         {consultantOpen && (
                           <div className="client-suggestions manual-suggestions is-open">
                             {matchingConsultants.length ? matchingConsultants.map(user => (
@@ -1443,7 +1444,7 @@ export default function ClientsPage() {
                         )}
                       </div>
                     ) : name === 'region' ? (
-                      <select name={name} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving}>
+                      <select name={name} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving || isClientFieldDisabled(name)}>
                         {REGION_OPTIONS.map(option => <option key={option || '-'} value={option}>{option || '-'}</option>)}
                       </select>
                     ) : name === 'sector' ? (
@@ -1452,7 +1453,7 @@ export default function ClientsPage() {
                           setSectorSearch(e.target.value)
                           setForm(current => ({ ...current, sector: '' }))
                           setSectorOpen(true)
-                        }} onFocus={() => setSectorOpen(true)} onBlur={() => window.setTimeout(() => setSectorOpen(false), 120)} disabled={saving} autoComplete="off" />
+                        }} onFocus={() => setSectorOpen(true)} onBlur={() => window.setTimeout(() => setSectorOpen(false), 120)} disabled={saving || isClientFieldDisabled(name)} autoComplete="off" />
                         {sectorOpen && (
                           <div className="client-suggestions manual-suggestions is-open">
                             {matchingSectors.length ? matchingSectors.map(value => (
@@ -1467,26 +1468,26 @@ export default function ClientsPage() {
                         )}
                       </div>
                     ) : type === 'date' ? (
-                      <FormattedDateInput name={name} value={form[name]} onChange={(value) => setForm(current => ({ ...current, [name]: value }))} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} />
+                      <FormattedDateInput name={name} value={form[name]} onChange={(value) => setForm(current => ({ ...current, [name]: value }))} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving || isClientFieldDisabled(name)} />
                     ) : (
-                      <input name={name} type={type} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving} />
+                      <input name={name} type={type} value={form[name]} onChange={handleChange} className={`form-control${errors[name] ? ' is-error' : ''}`} disabled={saving || isClientFieldDisabled(name)} />
                     )}
                     {errors[name] && <span className="form-error">{errors[name]}</span>}
                   </div>
                 ))}
                 {!isClientFieldHidden('comments') && <div className="form-group full">
                   <label className="form-label">Comments</label>
-                  <textarea name="comments" value={form.comments} onChange={handleChange} className="form-control" rows={2} disabled={saving} />
+                  <textarea name="comments" value={form.comments} onChange={handleChange} className="form-control" rows={2} disabled={saving || isClientFieldDisabled('comments')} />
                 </div>}
                 {!isClientFieldHidden('status') && <div className="form-group">
                   <label className="form-label">Status</label>
-                  <select name="status" value={form.status} onChange={handleChange} className="form-control" disabled={saving}>
+                  <select name="status" value={form.status} onChange={handleChange} className="form-control" disabled={saving || isClientFieldDisabled('status')}>
                     {STATUS_OPTIONS.map((status) => <option key={status || '-'} value={status}>{status || '-'}</option>)}
                   </select>
                 </div>}
                 {!isClientFieldHidden('contract_signed') && <div className="form-group">
                   <label className="form-label">Contract Signed</label>
-                  <select name="contract_signed" value={form.contract_signed} onChange={handleChange} className={`form-control${errors.contract_signed ? ' is-error' : ''}`} disabled={saving}>
+                  <select name="contract_signed" value={form.contract_signed} onChange={handleChange} className={`form-control${errors.contract_signed ? ' is-error' : ''}`} disabled={saving || isClientFieldDisabled('contract_signed')}>
                     <option value="No">No</option>
                     <option value="Yes">Yes</option>
                   </select>
@@ -1495,7 +1496,7 @@ export default function ClientsPage() {
                 {form.contract_signed === 'Yes' && !isClientFieldHidden('contract_document') && (
                   <div className="form-group">
                     <label className="form-label">Contract PDF</label>
-                    <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving} />
+                    <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving || isClientFieldDisabled('contract_document')} />
                     {form.contract_document && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('contract-form', form.contract_document) }}>{openingDocument === 'contract-form' ? 'Opening...' : 'Current Contract'}</a>}
                     {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
                   </div>
@@ -1504,7 +1505,7 @@ export default function ClientsPage() {
                   <>
                     {!isClientFieldHidden('terms_signed_type') && <div className="form-group">
                       <label className="form-label">Terms Signed</label>
-                      <select name="terms_signed_type" value={form.terms_signed_type} onChange={handleChange} className="form-control" disabled={saving}>
+                      <select name="terms_signed_type" value={form.terms_signed_type} onChange={handleChange} className="form-control" disabled={saving || isClientFieldDisabled('terms_signed_type')}>
                         <option value="">-</option>
                         {TERMS.map((term) => <option key={term} value={term}>{term}</option>)}
                       </select>
@@ -1512,16 +1513,16 @@ export default function ClientsPage() {
                     {form.terms_signed_type === 'Any Other' && !isClientFieldHidden('terms_signed_custom') && (
                       <div className="form-group">
                         <label className="form-label">Custom Terms</label>
-                        <input name="terms_signed_custom" value={form.terms_signed_custom} onChange={handleChange} className="form-control" disabled={saving} />
+                        <input name="terms_signed_custom" value={form.terms_signed_custom} onChange={handleChange} className="form-control" disabled={saving || isClientFieldDisabled('terms_signed_custom')} />
                       </div>
                     )}
                     {!isClientFieldHidden('terms_value') && <div className="form-group">
                       <label className="form-label">Value</label>
-                      <input name="terms_value" value={form.terms_value} onChange={handleChange} className="form-control" disabled={saving} />
+                      <input name="terms_value" value={form.terms_value} onChange={handleChange} className="form-control" disabled={saving || isClientFieldDisabled('terms_value')} />
                     </div>}
                     {!isClientFieldHidden('billing_entity') && <div className="form-group">
                       <label className="form-label">Billing Entity</label>
-                      <select name="billing_entity" value={form.billing_entity} onChange={handleChange} className="form-control" disabled={saving}>
+                      <select name="billing_entity" value={form.billing_entity} onChange={handleChange} className="form-control" disabled={saving || isClientFieldDisabled('billing_entity')}>
                         <option value="">-</option>
                         {BILLING_ENTITIES.map(entity => <option key={entity} value={entity}>{entity}</option>)}
                       </select>
@@ -1533,7 +1534,7 @@ export default function ClientsPage() {
                     ].filter(([name]) => !isClientFieldHidden(name)).map(([name, label]) => (
                       <div className={name === 'address_on_invoice' ? 'form-group full' : 'form-group'} key={name}>
                         <label className="form-label">{label}</label>
-                        <input name={name} value={form[name]} onChange={handleChange} className="form-control" disabled={saving} />
+                        <input name={name} value={form[name]} onChange={handleChange} className="form-control" disabled={saving || isClientFieldDisabled(name)} />
                       </div>
                     ))}
                   </>
