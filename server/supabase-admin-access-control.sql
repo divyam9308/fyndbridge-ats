@@ -57,3 +57,32 @@ begin
     alter publication supabase_realtime add table public.column_permissions;
   end if;
 end $$;
+
+grant select on public.clients to authenticated;
+grant select on public.client_follow_ups to authenticated;
+grant select on public.candidates to authenticated;
+grant select on public.candidate_associations to authenticated;
+grant select on public.jobs to authenticated;
+grant select on public.column_permissions to authenticated;
+
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'clients' and policyname = 'clients_realtime_select_authenticated') then
+    create policy clients_realtime_select_authenticated on public.clients for select to authenticated using (true);
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'client_follow_ups' and policyname = 'client_follow_ups_realtime_select_authenticated') then
+    create policy client_follow_ups_realtime_select_authenticated on public.client_follow_ups for select to authenticated using (true);
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'candidates' and policyname = 'candidates_realtime_select_authenticated') then
+    create policy candidates_realtime_select_authenticated on public.candidates for select to authenticated using (true);
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'candidate_associations' and policyname = 'candidate_associations_realtime_select_authenticated') then
+    create policy candidate_associations_realtime_select_authenticated on public.candidate_associations for select to authenticated using (true);
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'jobs' and policyname = 'jobs_realtime_select_authenticated') then
+    create policy jobs_realtime_select_authenticated on public.jobs for select to authenticated using (true);
+  end if;
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'column_permissions' and policyname = 'column_permissions_realtime_select_authenticated') then
+    create policy column_permissions_realtime_select_authenticated on public.column_permissions for select to authenticated using (true);
+  end if;
+end $$;
