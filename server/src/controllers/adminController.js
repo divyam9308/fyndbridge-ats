@@ -4,6 +4,11 @@ const {
   isAdmin,
   isSuperAdmin,
   listAdminUsers,
+  serializeAdminUser,
+  assertCanManageAdminUsers,
+  assertCanRevokeAdmin,
+  assertCanPromoteAdmin,
+  assertCanDemoteSuperAdmin,
   serializeColumnDefs,
   getAllColumnPermissions
 } = require('../services/adminAccess')
@@ -18,7 +23,17 @@ function validEmail(email) {
 
 async function me(req, res) {
   try {
-    return res.json({ isAdmin: await isAdmin(req.user), isSuperAdmin: await isSuperAdmin(req.user), user: req.user })
+    const admins = await listAdminUsers()
+    const admin = admins.find(row => serializeAdminUser(row, req.user).is_current_user)
+    const role = admin?.role || null
+    return res.json({
+      isAdmin: await isAdmin(req.user),
+      isSuperAdmin: await isSuperAdmin(req.user),
+      role,
+      email: req.user.email,
+      name: req.user.name,
+      user: req.user
+    })
   } catch (err) {
     return sendError(res, err)
   }
@@ -26,7 +41,8 @@ async function me(req, res) {
 
 async function users(req, res) {
   try {
-    return res.json({ data: await listAdminUsers() })
+    const admins = await listAdminUsers()
+    return res.json({ data: admins.map(admin => serializeAdminUser(admin, req.user)) })
   } catch (err) {
     return sendError(res, err)
   }
@@ -34,13 +50,15 @@ async function users(req, res) {
 
 async function addUser(req, res) {
   try {
+    await assertCanManageAdminUsers(req.user)
     const email = normalizeEmail(req.body.email)
     if (!validEmail(email)) return res.status(400).json({ error: 'Valid email is required' })
+    const role = req.body.role || (req.body.isSuperAdmin ? 'super_admin' : 'admin')
+    if (!['admin', 'super_admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' })
     const name = email.split('@')[0]
-    const superAdmin = Boolean(req.body.isSuperAdmin) && (await isSuperAdmin(req.user))
     const { data, error } = await supabase
       .from('admin_users')
-      .insert({ email, name, added_by: req.user.id, is_super_admin: superAdmin })
+      .insert({ email, name, added_by: req.user.id, role, is_super_admin: role === 'super_admin' })
       .select('*')
       .single()
     if (error?.code === '23505') return res.status(409).json({ error: 'Admin already exists' })
@@ -53,17 +71,39 @@ async function addUser(req, res) {
 
 async function removeUser(req, res) {
   try {
+    await assertCanManageAdminUsers(req.user)
     const email = normalizeEmail(req.params.email)
     const admins = await listAdminUsers()
-    if (admins.length <= 1) return res.status(400).json({ error: 'Cannot remove the last admin' })
     const target = admins.find(admin => normalizeEmail(admin.email) === email)
     if (!target) return res.status(404).json({ error: 'Admin not found' })
-    const requesterSuperAdmin = await isSuperAdmin(req.user)
-    if (target.is_super_admin && !requesterSuperAdmin) return res.status(403).json({ error: 'Only super admins can remove a super admin' })
-    if (target.is_super_admin && admins.filter(admin => admin.is_super_admin).length <= 1) return res.status(400).json({ error: 'Cannot remove the last super admin' })
-    const { error } = await supabase.from('admin_users').delete().eq('email', email)
+    assertCanRevokeAdmin(target, req.user, admins)
+    const { error } = await supabase.from('admin_users').delete().eq('id', target.id)
     if (error) throw error
     return res.json({ ok: true })
+  } catch (err) {
+    return sendError(res, err)
+  }
+}
+
+async function updateUserRole(req, res) {
+  try {
+    await assertCanManageAdminUsers(req.user)
+    const email = normalizeEmail(req.params.email)
+    const role = req.body.role
+    if (!['admin', 'super_admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' })
+    const admins = await listAdminUsers()
+    const target = admins.find(admin => normalizeEmail(admin.email) === email)
+    if (!target) return res.status(404).json({ error: 'Admin not found' })
+    if (role === 'super_admin') assertCanPromoteAdmin(target, req.user, admins)
+    if (role === 'admin') assertCanDemoteSuperAdmin(target, req.user, admins)
+    const { data, error } = await supabase
+      .from('admin_users')
+      .update({ role, is_super_admin: role === 'super_admin' })
+      .eq('id', target.id)
+      .select('*')
+      .single()
+    if (error) throw error
+    return res.json({ data: serializeAdminUser(data, req.user) })
   } catch (err) {
     return sendError(res, err)
   }
@@ -148,6 +188,7 @@ module.exports = {
   users,
   addUser,
   removeUser,
+  updateUserRole,
   columnPermissions,
   updateColumnPermission,
   lockedRecords,

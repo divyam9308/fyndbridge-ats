@@ -1,4 +1,4 @@
-const { isAdmin } = require('../services/adminAccess')
+const { isAdmin, isSuperAdmin } = require('../services/adminAccess')
 
 async function requireAdmin(req, res, next) {
   try {
@@ -10,4 +10,14 @@ async function requireAdmin(req, res, next) {
   }
 }
 
-module.exports = { requireAdmin }
+async function requireSuperAdmin(req, res, next) {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' })
+    if (!(await isSuperAdmin(req.user))) return res.status(403).json({ error: 'Super Admin required' })
+    return next()
+  } catch (err) {
+    return next(err)
+  }
+}
+
+module.exports = { requireAdmin, requireSuperAdmin }

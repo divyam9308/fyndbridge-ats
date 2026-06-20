@@ -7,6 +7,7 @@ const EMPTY = { clients: {}, candidates: {}, jobs: {} }
 export function useAdminAccess({ loadPermissions = true } = {}) {
   const [isAdmin, setIsAdmin] = useState(false)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [role, setRole] = useState(null)
   const [loading, setLoading] = useState(true)
   const [columns, setColumns] = useState({})
   const [permissions, setPermissions] = useState(EMPTY)
@@ -16,6 +17,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
       const me = await fetchAdminMe()
       setIsSuperAdmin(Boolean(me.isSuperAdmin))
       setIsAdmin(Boolean(me.isAdmin))
+      setRole(me.role || null)
       if (!loadPermissions) return
       try {
         const data = await fetchColumnPermissions()
@@ -28,6 +30,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
     } catch {
       setIsAdmin(false)
       setIsSuperAdmin(false)
+      setRole(null)
     } finally {
       setLoading(false)
     }
@@ -47,7 +50,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
     onChange: refresh
   })
 
-  return useMemo(() => ({ isAdmin, isSuperAdmin, loading, columns, permissions, refresh, setPermissions }), [columns, isAdmin, isSuperAdmin, loading, permissions, refresh])
+  return useMemo(() => ({ isAdmin, isSuperAdmin, role, loading, columns, permissions, refresh, setPermissions }), [columns, isAdmin, isSuperAdmin, role, loading, permissions, refresh])
 }
 
 export function isColumnHidden(permissions, tableName, columnKey, isAdmin) {

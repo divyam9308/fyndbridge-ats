@@ -4,11 +4,30 @@ create table if not exists admin_users (
   user_id uuid null,
   name text null,
   added_by uuid null,
+  role text not null default 'admin',
   is_super_admin boolean default false,
   created_at timestamptz default now()
 );
 
+alter table admin_users add column if not exists role text not null default 'admin';
 alter table admin_users add column if not exists is_super_admin boolean default false;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'admin_users_role_check'
+      and conrelid = 'public.admin_users'::regclass
+  ) then
+    alter table public.admin_users
+      add constraint admin_users_role_check
+      check (role in ('admin', 'super_admin'));
+  end if;
+end $$;
+
+update admin_users
+set role = 'super_admin'
+where is_super_admin = true;
 
 create table if not exists column_permissions (
   id uuid primary key default gen_random_uuid(),
@@ -32,12 +51,9 @@ alter table jobs add column if not exists is_locked boolean default false;
 alter table jobs add column if not exists locked_by uuid null;
 alter table jobs add column if not exists locked_at timestamptz null;
 
-insert into admin_users (email, name, is_super_admin)
-values ('divyam@fyndbridge.in', 'Divyam', true)
-on conflict (email) do update set is_super_admin = true;
-
-delete from admin_users
-where email = 'rajneesh@fyndbridge.in';
+insert into admin_users (email, name, role, is_super_admin)
+values ('divyam@fyndbridge.in', 'Divyam', 'super_admin', true)
+on conflict (email) do update set role = 'super_admin', is_super_admin = true;
 
 do $$
 begin

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Briefcase, Building2, Eye, EyeOff, Lock, Mail, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
@@ -8,6 +9,7 @@ import {
   fetchAdminUsers,
   fetchLockedRecords,
   removeAdminUser,
+  updateAdminUserRole,
   updateColumnPermission,
   setRecordLock
 } from '../services/adminAccessApi'
@@ -41,7 +43,11 @@ function adminName(admin) {
 }
 
 function adminIsSuper(admin) {
-  return Boolean(admin?.is_super_admin || admin?.isSuperAdmin)
+  return admin?.role === 'super_admin' || Boolean(admin?.is_super_admin || admin?.isSuperAdmin)
+}
+
+function adminRoleLabel(admin) {
+  return adminIsSuper(admin) ? 'Super Admin' : 'Admin'
 }
 
 function formatDate(value) {
@@ -140,11 +146,13 @@ function LockedRecordsTable({ records, onUnlock, emptyText = 'No records are cur
 }
 
 export default function AdminPage() {
+  const navigate = useNavigate()
   const { isAdmin, isSuperAdmin, loading, columns, permissions, refresh, setPermissions } = useAdminAccess()
+  const hadAdminAccessRef = useRef(false)
   const [activeTab, setActiveTab] = useState('clients')
   const [admins, setAdmins] = useState([])
   const [email, setEmail] = useState('')
-  const [newAdminSuper, setNewAdminSuper] = useState(false)
+  const [selectedAdminEmail, setSelectedAdminEmail] = useState('')
   const [lockedRecords, setLockedRecords] = useState([])
   const [error, setError] = useState('')
   const [columnSearch, setColumnSearch] = useState('')
@@ -152,6 +160,7 @@ export default function AdminPage() {
   const [draftPermissions, setDraftPermissions] = useState({})
   const [savingPermissions, setSavingPermissions] = useState(false)
   const [savingAdmin, setSavingAdmin] = useState(false)
+  const [savingRole, setSavingRole] = useState(false)
   const [lockModalType, setLockModalType] = useState('')
 
   const loadAdminData = useCallback(async () => {
@@ -178,6 +187,15 @@ export default function AdminPage() {
     return () => { active = false }
   }, [isAdmin, loadAdminData])
 
+  useEffect(() => {
+    if (loading) return
+    if (isAdmin) {
+      hadAdminAccessRef.current = true
+    } else if (hadAdminAccessRef.current) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [isAdmin, loading, navigate])
+
   useRealtimeRefresh({
     channelName: 'realtime:admin-page-locks',
     tables: ['admin_users', 'column_permissions', 'clients', 'candidates', 'jobs'],
@@ -198,6 +216,14 @@ export default function AdminPage() {
   const lockCounts = lockedRecords.reduce((acc, record) => ({ ...acc, [record.type]: (acc[record.type] || 0) + 1 }), {})
   const sortedLocks = [...lockedRecords].sort((a, b) => new Date(b.lockedAt || 0) - new Date(a.lockedAt || 0))
   const limitedLocks = Object.keys(TYPE_META).flatMap(type => sortedLocks.filter(record => record.type === type).slice(0, 2))
+  const superAdminCount = admins.filter(adminIsSuper).length
+  const selectedAdmin = admins.find(admin => admin.email === selectedAdminEmail) || admins[0]
+  const currentAdmin = admins.find(admin => admin.is_current_user)
+  const selectedIsSuper = adminIsSuper(selectedAdmin)
+  const roleTarget = selectedIsSuper ? 'admin' : 'super_admin'
+  const selectedIsLastSuper = selectedIsSuper && superAdminCount <= 1
+  const selectedIsCurrentUser = Boolean(selectedAdmin?.is_current_user)
+  const roleActionDisabled = !isSuperAdmin || !selectedAdmin || selectedIsCurrentUser || selectedIsLastSuper || savingRole
 
   if (loading && !Object.keys(permissions || {}).length) return null
   if (!isAdmin) {
@@ -258,9 +284,8 @@ export default function AdminPage() {
     setError('')
     setSavingAdmin(true)
     try {
-      await addAdminUser(email, newAdminSuper)
+      await addAdminUser(email, 'admin')
       setEmail('')
-      setNewAdminSuper(false)
       await loadAdminData()
       await refresh()
     } catch (err) {
@@ -270,7 +295,26 @@ export default function AdminPage() {
     }
   }
 
+  const changeAdminRole = async () => {
+    if (!selectedAdmin) return
+    const action = roleTarget === 'super_admin' ? 'Promote' : 'Demote'
+    if (!window.confirm(`${action} ${adminName(selectedAdmin)}?`)) return
+    setError('')
+    setSavingRole(true)
+    try {
+      await updateAdminUserRole(selectedAdmin.email, roleTarget)
+      await loadAdminData()
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingRole(false)
+    }
+  }
+
   const revokeAdmin = async (adminEmail) => {
+    const target = admins.find(admin => admin.email === adminEmail)
+    if (target && !window.confirm(`Revoke ${adminName(target)}?`)) return
     setError('')
     try {
       await removeAdminUser(adminEmail)
@@ -298,42 +342,57 @@ export default function AdminPage() {
         icon={ShieldCheck}
         action={<span className="admin-count-pill">{admins.length} active</span>}
       >
-        <form className={`admin-invite-card${isSuperAdmin ? ' has-super-check' : ''}`} onSubmit={submitAdmin}>
+        <form className="admin-invite-card" onSubmit={submitAdmin}>
           <div className="admin-email-field">
             <Mail size={17} />
-            <input value={email} onChange={event => setEmail(event.target.value)} placeholder="Enter admin email address" />
+            <input value={email} onChange={event => setEmail(event.target.value)} placeholder="Enter admin email address" disabled={!isSuperAdmin} />
           </div>
-          {isSuperAdmin && (
-            <label className="admin-super-check">
-              <input type="checkbox" checked={newAdminSuper} onChange={event => setNewAdminSuper(event.target.checked)} />
-              <span><ShieldCheck size={15} />Make Super Admin</span>
-            </label>
-          )}
-          <button className="admin-add-btn" type="submit" disabled={savingAdmin}>
+          <button className="admin-add-btn" type="submit" disabled={savingAdmin || !isSuperAdmin}>
             <UserPlus size={16} />
             {savingAdmin ? 'Adding...' : 'Add Admin'}
           </button>
-          <p>Admins can manage column permissions, lock records, and invite other admins.</p>
+          <p>{isSuperAdmin ? 'New users are added as Admin by default.' : 'Super Admin required to add or change admin users.'}</p>
         </form>
+
+        <div className="admin-advanced-card">
+          <div>
+            <h3>Advanced role management</h3>
+            <p>Promote an existing admin to Super Admin or demote a Super Admin safely.</p>
+          </div>
+          <div className="admin-role-controls">
+            <select value={selectedAdmin?.email || ''} onChange={event => setSelectedAdminEmail(event.target.value)} disabled={!admins.length}>
+              {admins.map(admin => <option key={admin.email} value={admin.email}>{adminName(admin)} - {admin.email}</option>)}
+            </select>
+            <span className={`admin-role-current${selectedIsSuper ? ' is-super' : ''}`}>{selectedAdmin ? adminRoleLabel(selectedAdmin) : '-'}</span>
+            <button className="admin-role-btn" type="button" onClick={changeAdminRole} disabled={roleActionDisabled} title={!isSuperAdmin ? 'Super Admin required.' : selectedIsCurrentUser ? 'You cannot revoke your own access.' : selectedIsLastSuper ? 'At least one Super Admin must remain.' : ''}>
+              <ShieldCheck size={15} />
+              {savingRole ? 'Saving...' : selectedIsSuper ? 'Demote to Admin' : 'Promote to Super Admin'}
+            </button>
+          </div>
+          <small>{selectedIsCurrentUser ? 'You cannot revoke your own access.' : selectedIsLastSuper ? 'At least one Super Admin must remain.' : !isSuperAdmin ? 'Super Admin required.' : 'Role changes apply immediately.'}</small>
+        </div>
 
         <div className="admin-user-grid">
           {admins.map((admin) => {
             const superAdmin = adminIsSuper(admin)
-            const canRevoke = isSuperAdmin || !superAdmin
+            const isSelf = admin.is_current_user || currentAdmin?.email === admin.email
+            const lastSuper = superAdmin && superAdminCount <= 1
+            const canRevoke = isSuperAdmin && !isSelf && !lastSuper
+            const revokeTitle = isSelf ? 'You cannot revoke your own access.' : !isSuperAdmin ? 'Super Admin required.' : lastSuper ? 'At least one Super Admin must remain.' : 'Revoke'
             return (
             <div className={`admin-user-card${superAdmin ? ' is-super' : ''}`} key={admin.email}>
               <div className="admin-avatar">{initials(adminName(admin))}</div>
               <div className="admin-user-main">
                 <div className="admin-user-title">
                   <strong>{adminName(admin)}</strong>
-                  <span><ShieldCheck size={12} />{superAdmin ? 'Super Admin' : 'Admin'}</span>
+                  <span className={superAdmin ? 'is-super' : ''}><ShieldCheck size={12} />{adminRoleLabel(admin)}</span>
                 </div>
                 <p>{admin.email}</p>
                 <small>Added {formatDate(admin.created_at)}</small>
               </div>
               <div className="admin-user-footer">
                 <span><i />Active session</span>
-                <button type="button" onClick={() => revokeAdmin(admin.email)} disabled={!canRevoke} title={canRevoke ? 'Revoke' : 'Only a super admin can revoke a super admin'}><Trash2 size={14} />Revoke</button>
+                <button type="button" onClick={() => revokeAdmin(admin.email)} disabled={!canRevoke} title={revokeTitle}><Trash2 size={14} />Revoke</button>
               </div>
             </div>
           )})}

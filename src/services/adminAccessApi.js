@@ -14,16 +14,24 @@ export async function fetchAdminUsers() {
   return json(await apiFetch('/api/admin/users', { cache: 'no-store' }))
 }
 
-export async function addAdminUser(email, isSuperAdmin = false) {
+export async function addAdminUser(email, role = 'admin') {
   return json(await apiFetch('/api/admin/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, isSuperAdmin })
+    body: JSON.stringify({ email, role })
   }))
 }
 
 export async function removeAdminUser(email) {
   return json(await apiFetch(`/api/admin/users/${encodeURIComponent(email)}`, { method: 'DELETE' }))
+}
+
+export async function updateAdminUserRole(email, role) {
+  return json(await apiFetch(`/api/admin/users/${encodeURIComponent(email)}/role`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role })
+  }))
 }
 
 export async function fetchColumnPermissions() {

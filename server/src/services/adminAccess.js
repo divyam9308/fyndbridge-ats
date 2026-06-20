@@ -5,6 +5,10 @@ const ACCESS = {
   DISABLED: 'admin_disabled',
   HIDDEN: 'admin_hidden'
 }
+const ROLES = {
+  ADMIN: 'admin',
+  SUPER_ADMIN: 'super_admin'
+}
 
 const COLUMN_DEFS = {
   clients: [
@@ -104,13 +108,13 @@ async function isAdmin(user) {
 
 async function isSuperAdmin(user) {
   const admin = await findAdminUser(user)
-  return Boolean(admin?.is_super_admin)
+  return adminRole(admin) === ROLES.SUPER_ADMIN
 }
 
 async function listAdminUsers() {
   const { data, error } = await supabase.from('admin_users').select('*').order('created_at', { ascending: true })
   if (error) throw error
-  return data || []
+  return (data || []).map(serializeAdminUser)
 }
 
 async function findAdminUser(user) {
@@ -119,6 +123,71 @@ async function findAdminUser(user) {
   return admins.find(admin => {
     return (email && normalizeEmail(admin.email) === email) || (user?.id && admin.user_id === user.id)
   })
+}
+
+function adminRole(admin) {
+  return admin?.role === ROLES.SUPER_ADMIN || admin?.is_super_admin ? ROLES.SUPER_ADMIN : ROLES.ADMIN
+}
+
+function serializeAdminUser(admin, currentUser = null) {
+  const role = adminRole(admin)
+  const currentEmail = normalizeEmail(currentUser?.email)
+  return {
+    ...admin,
+    role,
+    is_super_admin: role === ROLES.SUPER_ADMIN,
+    is_current_user: Boolean((currentEmail && normalizeEmail(admin.email) === currentEmail) || (currentUser?.id && admin.user_id === currentUser.id))
+  }
+}
+
+function countSuperAdmins(admins) {
+  return admins.filter(admin => adminRole(admin) === ROLES.SUPER_ADMIN).length
+}
+
+async function assertCanManageAdminUsers(user) {
+  if (await isSuperAdmin(user)) return
+  const err = new Error('Super Admin required')
+  err.statusCode = 403
+  throw err
+}
+
+function assertCanRevokeAdmin(targetAdmin, currentUser, admins) {
+  if (serializeAdminUser(targetAdmin, currentUser).is_current_user) {
+    const err = new Error('You cannot revoke your own access.')
+    err.statusCode = 403
+    throw err
+  }
+  if (adminRole(targetAdmin) === ROLES.SUPER_ADMIN && countSuperAdmins(admins) <= 1) {
+    const err = new Error('At least one Super Admin must remain.')
+    err.statusCode = 400
+    throw err
+  }
+}
+
+function assertCanPromoteAdmin(targetAdmin) {
+  if (!targetAdmin) {
+    const err = new Error('Admin not found')
+    err.statusCode = 404
+    throw err
+  }
+}
+
+function assertCanDemoteSuperAdmin(targetAdmin, currentUser, admins) {
+  if (!targetAdmin) {
+    const err = new Error('Admin not found')
+    err.statusCode = 404
+    throw err
+  }
+  if (serializeAdminUser(targetAdmin, currentUser).is_current_user) {
+    const err = new Error('You cannot revoke your own access.')
+    err.statusCode = 403
+    throw err
+  }
+  if (adminRole(targetAdmin) === ROLES.SUPER_ADMIN && countSuperAdmins(admins) <= 1) {
+    const err = new Error('At least one Super Admin must remain.')
+    err.statusCode = 400
+    throw err
+  }
 }
 
 async function getColumnPermissions(tableName) {
@@ -187,12 +256,19 @@ async function assertRowEditable(tableName, rowId, admin) {
 
 module.exports = {
   ACCESS,
+  ROLES,
   COLUMN_DEFS,
   normalizeEmail,
   serializeColumnDefs,
+  serializeAdminUser,
   isAdmin,
   isSuperAdmin,
   listAdminUsers,
+  countSuperAdmins,
+  assertCanManageAdminUsers,
+  assertCanRevokeAdmin,
+  assertCanPromoteAdmin,
+  assertCanDemoteSuperAdmin,
   getColumnPermissions,
   getAllColumnPermissions,
   stripHiddenFields,
