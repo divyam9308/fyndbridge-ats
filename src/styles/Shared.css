@@ -2034,3 +2034,9 @@ textarea.form-control {
   to { transform: rotate(360deg); }
 }
 
+.fb-lock-icon {
+  color: #DAB111;
+  filter: drop-shadow(0 1px 4px rgba(218, 177, 17, 0.28));
+  flex: 0 0 auto;
+  vertical-align: -1px;
+}

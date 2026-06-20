@@ -445,7 +445,35 @@ export default function ClientsPage() {
   }, [clients, selectedContacts])
 
   const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) && !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  const availableColumns = CLIENT_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_COLUMN[column.key], isAdmin))
   const visibleAiFields = CLIENT_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_AI_FIELD[field], isAdmin))
+  const clientFieldPermission = {
+    client_display_id: 'client_display_id',
+    consultant_name: 'consultant_name',
+    client_name: 'client_name',
+    location: 'location',
+    region: 'region',
+    contact_person: 'contact_person',
+    mobile: 'mobile',
+    email: 'email',
+    designation: 'designation',
+    linkedin: 'linkedin',
+    sector: 'sector',
+    connected_on_date: 'connected_on_date',
+    follow_up_date: 'follow_up_date',
+    comments: 'comments',
+    status: 'status',
+    contract_signed: 'contract_signed',
+    contract_document: 'contract_document',
+    terms_signed_type: 'terms_signed_type',
+    terms_signed_custom: 'terms_signed_type',
+    terms_value: 'terms_value',
+    billing_entity: 'terms_value',
+    gstin: 'gstin',
+    pan: 'pan',
+    address_on_invoice: 'address_on_invoice'
+  }
+  const isClientFieldHidden = (name) => isColumnHidden(permissions, 'clients', clientFieldPermission[name] || name, isAdmin)
   const canonicalClients = useMemo(() => getCanonicalClients(allClients), [allClients])
   const matchingClients = useMemo(() => (
     canonicalClients
@@ -598,7 +626,9 @@ export default function ClientsPage() {
     const action = location.state?.action
     if (!action) return
     navigate(location.pathname, { replace: true, state: null })
-    if (action === 'add-client') openModal()
+    if (action !== 'add-client') return
+    const timer = window.setTimeout(openModal, 0)
+    return () => window.clearTimeout(timer)
   }, [location.pathname, location.state?.action, navigate, openModal])
 
   const openEditModal = (client) => {
@@ -857,7 +887,9 @@ export default function ClientsPage() {
   }
 
   const proceedColumns = () => {
-    setVisibleColumns(pendingColumns.length ? pendingColumns : DEFAULT_CLIENT_COLUMN_KEYS)
+    const allowed = availableColumns.map(column => column.key)
+    const next = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
+    setVisibleColumns(next.length ? next : allowed)
     setColumnsOpen(false)
   }
 
@@ -866,7 +898,8 @@ export default function ClientsPage() {
       const session = supabase ? (await supabase.auth.getSession()).data.session : null
       const currentUser = getCurrentUser()
       const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
-      const value = pendingColumns.length ? pendingColumns : DEFAULT_CLIENT_COLUMN_KEYS
+      const allowed = availableColumns.map(column => column.key)
+      const value = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
       const response = await fetch(`/api/user-preferences/${CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1055,7 +1088,7 @@ export default function ClientsPage() {
         return (
           <td key={key}>
             <div>
-              <Link className="name-text" to={`/dashboard/clients/${client.id}`}>{client.is_locked && <Lock size={12} />} {highlightText(client.client_name, aiFilters)}</Link>
+              <Link className="name-text" to={`/dashboard/clients/${client.id}`}>{client.is_locked && <Lock size={12} className="fb-lock-icon" />} {highlightText(client.client_name, aiFilters)}</Link>
               <div className="sub-text candidate-location-text">{highlightText(formatLocationRegion(client.location, client.region) || '-', aiFilters)}</div>
             </div>
           </td>
@@ -1169,12 +1202,12 @@ export default function ClientsPage() {
           <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
           {columnsOpen && (
             <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
-              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CLIENT_COLUMN_KEYS)}>Select All</button>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(availableColumns.map(column => column.key))}>Select All</button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
-              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(savedColumns?.length ? savedColumns : DEFAULT_CLIENT_COLUMN_KEYS)}>Reset to Saved Preference</button>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns((savedColumns?.length ? savedColumns : DEFAULT_CLIENT_COLUMN_KEYS).filter(key => availableColumns.some(column => column.key === key)))}>Reset to Saved Preference</button>
               <div className="candidate-columns-divider" />
-              {CLIENT_TABLE_COLUMNS.map(column => (
+              {availableColumns.map(column => (
                 <label className="candidate-column-option" key={column.key}>
                   <input type="checkbox" checked={pendingColumns.includes(column.key)} onChange={() => togglePendingColumn(column.key)} />
                   {column.label}
@@ -1345,7 +1378,7 @@ export default function ClientsPage() {
             </div>
             <div className="modal-body">
               <div className="form-grid-2">
-                {(editingClient || addingNewClient) && (
+                {(editingClient || addingNewClient) && !isClientFieldHidden('client_display_id') && (
                   <div className="form-group">
                     <label className="form-label">Client ID</label>
                     <input value={form.client_display_id || ''} placeholder="Loading..." className={`form-control${errors.client_display_id ? ' is-error' : ''}`} disabled readOnly />
@@ -1365,7 +1398,7 @@ export default function ClientsPage() {
                   ['sector', 'Sector', 'text'],
                   ['connected_on_date', 'Connected On Date', 'date'],
                   ['follow_up_date', 'Follow Up Date', 'date']
-                ].map(([name, label, type, required]) => (
+                ].filter(([name]) => !isClientFieldHidden(name)).map(([name, label, type, required]) => (
                   <div className="form-group" key={name}>
                     <label className="form-label">{label} {required && <span className="req">*</span>}</label>
                     {name === 'client_name' && !editingClient ? (
@@ -1441,25 +1474,25 @@ export default function ClientsPage() {
                     {errors[name] && <span className="form-error">{errors[name]}</span>}
                   </div>
                 ))}
-                <div className="form-group full">
+                {!isClientFieldHidden('comments') && <div className="form-group full">
                   <label className="form-label">Comments</label>
                   <textarea name="comments" value={form.comments} onChange={handleChange} className="form-control" rows={2} disabled={saving} />
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isClientFieldHidden('status') && <div className="form-group">
                   <label className="form-label">Status</label>
                   <select name="status" value={form.status} onChange={handleChange} className="form-control" disabled={saving}>
                     {STATUS_OPTIONS.map((status) => <option key={status || '-'} value={status}>{status || '-'}</option>)}
                   </select>
-                </div>
-                <div className="form-group">
+                </div>}
+                {!isClientFieldHidden('contract_signed') && <div className="form-group">
                   <label className="form-label">Contract Signed</label>
                   <select name="contract_signed" value={form.contract_signed} onChange={handleChange} className={`form-control${errors.contract_signed ? ' is-error' : ''}`} disabled={saving}>
                     <option value="No">No</option>
                     <option value="Yes">Yes</option>
                   </select>
                   {errors.contract_signed && <span className="form-error">{errors.contract_signed}</span>}
-                </div>
-                {form.contract_signed === 'Yes' && (
+                </div>}
+                {form.contract_signed === 'Yes' && !isClientFieldHidden('contract_document') && (
                   <div className="form-group">
                     <label className="form-label">Contract PDF</label>
                     <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving} />
@@ -1469,35 +1502,35 @@ export default function ClientsPage() {
                 )}
                 {form.contract_signed === 'Yes' && (
                   <>
-                    <div className="form-group">
+                    {!isClientFieldHidden('terms_signed_type') && <div className="form-group">
                       <label className="form-label">Terms Signed</label>
                       <select name="terms_signed_type" value={form.terms_signed_type} onChange={handleChange} className="form-control" disabled={saving}>
                         <option value="">-</option>
                         {TERMS.map((term) => <option key={term} value={term}>{term}</option>)}
                       </select>
-                    </div>
-                    {form.terms_signed_type === 'Any Other' && (
+                    </div>}
+                    {form.terms_signed_type === 'Any Other' && !isClientFieldHidden('terms_signed_custom') && (
                       <div className="form-group">
                         <label className="form-label">Custom Terms</label>
                         <input name="terms_signed_custom" value={form.terms_signed_custom} onChange={handleChange} className="form-control" disabled={saving} />
                       </div>
                     )}
-                    <div className="form-group">
+                    {!isClientFieldHidden('terms_value') && <div className="form-group">
                       <label className="form-label">Value</label>
                       <input name="terms_value" value={form.terms_value} onChange={handleChange} className="form-control" disabled={saving} />
-                    </div>
-                    <div className="form-group">
+                    </div>}
+                    {!isClientFieldHidden('billing_entity') && <div className="form-group">
                       <label className="form-label">Billing Entity</label>
                       <select name="billing_entity" value={form.billing_entity} onChange={handleChange} className="form-control" disabled={saving}>
                         <option value="">-</option>
                         {BILLING_ENTITIES.map(entity => <option key={entity} value={entity}>{entity}</option>)}
                       </select>
-                    </div>
+                    </div>}
                     {[
                       ['gstin', 'GSTIN'],
                       ['pan', 'PAN'],
                       ['address_on_invoice', 'Address on Invoice']
-                    ].map(([name, label]) => (
+                    ].filter(([name]) => !isClientFieldHidden(name)).map(([name, label]) => (
                       <div className={name === 'address_on_invoice' ? 'form-group full' : 'form-group'} key={name}>
                         <label className="form-label">{label}</label>
                         <input name={name} value={form[name]} onChange={handleChange} className="form-control" disabled={saving} />

@@ -2,8 +2,8 @@ import { Check, Eye, EyeOff, Lock } from 'lucide-react'
 
 const OPTIONS = [
   { value: 'everyone', label: 'Everyone', Icon: Eye },
-  { value: 'admin_disabled', label: 'Admin Disabled', Icon: Lock },
-  { value: 'admin_hidden', label: 'Admin Hidden', Icon: EyeOff }
+  { value: 'admin_disabled', label: 'Admin · Disabled', Icon: Lock },
+  { value: 'admin_hidden', label: 'Admin · Hidden', Icon: EyeOff }
 ]
 
 export default function AdminPermissionPicker({ value, onChange }) {

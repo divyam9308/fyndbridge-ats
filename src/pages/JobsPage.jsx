@@ -450,7 +450,24 @@ export default function JobsPage() {
     : ['-']
   const selectedConsultants = normalizeConsultantFields(consultantFields)
   const activeColumns = MANDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) && !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  const availableColumns = MANDATE_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
   const visibleAiFields = MANDATE_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_AI_FIELD[field], isAdmin))
+  const jobFieldPermission = {
+    job_display_id: 'job_display_id',
+    allocation_date: 'allocation_date',
+    consultants: 'consultants',
+    team_lead: 'team_lead',
+    client_name: 'client_name',
+    client_id: 'client_id',
+    title: 'title',
+    location: 'city',
+    budget: 'budget',
+    mandate_status: 'mandate_status',
+    vertical: 'vertical',
+    jd_file: 'jd_storage_path',
+    comments: 'comments'
+  }
+  const isJobFieldHidden = (name) => isColumnHidden(permissions, 'jobs', jobFieldPermission[name] || name, isAdmin)
 
   const updateJobLockState = async (record) => {
     setJobs(current => current.map(job => job.id === record.id ? { ...job, ...record } : job))
@@ -464,7 +481,9 @@ export default function JobsPage() {
   }
 
   const proceedColumns = () => {
-    setVisibleColumns(pendingColumns.length ? pendingColumns : DEFAULT_MANDATE_COLUMN_KEYS)
+    const allowed = availableColumns.map(column => column.key)
+    const next = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
+    setVisibleColumns(next.length ? next : allowed)
     setColumnsOpen(false)
   }
 
@@ -472,7 +491,8 @@ export default function JobsPage() {
     try {
       const currentUser = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
       const userId = currentUser?.id || currentUser?.email || 'anonymous'
-      const value = pendingColumns.length ? pendingColumns : DEFAULT_MANDATE_COLUMN_KEYS
+      const allowed = availableColumns.map(column => column.key)
+      const value = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
       const response = await fetch('/api/user-preferences/mandates_columns_preference', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -690,7 +710,7 @@ export default function JobsPage() {
         return (
           <td key={column.key}>
             <div>
-              <button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>{job.is_locked && <Lock size={12} />} {highlightText(dash(job.role), aiFilters)}</button>
+              <button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>{job.is_locked && <Lock size={12} className="fb-lock-icon" />} {highlightText(dash(job.role), aiFilters)}</button>
               <div className="sub-text candidate-location-text">{highlightText(formatLocationText(job.location) || '-', aiFilters)}</div>
             </div>
           </td>
@@ -732,12 +752,12 @@ export default function JobsPage() {
           <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
           {columnsOpen && (
             <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
-              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_MANDATE_COLUMN_KEYS)}>Select All</button>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(availableColumns.map(column => column.key))}>Select All</button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
-              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(savedColumns?.length ? savedColumns : DEFAULT_MANDATE_COLUMN_KEYS)}>Reset to Saved Preference</button>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns((savedColumns?.length ? savedColumns : DEFAULT_MANDATE_COLUMN_KEYS).filter(key => availableColumns.some(column => column.key === key)))}>Reset to Saved Preference</button>
               <div className="candidate-columns-divider" />
-              {MANDATE_TABLE_COLUMNS.map(column => (
+              {availableColumns.map(column => (
                 <label className="candidate-column-option" key={column.key}>
                   <input type="checkbox" checked={pendingColumns.includes(column.key)} onChange={() => togglePendingColumn(column.key)} />
                   {column.label}

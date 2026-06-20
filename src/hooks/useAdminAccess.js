@@ -11,7 +11,6 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
   const [permissions, setPermissions] = useState(EMPTY)
 
   const refresh = useCallback(async () => {
-    setLoading(true)
     try {
       const me = await fetchAdminMe()
       setIsAdmin(Boolean(me.isAdmin))

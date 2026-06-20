@@ -766,8 +766,14 @@ export default function CandidatesPage() {
     )
   }
 
+  const allowedCandidateColumnKeys = () => CANDIDATE_TABLE_COLUMNS
+    .filter(column => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+    .map(column => column.key)
+
   const proceedColumns = () => {
-    setVisibleColumns(pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS)
+    const allowed = allowedCandidateColumnKeys()
+    const next = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
+    setVisibleColumns(next.length ? next : allowed)
     setColumnsOpen(false)
   }
 
@@ -776,7 +782,8 @@ export default function CandidatesPage() {
       const session = supabase ? (await supabase.auth.getSession()).data.session : null
       const currentUser = getCurrentUser()
       const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
-      const value = pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS
+      const allowed = allowedCandidateColumnKeys()
+      const value = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
       const response = await fetch(`/api/user-preferences/${CANDIDATES_TABLE_COLUMNS_PREFERENCE_KEY}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1761,6 +1768,7 @@ export default function CandidatesPage() {
     )
   }
   const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => (visibleColumns.includes(column.key) || column.key === 'jobId') && !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  const availableColumns = CANDIDATE_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
 
   const updateCandidateLockState = async (record) => {
     setCandidates(current => current.map(candidate => candidate.candidateId === record.id ? { ...candidate, isLocked: record.is_locked } : candidate))
@@ -1849,7 +1857,7 @@ export default function CandidatesPage() {
               <div className="name-avatar" style={candidateAvatarStyle}>{initials(c.name)}</div>
               <div className="candidate-name-content">
                 <div className="name-text candidate-group-name">
-                  <span className="candidate-name-text">{c.isLocked && <Lock size={12} />} {highlightText(c.name, aiFilters)}</span>
+                  <span className="candidate-name-text">{c.isLocked && <Lock size={12} className="fb-lock-icon" />} {highlightText(c.name, aiFilters)}</span>
                   {isGroup && groupIndex === 0 && (
                     <button
                       className="candidate-submission-chip"
@@ -1981,7 +1989,7 @@ export default function CandidatesPage() {
           </button>
           {columnsOpen && (
             <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
-              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)}>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(availableColumns.map(column => column.key))}>
                 Select All
               </button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>
@@ -1990,11 +1998,11 @@ export default function CandidatesPage() {
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>
                 Save Preference
               </button>
-              <button className="candidate-columns-action" type="button" onClick={resetColumnsToSaved}>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns((savedColumns?.length ? savedColumns : DEFAULT_CANDIDATE_COLUMN_KEYS).filter(key => availableColumns.some(column => column.key === key)))}>
                 Reset to Saved Preference
               </button>
               <div className="candidate-columns-divider" />
-              {CANDIDATE_TABLE_COLUMNS.map(column => (
+              {availableColumns.map(column => (
                 <label className="candidate-column-option" key={column.key}>
                   <input
                     type="checkbox"
