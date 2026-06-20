@@ -6,6 +6,7 @@ const { validateAiFilters, applyFilters: applySharedFilters } = require('../serv
 const { parseAiFilters } = require('../services/aiFilterParser')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
+const { isAdmin, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
@@ -282,7 +283,7 @@ return res.json({ data: [], total: 0, page, totalPages: 1, limit })
     if (localAiFilter) rows = rows.slice(from, to + 1)
     const total = paginate ? count || 0 : filteredTotal
     const totalPages = Math.max(1, Math.ceil(total / limit))
-return res.json({ data: rows, total, page, totalPages, limit })
+return res.json({ data: await stripHiddenFields('jobs', rows, await isAdmin(req.user)), total, page, totalPages, limit })
   } catch (err) {
     return logAndSendInternal(res, 'listJobs', err)
   }
@@ -293,7 +294,7 @@ async function getJob(req, res) {
     const { data, error } = await supabase.from('jobs').select('*, clients(name, client_name, client_display_id)').eq('id', req.params.id).maybeSingle()
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Mandate not found' })
-    return res.json(formatJob(data))
+    return res.json(await stripHiddenFields('jobs', formatJob(data), await isAdmin(req.user)))
   } catch (err) {
     return logAndSendInternal(res, 'getJob', err)
   }
@@ -399,6 +400,9 @@ async function createJob(req, res) {
 
 async function updateJob(req, res) {
   try {
+    const admin = await isAdmin(req.user)
+    await assertRowEditable('jobs', req.params.id, admin)
+    await assertCanUpdateColumns('jobs', req.body, admin)
     const payload = await payloadFromBody(req.body, true)
     if (req.file) {
       const jd = await uploadDocument(req.file, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
@@ -419,7 +423,7 @@ async function updateJob(req, res) {
       previousConsultants: previousJob?.consultants || [],
       previousTeamLead: previousJob?.team_lead || ''
     })
-    return res.json(job)
+    return res.json(await stripHiddenFields('jobs', job, admin))
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'updateJob', err)
@@ -432,6 +436,7 @@ async function updateJob(req, res) {
 
 async function deleteJob(req, res) {
   try {
+    await assertRowEditable('jobs', req.params.id, await isAdmin(req.user))
     const { data, error } = await supabase.from('jobs').delete().eq('id', req.params.id).select('*').maybeSingle()
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Mandate not found' })

@@ -7,6 +7,7 @@ const { validateAiFilters, applyFilters: applySharedFilters } = require('../serv
 const { parseAiFilters } = require('../services/aiFilterParser')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { createConsultantAssignmentNotification, createClientFollowUpDueNotification } = require('../services/assignmentNotifications')
+const { isAdmin, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 
 const CLIENT_STATUSES = [
   'Active',
@@ -684,7 +685,7 @@ async function listClients(req, res) {
     const dataRows = localAiFilter ? filteredRows.slice(from, to + 1) : filteredRows
     const total = paginate ? count || 0 : filteredRows.length
     const totalPages = Math.max(1, Math.ceil(total / limit))
-return res.json({ data: dataRows, total, page, totalPages, limit })
+return res.json({ data: await stripHiddenFields('clients', dataRows, await isAdmin(req.user)), total, page, totalPages, limit })
   } catch (err) {
     return logAndSendInternal(res, 'listClients', err)
   }
@@ -718,7 +719,7 @@ async function getClient(req, res) {
   try {
     const client = await loadClientWithRelations(req.params.id)
     if (!client) return res.status(404).json({ error: 'Client not found' })
-    return res.json(client)
+    return res.json(await stripHiddenFields('clients', client, await isAdmin(req.user)))
   } catch (err) {
     return logAndSendInternal(res, 'getClient', err)
   }
@@ -831,6 +832,9 @@ async function createClient(req, res) {
 
 async function updateClient(req, res) {
   try {
+    const admin = await isAdmin(req.user)
+    await assertRowEditable('clients', req.params.id, admin)
+    await assertCanUpdateColumns('clients', req.body, admin)
     const { data: existing, error: existingError } = await supabase.from('clients').select('*').eq('id', req.params.id).maybeSingle()
     if (existingError) throw existingError
     if (!existing) return res.status(404).json({ error: 'Client not found' })
@@ -851,7 +855,7 @@ async function updateClient(req, res) {
 
     if (error) throw error
     await notifyClientConsultantAssignment(req, data, existing.consultant_name || existing.consultant)
-    return res.json(await loadClientWithRelations(data.id))
+    return res.json(await stripHiddenFields('clients', await loadClientWithRelations(data.id), admin))
   } catch (err) {
     if (isClientDisplayIdUniqueError(err)) {
       return res.status(400).json({ error: 'Could not allocate unique Client ID. Please try again.' })
@@ -944,6 +948,7 @@ async function deleteFollowUp(req, res) {
 
 async function deleteClient(req, res) {
   try {
+    await assertRowEditable('clients', req.params.id, await isAdmin(req.user))
     const { data, error } = await supabase.from('clients').delete().eq('id', req.params.id).select('*').maybeSingle()
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Client not found' })

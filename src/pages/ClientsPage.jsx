@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText, Search, Trash2 } from 'lucide-react'
+import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText, Search, Trash2, Lock } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
+import { useAdminAccess, isColumnHidden } from '../hooks/useAdminAccess'
+import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
@@ -123,6 +125,54 @@ const SORT_OPTIONS = [
 ]
 const CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY = 'clientsTableColumns'
 const CLIENT_AI_SEARCH_FIELDS = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'billing_entity', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
+const CLIENT_PERMISSION_BY_COLUMN = {
+  clientId: 'client_display_id',
+  clientName: 'client_name',
+  consultant: 'consultant_name',
+  contactPerson: 'contact_person',
+  mobile: 'mobile',
+  email: 'email',
+  designation: 'designation',
+  linkedin: 'linkedin',
+  sector: 'sector',
+  connectedOnDate: 'connected_on_date',
+  comments: 'comments',
+  followUpDate: 'follow_up_date',
+  status: 'status',
+  contractSigned: 'contract_signed',
+  termsSigned: 'terms_signed_type',
+  value: 'terms_value',
+  billingEntity: 'terms_value',
+  gstin: 'gstin',
+  pan: 'pan',
+  addressOnInvoice: 'address_on_invoice',
+  contractPdf: 'contract_document'
+}
+const CLIENT_PERMISSION_BY_AI_FIELD = {
+  client_id: 'client_display_id',
+  client_name: 'client_name',
+  location: 'location',
+  region: 'region',
+  consultant: 'consultant_name',
+  contact_person: 'contact_person',
+  mobile: 'mobile',
+  email: 'email',
+  linkedin: 'linkedin',
+  sector: 'sector',
+  connected_on_date: 'connected_on_date',
+  comments: 'comments',
+  follow_up_date: 'follow_up_date',
+  status: 'status',
+  terms_signed: 'terms_signed_type',
+  value: 'terms_value',
+  billing_entity: 'terms_value',
+  gstin: 'gstin',
+  pan: 'pan',
+  address_on_invoice: 'address_on_invoice',
+  designation: 'designation',
+  contract_signed: 'contract_signed',
+  contract_document: 'contract_document'
+}
 
 const getCurrentUser = () => {
   if (typeof window === 'undefined') return {}
@@ -184,6 +234,7 @@ function clientToForm(client) {
 
 export default function ClientsPage() {
   const { loadProfile } = useAuth()
+  const { isAdmin, permissions } = useAdminAccess()
   const location = useLocation()
   const navigate = useNavigate()
   const [clients, setClients] = useState([])
@@ -396,7 +447,8 @@ export default function ClientsPage() {
     })
   }, [clients, selectedContacts])
 
-  const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
+  const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) && !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  const visibleAiFields = CLIENT_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_AI_FIELD[field], isAdmin))
   const canonicalClients = useMemo(() => getCanonicalClients(allClients), [allClients])
   const matchingClients = useMemo(() => (
     canonicalClients
@@ -408,6 +460,11 @@ export default function ClientsPage() {
     const query = consultantSearch.trim().toLowerCase()
     return consultantOptions.filter(user => !query || user.name.toLowerCase().includes(query))
   }, [consultantOptions, consultantSearch])
+
+  const updateClientLockState = (record) => {
+    setClients(current => current.map(client => client.id === record.id ? { ...client, ...record } : client))
+    setAllClients(current => current.map(client => client.id === record.id ? { ...client, ...record } : client))
+  }
 
   const fetchConsultantOptions = useCallback(async () => {
     const res = await fetch('/api/user-profiles/options')
@@ -922,7 +979,7 @@ export default function ClientsPage() {
       setAiFilters(data.filters || null)
       setPage(1)
     } catch {
-      setAiFilters(keywordFilters('clients', prompt, CLIENT_AI_SEARCH_FIELDS))
+      setAiFilters(keywordFilters('clients', prompt, visibleAiFields))
       setAiFilterError('')
       setPage(1)
     } finally {
@@ -999,7 +1056,7 @@ export default function ClientsPage() {
         return (
           <td key={key}>
             <div>
-              <Link className="name-text" to={`/dashboard/clients/${client.id}`}>{highlightText(client.client_name, aiFilters)}</Link>
+              <Link className="name-text" to={`/dashboard/clients/${client.id}`}>{client.is_locked && <Lock size={12} />} {highlightText(client.client_name, aiFilters)}</Link>
               <div className="sub-text candidate-location-text">{highlightText(formatLocationRegion(client.location, client.region) || '-', aiFilters)}</div>
             </div>
           </td>
@@ -1090,7 +1147,7 @@ export default function ClientsPage() {
         return <td key={key}>{contractUrl ? <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" title="Open Contract PDF" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument(docKey, contractUrl) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
       }
       case 'actions':
-        return <td key={key}><div className="row-actions"><button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)}><Pencil size={13} strokeWidth={2} /></button></div></td>
+        return <td key={key}><div className="row-actions"><button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)} disabled={client.is_locked && !isAdmin}><Pencil size={13} strokeWidth={2} /></button>{isAdmin && <RecordLockButton tableName="clients" recordId={client.id} locked={client.is_locked} onChanged={updateClientLockState} />}</div></td>
       default:
         return null
     }

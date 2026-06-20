@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut
+  LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut, ShieldCheck
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
+import { useAdminAccess } from '../hooks/useAdminAccess'
 import './Sidebar.css'
 
 const navItems = [
@@ -14,6 +15,7 @@ const navItems = [
 
 export default function Sidebar() {
   const { user, signOut } = useAuth()
+  const { isAdmin } = useAdminAccess({ loadPermissions: false })
   const displayName = user?.profile_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Recruiter'
   const initials = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 
@@ -47,6 +49,18 @@ export default function Sidebar() {
             <span className="sidebar-nav-label">{label}</span>
           </NavLink>
         ))}
+        {isAdmin && (
+          <NavLink
+            to="/dashboard/admin"
+            className={({ isActive }) =>
+              `sidebar-nav-link${isActive ? ' active' : ''}`
+            }
+            id="nav-admin-panel"
+          >
+            <span className="nav-icon"><ShieldCheck size={17} strokeWidth={1.8} /></span>
+            <span className="sidebar-nav-label">Admin Panel</span>
+          </NavLink>
+        )}
 
         <div className="sidebar-divider" />
 

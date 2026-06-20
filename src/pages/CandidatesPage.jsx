@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2 } from 'lucide-react'
+import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2, Eye, Pencil, Lock } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
+import { useAdminAccess, isColumnHidden } from '../hooks/useAdminAccess'
+import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
@@ -139,6 +141,57 @@ const SORT_OPTIONS = [
   { field: 'consultant', label: 'Consultant', toggle: false }
 ]
 const CANDIDATE_AI_SEARCH_FIELDS = ['candidate_id', 'candidate_name', 'consultant', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'date', 'current_ctc', 'expected_ctc', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin']
+const CANDIDATE_PERMISSION_BY_COLUMN = {
+  candidateDisplayId: 'candidate_display_id',
+  date: 'created_at',
+  consultant: 'consultant_name',
+  client: 'client_name',
+  clientId: 'client_id',
+  jobId: 'job_id',
+  job: 'job_title',
+  name: 'full_name',
+  organisation: 'current_organisation',
+  designation: 'current_designation',
+  mobile: 'mobile_number',
+  email: 'email',
+  experience: 'experience_years',
+  skills: 'skills',
+  salary: 'current_salary',
+  notice: 'notice_period',
+  expectedSalary: 'expected_salary',
+  relocate: 'open_to_relocate',
+  comments: 'notes',
+  linkedin: 'linkedin_url',
+  status: 'status',
+  offeredCtc: 'current_salary',
+  dateOfJoining: 'created_at',
+  cv: 'cv_link',
+  month: 'created_at_month'
+}
+const CANDIDATE_PERMISSION_BY_AI_FIELD = {
+  candidate_id: 'candidate_display_id',
+  candidate_name: 'full_name',
+  consultant: 'consultant_name',
+  email: 'email',
+  mobile: 'mobile_number',
+  designation: 'current_designation',
+  organisation: 'current_organisation',
+  experience: 'experience_years',
+  skills: 'skills',
+  client_id: 'client_id',
+  client_name: 'client_name',
+  role: 'job_title',
+  date: 'created_at',
+  current_ctc: 'current_salary',
+  expected_ctc: 'expected_salary',
+  current_location: 'location',
+  notice_period: 'notice_period',
+  open_to_relocate: 'open_to_relocate',
+  comments: 'notes',
+  status: 'status',
+  month: 'created_at_month',
+  linkedin: 'linkedin_url'
+}
 
 /* ====== Empty forms ====== */
 const EMPTY_CAND = {
@@ -190,6 +243,7 @@ const apiCandidateToUi = (row) => ({
   consultant: row.consultant_name || '',
   consultantName: row.consultant_name || '',
   consultantUserId: row.consultant_user_id || '',
+  isLocked: Boolean(row.is_locked),
   createdAt: row.created_at || '',
 })
 
@@ -272,6 +326,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
 
 export default function CandidatesPage() {
   const { loadProfile } = useAuth()
+  const { isAdmin, permissions } = useAdminAccess()
   const location = useLocation()
   const navigate = useNavigate()
   const [candidates, setCandidates] = useState([])
@@ -995,7 +1050,7 @@ export default function CandidatesPage() {
       setPage(1)
     } catch (err) {
       notifyAiQuota(err.message)
-      setAiFilters(keywordFilters('candidates', prompt, CANDIDATE_AI_SEARCH_FIELDS))
+      setAiFilters(keywordFilters('candidates', prompt, CANDIDATE_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_AI_FIELD[field], isAdmin))))
       setAiAppliedPrompt(prompt)
       setAiFilterError('')
       setPage(1)
@@ -1688,7 +1743,11 @@ export default function CandidatesPage() {
       </div>
     )
   }
-  const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'jobId')
+  const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => (visibleColumns.includes(column.key) || column.key === 'jobId') && !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+
+  const updateCandidateLockState = (record) => {
+    setCandidates(current => current.map(candidate => candidate.candidateId === record.id ? { ...candidate, isLocked: record.is_locked } : candidate))
+  }
   const toggleExpandedCell = (id, key, event) => {
     event.stopPropagation()
     const cellKey = `${id}-${key}`
@@ -1772,7 +1831,7 @@ export default function CandidatesPage() {
               <div className="name-avatar" style={candidateAvatarStyle}>{initials(c.name)}</div>
               <div className="candidate-name-content">
                 <div className="name-text candidate-group-name">
-                  <span className="candidate-name-text">{highlightText(c.name, aiFilters)}</span>
+                  <span className="candidate-name-text">{c.isLocked && <Lock size={12} />} {highlightText(c.name, aiFilters)}</span>
                   {isGroup && groupIndex === 0 && (
                     <button
                       className="candidate-submission-chip"
@@ -1856,12 +1915,9 @@ export default function CandidatesPage() {
         return (
           <td key={key}>
             <div className="row-actions">
-              <button className="btn-secondary" style={{ height:30, padding:'0 10px' }} onClick={(event) => { event.stopPropagation(); openCandidateDetail(c, event) }}>
-                View
-              </button>
-              <button className="btn-secondary" style={{ height:30, padding:'0 10px' }} onClick={(event) => { event.stopPropagation(); openEditCandidate(c) }}>
-                Edit
-              </button>
+              <button className="row-action-btn" type="button" title="View" onClick={(event) => { event.stopPropagation(); openCandidateDetail(c, event) }}><Eye size={13} /></button>
+              <button className="row-action-btn" type="button" title="Edit" onClick={(event) => { event.stopPropagation(); openEditCandidate(c) }} disabled={c.isLocked && !isAdmin}><Pencil size={13} /></button>
+              {isAdmin && <RecordLockButton tableName="candidates" recordId={c.candidateId} locked={c.isLocked} onChanged={updateCandidateLockState} />}
             </div>
           </td>
         )

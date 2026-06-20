@@ -8,6 +8,7 @@ import ClientsPage from './pages/ClientsPage'
 import ClientDetailPage from './pages/ClientDetailPage'
 import ClientJobCandidatesPage from './pages/ClientJobCandidatesPage'
 import CandidatesPage from './pages/CandidatesPage'
+import AdminPage from './pages/AdminPage'
 import SettingsPage from './pages/SettingsPage'
 import ProfileSettingsPage from './pages/ProfileSettingsPage'
 import { AuthProvider, RequireAuth } from './context/AuthContext'
@@ -49,6 +50,7 @@ function App() {
             <Route path="clients/:clientId" element={<ClientDetailPage />} />
             <Route path="clients/:clientId/jobs/:jobId/candidates" element={<ClientJobCandidatesPage />} />
             <Route path="candidates" element={<CandidatesPage />} />
+            <Route path="admin" element={<AdminPage />} />
             <Route path="cvs" element={<Navigate to="/dashboard/candidates" replace />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="profile" element={<ProfileSettingsPage />} />

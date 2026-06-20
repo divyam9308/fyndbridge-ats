@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
+import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X, Lock } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
+import { useAdminAccess, isColumnHidden } from '../hooks/useAdminAccess'
+import RecordLockButton from '../components/admin/RecordLockButton'
 import PaginationBar from '../components/PaginationBar'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
@@ -22,6 +24,35 @@ const SORT_OPTIONS = [
   { field: 'role', label: 'Alphabetic order' }
 ]
 const MANDATE_AI_SEARCH_FIELDS = ['job_id', 'consultant', 'team_lead', 'client_id', 'client_name', 'role', 'location', 'budget', 'experience', 'vertical', 'date_of_allocation', 'mandate_status', 'comments', 'jd']
+const MANDATE_PERMISSION_BY_COLUMN = {
+  jobId: 'job_display_id',
+  consultant: 'consultants',
+  teamLead: 'team_lead',
+  clientId: 'client_id',
+  clientName: 'client_name',
+  role: 'title',
+  budget: 'budget',
+  mandateStatus: 'mandate_status',
+  sector: 'vertical',
+  allocationDate: 'allocation_date',
+  jd: 'jd_storage_path'
+}
+const MANDATE_PERMISSION_BY_AI_FIELD = {
+  job_id: 'job_display_id',
+  consultant: 'consultants',
+  team_lead: 'team_lead',
+  client_id: 'client_id',
+  client_name: 'client_name',
+  role: 'title',
+  location: 'city',
+  budget: 'budget',
+  experience: 'experience',
+  vertical: 'vertical',
+  date_of_allocation: 'allocation_date',
+  mandate_status: 'mandate_status',
+  comments: 'comments',
+  jd: 'jd_storage_path'
+}
 const MANDATE_TABLE_COLUMNS = [
   { key: 'jobId', label: 'Job ID' },
   { key: 'consultant', label: 'Consultant' },
@@ -101,6 +132,7 @@ const normalizeConsultantFields = (values) => {
 export default function JobsPage() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { isAdmin, permissions } = useAdminAccess()
   const [jobs, setJobs] = useState([])
   const [allJobs, setAllJobs] = useState([])
   const [dbClients, setDbClients] = useState([])
@@ -420,7 +452,13 @@ export default function JobsPage() {
     ? form.consultants.map(item => displayUserLabel(item) || '-')
     : ['-']
   const selectedConsultants = normalizeConsultantFields(consultantFields)
-  const activeColumns = MANDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
+  const activeColumns = MANDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) && !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  const visibleAiFields = MANDATE_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_AI_FIELD[field], isAdmin))
+
+  const updateJobLockState = (record) => {
+    setJobs(current => current.map(job => job.id === record.id ? { ...job, ...record } : job))
+    setAllJobs(current => current.map(job => job.id === record.id ? { ...job, ...record } : job))
+  }
 
   const togglePendingColumn = (key) => {
     setPendingColumns(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key])
@@ -522,14 +560,14 @@ export default function JobsPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setAiFilters(keywordFilters('mandates', aiText, MANDATE_AI_SEARCH_FIELDS))
+        setAiFilters(keywordFilters('mandates', aiText, visibleAiFields))
         setPage(1)
         return
       }
       setAiFilters(data.filters)
       setPage(1)
     } catch {
-      setAiFilters(keywordFilters('mandates', aiText, MANDATE_AI_SEARCH_FIELDS))
+      setAiFilters(keywordFilters('mandates', aiText, visibleAiFields))
       setPage(1)
     } finally {
       setAiLoading(false)
@@ -653,7 +691,7 @@ export default function JobsPage() {
         return (
           <td key={column.key}>
             <div>
-              <button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>{highlightText(dash(job.role), aiFilters)}</button>
+              <button className="table-link-button name-text" type="button" onClick={() => openMandateCandidates(job)}>{job.is_locked && <Lock size={12} />} {highlightText(dash(job.role), aiFilters)}</button>
               <div className="sub-text candidate-location-text">{highlightText(formatLocationText(job.location) || '-', aiFilters)}</div>
             </div>
           </td>
@@ -672,7 +710,7 @@ export default function JobsPage() {
           return <td key={column.key}>{job.jd_url ? <a href="#" target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument(docKey, job.jd_url) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
         }
       case 'action':
-        return <td key={column.key}><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)}><Pencil size={13} /></button></td>
+        return <td key={column.key}><div className="row-actions"><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)} disabled={job.is_locked && !isAdmin}><Pencil size={13} /></button>{isAdmin && <RecordLockButton tableName="jobs" recordId={job.id} locked={job.is_locked} onChanged={updateJobLockState} />}</div></td>
       default:
         return null
     }

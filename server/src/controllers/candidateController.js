@@ -10,6 +10,7 @@ const { parseAiFilters } = require('../services/aiFilterParser')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { createConsultantAssignmentNotification } = require('../services/assignmentNotifications')
+const { isAdmin, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 
 const VALID_STATUSES = [
   'Interested',
@@ -440,7 +441,8 @@ function flattenAssociation(row) {
     date_of_joining: row.date_of_joining || null,
     notes: row.notes || null,
     created_at: row.created_at,
-    updated_at: row.updated_at
+    updated_at: row.updated_at,
+    is_locked: Boolean(candidate.is_locked)
   }
 }
 
@@ -486,7 +488,8 @@ function flattenCandidateOnly(candidate) {
     date_of_joining: null,
     notes: null,
     created_at: candidate.created_at,
-    updated_at: candidate.updated_at
+    updated_at: candidate.updated_at,
+    is_locked: Boolean(candidate.is_locked)
   }
 }
 
@@ -1019,9 +1022,10 @@ async function listCandidates(req, res) {
 
     const total = localAiFilter ? flattened.length : count || 0
     const paged = localAiFilter ? flattened.slice(from, to + 1) : flattened.slice(0, limit)
+    const safeRows = await stripHiddenFields('candidates', paged, await isAdmin(req.user))
 
     return res.json({
-      data: paged,
+      data: safeRows,
       total,
       page,
       totalPages: Math.max(1, Math.ceil(total / limit)),
@@ -1044,7 +1048,7 @@ async function listCandidateAssociations(req, res) {
       throw error
     }
 
-    return res.json({ data: await enrichCandidateRows((data || []).map(flattenAssociation)) })
+    return res.json({ data: await stripHiddenFields('candidates', await enrichCandidateRows((data || []).map(flattenAssociation)), await isAdmin(req.user)) })
   } catch (err) {
     return logAndSendInternal(res, 'listCandidateAssociations', err)
   }
@@ -1067,7 +1071,7 @@ async function getCandidate(req, res) {
     }
 
     const [row] = await enrichCandidateRows([flattenAssociation(data)])
-    return res.json(row)
+    return res.json(await stripHiddenFields('candidates', row, await isAdmin(req.user)))
   } catch (err) {
     return logAndSendInternal(res, 'getCandidate', err)
   }
@@ -1251,6 +1255,7 @@ const { data: association, error: associationError } = await insertAssociation(a
 async function updateCandidate(req, res) {
   let cvResult = null
   try {
+    const admin = await isAdmin(req.user)
     const incomingStatus = req.body.status || req.body.candidateStatus || req.body.application_status || req.body.association_status;
     const body = normalizeRequestBody({
       ...req.body
@@ -1268,6 +1273,7 @@ async function updateCandidate(req, res) {
     const associationId = body.association_id || req.params.id
     const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
     const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
+    await assertCanUpdateColumns('candidates', { ...candidatePayload, ...associationPayload }, admin)
     cvResult = await applyCvInput(req, candidatePayload)
 
     if (Object.prototype.hasOwnProperty.call(associationPayload, 'status')) {
@@ -1311,6 +1317,7 @@ async function updateCandidate(req, res) {
     if (!existingCandidateId) {
       return res.status(404).json({ error: 'Candidate or association not found' })
     }
+    await assertRowEditable('candidates', existingCandidateId, admin)
 
     if (Object.keys(candidatePayload).length) {
       const updatePayload = {
@@ -1418,6 +1425,7 @@ const { data: inserted, error: insertError } = await insertAssociation(assocInse
 
 async function updateCandidateStatus(req, res) {
   try {
+    const admin = await isAdmin(req.user)
     if (!VALID_STATUSES.includes(req.body.status)) {
       return res.status(400).json({
         errors: {
@@ -1425,6 +1433,16 @@ async function updateCandidateStatus(req, res) {
         }
       })
     }
+
+    await assertCanUpdateColumns('candidates', { status: req.body.status }, admin)
+
+    const existing = await supabase
+      .from('candidate_associations')
+      .select('candidate_id')
+      .eq('id', req.params.id)
+      .maybeSingle()
+    if (existing.error) throw existing.error
+    await assertRowEditable('candidates', existing.data?.candidate_id, admin)
 
     const updatePayload = {
       status: req.body.status,
@@ -1520,6 +1538,7 @@ async function deleteResumeFromStorage(resumeUrl) {
 
 async function deleteCandidate(req, res) {
   try {
+    const admin = await isAdmin(req.user)
     const associationId = req.params.id
 
     const { data: existingAssoc, error: lookupError } = await supabase
@@ -1533,6 +1552,7 @@ async function deleteCandidate(req, res) {
     }
 
     if (existingAssoc) {
+      await assertRowEditable('candidates', existingAssoc.candidate_id, admin)
       const { error } = await supabase.from('candidate_associations').delete().eq('id', associationId)
 
       if (error) {
@@ -1568,6 +1588,7 @@ async function deleteCandidate(req, res) {
       if (!existingCand) {
         return res.status(404).json({ error: 'Candidate or association not found' })
       }
+      await assertRowEditable('candidates', existingCand.id, admin)
 
       await supabase.from('candidates').delete().eq('id', existingCand.id)
       await deleteResumeFromStorage(existingCand.resume_url)
