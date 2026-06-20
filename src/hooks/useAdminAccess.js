@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchAdminMe, fetchColumnPermissions } from '../services/adminAccessApi'
+import { supabase } from '../services/supabaseClient'
 import { useRealtimeRefresh } from './useRealtimeRefresh'
 
 const EMPTY = { clients: {}, candidates: {}, jobs: {} }
 const SEEDED_ADMIN_EMAIL = 'divyam@fyndbridge.in'
 
-function currentEmailFallback() {
+async function currentEmailFallback() {
   try {
     const user = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
-    return String(user?.email || '').trim().toLowerCase()
+    const storedEmail = String(user?.email || '').trim().toLowerCase()
+    if (storedEmail) return storedEmail
+    const session = supabase ? (await supabase.auth.getSession()).data.session : null
+    return String(session?.user?.email || '').trim().toLowerCase()
   } catch {
     return ''
   }
@@ -23,7 +27,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
   const refresh = useCallback(async () => {
     try {
       const me = await fetchAdminMe()
-      const nextIsAdmin = Boolean(me.isAdmin) || currentEmailFallback() === SEEDED_ADMIN_EMAIL
+      const nextIsAdmin = Boolean(me.isAdmin) || await currentEmailFallback() === SEEDED_ADMIN_EMAIL
       setIsAdmin(nextIsAdmin)
       if (!loadPermissions) return
       try {
@@ -35,7 +39,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
         setPermissions(EMPTY)
       }
     } catch {
-      setIsAdmin(currentEmailFallback() === SEEDED_ADMIN_EMAIL)
+      setIsAdmin(await currentEmailFallback() === SEEDED_ADMIN_EMAIL)
     } finally {
       setLoading(false)
     }
