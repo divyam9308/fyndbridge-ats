@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Briefcase, Building2, Eye, EyeOff, Lock, Mail, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
-import { useAdminAccess } from '../hooks/useAdminAccess'
+import { notifyAdminPermissionsChanged, useAdminAccess } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import {
   addAdminUser,
@@ -273,6 +273,7 @@ export default function AdminPage() {
       setSavedPermissions(draftPermissions)
       setPermissions(draftPermissions)
       await refreshPermissions()
+      notifyAdminPermissionsChanged()
       await refresh()
     } catch (err) {
       setError(err.message)

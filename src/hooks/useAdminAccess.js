@@ -3,19 +3,26 @@ import { fetchAdminMe, fetchColumnPermissions } from '../services/adminAccessApi
 import { useRealtimeRefresh } from './useRealtimeRefresh'
 
 const EMPTY = { clients: {}, candidates: {}, jobs: {} }
+const PERMISSIONS_CHANGED_EVENT = 'fb:admin-permissions-changed'
+const PERMISSIONS_CHANGED_STORAGE_KEY = 'fb_admin_permissions_changed_at'
+const PERMISSIONS_POLL_MS = 5000
+let cachedColumns = {}
+let cachedPermissions = EMPTY
 
 export function useAdminAccess({ loadPermissions = true } = {}) {
   const [isAdmin, setIsAdmin] = useState(false)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [role, setRole] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [columns, setColumns] = useState({})
-  const [permissions, setPermissions] = useState(EMPTY)
+  const [columns, setColumns] = useState(cachedColumns)
+  const [permissions, setPermissions] = useState(cachedPermissions)
 
   const refreshPermissions = useCallback(async () => {
     const data = await fetchColumnPermissions()
-    setColumns(data.columns || {})
-    setPermissions(data.permissions || EMPTY)
+    cachedColumns = data.columns || {}
+    cachedPermissions = data.permissions || EMPTY
+    setColumns(cachedColumns)
+    setPermissions(cachedPermissions)
     return data
   }, [])
 
@@ -52,8 +59,26 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
   useRealtimeRefresh({
     channelName: loadPermissions ? 'realtime:admin-access-permissions' : 'realtime:admin-access-me',
     tables: loadPermissions ? ['admin_users', 'column_permissions'] : ['admin_users'],
-    onChange: refresh
+    onChange: loadPermissions ? refreshPermissions : refresh
   })
+
+  useEffect(() => {
+    if (!loadPermissions) return undefined
+
+    const syncPermissions = () => { refreshPermissions().catch(() => null) }
+    const syncStoragePermissions = (event) => {
+      if (event.key === PERMISSIONS_CHANGED_STORAGE_KEY) syncPermissions()
+    }
+    const poll = window.setInterval(syncPermissions, PERMISSIONS_POLL_MS)
+
+    window.addEventListener(PERMISSIONS_CHANGED_EVENT, syncPermissions)
+    window.addEventListener('storage', syncStoragePermissions)
+    return () => {
+      window.clearInterval(poll)
+      window.removeEventListener(PERMISSIONS_CHANGED_EVENT, syncPermissions)
+      window.removeEventListener('storage', syncStoragePermissions)
+    }
+  }, [loadPermissions, refreshPermissions])
 
   const helpers = useMemo(() => {
     const canViewColumn = (tableName, columnKey) => !isColumnHidden(permissions, tableName, columnKey, isAdmin)
@@ -74,4 +99,9 @@ export function isColumnHidden(permissions, tableName, columnKey, isAdmin) {
 
 export function isColumnDisabled(permissions, tableName, columnKey, isAdmin) {
   return !isAdmin && permissions?.[tableName]?.[columnKey] === 'admin_disabled'
+}
+
+export function notifyAdminPermissionsChanged() {
+  window.dispatchEvent(new Event(PERMISSIONS_CHANGED_EVENT))
+  window.localStorage.setItem(PERMISSIONS_CHANGED_STORAGE_KEY, String(Date.now()))
 }
