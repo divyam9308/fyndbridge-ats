@@ -214,7 +214,7 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="admin-section-body">
-            <div className="admin-error">Sign in with divyam@fyndbridge.in, then refresh this page.</div>
+            <div className="admin-error">Your email is not listed as an admin in Supabase.</div>
           </div>
         </section>
       </div>
