@@ -71,3 +71,10 @@ create table if not exists public.client_follow_ups (
 );
 
 create index if not exists client_follow_ups_client_id_idx on public.client_follow_ups(client_id);
+
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'client_follow_ups') then
+    alter publication supabase_realtime add table public.client_follow_ups;
+  end if;
+end $$;

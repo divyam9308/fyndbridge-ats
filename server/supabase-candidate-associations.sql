@@ -168,3 +168,10 @@ create index if not exists candidate_associations_consultant_user_id_idx
 
 create index if not exists candidate_associations_job_id_idx
   on public.candidate_associations(job_id);
+
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'candidate_associations') then
+    alter publication supabase_realtime add table public.candidate_associations;
+  end if;
+end $$;
