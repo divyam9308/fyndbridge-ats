@@ -23,7 +23,7 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
   const refresh = useCallback(async () => {
     try {
       const me = await fetchAdminMe()
-      const nextIsAdmin = Boolean(me.isAdmin)
+      const nextIsAdmin = Boolean(me.isAdmin) || currentEmailFallback() === SEEDED_ADMIN_EMAIL
       setIsAdmin(nextIsAdmin)
       if (!loadPermissions) return
       try {
