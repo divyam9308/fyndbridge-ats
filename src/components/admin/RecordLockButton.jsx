@@ -10,7 +10,7 @@ export default function RecordLockButton({ tableName, recordId, locked, onChange
     event.stopPropagation()
     if (!recordId || disabled) return
     const result = await setRecordLock(tableName, recordId, nextLocked)
-    onChanged?.(result.data)
+    await onChanged?.(result.data)
   }
 
   return (

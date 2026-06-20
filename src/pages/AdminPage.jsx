@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { Trash2, Unlock } from 'lucide-react'
 import { useAdminAccess } from '../hooks/useAdminAccess'
@@ -32,11 +32,11 @@ export default function AdminPage() {
   const [lockedRecords, setLockedRecords] = useState([])
   const [error, setError] = useState('')
 
-  const loadAdminData = async () => {
+  const loadAdminData = useCallback(async () => {
     const [users, locks] = await Promise.all([fetchAdminUsers(), fetchLockedRecords()])
     setAdmins(users.data || [])
     setLockedRecords(locks.data || [])
-  }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -46,7 +46,7 @@ export default function AdminPage() {
       })
     }
     return () => { active = false }
-  }, [isAdmin])
+  }, [isAdmin, loadAdminData])
 
   useRealtimeRefresh({
     channelName: 'realtime:admin-page-locks',
@@ -82,6 +82,7 @@ export default function AdminPage() {
       await addAdminUser(email)
       setEmail('')
       await loadAdminData()
+      await refresh()
     } catch (err) {
       setError(err.message)
     }
@@ -92,6 +93,7 @@ export default function AdminPage() {
     try {
       await removeAdminUser(adminEmail)
       await loadAdminData()
+      await refresh()
     } catch (err) {
       setError(err.message)
     }

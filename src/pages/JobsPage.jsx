@@ -452,9 +452,11 @@ export default function JobsPage() {
   const activeColumns = MANDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) && !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
   const visibleAiFields = MANDATE_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_AI_FIELD[field], isAdmin))
 
-  const updateJobLockState = (record) => {
+  const updateJobLockState = async (record) => {
     setJobs(current => current.map(job => job.id === record.id ? { ...job, ...record } : job))
     setAllJobs(current => current.map(job => job.id === record.id ? { ...job, ...record } : job))
+    await fetchData()
+    await refreshClientOptions()
   }
 
   const togglePendingColumn = (key) => {

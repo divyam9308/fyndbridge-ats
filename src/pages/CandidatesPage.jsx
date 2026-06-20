@@ -1762,8 +1762,9 @@ export default function CandidatesPage() {
   }
   const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => (visibleColumns.includes(column.key) || column.key === 'jobId') && !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
 
-  const updateCandidateLockState = (record) => {
+  const updateCandidateLockState = async (record) => {
     setCandidates(current => current.map(candidate => candidate.candidateId === record.id ? { ...candidate, isLocked: record.is_locked } : candidate))
+    await loadCandidates(page, { showLoading: false })
   }
   const toggleExpandedCell = (id, key, event) => {
     event.stopPropagation()

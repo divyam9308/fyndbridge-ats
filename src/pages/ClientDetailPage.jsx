@@ -9,6 +9,7 @@ import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateC
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { supabase } from '../services/supabaseClient'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
@@ -251,17 +252,12 @@ export default function ClientDetailPage() {
     refreshDetailData({ showLoading: false })
   }, [editCandidate, refreshDetailData])
 
-  useEffect(() => {
-    if (!supabase) return
-    const channel = supabase
-      .channel(`realtime:client-detail:${clientId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, refreshDetailRealtime)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, refreshDetailRealtime)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidates' }, refreshDetailRealtime)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidate_associations' }, refreshDetailRealtime)
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [clientId, refreshDetailRealtime])
+  useRealtimeRefresh({
+    channelName: `realtime:client-detail:${clientId}`,
+    tables: ['clients', 'jobs', 'candidates', 'candidate_associations'],
+    onChange: refreshDetailRealtime,
+    enabled: Boolean(clientId)
+  })
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {

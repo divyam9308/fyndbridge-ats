@@ -458,9 +458,11 @@ export default function ClientsPage() {
     return consultantOptions.filter(user => !query || user.name.toLowerCase().includes(query))
   }, [consultantOptions, consultantSearch])
 
-  const updateClientLockState = (record) => {
+  const updateClientLockState = async (record) => {
     setClients(current => current.map(client => client.id === record.id ? { ...client, ...record } : client))
     setAllClients(current => current.map(client => client.id === record.id ? { ...client, ...record } : client))
+    await fetchClients({ showLoading: false })
+    await fetchClientOptions()
   }
 
   const fetchConsultantOptions = useCallback(async () => {
