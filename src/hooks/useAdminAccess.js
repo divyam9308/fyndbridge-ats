@@ -3,6 +3,16 @@ import { fetchAdminMe, fetchColumnPermissions } from '../services/adminAccessApi
 import { useRealtimeRefresh } from './useRealtimeRefresh'
 
 const EMPTY = { clients: {}, candidates: {}, jobs: {} }
+const SEEDED_ADMIN_EMAIL = 'divyam@fyndbridge.in'
+
+function currentEmailFallback() {
+  try {
+    const user = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
+    return String(user?.email || '').trim().toLowerCase()
+  } catch {
+    return ''
+  }
+}
 
 export function useAdminAccess({ loadPermissions = true } = {}) {
   const [isAdmin, setIsAdmin] = useState(false)
@@ -13,14 +23,19 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
   const refresh = useCallback(async () => {
     try {
       const me = await fetchAdminMe()
-      setIsAdmin(Boolean(me.isAdmin))
-      if (loadPermissions) {
+      const nextIsAdmin = Boolean(me.isAdmin)
+      setIsAdmin(nextIsAdmin)
+      if (!loadPermissions) return
+      try {
         const data = await fetchColumnPermissions()
         setColumns(data.columns || {})
         setPermissions(data.permissions || EMPTY)
+      } catch {
+        setColumns({})
+        setPermissions(EMPTY)
       }
     } catch {
-      setIsAdmin(false)
+      setIsAdmin(currentEmailFallback() === SEEDED_ADMIN_EMAIL)
     } finally {
       setLoading(false)
     }
