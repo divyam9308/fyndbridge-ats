@@ -98,24 +98,27 @@ function serializeColumnDefs() {
 
 async function isAdmin(user) {
   const email = normalizeEmail(user?.email)
-  if (!email) return false
-  const { data, error } = await supabase.from('admin_users').select('id').eq('email', email).limit(1).maybeSingle()
-  if (error && error.code !== '42P01') throw error
-  return Boolean(data)
+  if (!email && !user?.id) return false
+  return Boolean(await findAdminUser(user))
 }
 
 async function isSuperAdmin(user) {
-  const email = normalizeEmail(user?.email)
-  if (!email) return false
-  const { data, error } = await supabase.from('admin_users').select('is_super_admin').eq('email', email).limit(1).maybeSingle()
-  if (error && error.code !== '42P01') throw error
-  return Boolean(data?.is_super_admin)
+  const admin = await findAdminUser(user)
+  return Boolean(admin?.is_super_admin)
 }
 
 async function listAdminUsers() {
   const { data, error } = await supabase.from('admin_users').select('*').order('created_at', { ascending: true })
   if (error) throw error
   return data || []
+}
+
+async function findAdminUser(user) {
+  const email = normalizeEmail(user?.email)
+  const admins = await listAdminUsers()
+  return admins.find(admin => {
+    return (email && normalizeEmail(admin.email) === email) || (user?.id && admin.user_id === user.id)
+  })
 }
 
 async function getColumnPermissions(tableName) {
