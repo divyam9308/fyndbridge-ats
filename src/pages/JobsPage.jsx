@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X, Lock } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
 import { useAdminAccess, isColumnHidden } from '../hooks/useAdminAccess'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import PaginationBar from '../components/PaginationBar'
 import TablePopover from '../components/TablePopover'
@@ -257,15 +258,11 @@ export default function JobsPage() {
     refreshClientOptions()
   }, [editingJob, fetchData, isOpen, refreshClientOptions])
 
-  useEffect(() => {
-    if (!supabase) return
-    const channel = supabase
-      .channel('realtime:jobs-page')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, refreshJobsRealtime)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, refreshJobsRealtime)
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [refreshJobsRealtime])
+  useRealtimeRefresh({
+    channelName: 'realtime:jobs-page',
+    tables: ['jobs', 'clients'],
+    onChange: refreshJobsRealtime
+  })
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {

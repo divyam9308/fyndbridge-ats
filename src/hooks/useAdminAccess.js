@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchAdminMe, fetchColumnPermissions } from '../services/adminAccessApi'
+import { useRealtimeRefresh } from './useRealtimeRefresh'
 
 const EMPTY = { clients: {}, candidates: {}, jobs: {} }
 
@@ -33,6 +34,12 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
     })
     return () => { active = false }
   }, [refresh])
+
+  useRealtimeRefresh({
+    channelName: loadPermissions ? 'realtime:admin-access-permissions' : 'realtime:admin-access-me',
+    tables: loadPermissions ? ['admin_users', 'column_permissions'] : ['admin_users'],
+    onChange: refresh
+  })
 
   return useMemo(() => ({ isAdmin, loading, columns, permissions, refresh, setPermissions }), [columns, isAdmin, loading, permissions, refresh])
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { Trash2, Unlock } from 'lucide-react'
 import { useAdminAccess } from '../hooks/useAdminAccess'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import {
   addAdminUser,
   fetchAdminUsers,
@@ -46,6 +47,15 @@ export default function AdminPage() {
     }
     return () => { active = false }
   }, [isAdmin])
+
+  useRealtimeRefresh({
+    channelName: 'realtime:admin-page-locks',
+    tables: ['admin_users', 'column_permissions', 'clients', 'candidates', 'jobs'],
+    onChange: () => {
+      if (isAdmin) loadAdminData().catch(err => setError(err.message))
+    },
+    enabled: isAdmin
+  })
 
   if (loading) return null
   if (!isAdmin) return <Navigate to="/dashboard" replace />

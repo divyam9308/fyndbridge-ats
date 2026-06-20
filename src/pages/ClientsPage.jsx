@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText, Search, Trash2, Lock } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden } from '../hooks/useAdminAccess'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
@@ -380,15 +381,11 @@ export default function ClientsPage() {
     fetchClientOptions()
   }, [clientAlreadyAdded, clientDuplicate, fetchClientOptions, fetchClients, followUpClient, isOpen])
 
-  useEffect(() => {
-    if (!supabase) return
-    const channel = supabase
-      .channel('realtime:clients-page')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, refreshClientsRealtime)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'client_follow_ups' }, refreshClientsRealtime)
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [refreshClientsRealtime])
+  useRealtimeRefresh({
+    channelName: 'realtime:clients-page',
+    tables: ['clients', 'client_follow_ups'],
+    onChange: refreshClientsRealtime
+  })
 
   useEffect(() => {
     const timer = window.setTimeout(fetchClientOptions, 0)

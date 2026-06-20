@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2, Eye, Pencil, Lock } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden } from '../hooks/useAdminAccess'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
@@ -611,23 +612,14 @@ export default function CandidatesPage() {
     loadCandidates(page, { showLoading: false })
   }, [addOpen, candidateDuplicate, editing, importOpen, loadCandidates, page])
 
-  useEffect(() => {
-    if (!supabase) return
-    const channel = supabase
-      .channel('realtime:candidates-page')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidates' }, refreshCandidatesRealtime)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidate_associations' }, refreshCandidatesRealtime)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
-        refreshOptionData()
-        refreshCandidatesRealtime()
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, () => {
-        refreshOptionData()
-        refreshCandidatesRealtime()
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [refreshCandidatesRealtime, refreshOptionData])
+  useRealtimeRefresh({
+    channelName: 'realtime:candidates-page',
+    tables: ['candidates', 'candidate_associations', 'clients', 'jobs'],
+    onChange: () => {
+      refreshOptionData()
+      refreshCandidatesRealtime()
+    }
+  })
 
   const saveCandidateToApi = async (candidate, { update = false, duplicateAction = '' } = {}) => {
     const prepared = await ensureCandidateClient(candidate)

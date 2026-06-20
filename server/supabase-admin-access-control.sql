@@ -32,3 +32,22 @@ alter table jobs add column if not exists locked_at timestamptz null;
 insert into admin_users (email, name)
 values ('divyam@fyndbridge.in', 'Divyam')
 on conflict (email) do nothing;
+
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'clients') then
+    alter publication supabase_realtime add table public.clients;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'candidates') then
+    alter publication supabase_realtime add table public.candidates;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'jobs') then
+    alter publication supabase_realtime add table public.jobs;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'admin_users') then
+    alter publication supabase_realtime add table public.admin_users;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'column_permissions') then
+    alter publication supabase_realtime add table public.column_permissions;
+  end if;
+end $$;
