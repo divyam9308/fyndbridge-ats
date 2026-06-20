@@ -1,5 +1,6 @@
 const fs = require('fs/promises')
 const path = require('path')
+const os = require('os')
 const axios = require('axios')
 const { v4: uuidv4 } = require('uuid')
 const supabase = require('../services/supabaseAdmin')
@@ -710,21 +711,42 @@ async function deleteUploadedCvResult(cv) {
   if (error) console.error('deleteUploadedCvResult:', error.message)
 }
 
+function isTempResumePath(value) {
+  const filePath = String(value || '').trim()
+  if (!filePath) return false
+  const resolved = path.resolve(filePath)
+  return [path.resolve('/tmp'), path.resolve(os.tmpdir())].some((tmpRoot) => resolved === tmpRoot || resolved.startsWith(`${tmpRoot}${path.sep}`))
+}
+
 async function applyCvInput(req, candidatePayload) {
   if (req.file) {
-    const cv = await prepareUploadedCv(req.file)
-    if (cv) {
-      candidatePayload.cv_link = cv.cv_link
-      candidatePayload.resume_url = cv.resume_url
-      candidatePayload.cv_file_hash = cv.cv_file_hash
-      candidatePayload.cv_storage_path = cv.cv_storage_path
-      candidatePayload.cv_original_name = cv.cv_original_name || req.file.originalname || candidatePayload.cv_original_name
-      candidatePayload.cv_mimetype = cv.cv_mimetype || req.file.mimetype || candidatePayload.cv_mimetype
-      return cv
+    try {
+      const cv = await prepareUploadedCv(req.file)
+      if (cv) {
+        candidatePayload.cv_link = cv.cv_link
+        candidatePayload.resume_url = cv.resume_url
+        candidatePayload.cv_file_hash = cv.cv_file_hash
+        candidatePayload.cv_storage_path = cv.cv_storage_path
+        candidatePayload.cv_original_name = cv.cv_original_name || req.file.originalname || candidatePayload.cv_original_name
+        candidatePayload.cv_mimetype = cv.cv_mimetype || req.file.mimetype || candidatePayload.cv_mimetype
+        return cv
+      }
+    } catch (err) {
+      console.error('applyCvInput file upload error:', {
+        message: err.message,
+        code: err.code || '',
+        filePath: req.file.path || '',
+        originalName: req.file.originalname || '',
+        mimetype: req.file.mimetype || '',
+        bucket: RESUME_BUCKET
+      })
+      const uploadError = new Error('Resume upload failed. Please re-upload the CV and try again.')
+      uploadError.statusCode = err.statusCode || 400
+      throw uploadError
     }
   }
   const tempResumePath = String(candidatePayload.cv_storage_path || '').trim()
-  if (!req.file && tempResumePath && tempResumePath.startsWith('/tmp/')) {
+  if (!req.file && isTempResumePath(tempResumePath)) {
     try {
       await fs.access(tempResumePath)
       const tempFile = {
@@ -762,8 +784,17 @@ async function applyCvInput(req, candidatePayload) {
         return cv
       }
     } catch (err) {
-      console.error('applyCvInput temp upload error:', err.message)
-      const uploadError = new Error('Resume upload failed. Please re-upload the CV and try again.')
+      console.error('applyCvInput temp upload error:', {
+        message: err.message,
+        code: err.code || '',
+        tempResumePath,
+        originalName: req.body.cv_original_name || '',
+        mimetype: req.body.cv_mimetype || '',
+        bucket: RESUME_BUCKET
+      })
+      const uploadError = new Error(err.code === 'ENOENT'
+        ? 'Parsed resume file was lost. Please re-upload this resume.'
+        : 'Resume upload failed. Please re-upload the CV and try again.')
       uploadError.statusCode = err.statusCode || 400
       throw uploadError
     } finally {

@@ -2,11 +2,20 @@ const { v4: uuidv4 } = require('uuid')
 const { parseResume } = require('../services/resumeParser')
 const supabase = require('../services/supabaseAdmin')
 const fs = require('fs/promises')
+const path = require('path')
+const os = require('os')
 const { RESUME_BUCKET, checkUploadedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
 const { MIME_BY_EXTENSION, pathExtension } = require('../services/documentFile')
 
 function cleanText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function isTempResumePath(value) {
+  const filePath = String(value || '').trim()
+  if (!filePath) return false
+  const resolved = path.resolve(filePath)
+  return [path.resolve('/tmp'), path.resolve(os.tmpdir())].some((tmpRoot) => resolved === tmpRoot || resolved.startsWith(`${tmpRoot}${path.sep}`))
 }
 
 function rowFromParsed(file, parsed, error = null, storage = {}, warnings = []) {
@@ -149,7 +158,7 @@ async function discardTempResumes(req, res) {
     const values = Array.isArray(req.body?.paths) ? req.body.paths : [req.body?.path]
     const paths = values
       .map((value) => String(value || '').trim())
-      .filter((value) => value.startsWith('/tmp/'))
+      .filter(isTempResumePath)
 
     await Promise.all(paths.map(async (filePath) => {
       try {

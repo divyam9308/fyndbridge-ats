@@ -202,6 +202,7 @@ const EMPTY_CAND = {
   offeredCtc:'', dateOfJoining:'',
   client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', status:'',
   cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', cvOriginalName:'', cvMimetype:'', linkedinUrl:'', notes:'', consultantName:'', consultantUserId:'', candidateId:'', candidateDisplayId:'', associationId:'',
+  sourceFile:null, duplicateCvAlreadyChecked:false, duplicateCvResult:null,
 }
 
 const apiCandidateToUi = (row) => ({
@@ -631,7 +632,8 @@ export default function CandidatesPage() {
       if (value === '') return
       formBody.append(key, Array.isArray(value) ? JSON.stringify(value) : value ?? '')
     })
-    if (candidate.cvFile) formBody.append('cv_file', candidate.cvFile)
+    const cvFile = candidate.cvFile || (candidate.source === 'resume' ? candidate.sourceFile : null)
+    if (cvFile) formBody.append('cv_file', cvFile)
 
     const response = await fetch(update ? `/api/candidates/${candidate.associationId}` : '/api/candidates', {
       method: update ? 'PATCH' : 'POST',
@@ -1177,6 +1179,9 @@ export default function CandidatesPage() {
       cvStoragePath: row.cv_storage_path || row.resume_path || '',
       cvOriginalName: row.cv_original_name || row.file_name || '',
       cvMimetype: row.cv_mimetype || '',
+      sourceFile: row.sourceFile || null,
+      duplicateCvAlreadyChecked: Boolean(row.duplicateCvAlreadyChecked),
+      duplicateCvResult: row.duplicateCvResult || null,
       notes: row.summary || row.error || '',
       source: 'resume'
     }
@@ -1225,7 +1230,19 @@ export default function CandidatesPage() {
         await discardResumeTemps(rows.map(row => row?.cv_storage_path || row?.resume_path))
         return
       }
-      await startResumeReview(rows)
+      await startResumeReview(rows.map((row, index) => ({
+        ...row,
+        sourceFile: files[index] || null,
+        originalFileName: files[index]?.name || row.file_name || '',
+        duplicateCvAlreadyChecked: true,
+        duplicateCvResult: row.cv_duplicate ? {
+          duplicate: true,
+          cv_link: row.cv_link || row.resume_url || '',
+          resume_url: row.resume_url || row.cv_link || '',
+          cv_file_hash: row.cv_file_hash || '',
+          cv_storage_path: row.cv_storage_path || ''
+        } : null
+      })))
     } catch (err) {
       notifyAiQuota(err.message)
       setImportError(err.message)
@@ -1272,9 +1289,14 @@ export default function CandidatesPage() {
     const candidateToSave = fillEmptyCandidateFields({ ...parsedForm, source: 'resume' })
     const e = validate(candidateToSave)
     if (Object.keys(e).length) { setImportError(Object.values(e)[0]); return }
+    if (!candidateToSave.cvFile && !candidateToSave.sourceFile && !candidateToSave.cvStoragePath && !candidateToSave.cvLink) {
+      setImportError('Parsed resume file was lost. Please re-upload this resume.')
+      return
+    }
     setSaving(true)
     try {
       await saveCandidateToApi(candidateToSave, { duplicateAction: duplicateBypass?.source === 'resume' ? 'add_duplicate' : '' })
+      await discardResumeTemps([candidateToSave.cvStoragePath || importQueue[currentImportIndex]?.cv_storage_path || importQueue[currentImportIndex]?.resume_path])
       setDuplicateBypass(null)
       await loadCandidates(1, { showLoading: false })
       setPage(1)
@@ -1456,6 +1478,7 @@ export default function CandidatesPage() {
       }
     })
     const cvHref = resolveCandidateCvHref(f)
+    const parsedResumeAttached = f.source === 'resume' && (f.sourceFile || f.cvOriginalName || f.cvStoragePath)
     return (
       <div className="form-grid-2">
         <div className="form-group">
@@ -1682,8 +1705,10 @@ export default function CandidatesPage() {
           <div style={{ display:'grid', gap:8 }}>
             {!lockCv && (
               <div>
-                <span className="sub-text">{f.cvOriginalName ? `Resume: ${f.cvOriginalName}` : 'Choose File'}</span>
-                <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => handleCvFileChange(setF, event.target.files?.[0] || null)} className="form-control" />
+                <span className="sub-text">{parsedResumeAttached ? `Parsed resume attached: ${f.cvOriginalName || f.sourceFile?.name || 'Resume'}` : (f.cvOriginalName ? `Resume: ${f.cvOriginalName}` : 'Choose File')}</span>
+                {!parsedResumeAttached && (
+                  <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => handleCvFileChange(setF, event.target.files?.[0] || null)} className="form-control" />
+                )}
               </div>
             )}
             {cvHref && (
