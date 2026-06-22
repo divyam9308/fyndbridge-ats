@@ -802,7 +802,10 @@ export default function JobsPage() {
 
       <div className="table-card table-card-popovers">
         {loading ? (
-          <div className="loading-state"><Loader2 size={32} className="spin" color="var(--gold)" /><p>Loading mandates...</p></div>
+          <div className="empty-state">
+            <div className="empty-state-icon"><Loader2 size={28} color="var(--gold)" className="spin" /></div>
+            <div className="empty-state-title">Loading mandates</div>
+          </div>
         ) : error ? (
           <div className="empty-state"><div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div><div className="empty-state-title">Error loading data</div><div className="empty-state-desc">{error}</div></div>
         ) : jobs.length === 0 ? (

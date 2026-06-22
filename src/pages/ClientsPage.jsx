@@ -1289,7 +1289,10 @@ export default function ClientsPage() {
 
       <div className="table-card">
         {loading ? (
-          <div className="loading-state"><Loader2 size={32} className="spin" color="var(--gold)" /><p>Loading clients database...</p></div>
+          <div className="empty-state">
+            <div className="empty-state-icon"><Loader2 size={28} color="var(--gold)" className="spin" /></div>
+            <div className="empty-state-title">Loading clients</div>
+          </div>
         ) : error ? (
           <div className="empty-state">
             <div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div>
