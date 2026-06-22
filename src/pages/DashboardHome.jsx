@@ -568,7 +568,7 @@ export default function DashboardHome() {
           <SectionTitle icon={FileSignature} title="Active Clients with Contract Signed" subtitle="Billing entity split" />
           <div className="ats-dashboard-billing-grid">
             {billingEntityData.map((item, index) => (
-              <div className={`ats-dashboard-billing-card kpi-3d ${index === 0 ? 'gradient-info' : 'gradient-fcapl'}`} key={item.label}>
+              <div className={`ats-dashboard-billing-card kpi-3d ${index === 0 ? 'gradient-fcs-billing' : 'gradient-fcapl-billing'}`} key={item.label}>
                 <span>{item.label}</span>
                 <strong>{Number(item.value || 0).toLocaleString('en-IN')}</strong>
                 <small>{billingTotal ? Math.round((Number(item.value || 0) / billingTotal) * 100) : 0}% of signed</small>

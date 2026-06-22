@@ -44,7 +44,8 @@
 .modern-dashboard .gradient-warning { background-image: var(--modern-gradient-warning); }
 .modern-dashboard .gradient-info { background-image: var(--modern-gradient-info); }
 .modern-dashboard .gradient-pink { background-image: var(--modern-gradient-pink); }
-.modern-dashboard .gradient-fcapl { background-image: linear-gradient(135deg, #8B5CF6, #A855F7, #6366F1); }
+.modern-dashboard .gradient-fcs-billing { background-image: linear-gradient(135deg, #001264, #1E3A8A, #2563EB); }
+.modern-dashboard .gradient-fcapl-billing { background-image: linear-gradient(135deg, #10B981, #14B8A6, #0F766E); }
 .modern-dashboard .gradient-teal { background-image: var(--modern-gradient-teal); }
 .modern-dashboard .shadow-soft { box-shadow: var(--modern-shadow-soft); }
 .modern-dashboard .shadow-card { box-shadow: var(--modern-shadow-card); }
@@ -316,21 +317,38 @@
   background: rgba(255,255,255,0.16);
 }
 
-.ats-dashboard-billing-card.gradient-fcapl {
+.ats-dashboard-billing-card.gradient-fcs-billing {
   color: #fff;
-  box-shadow: 0 18px 38px rgba(99, 102, 241, 0.24);
+  box-shadow: 0 18px 38px rgba(0, 18, 100, 0.24);
 }
 
-.ats-dashboard-billing-card.gradient-fcapl::after {
-  background: rgba(238, 231, 255, 0.24);
+.ats-dashboard-billing-card.gradient-fcs-billing::after {
+  background: rgba(226, 242, 255, 0.22);
 }
 
-.ats-dashboard-billing-card.gradient-fcapl .ats-dashboard-billing-progress {
+.ats-dashboard-billing-card.gradient-fcs-billing .ats-dashboard-billing-progress {
   background: rgba(255, 255, 255, 0.34);
 }
 
-.ats-dashboard-billing-card.gradient-fcapl .ats-dashboard-billing-progress em {
-  background: rgba(248, 245, 255, 0.92);
+.ats-dashboard-billing-card.gradient-fcs-billing .ats-dashboard-billing-progress em {
+  background: rgba(240, 248, 255, 0.92);
+}
+
+.ats-dashboard-billing-card.gradient-fcapl-billing {
+  color: #fff;
+  box-shadow: 0 18px 38px rgba(15, 118, 110, 0.22);
+}
+
+.ats-dashboard-billing-card.gradient-fcapl-billing::after {
+  background: rgba(220, 255, 244, 0.24);
+}
+
+.ats-dashboard-billing-card.gradient-fcapl-billing .ats-dashboard-billing-progress {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.ats-dashboard-billing-card.gradient-fcapl-billing .ats-dashboard-billing-progress em {
+  background: rgba(236, 253, 245, 0.92);
 }
 
 .ats-dashboard-kpi:hover,
