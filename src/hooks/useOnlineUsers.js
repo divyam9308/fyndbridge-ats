@@ -3,12 +3,12 @@ import { useAuth } from '../context/useAuth'
 import { fetchAdminMe } from '../services/adminAccessApi'
 import { supabase } from '../services/supabaseClient'
 
+const OnlineUsersContext = createContext([])
+
 function initials(name, email) {
   const value = String(name || email || '').trim()
-  if (!value) return 'U'
-  const source = value.includes('@') ? value.split('@')[0].replace(/[._-]+/g, ' ') : value
-  const parts = source.split(/\s+/).filter(Boolean)
-  return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)[0]}` : parts[0].slice(0, 2)).toUpperCase()
+  const parts = value.includes('@') ? value.split('@')[0].replace(/[._-]+/g, ' ').split(/\s+/) : value.split(/\s+/)
+  return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)[0]}` : parts[0]?.slice(0, 2) || 'U').toUpperCase()
 }
 
 function uniqueUsers(state) {
@@ -16,30 +16,20 @@ function uniqueUsers(state) {
   Object.entries(state || {}).forEach(([key, presences]) => {
     for (const presence of presences || []) {
       const userId = presence.user_id || key
-      if (!userId) continue
-      const existing = users.get(userId)
-      if (!existing || String(presence.online_at || '') > String(existing.online_at || '')) {
-        users.set(userId, {
-          ...presence,
-          id: userId,
-          user_id: userId,
-          status: 'online'
-        })
+      const previous = users.get(userId)
+      if (userId && (!previous || String(presence.online_at || '') > String(previous.online_at || ''))) {
+        users.set(userId, { ...presence, id: userId, user_id: userId, status: 'online' })
       }
     }
   })
-  return [...users.values()].sort((a, b) => {
-    return String(a.name || a.email || '').localeCompare(String(b.name || b.email || ''))
-  })
+  return [...users.values()].sort((a, b) => String(a.name || a.email || '').localeCompare(String(b.name || b.email || '')))
 }
-
-const OnlineUsersContext = createContext([])
 
 function usePresenceUsers() {
   const { user, session, profile, loadProfile } = useAuth()
   const [onlineUsers, setOnlineUsers] = useState([])
-  const enabled = Boolean(supabase && session?.user && user?.id)
   const loadProfileRef = useRef(loadProfile)
+  const enabled = Boolean(supabase && session?.user && user?.id)
   const profileName = String(profile?.name || '').trim()
   const profileRole = profile?.role
   const profileDesignation = profile?.designation
@@ -53,139 +43,98 @@ function usePresenceUsers() {
 
     let cancelled = false
     let channel
-    let subscribed = false
-    let tracked = false
-    let desiredPresence = false
-    let reconciling = false
-    let activityTimer
-    let retryTimer
-    let retryCount = 0
+    let restoreTimer
+    const isActive = () => document.visibilityState === 'visible' && document.hasFocus()
 
-    const isPageActive = () => document.visibilityState === 'visible' && document.hasFocus()
-
-    async function connect() {
+    async function start() {
       const [savedProfile, admin] = await Promise.all([
-        profileName
-          ? Promise.resolve({ name: profileName, role: profileRole, designation: profileDesignation })
-          : loadProfileRef.current().catch(() => null),
+        profileName ? Promise.resolve({ name: profileName, role: profileRole, designation: profileDesignation }) : loadProfileRef.current().catch(() => null),
         fetchAdminMe().catch(() => null)
       ])
       if (cancelled) return
 
-      const email = String(user.email || session.user.email || '').trim()
       const name = String(savedProfile?.name || '').trim()
       if (!name) return
-      const role = admin?.isSuperAdmin ? 'Super Admin' : admin?.isAdmin ? 'Admin' : String(savedProfile?.role || savedProfile?.designation || 'Consultant')
-      const currentUser = {
+      const email = String(user.email || session.user.email || '').trim()
+      const presence = {
         user_id: user.id,
         id: user.id,
         name,
         email,
-        role,
+        role: admin?.isSuperAdmin ? 'Super Admin' : admin?.isAdmin ? 'Admin' : String(savedProfile?.role || savedProfile?.designation || 'Consultant'),
         initials: initials(name, email),
         online_at: new Date().toISOString(),
         status: 'online'
       }
 
-      channel = supabase.channel('online-users', {
-        config: { presence: { key: user.id } }
-      })
-      const sync = () => {
-        if (!cancelled) setOnlineUsers(uniqueUsers(channel.presenceState()))
+      const stop = () => {
+        const current = channel
+        channel = undefined
+        setOnlineUsers([])
+        if (current) {
+          current.untrack().catch(() => {})
+          supabase.removeChannel(current)
+        }
       }
-      const reconcilePresence = async () => {
-        if (!subscribed || reconciling || cancelled) return
-        reconciling = true
-        while (!cancelled && subscribed && desiredPresence !== tracked) {
-          const shouldTrack = desiredPresence
-          try {
-            const result = shouldTrack ? await channel.track(currentUser) : await channel.untrack()
-            if (result !== 'ok') throw new Error('Presence update failed')
-            tracked = shouldTrack
-            retryCount = 0
-            sync()
-          } catch {
-            tracked = !shouldTrack
-            if (retryCount++ < 3) {
-              window.clearTimeout(retryTimer)
-              retryTimer = window.setTimeout(reconcilePresence, 500)
+      const open = () => {
+        if (cancelled || channel || !isActive()) return
+        const current = supabase.channel('online-users', { config: { presence: { key: user.id } } })
+        channel = current
+        const sync = () => {
+          if (!cancelled && channel === current) setOnlineUsers(uniqueUsers(current.presenceState()))
+        }
+        current
+          .on('presence', { event: 'sync' }, sync)
+          .on('presence', { event: 'join' }, sync)
+          .on('presence', { event: 'leave' }, sync)
+          .subscribe(status => {
+            if (cancelled || channel !== current) return
+            if (status === 'SUBSCRIBED') {
+              current.track({ ...presence, online_at: new Date().toISOString() }).then(result => {
+                if (result === 'ok') sync()
+                else stop()
+              }).catch(stop)
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              stop()
             }
-            break
-          }
-        }
-        reconciling = false
+          })
       }
-      const updatePresence = (forceOffline = false) => {
-        desiredPresence = !forceOffline && isPageActive()
-        reconcilePresence()
+      const restore = () => {
+        window.clearTimeout(restoreTimer)
+        restoreTimer = window.setTimeout(open, 0)
       }
-      const handleVisibilityChange = () => {
-        if (document.visibilityState !== 'visible') {
-          updatePresence(true)
-          return
-        }
-        tracked = false
-        retryCount = 0
-        window.clearTimeout(activityTimer)
-        window.clearTimeout(retryTimer)
-        activityTimer = window.setTimeout(updatePresence, 0)
+      const hide = () => {
+        window.clearTimeout(restoreTimer)
+        stop()
       }
-      const handleFocus = () => {
-        tracked = false
-        retryCount = 0
-        window.clearTimeout(retryTimer)
-        desiredPresence = document.visibilityState === 'visible'
-        reconcilePresence()
-      }
-      const handleBlur = () => updatePresence(true)
-      const handleExit = () => updatePresence(true)
+      const visibility = () => document.visibilityState === 'visible' ? restore() : hide()
 
-      channel
-        .on('presence', { event: 'sync' }, sync)
-        .on('presence', { event: 'join' }, sync)
-        .on('presence', { event: 'leave' }, sync)
-        .subscribe(async (status) => {
-          if (cancelled) return
-          if (status === 'SUBSCRIBED') {
-            subscribed = true
-            updatePresence()
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            subscribed = false
-            tracked = false
-            setOnlineUsers([])
-          }
-        })
-
-      document.addEventListener('visibilitychange', handleVisibilityChange)
-      window.addEventListener('focus', handleFocus)
-      window.addEventListener('blur', handleBlur)
-      window.addEventListener('pagehide', handleExit)
-      window.addEventListener('beforeunload', handleExit)
+      document.addEventListener('visibilitychange', visibility)
+      window.addEventListener('focus', restore)
+      window.addEventListener('blur', hide)
+      window.addEventListener('pagehide', hide)
+      window.addEventListener('beforeunload', hide)
+      open()
 
       return () => {
-        window.clearTimeout(activityTimer)
-        window.clearTimeout(retryTimer)
-        document.removeEventListener('visibilitychange', handleVisibilityChange)
-        window.removeEventListener('focus', handleFocus)
-        window.removeEventListener('blur', handleBlur)
-        window.removeEventListener('pagehide', handleExit)
-        window.removeEventListener('beforeunload', handleExit)
-        desiredPresence = false
-        if (subscribed && tracked) channel.untrack().catch(() => {})
+        window.clearTimeout(restoreTimer)
+        document.removeEventListener('visibilitychange', visibility)
+        window.removeEventListener('focus', restore)
+        window.removeEventListener('blur', hide)
+        window.removeEventListener('pagehide', hide)
+        window.removeEventListener('beforeunload', hide)
+        stop()
       }
     }
 
-    let disconnect
-    connect().then(cleanup => {
-      disconnect = cleanup
-      if (cancelled) disconnect?.()
+    let cleanup
+    start().then(result => {
+      cleanup = result
+      if (cancelled) cleanup?.()
     })
     return () => {
       cancelled = true
-      disconnect?.()
-      if (channel) {
-        supabase.removeChannel(channel)
-      }
+      cleanup?.()
     }
   }, [enabled, profileDesignation, profileName, profileRole, session?.user?.email, user?.email, user?.id])
 
@@ -193,8 +142,7 @@ function usePresenceUsers() {
 }
 
 export function OnlineUsersProvider({ children }) {
-  const onlineUsers = usePresenceUsers()
-  return createElement(OnlineUsersContext.Provider, { value: onlineUsers }, children)
+  return createElement(OnlineUsersContext.Provider, { value: usePresenceUsers() }, children)
 }
 
 export function useOnlineUsers() {
