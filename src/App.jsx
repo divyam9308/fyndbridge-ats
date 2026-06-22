@@ -13,6 +13,7 @@ import SettingsPage from './pages/SettingsPage'
 import ProfileSettingsPage from './pages/ProfileSettingsPage'
 import InvoicePage from './pages/InvoicePage'
 import { AuthProvider, RequireAuth } from './context/AuthContext'
+import { OnlineUsersProvider } from './hooks/useOnlineUsers'
 import './index.css'
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <OnlineUsersProvider>
         {aiQuotaNotice && (
           <div className="global-ai-notice" role="status">
             <span>{aiQuotaNotice}</span>
@@ -60,6 +62,7 @@ function App() {
             <Route index element={<InvoicePage />} />
           </Route>
         </Routes>
+        </OnlineUsersProvider>
       </AuthProvider>
     </BrowserRouter>
   )

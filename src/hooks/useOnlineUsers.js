@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { createContext, createElement, useContext, useEffect, useState } from 'react'
 import { useAuth } from '../context/useAuth'
 import { fetchAdminMe } from '../services/adminAccessApi'
 import { supabase } from '../services/supabaseClient'
@@ -11,7 +11,7 @@ function initials(name, email) {
   return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)[0]}` : parts[0].slice(0, 2)).toUpperCase()
 }
 
-function uniqueUsers(state, currentUser) {
+function uniqueUsers(state) {
   const users = new Map()
   Object.entries(state || {}).forEach(([key, presences]) => {
     for (const presence of presences || []) {
@@ -28,15 +28,14 @@ function uniqueUsers(state, currentUser) {
       }
     }
   })
-  if (currentUser && !users.has(currentUser.user_id)) users.set(currentUser.user_id, currentUser)
   return [...users.values()].sort((a, b) => {
-    if (a.user_id === currentUser?.user_id) return -1
-    if (b.user_id === currentUser?.user_id) return 1
     return String(a.name || a.email || '').localeCompare(String(b.name || b.email || ''))
   })
 }
 
-export function useOnlineUsers() {
+const OnlineUsersContext = createContext([])
+
+function usePresenceUsers() {
   const { user, session, profile, loadProfile } = useAuth()
   const [onlineUsers, setOnlineUsers] = useState([])
   const enabled = Boolean(supabase && session?.user && user?.id)
@@ -46,14 +45,20 @@ export function useOnlineUsers() {
 
     let cancelled = false
     let channel
+    let subscribed = false
+    let tracked = false
+    let desiredPresence = false
+    let reconciling = false
+
+    const isPageActive = () => document.visibilityState === 'visible' && document.hasFocus()
 
     async function connect() {
       const [savedProfile, admin] = await Promise.all([profile ? Promise.resolve(profile) : loadProfile().catch(() => null), fetchAdminMe().catch(() => null)])
       if (cancelled) return
 
       const email = String(user.email || session.user.email || '').trim()
-      const emailName = email.includes('@') ? email.split('@')[0] : email
-      const name = String(savedProfile?.name || '').trim() || emailName || 'User'
+      const name = String(savedProfile?.name || '').trim()
+      if (!name) return
       const role = admin?.isSuperAdmin ? 'Super Admin' : admin?.isAdmin ? 'Admin' : String(savedProfile?.role || savedProfile?.designation || 'Consultant')
       const currentUser = {
         user_id: user.id,
@@ -66,13 +71,33 @@ export function useOnlineUsers() {
         status: 'online'
       }
 
-      setOnlineUsers([currentUser])
       channel = supabase.channel('online-users', {
         config: { presence: { key: user.id } }
       })
       const sync = () => {
-        if (!cancelled) setOnlineUsers(uniqueUsers(channel.presenceState(), currentUser))
+        if (!cancelled) setOnlineUsers(uniqueUsers(channel.presenceState()))
       }
+      const reconcilePresence = async () => {
+        if (!subscribed || reconciling || cancelled) return
+        reconciling = true
+        while (!cancelled && subscribed && desiredPresence !== tracked) {
+          try {
+            if (desiredPresence) await channel.track(currentUser)
+            else await channel.untrack()
+            tracked = desiredPresence
+            sync()
+          } catch {
+            break
+          }
+        }
+        reconciling = false
+      }
+      const updatePresence = (forceOffline = false) => {
+        desiredPresence = !forceOffline && isPageActive()
+        reconcilePresence()
+      }
+      const handlePageState = () => updatePresence()
+      const handleExit = () => updatePresence(true)
 
       channel
         .on('presence', { event: 'sync' }, sync)
@@ -81,23 +106,54 @@ export function useOnlineUsers() {
         .subscribe(async (status) => {
           if (cancelled) return
           if (status === 'SUBSCRIBED') {
-            await channel.track(currentUser)
-            sync()
+            subscribed = true
+            updatePresence()
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            setOnlineUsers([currentUser])
+            subscribed = false
+            tracked = false
+            setOnlineUsers([])
           }
         })
+
+      document.addEventListener('visibilitychange', handlePageState)
+      window.addEventListener('focus', handlePageState)
+      window.addEventListener('blur', handlePageState)
+      window.addEventListener('pagehide', handleExit)
+      window.addEventListener('beforeunload', handleExit)
+
+      return () => {
+        document.removeEventListener('visibilitychange', handlePageState)
+        window.removeEventListener('focus', handlePageState)
+        window.removeEventListener('blur', handlePageState)
+        window.removeEventListener('pagehide', handleExit)
+        window.removeEventListener('beforeunload', handleExit)
+        desiredPresence = false
+        if (subscribed && tracked) channel.untrack().catch(() => {})
+      }
     }
 
-    connect()
+    let disconnect
+    connect().then(cleanup => {
+      disconnect = cleanup
+      if (cancelled) disconnect?.()
+    })
     return () => {
       cancelled = true
+      disconnect?.()
       if (channel) {
-        channel.untrack().catch(() => {})
         supabase.removeChannel(channel)
       }
     }
   }, [enabled, loadProfile, profile, session, user?.email, user?.id])
 
   return enabled ? onlineUsers : []
+}
+
+export function OnlineUsersProvider({ children }) {
+  const onlineUsers = usePresenceUsers()
+  return createElement(OnlineUsersContext.Provider, { value: onlineUsers }, children)
+}
+
+export function useOnlineUsers() {
+  return useContext(OnlineUsersContext)
 }
