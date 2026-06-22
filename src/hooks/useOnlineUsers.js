@@ -1,4 +1,4 @@
-import { createContext, createElement, useContext, useEffect, useState } from 'react'
+import { createContext, createElement, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../context/useAuth'
 import { fetchAdminMe } from '../services/adminAccessApi'
 import { supabase } from '../services/supabaseClient'
@@ -39,6 +39,14 @@ function usePresenceUsers() {
   const { user, session, profile, loadProfile } = useAuth()
   const [onlineUsers, setOnlineUsers] = useState([])
   const enabled = Boolean(supabase && session?.user && user?.id)
+  const loadProfileRef = useRef(loadProfile)
+  const profileName = String(profile?.name || '').trim()
+  const profileRole = profile?.role
+  const profileDesignation = profile?.designation
+
+  useEffect(() => {
+    loadProfileRef.current = loadProfile
+  }, [loadProfile])
 
   useEffect(() => {
     if (!enabled) return undefined
@@ -53,7 +61,12 @@ function usePresenceUsers() {
     const isPageActive = () => document.visibilityState === 'visible' && document.hasFocus()
 
     async function connect() {
-      const [savedProfile, admin] = await Promise.all([profile ? Promise.resolve(profile) : loadProfile().catch(() => null), fetchAdminMe().catch(() => null)])
+      const [savedProfile, admin] = await Promise.all([
+        profileName
+          ? Promise.resolve({ name: profileName, role: profileRole, designation: profileDesignation })
+          : loadProfileRef.current().catch(() => null),
+        fetchAdminMe().catch(() => null)
+      ])
       if (cancelled) return
 
       const email = String(user.email || session.user.email || '').trim()
@@ -144,7 +157,7 @@ function usePresenceUsers() {
         supabase.removeChannel(channel)
       }
     }
-  }, [enabled, loadProfile, profile, session, user?.email, user?.id])
+  }, [enabled, profileDesignation, profileName, profileRole, session?.user?.email, user?.email, user?.id])
 
   return enabled ? onlineUsers : []
 }
