@@ -148,7 +148,10 @@ function GenerateModal({ entities, onClose }) {
     if (selected) setForm(current => autoGst({ ...EMPTY, ...selected, model: 'joining_percentage', invoice_entity_id: selected.id, invoice_date: current.invoice_date || today(), professional_fee_text: '' }))
   }, [selectedId])
   useEffect(() => {
-    fetchNextInvoiceNumber(form.billing_entity, form.invoice_date).then(data => setNextNumber(data.invoiceNumber)).catch(() => setNextNumber(''))
+    let active = true
+    setNextNumber('')
+    fetchNextInvoiceNumber(form.billing_entity, form.invoice_date).then(data => active && setNextNumber(data.invoiceNumber)).catch(() => active && setNextNumber(''))
+    return () => { active = false }
   }, [form.billing_entity, form.invoice_date])
   const update = event => {
     const { name, value } = event.target
@@ -252,6 +255,17 @@ export default function InvoicePage() {
     if (!adminLoading && isAdmin) load()
     if (!adminLoading && !isAdmin) setLoading(false)
   }, [adminLoading, isAdmin])
+  useEffect(() => {
+    if (adminLoading || !isAdmin) return undefined
+    const refresh = () => load()
+    const refreshWhenVisible = () => { if (!document.hidden) refresh() }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [adminLoading, isAdmin])
   const filtered = useMemo(() => entities.filter(entity => [entity.invoice_id, entity.legal_entity_name, entity.gstin, entity.pan, entity.contact_person, entity.email, entity.billing_entity].join(' ').toLowerCase().includes(query.toLowerCase())), [entities, query])
   const save = async form => {
     if (editing) await updateInvoiceEntity(editing.id, form)
@@ -262,12 +276,16 @@ export default function InvoicePage() {
     if (!window.confirm(`Delete ${entity.invoice_id}?`)) return
     await deleteInvoiceEntity(entity.id); await load()
   }
+  const openGenerate = async () => {
+    await load()
+    setGenerating(true)
+  }
   if (adminLoading) return <div className="table-card"><div className="table-empty">Checking access...</div></div>
   if (!isAdmin) return <div className="table-card"><div className="form-error" style={{ display: 'block', margin: 16 }}>Admin access required.</div></div>
   return <div className="invoice-page">
     <div className="candidate-page-header">
       <div><h2>Invoice</h2><p>Manage legal entities and generate FCS/FCAPL invoices.</p></div>
-      <div className="header-actions"><button className="btn-secondary" onClick={() => setGenerating(true)}><FileText size={15} />Generate Invoice</button><button className="btn-primary" onClick={() => setAdding(true)}><Plus size={15} />Add Entity</button></div>
+      <div className="header-actions"><button className="btn-secondary" onClick={openGenerate}><FileText size={15} />Generate Invoice</button><button className="btn-primary" onClick={() => setAdding(true)}><Plus size={15} />Add Entity</button></div>
     </div>
     <div className="table-card">
       <div className="filters-row"><div className="search-box"><Search size={15} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search invoice entities..." /></div></div>
