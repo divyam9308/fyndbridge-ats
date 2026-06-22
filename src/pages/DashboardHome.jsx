@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Activity,
@@ -171,17 +171,53 @@ function Sparkline({ values, color = 'rgba(255,255,255,0.95)', animationKey = 's
 }
 
 function SparklineSkeleton() {
-  return <div className="ats-dashboard-sparkline-skeleton" aria-hidden="true" />
+  return (
+    <div className="ats-dashboard-sparkline-loading" aria-hidden="true">
+      <i />
+      <span><b /><b /><b /></span>
+    </div>
+  )
+}
+
+function CountUpValue({ value, ready, animationKey }) {
+  const target = Number(value || 0)
+  const [display, setDisplay] = useState(target)
+  const reduceMotion = useMemo(() => (
+    typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  ), [])
+
+  useEffect(() => {
+    if (!ready || reduceMotion) {
+      setDisplay(target)
+      return undefined
+    }
+
+    let frame = 0
+    const start = performance.now()
+    const duration = 1050
+    const easeOut = (t) => 1 - Math.pow(1 - t, 3)
+    const tick = (now) => {
+      const progress = Math.min(1, (now - start) / duration)
+      setDisplay(Math.round(target * easeOut(progress)))
+      if (progress < 1) frame = window.requestAnimationFrame(tick)
+    }
+
+    setDisplay(0)
+    frame = window.requestAnimationFrame(tick)
+    return () => window.cancelAnimationFrame(frame)
+  }, [animationKey, ready, reduceMotion, target])
+
+  return ready ? Number(display || 0).toLocaleString('en-IN') : '--'
 }
 
 function StatCard({ icon: Icon, label, value, accent, sparkline, isReady, animationKey }) {
   return (
-    <article className={`ats-dashboard-kpi kpi-3d ${accent}`}>
+    <article className={`ats-dashboard-kpi kpi-3d ${accent}${isReady ? ' is-ready' : ' is-loading'}`}>
       <div className="ats-dashboard-kpi-top">
         <span className="ats-dashboard-kpi-icon animate-float"><Icon size={20} /></span>
         <span className="ats-dashboard-kpi-trend"><TrendingUp size={12} /> Live</span>
       </div>
-      <strong>{Number(value || 0).toLocaleString('en-IN')}</strong>
+      <strong><CountUpValue value={value} ready={isReady} animationKey={animationKey} /></strong>
       <span>{label}</span>
       {isReady ? <Sparkline values={sparkline} animationKey={animationKey} /> : <SparklineSkeleton />}
     </article>

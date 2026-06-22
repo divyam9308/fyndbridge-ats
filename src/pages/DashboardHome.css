@@ -456,32 +456,79 @@
 
 .ats-dashboard-sparkline-fill {
   fill: rgba(255,255,255,0.16);
+  opacity: 0;
+  animation: dashboard-area-fade 1000ms ease-out 260ms forwards;
 }
 
 .ats-dashboard-sparkline path:last-child {
   stroke-dasharray: 360;
   stroke-dashoffset: 360;
-  animation: dashboard-line-draw 2s ease-out forwards;
+  animation: dashboard-line-draw 1050ms ease-out forwards;
 }
 
-.ats-dashboard-sparkline-skeleton {
+.ats-dashboard-sparkline-loading {
   position: absolute;
   left: 16px;
   right: 16px;
   bottom: 20px;
   z-index: 1;
   height: 66px;
-  overflow: hidden;
-  border-radius: 18px;
-  background:
-    linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent),
-    rgba(255,255,255,0.14);
-  background-size: 160px 100%, 100% 100%;
-  animation: dashboard-chart-shimmer 950ms ease-in-out infinite;
+}
+
+.ats-dashboard-sparkline-loading > i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.28);
+}
+
+.ats-dashboard-sparkline-loading > span {
+  position: absolute;
+  left: 0;
+  bottom: 2px;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.ats-dashboard-sparkline-loading b {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.58);
+  animation: dashboard-dot-pulse 900ms ease-in-out infinite;
+}
+
+.ats-dashboard-sparkline-loading b:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.ats-dashboard-sparkline-loading b:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.ats-dashboard-kpi.is-loading .ats-dashboard-kpi-icon {
+  animation: dashboard-icon-pulse 1200ms ease-in-out infinite;
 }
 
 @keyframes dashboard-line-draw {
   to { stroke-dashoffset: 0; }
+}
+
+@keyframes dashboard-area-fade {
+  to { opacity: 1; }
+}
+
+@keyframes dashboard-dot-pulse {
+  0%, 100% { opacity: 0.36; transform: translateY(0); }
+  50% { opacity: 0.86; transform: translateY(-2px); }
+}
+
+@keyframes dashboard-icon-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(255,255,255,0); }
+  50% { box-shadow: 0 0 0 8px rgba(255,255,255,0.12); }
 }
 
 .ats-dashboard-grid {
@@ -1289,6 +1336,22 @@
   .ats-dashboard-modal-chart .recharts-cartesian-axis,
   .ats-dashboard-modal-chart .recharts-legend-wrapper {
     animation-duration: 120ms;
+  }
+
+  .modern-dashboard .animate-float,
+  .ats-dashboard-kpi.is-loading .ats-dashboard-kpi-icon,
+  .ats-dashboard-sparkline-loading b,
+  .ats-dashboard-sparkline path:last-child,
+  .ats-dashboard-sparkline-fill {
+    animation: none;
+  }
+
+  .ats-dashboard-sparkline path:last-child {
+    stroke-dashoffset: 0;
+  }
+
+  .ats-dashboard-sparkline-fill {
+    opacity: 1;
   }
 }
 
