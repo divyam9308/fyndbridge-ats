@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut, ShieldCheck
+  LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut, ShieldCheck, FileText
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
@@ -11,6 +11,7 @@ const navItems = [
   { to: '/dashboard/jobs',       label: 'Mandates', Icon: Briefcase },
   { to: '/dashboard/clients',    label: 'Clients',    Icon: Building2 },
   { to: '/dashboard/candidates', label: 'Candidates', Icon: Users },
+  { to: '/invoice',              label: 'Invoice', Icon: FileText },
 ]
 
 export default function Sidebar() {

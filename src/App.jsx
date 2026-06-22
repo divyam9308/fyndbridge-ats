@@ -11,6 +11,7 @@ import CandidatesPage from './pages/CandidatesPage'
 import AdminPage from './pages/AdminPage'
 import SettingsPage from './pages/SettingsPage'
 import ProfileSettingsPage from './pages/ProfileSettingsPage'
+import InvoicePage from './pages/InvoicePage'
 import { AuthProvider, RequireAuth } from './context/AuthContext'
 import './index.css'
 
@@ -54,6 +55,9 @@ function App() {
             <Route path="cvs" element={<Navigate to="/dashboard/candidates" replace />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="profile" element={<ProfileSettingsPage />} />
+          </Route>
+          <Route path="/invoice" element={<RequireAuth><DashboardLayout /></RequireAuth>}>
+            <Route index element={<InvoicePage />} />
           </Route>
         </Routes>
       </AuthProvider>
