@@ -125,12 +125,15 @@ function usePresenceUsers() {
           return
         }
         tracked = false
+        retryCount = 0
         window.clearTimeout(activityTimer)
         window.clearTimeout(retryTimer)
         activityTimer = window.setTimeout(updatePresence, 0)
       }
       const handleFocus = () => {
         tracked = false
+        retryCount = 0
+        window.clearTimeout(retryTimer)
         desiredPresence = document.visibilityState === 'visible'
         reconcilePresence()
       }
@@ -161,6 +164,7 @@ function usePresenceUsers() {
 
       return () => {
         window.clearTimeout(activityTimer)
+        window.clearTimeout(retryTimer)
         document.removeEventListener('visibilitychange', handleVisibilityChange)
         window.removeEventListener('focus', handleFocus)
         window.removeEventListener('blur', handleBlur)
