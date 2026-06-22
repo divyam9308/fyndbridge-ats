@@ -27,6 +27,7 @@ import {
   YAxis
 } from 'recharts'
 import { DASHBOARD_PERIODS, useDashboardStats } from '../hooks/useDashboardStats'
+import OnlineUsersStrip from '../components/dashboard/OnlineUsersStrip'
 import './DashboardHome.css'
 
 const OVERALL = 'Overall (All Consultants)'
@@ -562,6 +563,8 @@ export default function DashboardHome() {
       {error ? (
         <div className="ats-dashboard-state is-error">{error}</div>
       ) : null}
+
+      <OnlineUsersStrip />
 
       <div className="ats-dashboard-kpi-grid">
         {kpis.map(item => (
