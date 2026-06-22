@@ -57,6 +57,7 @@ function usePresenceUsers() {
     let tracked = false
     let desiredPresence = false
     let reconciling = false
+    let activityTimer
 
     const isPageActive = () => document.visibilityState === 'visible' && document.hasFocus()
 
@@ -109,7 +110,19 @@ function usePresenceUsers() {
         desiredPresence = !forceOffline && isPageActive()
         reconcilePresence()
       }
-      const handlePageState = () => updatePresence()
+      const handleVisibilityChange = () => {
+        if (document.visibilityState !== 'visible') {
+          updatePresence(true)
+          return
+        }
+        window.clearTimeout(activityTimer)
+        activityTimer = window.setTimeout(updatePresence, 0)
+      }
+      const handleFocus = () => {
+        desiredPresence = document.visibilityState === 'visible'
+        reconcilePresence()
+      }
+      const handleBlur = () => updatePresence(true)
       const handleExit = () => updatePresence(true)
 
       channel
@@ -128,16 +141,17 @@ function usePresenceUsers() {
           }
         })
 
-      document.addEventListener('visibilitychange', handlePageState)
-      window.addEventListener('focus', handlePageState)
-      window.addEventListener('blur', handlePageState)
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+      window.addEventListener('focus', handleFocus)
+      window.addEventListener('blur', handleBlur)
       window.addEventListener('pagehide', handleExit)
       window.addEventListener('beforeunload', handleExit)
 
       return () => {
-        document.removeEventListener('visibilitychange', handlePageState)
-        window.removeEventListener('focus', handlePageState)
-        window.removeEventListener('blur', handlePageState)
+        window.clearTimeout(activityTimer)
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+        window.removeEventListener('focus', handleFocus)
+        window.removeEventListener('blur', handleBlur)
         window.removeEventListener('pagehide', handleExit)
         window.removeEventListener('beforeunload', handleExit)
         desiredPresence = false
