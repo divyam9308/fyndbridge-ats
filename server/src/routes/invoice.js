@@ -1,8 +1,10 @@
 const express = require('express')
 const controller = require('../controllers/invoiceController')
+const { requireAdmin } = require('../middleware/adminAccessMiddleware')
 
 const router = express.Router()
 
+router.use(requireAdmin)
 router.get('/entities', controller.listEntities)
 router.post('/entities', controller.createEntity)
 router.put('/entities/:id', controller.updateEntity)

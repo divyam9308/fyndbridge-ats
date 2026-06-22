@@ -9,6 +9,7 @@ import {
   generateInvoicePdf,
   updateInvoiceEntity
 } from '../services/invoiceApi'
+import { useAdminAccess } from '../hooks/useAdminAccess'
 import '../styles/Shared.css'
 import './InvoicePage.css'
 
@@ -79,15 +80,20 @@ function autoGst(form) {
   return { ...form, gst_component: isDelhi(form) ? 'CGST_SGST' : 'IGST' }
 }
 
+function entityPayload(form) {
+  const { legal_entity_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, sac, billing_entity, gst_component, igst_rate, cgst_rate, sgst_rate } = form
+  return { legal_entity_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, sac, billing_entity, gst_component, igst_rate, cgst_rate, sgst_rate }
+}
+
 function Field({ label, children, full = false, error }) {
   return <div className={full ? 'form-group full' : 'form-group'}><label className="form-label">{label}</label>{children}{error && <span className="form-error">{error}</span>}</div>
 }
 
 function ModelFields({ form, update }) {
-  if (['joining_percentage', 'project'].includes(form.model)) return <Field label="Percent Value"><input className="form-control" name="model_percent" value={form.model_percent || ''} onChange={update} /></Field>
+  if (['joining_percentage', 'project'].includes(form.model)) return <><Field label="CTC in LPA"><input className="form-control" name="ctc_lpa" value={form.ctc_lpa || ''} onChange={update} /></Field><Field label="Percent Value"><input className="form-control" name="model_percent" value={form.model_percent || ''} onChange={update} /></Field></>
   if (form.model === 'joining_flat_fee') return <Field label="Flat Fee Value in Rs."><input className="form-control" name="model_flat_fee" value={form.model_flat_fee || ''} onChange={update} /></Field>
   if (form.model === 'retainer') return <Field label="Retainer Amount in Rs."><input className="form-control" name="retainer_amount" value={form.retainer_amount || ''} onChange={update} /></Field>
-  if (form.model === 'jra_adjustment_percentage') return <><Field label="Percent Value"><input className="form-control" name="model_percent" value={form.model_percent || ''} onChange={update} /></Field><Field label="Adjustment Value in Rs."><input className="form-control" name="jra_adjustment_value" value={form.jra_adjustment_value || ''} onChange={update} /></Field></>
+  if (form.model === 'jra_adjustment_percentage') return <><Field label="CTC in LPA"><input className="form-control" name="ctc_lpa" value={form.ctc_lpa || ''} onChange={update} /></Field><Field label="Percent Value"><input className="form-control" name="model_percent" value={form.model_percent || ''} onChange={update} /></Field><Field label="Adjustment Value in Rs."><input className="form-control" name="jra_adjustment_value" value={form.jra_adjustment_value || ''} onChange={update} /></Field></>
   if (form.model === 'jra_adjustment_flat_fee') return <><Field label="Value in Rs."><input className="form-control" name="jra_base_value" value={form.jra_base_value || ''} onChange={update} /></Field><Field label="Flat Fee / Adjustment in Rs."><input className="form-control" name="jra_flat_fee" value={form.jra_flat_fee || ''} onChange={update} /></Field></>
   return <Field label="Amount in Rs."><input className="form-control" name="others_amount" value={form.others_amount || ''} onChange={update} /></Field>
 }
@@ -98,14 +104,12 @@ function EntityModal({ initial, onClose, onSave }) {
   const [error, setError] = useState('')
   const update = event => {
     const { name, value } = event.target
-    setForm(current => autoGst({ ...current, [name]: value }))
+    setForm(current => name === 'gst_component' ? { ...current, [name]: value } : autoGst({ ...current, [name]: value }))
   }
   const save = async () => {
     setSaving(true); setError('')
     try {
-      const calc = calculate(form)
-      if (calc.taxable < 0) throw new Error('Taxable amount cannot be negative.')
-      await onSave(form)
+      await onSave(entityPayload(form))
       onClose()
     } catch (err) {
       setError(err.message)
@@ -122,13 +126,9 @@ function EntityModal({ initial, onClose, onSave }) {
         <Field label="Legal Entity Name"><input className="form-control" name="legal_entity_name" value={form.legal_entity_name} onChange={update} /></Field>
         <Field label="Address" full><textarea className="form-control" name="address" value={form.address} onChange={update} rows={3} /></Field>
         {['pan', 'place_of_supply', 'state', 'state_code', 'gstin', 'contact_person', 'email'].map(key => <Field label={key.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase())} key={key}><input className="form-control" name={key} value={form[key] || ''} onChange={update} /></Field>)}
-        <Field label="Model"><select className="form-control" name="model" value={form.model} onChange={update}>{MODELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-        <Field label="CTC in LPA"><input className="form-control" name="ctc_lpa" value={form.ctc_lpa || ''} onChange={update} /></Field>
-        <ModelFields form={form} update={update} />
         <Field label="SAC"><input className="form-control" name="sac" value={form.sac || ''} onChange={update} /></Field>
         <Field label="GST Component"><select className="form-control" name="gst_component" value={form.gst_component} onChange={update}><option value="IGST">IGST</option><option value="CGST_SGST">CGST + SGST</option></select></Field>
         {form.gst_component === 'IGST' ? <Field label="IGST Rate"><input className="form-control" name="igst_rate" value={form.igst_rate || ''} onChange={update} /></Field> : <><Field label="CGST Rate"><input className="form-control" name="cgst_rate" value={form.cgst_rate || ''} onChange={update} /></Field><Field label="SGST Rate"><input className="form-control" name="sgst_rate" value={form.sgst_rate || ''} onChange={update} /></Field></>}
-        <Field label="Professional Fee Text" full><textarea className="form-control" name="professional_fee_text" value={form.professional_fee_text || ''} onChange={update} rows={4} /></Field>
       </div>
     </div>
     <div className="modal-footer"><button className="btn-secondary" onClick={onClose} disabled={saving}>Cancel</button><button className="btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save Entity'}</button></div>
@@ -144,7 +144,9 @@ function GenerateModal({ entities, onClose }) {
   const [result, setResult] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  useEffect(() => { if (selected) setForm(autoGst({ ...EMPTY, ...selected, invoice_entity_id: selected.id, invoice_date: form.invoice_date || today() })) }, [selectedId])
+  useEffect(() => {
+    if (selected) setForm(current => autoGst({ ...EMPTY, ...selected, model: 'joining_percentage', invoice_entity_id: selected.id, invoice_date: current.invoice_date || today(), professional_fee_text: '' }))
+  }, [selectedId])
   useEffect(() => {
     fetchNextInvoiceNumber(form.billing_entity, form.invoice_date).then(data => setNextNumber(data.invoiceNumber)).catch(() => setNextNumber(''))
   }, [form.billing_entity, form.invoice_date])
@@ -166,6 +168,18 @@ function GenerateModal({ entities, onClose }) {
     setSaving(true); setError('')
     try {
       if (!selectedId) throw new Error('Select an entity.')
+      if (!form.invoice_date) throw new Error('Invoice Date is required.')
+      if (!clean(form.professional_fee_text)) throw new Error('Professional Fee Text is required.')
+      if (!form.model) throw new Error('Model is required.')
+      if (['joining_percentage', 'project', 'jra_adjustment_percentage'].includes(form.model) && n(form.ctc_lpa) < 0) throw new Error('CTC must be non-negative.')
+      if (['joining_percentage', 'project', 'jra_adjustment_percentage'].includes(form.model) && !clean(form.ctc_lpa)) throw new Error('CTC is required.')
+      if (['joining_percentage', 'project', 'jra_adjustment_percentage'].includes(form.model) && !clean(form.model_percent)) throw new Error('Percent Value is required.')
+      if (form.model === 'joining_flat_fee' && !clean(form.model_flat_fee)) throw new Error('Flat Fee Value is required.')
+      if (form.model === 'retainer' && !clean(form.retainer_amount)) throw new Error('Retainer Amount is required.')
+      if (form.model === 'jra_adjustment_percentage' && !clean(form.jra_adjustment_value)) throw new Error('Adjustment Value is required.')
+      if (form.model === 'jra_adjustment_flat_fee' && (!clean(form.jra_base_value) || !clean(form.jra_flat_fee))) throw new Error('JRA flat fee values are required.')
+      if (form.model === 'others' && !clean(form.others_amount)) throw new Error('Amount is required.')
+      if (n(form.igst_rate) < 0 || n(form.cgst_rate) < 0 || n(form.sgst_rate) < 0) throw new Error('GST rates must be non-negative.')
       if (calc.taxable < 0) throw new Error('Taxable amount cannot be negative.')
       const payload = await generateInvoicePdf({ ...form, invoice_entity_id: selectedId })
       setResult(payload)
@@ -184,17 +198,32 @@ function GenerateModal({ entities, onClose }) {
         <input className="form-control" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search entity..." />
         <div>{matches.map(entity => <button type="button" key={entity.id} onClick={() => { setSelectedId(entity.id); setQuery(`${entity.invoice_id} - ${entity.legal_entity_name}`) }}>{entity.invoice_id} - {entity.legal_entity_name}<small>{entity.gstin || entity.email || ''}</small></button>)}</div>
       </div>
+      {selected && (
+        <div className="invoice-selected-preview">
+          {[
+            ['Invoice ID', selected.invoice_id],
+            ['Legal Entity Name', selected.legal_entity_name],
+            ['Address', selected.address],
+            ['PAN', selected.pan],
+            ['Place of Supply', selected.place_of_supply],
+            ['State', selected.state],
+            ['State Code', selected.state_code],
+            ['GSTIN', selected.gstin],
+            ['Contact Person', selected.contact_person],
+            ['Email', selected.email]
+          ].map(([label, value]) => <span key={label}><small>{label}</small><b>{value || '-'}</b></span>)}
+        </div>
+      )}
       <div className="form-grid-2">
         <Field label="Invoice Date"><input className="form-control" type="date" name="invoice_date" value={form.invoice_date} onChange={update} /></Field>
         <Field label="Invoice Number Preview"><input className="form-control" value={nextNumber || 'Auto-generated'} readOnly /></Field>
         <Field label="Billing Entity"><select className="form-control" name="billing_entity" value={form.billing_entity} onChange={update}><option>FCS</option><option>FCAPL</option></select></Field>
+        <Field label="Professional Fee Text" full><textarea className="form-control" name="professional_fee_text" value={form.professional_fee_text || ''} onChange={update} rows={3} /></Field>
         <Field label="Model"><select className="form-control" name="model" value={form.model} onChange={update}>{MODELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-        <Field label="CTC in LPA"><input className="form-control" name="ctc_lpa" value={form.ctc_lpa || ''} onChange={update} /></Field>
         <ModelFields form={form} update={update} />
         <Field label="SAC"><input className="form-control" name="sac" value={form.sac || ''} onChange={update} /></Field>
         <Field label="GST Component"><select className="form-control" name="gst_component" value={form.gst_component} onChange={update}><option value="IGST">IGST</option><option value="CGST_SGST">CGST + SGST</option></select></Field>
         {form.gst_component === 'IGST' ? <Field label="IGST Rate"><input className="form-control" name="igst_rate" value={form.igst_rate || ''} onChange={update} /></Field> : <><Field label="CGST Rate"><input className="form-control" name="cgst_rate" value={form.cgst_rate || ''} onChange={update} /></Field><Field label="SGST Rate"><input className="form-control" name="sgst_rate" value={form.sgst_rate || ''} onChange={update} /></Field></>}
-        <Field label="Professional Fee Text" full><textarea className="form-control" name="professional_fee_text" value={form.professional_fee_text || ''} onChange={update} rows={3} /></Field>
       </div>
       <div className="invoice-preview">
         <span>Taxable Amount <b>{money(calc.taxable)}</b></span><span>GST <b>{form.gst_component}</b></span>
@@ -207,6 +236,7 @@ function GenerateModal({ entities, onClose }) {
 }
 
 export default function InvoicePage() {
+  const { isAdmin, loading: adminLoading } = useAdminAccess()
   const [entities, setEntities] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -218,7 +248,10 @@ export default function InvoicePage() {
     setLoading(true); setError('')
     try { setEntities((await fetchInvoiceEntities()).data || []) } catch (err) { setError(err.message) } finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (!adminLoading && isAdmin) load()
+    if (!adminLoading && !isAdmin) setLoading(false)
+  }, [adminLoading, isAdmin])
   const filtered = useMemo(() => entities.filter(entity => [entity.invoice_id, entity.legal_entity_name, entity.gstin, entity.pan, entity.contact_person, entity.email, entity.billing_entity].join(' ').toLowerCase().includes(query.toLowerCase())), [entities, query])
   const save = async form => {
     if (editing) await updateInvoiceEntity(editing.id, form)
@@ -229,6 +262,8 @@ export default function InvoicePage() {
     if (!window.confirm(`Delete ${entity.invoice_id}?`)) return
     await deleteInvoiceEntity(entity.id); await load()
   }
+  if (adminLoading) return <div className="table-card"><div className="table-empty">Checking access...</div></div>
+  if (!isAdmin) return <div className="table-card"><div className="form-error" style={{ display: 'block', margin: 16 }}>Admin access required.</div></div>
   return <div className="invoice-page">
     <div className="candidate-page-header">
       <div><h2>Invoice</h2><p>Manage legal entities and generate FCS/FCAPL invoices.</p></div>
@@ -237,7 +272,7 @@ export default function InvoicePage() {
     <div className="table-card">
       <div className="filters-row"><div className="search-box"><Search size={15} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search invoice entities..." /></div></div>
       {error && <div className="form-error" style={{ display: 'block', margin: 12 }}>{error}</div>}
-      {loading ? <div className="table-empty">Loading entities...</div> : <div className="table-scroll"><table className="data-table invoice-table"><thead><tr>{['Invoice ID', 'Legal Entity Name', 'Address', 'PAN', 'Place of Supply', 'State', 'State Code', 'GSTIN', 'Contact Person', 'Email', 'Model', 'Billing Entity', 'SAC', 'GST Component', 'CTC', 'Latest Invoice No.', 'Actions'].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>{filtered.map(entity => <tr key={entity.id}><td>{entity.invoice_id}</td><td>{entity.legal_entity_name}</td><td>{entity.address}</td><td>{entity.pan || '-'}</td><td>{entity.place_of_supply || '-'}</td><td>{entity.state || '-'}</td><td>{entity.state_code || '-'}</td><td>{entity.gstin || '-'}</td><td>{entity.contact_person || '-'}</td><td>{entity.email || '-'}</td><td>{MODELS.find(([value]) => value === entity.model)?.[1] || entity.model}</td><td><span className="invoice-badge is-navy">{entity.billing_entity}</span></td><td>{entity.sac}</td><td><span className="invoice-badge">{entity.gst_component}</span></td><td>{entity.ctc_lpa || '-'}</td><td>{entity.latest_invoice_number || '-'}</td><td><div className="row-actions"><button className="row-action-btn" onClick={() => setEditing(entity)}><Pencil size={13} /></button><button className="row-action-btn" onClick={() => remove(entity)}><Trash2 size={13} /></button></div></td></tr>)}{!filtered.length && <tr><td colSpan={17} className="table-empty">No invoice entities found.</td></tr>}</tbody></table></div>}
+      {loading ? <div className="table-empty">Loading entities...</div> : <div className="table-scroll"><table className="data-table invoice-table"><thead><tr>{['Invoice ID', 'Legal Entity Name', 'Address', 'PAN', 'Place of Supply', 'State', 'State Code', 'GSTIN', 'Contact Person', 'Email', 'Default Billing Entity', 'Default SAC', 'Default GST Component', 'Latest Invoice No.', 'Actions'].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>{filtered.map(entity => <tr key={entity.id}><td>{entity.invoice_id}</td><td>{entity.legal_entity_name}</td><td>{entity.address}</td><td>{entity.pan || '-'}</td><td>{entity.place_of_supply || '-'}</td><td>{entity.state || '-'}</td><td>{entity.state_code || '-'}</td><td>{entity.gstin || '-'}</td><td>{entity.contact_person || '-'}</td><td>{entity.email || '-'}</td><td><span className="invoice-badge is-navy">{entity.billing_entity}</span></td><td>{entity.sac}</td><td><span className="invoice-badge">{entity.gst_component}</span></td><td>{entity.latest_invoice_number || '-'}</td><td><div className="row-actions"><button className="row-action-btn" onClick={() => setEditing(entity)}><Pencil size={13} /></button><button className="row-action-btn" onClick={() => remove(entity)}><Trash2 size={13} /></button></div></td></tr>)}{!filtered.length && <tr><td colSpan={15} className="table-empty">No invoice entities found.</td></tr>}</tbody></table></div>}
     </div>
     {(adding || editing) && <EntityModal initial={editing} onClose={() => { setAdding(false); setEditing(null) }} onSave={save} />}
     {generating && <GenerateModal entities={entities} onClose={() => { setGenerating(false); load() }} />}

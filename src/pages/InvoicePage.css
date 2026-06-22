@@ -17,6 +17,35 @@
   color: var(--gray-500);
 }
 
+.invoice-page .header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.invoice-page .filters-row {
+  padding: 14px 16px 10px;
+}
+
+.invoice-page .search-box {
+  width: min(420px, 100%);
+  border: 1.5px solid var(--gray-200);
+  border-radius: 12px;
+  background: var(--white);
+}
+
+.invoice-page .search-box:focus-within {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(var(--brand-gold-rgb), 0.18);
+}
+
+.invoice-page .search-box input {
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
 .invoice-page .data-table th {
   background: var(--navy);
   color: var(--white);
@@ -29,6 +58,12 @@
 
 .invoice-page .data-table tbody tr:hover td {
   background: rgba(var(--brand-gold-rgb), 0.06);
+}
+
+.invoice-page .table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0 16px 16px;
 }
 
 .invoice-modal .modal-body {
@@ -94,6 +129,36 @@
 .invoice-entity-picker small {
   color: var(--gray-500);
   font-weight: 600;
+}
+
+.invoice-selected-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border: 1px solid rgba(var(--brand-blue-rgb), 0.12);
+  border-radius: 14px;
+  background: rgba(var(--brand-gold-rgb), 0.05);
+}
+
+.invoice-selected-preview span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.invoice-selected-preview small {
+  color: var(--gray-500);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.invoice-selected-preview b {
+  color: var(--navy);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .invoice-preview {

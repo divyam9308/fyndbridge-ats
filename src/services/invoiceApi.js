@@ -6,20 +6,20 @@ async function json(response) {
   return payload
 }
 
-export const fetchInvoiceEntities = () => json(apiFetch('/api/invoice/entities', { cache: 'no-store' }))
-export const createInvoiceEntity = (payload) => json(apiFetch('/api/invoice/entities', {
+export const fetchInvoiceEntities = async () => json(await apiFetch('/api/invoice/entities', { cache: 'no-store' }))
+export const createInvoiceEntity = async (payload) => json(await apiFetch('/api/invoice/entities', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
 }))
-export const updateInvoiceEntity = (id, payload) => json(apiFetch(`/api/invoice/entities/${id}`, {
+export const updateInvoiceEntity = async (id, payload) => json(await apiFetch(`/api/invoice/entities/${id}`, {
   method: 'PUT',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
 }))
-export const deleteInvoiceEntity = (id) => json(apiFetch(`/api/invoice/entities/${id}`, { method: 'DELETE' }))
-export const fetchNextInvoiceNumber = (billingEntity, invoiceDate) => json(apiFetch(`/api/invoice/next-number?billing_entity=${encodeURIComponent(billingEntity)}&invoice_date=${encodeURIComponent(invoiceDate)}`, { cache: 'no-store' }))
-export const generateInvoicePdf = (payload) => json(apiFetch('/api/invoice/generate', {
+export const deleteInvoiceEntity = async (id) => json(await apiFetch(`/api/invoice/entities/${id}`, { method: 'DELETE' }))
+export const fetchNextInvoiceNumber = async (billingEntity, invoiceDate) => json(await apiFetch(`/api/invoice/next-number?billing_entity=${encodeURIComponent(billingEntity)}&invoice_date=${encodeURIComponent(invoiceDate)}`, { cache: 'no-store' }))
+export const generateInvoicePdf = async (payload) => json(await apiFetch('/api/invoice/generate', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)

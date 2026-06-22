@@ -48,6 +48,22 @@ function calculateTaxable(input) {
   const model = input.model
   if (!MODELS.has(model)) throw new Error('Invalid model')
   const ctc = n(input.ctc_lpa) * 100000
+  const required = (field, label) => {
+    if (input[field] === '' || input[field] === null || input[field] === undefined) throw new Error(`${label} is required`)
+    if (n(input[field]) < 0) throw new Error(`${label} must be non-negative`)
+  }
+  if (['joining_percentage', 'project', 'jra_adjustment_percentage'].includes(model)) {
+    required('ctc_lpa', 'CTC')
+    required('model_percent', 'Percent Value')
+  }
+  if (model === 'joining_flat_fee') required('model_flat_fee', 'Flat Fee Value')
+  if (model === 'retainer') required('retainer_amount', 'Retainer Amount')
+  if (model === 'jra_adjustment_percentage') required('jra_adjustment_value', 'Adjustment Value')
+  if (model === 'jra_adjustment_flat_fee') {
+    required('jra_base_value', 'Value')
+    required('jra_flat_fee', 'Flat Fee / Adjustment')
+  }
+  if (model === 'others') required('others_amount', 'Amount')
   if (['joining_percentage', 'project'].includes(model)) return money(ctc * n(input.model_percent) / 100)
   if (model === 'joining_flat_fee') return money(input.model_flat_fee)
   if (model === 'retainer') return money(input.retainer_amount)
@@ -172,13 +188,15 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     drawCell(doc, 32, y, 42, 24, 'SL.No', { bold: true, align: 'center' })
     drawCell(doc, 74, y, 255, 24, 'Description of Services', { bold: true })
     drawCell(doc, 329, y, 58, 24, 'SAC', { bold: true, align: 'center' })
-    drawCell(doc, 387, y, 70, 24, 'GST Rate %', { bold: true, align: 'center' })
+    drawCell(doc, 387, y, 45, 24, 'GST Rate', { bold: true, align: 'center' })
+    drawCell(doc, 432, y, 25, 24, '%', { bold: true, align: 'center' })
     drawCell(doc, 457, y, 105, 24, 'Amount', { bold: true, align: 'right' })
     const desc = `${company.feeLabel}\n${overrides.professional_fee_text || entity.professional_fee_text || ''}`
     drawCell(doc, 32, y + 24, 42, descH, '1', { align: 'center' })
     drawCell(doc, 74, y + 24, 255, descH, desc)
     drawCell(doc, 329, y + 24, 58, descH, entity.sac || '998512', { align: 'center' })
-    drawCell(doc, 387, y + 24, 70, descH, invoice.gst_component === 'IGST' ? `${invoice.igst_rate}\n%` : '', { align: 'center' })
+    drawCell(doc, 387, y + 24, 45, descH, invoice.gst_component === 'IGST' ? invoice.igst_rate : '', { align: 'center' })
+    drawCell(doc, 432, y + 24, 25, descH, invoice.gst_component === 'IGST' ? '%' : '', { align: 'center' })
     drawCell(doc, 457, y + 24, 105, descH, formatRs(invoice.taxable_amount, invoice.rounding_type ? 0 : 0), { align: 'right' })
     y += 24 + descH
     if (invoice.gst_component === 'IGST') {
@@ -187,11 +205,13 @@ function createInvoicePdf({ entity, invoice, overrides }) {
       y += 22
     } else {
       drawCell(doc, 329, y, 58, 22, 'SGST')
-      drawCell(doc, 387, y, 70, 22, `${invoice.sgst_rate}\n%`, { align: 'center' })
+      drawCell(doc, 387, y, 45, 22, invoice.sgst_rate, { align: 'center' })
+      drawCell(doc, 432, y, 25, 22, '%', { align: 'center' })
       drawCell(doc, 457, y, 105, 22, formatRs(invoice.sgst_amount, cents(invoice.sgst_amount)), { align: 'right' })
       y += 22
       drawCell(doc, 329, y, 58, 22, 'CGST')
-      drawCell(doc, 387, y, 70, 22, `${invoice.cgst_rate}\n%`, { align: 'center' })
+      drawCell(doc, 387, y, 45, 22, invoice.cgst_rate, { align: 'center' })
+      drawCell(doc, 432, y, 25, 22, '%', { align: 'center' })
       drawCell(doc, 457, y, 105, 22, formatRs(invoice.cgst_amount, cents(invoice.cgst_amount)), { align: 'right' })
       y += 22
     }

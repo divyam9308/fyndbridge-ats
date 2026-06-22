@@ -11,7 +11,6 @@ const navItems = [
   { to: '/dashboard/jobs',       label: 'Mandates', Icon: Briefcase },
   { to: '/dashboard/clients',    label: 'Clients',    Icon: Building2 },
   { to: '/dashboard/candidates', label: 'Candidates', Icon: Users },
-  { to: '/invoice',              label: 'Invoice', Icon: FileText },
 ]
 
 export default function Sidebar() {
@@ -51,6 +50,17 @@ export default function Sidebar() {
           </NavLink>
         ))}
         {isAdmin && (
+          <>
+          <NavLink
+            to="/invoice"
+            className={({ isActive }) =>
+              `sidebar-nav-link${isActive ? ' active' : ''}`
+            }
+            id="nav-invoice"
+          >
+            <span className="nav-icon"><FileText size={17} strokeWidth={1.8} /></span>
+            <span className="sidebar-nav-label">Invoice</span>
+          </NavLink>
           <NavLink
             to="/dashboard/admin"
             className={({ isActive }) =>
@@ -61,6 +71,7 @@ export default function Sidebar() {
             <span className="nav-icon"><ShieldCheck size={17} strokeWidth={1.8} /></span>
             <span className="sidebar-nav-label">Admin Panel</span>
           </NavLink>
+          </>
         )}
 
         <div className="sidebar-divider" />

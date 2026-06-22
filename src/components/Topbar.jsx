@@ -11,6 +11,7 @@ const pageTitles = {
   '/dashboard/admin':      { title: 'Admin Panel', crumb: 'Home / Admin Panel' },
   '/dashboard/settings':   { title: 'Settings',    crumb: 'Home / Settings' },
   '/dashboard/profile':    { title: 'Profile Settings', crumb: 'Home / Profile Settings' },
+  '/invoice':              { title: 'Invoice',     crumb: 'Home / Invoice' },
 }
 
 export default function Topbar() {

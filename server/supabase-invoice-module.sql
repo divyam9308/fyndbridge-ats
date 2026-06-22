@@ -10,18 +10,8 @@ create table if not exists invoice_entities (
   gstin text,
   contact_person text,
   email text,
-  professional_fee_text text,
-  model text not null check (model in ('joining_percentage', 'joining_flat_fee', 'retainer', 'jra_adjustment_percentage', 'jra_adjustment_flat_fee', 'project', 'others')),
-  model_percent numeric,
-  model_flat_fee numeric,
-  retainer_amount numeric,
-  jra_adjustment_value numeric,
-  jra_base_value numeric,
-  jra_flat_fee numeric,
-  others_amount numeric,
   sac text default '998512',
   billing_entity text not null check (billing_entity in ('FCS', 'FCAPL')),
-  ctc_lpa numeric,
   gst_component text check (gst_component in ('IGST', 'CGST_SGST')),
   igst_rate numeric default 18,
   cgst_rate numeric default 9,
@@ -61,27 +51,45 @@ create table if not exists invoices (
 alter table invoice_entities enable row level security;
 alter table invoices enable row level security;
 
-do $$
-begin
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'invoice_entities' and policyname = 'invoice_entities_authenticated_select') then
-    create policy invoice_entities_authenticated_select on invoice_entities for select to authenticated using (true);
-  end if;
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'invoice_entities' and policyname = 'invoice_entities_authenticated_insert') then
-    create policy invoice_entities_authenticated_insert on invoice_entities for insert to authenticated with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'invoice_entities' and policyname = 'invoice_entities_authenticated_update') then
-    create policy invoice_entities_authenticated_update on invoice_entities for update to authenticated using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'invoice_entities' and policyname = 'invoice_entities_authenticated_delete') then
-    create policy invoice_entities_authenticated_delete on invoice_entities for delete to authenticated using (true);
-  end if;
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'invoices' and policyname = 'invoices_authenticated_select') then
-    create policy invoices_authenticated_select on invoices for select to authenticated using (true);
-  end if;
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'invoices' and policyname = 'invoices_authenticated_insert') then
-    create policy invoices_authenticated_insert on invoices for insert to authenticated with check (true);
-  end if;
-end $$;
+alter table invoice_entities drop column if exists professional_fee_text;
+alter table invoice_entities drop column if exists model;
+alter table invoice_entities drop column if exists model_percent;
+alter table invoice_entities drop column if exists model_flat_fee;
+alter table invoice_entities drop column if exists retainer_amount;
+alter table invoice_entities drop column if exists jra_adjustment_value;
+alter table invoice_entities drop column if exists jra_base_value;
+alter table invoice_entities drop column if exists jra_flat_fee;
+alter table invoice_entities drop column if exists others_amount;
+alter table invoice_entities drop column if exists ctc_lpa;
+
+alter table invoices add column if not exists professional_fee_text text;
+alter table invoices add column if not exists model text check (model in ('joining_percentage', 'joining_flat_fee', 'retainer', 'jra_adjustment_percentage', 'jra_adjustment_flat_fee', 'project', 'others'));
+alter table invoices add column if not exists ctc_lpa numeric;
+alter table invoices add column if not exists model_percent numeric;
+alter table invoices add column if not exists model_flat_fee numeric;
+alter table invoices add column if not exists retainer_amount numeric;
+alter table invoices add column if not exists jra_adjustment_value numeric;
+alter table invoices add column if not exists jra_base_value numeric;
+alter table invoices add column if not exists jra_flat_fee numeric;
+alter table invoices add column if not exists others_amount numeric;
+alter table invoices add column if not exists sac text default '998512';
+
+drop policy if exists invoice_entities_authenticated_select on invoice_entities;
+drop policy if exists invoice_entities_authenticated_insert on invoice_entities;
+drop policy if exists invoice_entities_authenticated_update on invoice_entities;
+drop policy if exists invoice_entities_authenticated_delete on invoice_entities;
+drop policy if exists invoices_authenticated_select on invoices;
+drop policy if exists invoices_authenticated_insert on invoices;
+
+create policy invoice_entities_admin_all on invoice_entities
+  for all to authenticated
+  using (exists (select 1 from admin_users where user_id = auth.uid() or lower(email) = lower(auth.jwt() ->> 'email')))
+  with check (exists (select 1 from admin_users where user_id = auth.uid() or lower(email) = lower(auth.jwt() ->> 'email')));
+
+create policy invoices_admin_all on invoices
+  for all to authenticated
+  using (exists (select 1 from admin_users where user_id = auth.uid() or lower(email) = lower(auth.jwt() ->> 'email')))
+  with check (exists (select 1 from admin_users where user_id = auth.uid() or lower(email) = lower(auth.jwt() ->> 'email')));
 
 grant select, insert, update, delete on invoice_entities to authenticated;
-grant select, insert on invoices to authenticated;
+grant select, insert, update, delete on invoices to authenticated;

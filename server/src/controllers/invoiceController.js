@@ -10,7 +10,7 @@ const {
   createInvoicePdf
 } = require('../services/invoiceService')
 
-const ENTITY_FIELDS = 'id, invoice_id, legal_entity_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, professional_fee_text, model, model_percent, model_flat_fee, retainer_amount, jra_adjustment_value, jra_base_value, jra_flat_fee, others_amount, sac, billing_entity, ctc_lpa, gst_component, igst_rate, cgst_rate, sgst_rate, created_at, updated_at'
+const ENTITY_FIELDS = 'id, invoice_id, legal_entity_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, sac, billing_entity, gst_component, igst_rate, cgst_rate, sgst_rate, created_at, updated_at'
 
 function sendError(res, err) {
   return res.status(err.statusCode || 500).json({ error: err.message || 'Internal server error' })
@@ -34,12 +34,10 @@ async function nextEntityId() {
 
 function entityPayload(body) {
   const billing = body.billing_entity
-  const model = body.model
   const gst = body.gst_component || detectGstComponent(body.address, body.state, body.place_of_supply)
   if (!clean(body.legal_entity_name)) throw Object.assign(new Error('Legal Entity Name is required'), { statusCode: 400 })
   if (!clean(body.address)) throw Object.assign(new Error('Address is required'), { statusCode: 400 })
   if (!BILLING_ENTITIES.has(billing)) throw Object.assign(new Error('Billing Entity is required'), { statusCode: 400 })
-  if (!MODELS.has(model)) throw Object.assign(new Error('Model is required'), { statusCode: 400 })
   if (!clean(body.sac || '998512')) throw Object.assign(new Error('SAC is required'), { statusCode: 400 })
   if (!GST_COMPONENTS.has(gst)) throw Object.assign(new Error('Invalid GST component'), { statusCode: 400 })
   return {
@@ -52,18 +50,8 @@ function entityPayload(body) {
     gstin: nullable(body.gstin),
     contact_person: nullable(body.contact_person),
     email: nullable(body.email),
-    professional_fee_text: nullable(body.professional_fee_text),
-    model,
-    model_percent: numberOrNull(body.model_percent),
-    model_flat_fee: numberOrNull(body.model_flat_fee),
-    retainer_amount: numberOrNull(body.retainer_amount),
-    jra_adjustment_value: numberOrNull(body.jra_adjustment_value),
-    jra_base_value: numberOrNull(body.jra_base_value),
-    jra_flat_fee: numberOrNull(body.jra_flat_fee),
-    others_amount: numberOrNull(body.others_amount),
     sac: clean(body.sac || '998512'),
     billing_entity: billing,
-    ctc_lpa: numberOrNull(body.ctc_lpa),
     gst_component: gst,
     igst_rate: numberOrNull(body.igst_rate) ?? 18,
     cgst_rate: numberOrNull(body.cgst_rate) ?? 9,
@@ -162,6 +150,8 @@ async function generate(req, res) {
     const input = { ...entity, ...req.body }
     const invoiceDate = req.body.invoice_date || new Date().toISOString().slice(0, 10)
     const billing = input.billing_entity
+    if (!clean(input.professional_fee_text)) return res.status(400).json({ error: 'Professional Fee Text is required' })
+    if (!MODELS.has(input.model)) return res.status(400).json({ error: 'Model is required' })
     const calc = calculateInvoice(input)
 
     let record
@@ -174,6 +164,17 @@ async function generate(req, res) {
         financial_year: parts.financialYear,
         sequence_number: parts.sequence,
         invoice_date: invoiceDate,
+        professional_fee_text: clean(input.professional_fee_text),
+        model: input.model,
+        ctc_lpa: numberOrNull(input.ctc_lpa),
+        model_percent: numberOrNull(input.model_percent),
+        model_flat_fee: numberOrNull(input.model_flat_fee),
+        retainer_amount: numberOrNull(input.retainer_amount),
+        jra_adjustment_value: numberOrNull(input.jra_adjustment_value),
+        jra_base_value: numberOrNull(input.jra_base_value),
+        jra_flat_fee: numberOrNull(input.jra_flat_fee),
+        others_amount: numberOrNull(input.others_amount),
+        sac: clean(input.sac || entity.sac || '998512'),
         ...calc
       }
       const result = await supabase.from('invoices').insert(payload).select('*').single()
