@@ -9,7 +9,7 @@ const PERMISSIONS_POLL_MS = 5000
 let cachedColumns = {}
 let cachedPermissions = EMPTY
 
-export function useAdminAccess({ loadPermissions = true } = {}) {
+export function useAdminAccess({ loadPermissions = true, realtime = true } = {}) {
   const [isAdmin, setIsAdmin] = useState(false)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [role, setRole] = useState(null)
@@ -59,7 +59,8 @@ export function useAdminAccess({ loadPermissions = true } = {}) {
   useRealtimeRefresh({
     channelName: loadPermissions ? 'realtime:admin-access-permissions' : 'realtime:admin-access-me',
     tables: loadPermissions ? ['admin_users', 'column_permissions'] : ['admin_users'],
-    onChange: loadPermissions ? refreshPermissions : refresh
+    onChange: loadPermissions ? refreshPermissions : refresh,
+    enabled: realtime
   })
 
   useEffect(() => {

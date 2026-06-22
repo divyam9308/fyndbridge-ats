@@ -260,7 +260,7 @@ function amountDetails(entity) {
 }
 
 export default function InvoicePage() {
-  const { isAdmin, loading: adminLoading } = useAdminAccess({ loadPermissions: false })
+  const { isAdmin, loading: adminLoading } = useAdminAccess({ loadPermissions: false, realtime: false })
   const [entities, setEntities] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')

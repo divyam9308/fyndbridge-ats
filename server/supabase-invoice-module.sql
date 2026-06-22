@@ -89,6 +89,8 @@ drop policy if exists invoice_entities_authenticated_update on invoice_entities;
 drop policy if exists invoice_entities_authenticated_delete on invoice_entities;
 drop policy if exists invoices_authenticated_select on invoices;
 drop policy if exists invoices_authenticated_insert on invoices;
+drop policy if exists invoice_entities_admin_all on invoice_entities;
+drop policy if exists invoices_admin_all on invoices;
 
 create policy invoice_entities_admin_all on invoice_entities
   for all to authenticated
