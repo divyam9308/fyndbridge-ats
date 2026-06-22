@@ -29,6 +29,8 @@ export default function Sidebar() {
           src="/assets/fyndbridge-official-logo.png"
           alt="FYNDBRIDGE"
           className="sidebar-logo-image"
+          width="543"
+          height="90"
           onError={() => console.error('FYNDBRIDGE logo failed to load: /assets/fyndbridge-official-logo.png')}
         />
       </div>

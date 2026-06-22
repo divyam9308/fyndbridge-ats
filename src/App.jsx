@@ -1,20 +1,21 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
-import DashboardLayout from './pages/DashboardLayout'
-import DashboardHome from './pages/DashboardHome'
-import JobsPage from './pages/JobsPage'
-import ClientsPage from './pages/ClientsPage'
-import ClientDetailPage from './pages/ClientDetailPage'
-import ClientJobCandidatesPage from './pages/ClientJobCandidatesPage'
-import CandidatesPage from './pages/CandidatesPage'
-import AdminPage from './pages/AdminPage'
-import SettingsPage from './pages/SettingsPage'
-import ProfileSettingsPage from './pages/ProfileSettingsPage'
-import InvoicePage from './pages/InvoicePage'
 import { AuthProvider, RequireAuth } from './context/AuthContext'
 import { OnlineUsersProvider } from './hooks/useOnlineUsers'
 import './index.css'
+
+const DashboardLayout = lazy(() => import('./pages/DashboardLayout'))
+const DashboardHome = lazy(() => import('./pages/DashboardHome'))
+const JobsPage = lazy(() => import('./pages/JobsPage'))
+const ClientsPage = lazy(() => import('./pages/ClientsPage'))
+const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage'))
+const ClientJobCandidatesPage = lazy(() => import('./pages/ClientJobCandidatesPage'))
+const CandidatesPage = lazy(() => import('./pages/CandidatesPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const ProfileSettingsPage = lazy(() => import('./pages/ProfileSettingsPage'))
+const InvoicePage = lazy(() => import('./pages/InvoicePage'))
 
 function App() {
   const [aiQuotaNotice, setAiQuotaNotice] = useState('')
@@ -43,6 +44,7 @@ function App() {
             <button type="button" onClick={() => setAiQuotaNotice('')} aria-label="Close notification">×</button>
           </div>
         )}
+        <Suspense fallback={<div className="route-loading" role="status">Loading...</div>}>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />
@@ -62,6 +64,7 @@ function App() {
             <Route index element={<InvoicePage />} />
           </Route>
         </Routes>
+        </Suspense>
         </OnlineUsersProvider>
       </AuthProvider>
     </BrowserRouter>

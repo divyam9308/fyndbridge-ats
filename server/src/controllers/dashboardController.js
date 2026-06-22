@@ -317,19 +317,6 @@ async function getDashboardStats(req, res) {
     const candidateTrend = statusTrend(filteredAssociations, CANDIDATE_STATUSES, (row) => normalizeCandidateStatus(row.status), (row) => row.created_at || row.candidate_created_at, period, range)
     const mandateTrend = statusTrend(filteredMandates, MANDATE_STATUSES, (row) => normalizeMandateStatus(row.mandate_status || row.status), (row) => row.allocation_date || row.created_at, period, range)
 
-    const consultantPerformance = consultantOptions.map((name) => {
-      const candidateRows = allAssociations.filter((row) => withinPeriod(row.created_at || row.candidate_created_at, range) && matchesConsultant(row, name, ['consultant_name']))
-      const mandateRows = jobs.filter((row) => withinPeriod(row.allocation_date || row.created_at, range) && matchesConsultant(row, name, ['consultants', 'team_lead']))
-      const clientRows = clientOwnershipAvailable ? allUniqueClients.filter((row) => withinPeriod(row.connected_on_date || row.created_at, range) && matchesConsultant(row, name, ['consultant_name'])) : []
-      return {
-        name,
-        candidatesAdded: new Set(candidateRows.map((row) => row.candidate_id).filter(Boolean)).size,
-        candidatesHired: candidateRows.filter((row) => normalizeCandidateStatus(row.status) === 'Hired').length,
-        mandatesManaged: mandateRows.length,
-        activeClients: clientOwnershipAvailable ? clientRows.filter((row) => normalizeClientStatus(row.status) === 'Active').length : null
-      }
-    })
-
     return res.json({
       consultantOptions,
       kpis: {
@@ -346,11 +333,6 @@ async function getDashboardStats(req, res) {
       clientTrend,
       candidateTrend,
       mandateTrend,
-      candidateFunnel: ['Interested', 'Client Submission', 'Interview', 'Offered', 'Hired'].map((name) => ({
-        name,
-        value: filteredAssociations.filter((row) => normalizeCandidateStatus(row.status) === name).length
-      })),
-      consultantPerformance,
       recentActivity: buildRecentActivity({ clients: uniqueClients, candidates: filteredAssociations, mandates: filteredMandates }),
       sectionErrors,
       clientOwnershipAvailable,

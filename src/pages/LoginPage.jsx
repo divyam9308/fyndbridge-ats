@@ -83,6 +83,9 @@ export default function LoginPage() {
             src="/assets/fyndbridge-official-logo.png"
             alt="FYNDBRIDGE"
             className="login-brand-logo"
+            width="543"
+            height="90"
+            fetchPriority="high"
             onError={() => console.error('FYNDBRIDGE logo failed to load: /assets/fyndbridge-official-logo.png')}
           />
         </div>
