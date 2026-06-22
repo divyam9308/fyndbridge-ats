@@ -291,7 +291,7 @@ function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
   if (!chartData.length) return <EmptyChart label="No chart data." />
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={modalMode ? 420 : 210}>
       <PieChart>
         <Pie
           data={chartData}
@@ -335,7 +335,7 @@ function AnimatedChartDot({ cx, cy, stroke, index }) {
 
 function StatusTrendLines({ data, statuses, modalMode = false }) {
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={modalMode ? 420 : 210}>
       <LineChart data={data} margin={{ top: modalMode ? 18 : 12, right: modalMode ? 26 : 16, bottom: 12, left: 0 }}>
         <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="m" interval="preserveStartEnd" minTickGap={18} />
