@@ -29,9 +29,9 @@ const COMPANY = {
   }
 }
 
-const NAVY = '#001264'
-const BORDER = '#31508f'
-const LIGHT = '#f4f7ff'
+const NAVY = '#0b3d91'
+const BORDER = '#b7c2da'
+const LIGHT = '#e8eef9'
 const WHITE = '#ffffff'
 const REGULAR_FONT = 'InvoiceRegular'
 const BOLD_FONT = 'InvoiceBold'
@@ -156,15 +156,14 @@ function amountWords(value) {
 }
 
 function formatRs(value, decimals = 0) {
-  return `₹${n(value).toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
+  return `Rs. ${n(value).toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
 }
 
 function normalizeInvoiceText(value) {
   return String(value || '')
     .replace(/CTC in LPA/gi, 'CTC')
-    .replace(/Â¹|â‚¹|¹|\?{1,3}(?=\d)/g, '₹')
-    .replace(/\bRs\.?\s*/gi, '₹')
-    .replace(/₹\s+/g, '₹')
+    .replace(/Â¹|â‚¹|¹|₹|\?{1,3}(?=\d)/g, 'Rs. ')
+    .replace(/\bRs\.?\s*/gi, 'Rs. ')
 }
 
 function setupFonts(doc) {
@@ -178,12 +177,12 @@ function setupFonts(doc) {
 
 function drawCell(doc, x, y, w, h, text, opts = {}) {
   const fonts = doc._invoiceFonts || { regular: 'Helvetica', bold: 'Helvetica-Bold' }
-  const padding = opts.padding ?? 6
+  const padding = opts.padding ?? 5
   doc.save()
   doc.lineWidth(opts.lineWidth || 0.7).strokeColor(opts.strokeColor || BORDER)
   if (opts.fill) doc.rect(x, y, w, h).fillAndStroke(opts.fill, opts.strokeColor || BORDER)
   else doc.rect(x, y, w, h).stroke()
-  doc.fillColor(opts.textColor || '#111827').font(opts.bold ? fonts.bold : fonts.regular).fontSize(opts.size || 8)
+  doc.fillColor(opts.textColor || '#111827').font(opts.bold ? fonts.bold : fonts.regular).fontSize(opts.size || 8.5)
   doc.text(String(text ?? ''), x + padding, y + padding, {
     width: w - padding * 2,
     height: h - padding * 2,
@@ -209,7 +208,7 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     doc.fillColor(NAVY).font(F.bold).fontSize(15).text('TAX INVOICE', 250, 28, { align: 'center', width: 110 })
     doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, 64, 530, 92).stroke().moveTo(320, 64).lineTo(320, 156).stroke().restore()
     doc.fontSize(11).text(company.name, 40, 70)
-    doc.fillColor('#111827').font(F.regular).fontSize(8.5)
+    doc.fillColor('#111827').font(F.regular).fontSize(9)
     company.address.forEach((line, index) => doc.text(`${index === 0 ? 'Regd Office: ' : ''}${line}`, { continued: false }))
     doc.text('Mobile: 9717773066  |  Tel: 9717773066')
     doc.text('Email: partner@fyndbridge.in  |  www.fyndbridge.in')
@@ -218,8 +217,8 @@ function createInvoicePdf({ entity, invoice, overrides }) {
 
     drawCell(doc, 350, 72, 112, 22, 'Invoice No.', { bold: true, fill: NAVY, textColor: WHITE, align: 'center', valign: 'center' })
     drawCell(doc, 462, 72, 80, 22, 'Dated', { bold: true, fill: NAVY, textColor: WHITE, align: 'center', valign: 'center' })
-    drawCell(doc, 350, 94, 112, 30, invoice.invoice_number, { size: 7.5, align: 'center', valign: 'center' })
-    drawCell(doc, 462, 94, 80, 30, dateDDMMYYYY(invoice.invoice_date), { align: 'center', valign: 'center' })
+    drawCell(doc, 350, 94, 112, 30, invoice.invoice_number, { size: 9, align: 'center', valign: 'center' })
+    drawCell(doc, 462, 94, 80, 30, dateDDMMYYYY(invoice.invoice_date), { size: 9, align: 'center', valign: 'center' })
 
     let y = 165
     doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, y - 4, 530, 124).stroke().moveTo(320, y - 4).lineTo(320, y + 120).stroke().restore()
@@ -227,13 +226,13 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     y += 14
     doc.fillColor('#111827').font(F.bold).fontSize(9).text(entity.legal_entity_name || '-', 40, y, { width: 252 })
     y += 15
-    doc.font(F.regular).fontSize(8).text(entity.address || '-', 40, y, { width: 252 })
+    doc.font(F.regular).fontSize(9).text(entity.address || '-', 40, y, { width: 252 })
     const infoX = 330
     const pairs = [['PAN / IT No', entity.pan], ['Place of Supply', entity.place_of_supply], ['State', `${entity.state || '-'}   Code: ${entity.state_code || '-'}`], ['GSTIN', entity.gstin], ['Contact Person', entity.contact_person], ['Email', entity.email]]
     let py = 165
     pairs.forEach(([label, value]) => {
-      doc.save().lineWidth(0.5).strokeColor('#c7d2fe').rect(infoX - 8, py - 4, 232, 18).stroke().rect(infoX - 8, py - 4, 96, 18).fillAndStroke('#eef2ff', '#c7d2fe').restore()
-      doc.font(F.bold).fontSize(8).text(label, infoX, py, { width: 95 })
+      doc.save().lineWidth(0.5).strokeColor(BORDER).rect(infoX - 8, py - 4, 232, 18).stroke().rect(infoX - 8, py - 4, 96, 18).fillAndStroke(LIGHT, BORDER).restore()
+      doc.font(F.bold).fontSize(8.5).text(label, infoX, py, { width: 95 })
       doc.font(F.regular).text(value || '-', infoX + 105, py, { width: 140 })
       py += 18
     })
@@ -274,33 +273,33 @@ function createInvoicePdf({ entity, invoice, overrides }) {
       summaryRow('Total before Rounding Off', formatRs(invoice.total_before_rounding, 2))
       summaryRow(`${invoice.rounding_type === 'MORE' ? 'More' : 'Less'} : ROUNDING OFF`, `${invoice.rounding_type === 'MORE' ? '(+)' : '(-)'}${invoice.rounding_amount.toFixed(2)}`)
     }
-    ;[[32, 42], [329, 58], [387, 45], [432, 25]].forEach(([x, w]) => drawCell(doc, x, y, w, 22, '', { fill: NAVY }))
-    drawCell(doc, 74, y, 255, 22, 'Total', { bold: true, fill: NAVY, textColor: WHITE, padding: 5 })
-    drawCell(doc, 457, y, 105, 22, formatRs(invoice.grand_total, invoice.rounding_type ? 2 : 0), { bold: true, align: 'right', fill: NAVY, textColor: WHITE, padding: 5 })
+    ;[[32, 42], [329, 58], [387, 45], [432, 25]].forEach(([x, w]) => drawCell(doc, x, y, w, 22, '', { fill: LIGHT }))
+    drawCell(doc, 74, y, 255, 22, 'Total', { bold: true, fill: LIGHT, textColor: NAVY, padding: 5 })
+    drawCell(doc, 457, y, 105, 22, formatRs(invoice.grand_total, invoice.rounding_type ? 2 : 0), { bold: true, align: 'right', fill: LIGHT, textColor: NAVY, padding: 5 })
     y += 30
 
     doc.save().rect(32, y, 530, 30).fillAndStroke(LIGHT, BORDER).restore()
-    doc.fillColor(NAVY).font(F.bold).fontSize(7.3).text('Amount Chargeable (in words):', 36, y + 10, { width: 138 })
-    doc.fillColor(NAVY).font(F.bold).fontSize(7.3).text(invoice.amount_in_words, 174, y + 10, { width: 378, align: 'right' })
+    doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Amount Chargeable (in words):', 36, y + 9, { width: 170 })
+    doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(invoice.amount_in_words, 206, y + 9, { width: 346, align: 'right' })
     y += 40
     drawTaxBreakdown(doc, y, invoice, entity.sac || '998512')
     y += invoice.gst_component === 'IGST' ? 74 : 96
-    doc.fillColor(NAVY).font(F.bold).fontSize(8).text(`Tax Amount (in words): ${invoice.tax_amount_in_words}`, 32, y, { width: 520 })
+    doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(`Tax Amount (in words): ${invoice.tax_amount_in_words}`, 32, y, { width: 520 })
     y += 24
 
     const bottomY = y
     drawCell(doc, 32, bottomY, 300, 84, '', {})
     drawCell(doc, 332, bottomY, 230, 84, '', {})
-    doc.fillColor(NAVY).font(F.bold).fontSize(8).text('Description of Services', 40, bottomY + 10)
+    doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Description of Services', 40, bottomY + 10)
     doc.fillColor('#111827').font(F.regular).text('Permanent placement services, other than executive\nsearch services', 40, bottomY + 22)
     doc.font(F.bold).text(`Company's PAN: ${company.pan}`, 40, bottomY + 58)
-    doc.font(F.regular).text('Tax Payable on reverse charge basis: No', 40, bottomY + 74)
-    drawCell(doc, 344, bottomY + 8, 206, 20, "Company's Bank Details", { bold: true, align: 'center', valign: 'center', fill: NAVY, textColor: WHITE, padding: 4 })
+    doc.font(F.regular).text('Tax Payable on reverse charge basis: No', 40, bottomY + 68)
+    drawCell(doc, 344, bottomY + 6, 206, 18, "Company's Bank Details", { bold: true, align: 'center', valign: 'center', fill: NAVY, textColor: WHITE, padding: 3 })
     const bankLabels = ['Bank Name', 'A/c No.', 'IFSC Code', 'Branch']
     company.bank.forEach((value, index) => {
-      const by = bottomY + 28 + index * 11
-      drawCell(doc, 344, by, 70, 11, index <= 3 ? bankLabels[index] : '', { bold: true, size: 6.5, padding: 2 })
-      drawCell(doc, 414, by, 136, 11, value, { size: 6.5, padding: 2 })
+      const by = bottomY + 24 + index * 12
+      drawCell(doc, 344, by, 70, 12, index <= 3 ? bankLabels[index] : '', { bold: true, size: 7.5, padding: 2, fill: LIGHT, textColor: NAVY })
+      drawCell(doc, 414, by, 136, 12, value, { size: 7.5, padding: 2 })
     })
     const sigY = bottomY + 84
     company.sign.slice(0, -1).forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8).text(line, 350, sigY + 10 + index * 12, { width: 190, align: 'center' }))
