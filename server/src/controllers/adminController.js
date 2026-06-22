@@ -21,6 +21,33 @@ function validEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+function clean(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+async function lockedByNameMap(rows) {
+  const userIds = [...new Set((rows || []).map(row => row.locked_by).filter(Boolean))]
+  if (!userIds.length) return new Map()
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('user_id, name')
+    .in('user_id', userIds)
+  if (error) throw error
+  return new Map((data || []).map(profile => [profile.user_id, clean(profile.name)]).filter(([, name]) => name))
+}
+
+function lockedRecord(type, row, profileNames) {
+  return {
+    type,
+    id: row.id,
+    displayId: row.client_display_id || row.candidate_display_id || row.job_display_id,
+    name: row.client_name || row.name || row.full_name || row.title,
+    lockedBy: row.locked_by,
+    lockedByName: row.locked_by ? profileNames.get(row.locked_by) || 'Unknown user' : '',
+    lockedAt: row.locked_at
+  }
+}
+
 async function me(req, res) {
   try {
     const admins = await listAdminUsers()
@@ -148,11 +175,13 @@ async function lockedRecords(req, res) {
       supabase.from('jobs').select('id, job_display_id, title, is_locked, locked_by, locked_at').eq('is_locked', true)
     ])
     for (const result of [clients, candidates, jobs]) if (result.error) throw result.error
+    const rows = [...(clients.data || []), ...(candidates.data || []), ...(jobs.data || [])]
+    const profileNames = await lockedByNameMap(rows)
     return res.json({
       data: [
-        ...(clients.data || []).map((row) => ({ type: 'Client', id: row.id, displayId: row.client_display_id, name: row.client_name || row.name, lockedBy: row.locked_by, lockedAt: row.locked_at })),
-        ...(candidates.data || []).map((row) => ({ type: 'Candidate', id: row.id, displayId: row.candidate_display_id, name: row.full_name, lockedBy: row.locked_by, lockedAt: row.locked_at })),
-        ...(jobs.data || []).map((row) => ({ type: 'Mandate', id: row.id, displayId: row.job_display_id, name: row.title, lockedBy: row.locked_by, lockedAt: row.locked_at }))
+        ...(clients.data || []).map((row) => lockedRecord('Client', row, profileNames)),
+        ...(candidates.data || []).map((row) => lockedRecord('Candidate', row, profileNames)),
+        ...(jobs.data || []).map((row) => lockedRecord('Mandate', row, profileNames))
       ]
     })
   } catch (err) {

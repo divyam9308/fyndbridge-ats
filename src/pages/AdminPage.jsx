@@ -124,7 +124,7 @@ function LockedRecordsTable({ records, onUnlock, emptyText = 'No records are cur
                 <td><span className="admin-type-pill"><Icon size={13} />{record.type}</span></td>
                 <td><span className="admin-locked-name"><Lock size={14} />{record.name || '-'}</span></td>
                 <td className="admin-mono">{record.displayId || record.id}</td>
-                <td>{record.lockedBy || '-'}</td>
+                <td>{record.lockedBy ? (record.lockedByName || 'Unknown user') : '-'}</td>
                 <td>{formatDate(record.lockedAt)}</td>
                 <td className="is-action">
                   <button className="admin-unlock-btn" type="button" title="Unlock" onClick={() => onUnlock(record)}>
