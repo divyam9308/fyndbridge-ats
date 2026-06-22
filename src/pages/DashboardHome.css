@@ -274,6 +274,14 @@
   gap: 20px;
 }
 
+.ats-dashboard-state .spin {
+  animation: dashboard-spin 0.7s linear infinite;
+}
+
+@keyframes dashboard-spin {
+  to { transform: rotate(360deg); }
+}
+
 .ats-dashboard-expandable {
   display: block;
   min-width: 0;
