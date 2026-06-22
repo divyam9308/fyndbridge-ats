@@ -39,12 +39,14 @@ const BOLD_FONT = 'InvoiceBold'
 const firstExisting = (items) => items.find(item => fs.existsSync(item))
 const FONT_PATHS = {
   regular: firstExisting([
+    path.join(__dirname, '../../assets/fonts/NotoSans-Regular.ttf'),
     'C:/Windows/Fonts/ARIALUNI.ttf',
     'C:/Windows/Fonts/segoeui.ttf',
     'C:/Windows/Fonts/arial.ttf',
     '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
   ]),
   bold: firstExisting([
+    path.join(__dirname, '../../assets/fonts/NotoSans-Bold.ttf'),
     'C:/Windows/Fonts/segoeuib.ttf',
     'C:/Windows/Fonts/arialbd.ttf',
     '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
@@ -156,14 +158,15 @@ function amountWords(value) {
 }
 
 function formatRs(value, decimals = 0) {
-  return `Rs. ${n(value).toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
+  return `₹${n(value).toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
 }
 
 function normalizeInvoiceText(value) {
   return String(value || '')
     .replace(/CTC in LPA/gi, 'CTC')
-    .replace(/Â¹|â‚¹|¹|₹|\?{1,3}(?=\d)/g, 'Rs. ')
-    .replace(/\bRs\.?\s*/gi, 'Rs. ')
+    .replace(/Â¹|â‚¹|¹|\?{1,3}(?=\d)/g, '₹')
+    .replace(/\bRs\.?\s*/gi, '₹')
+    .replace(/₹\s+/g, '₹')
 }
 
 function setupFonts(doc) {
@@ -207,8 +210,8 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     if (fs.existsSync(logo)) doc.image(logo, 32, 24, { width: 92 })
     doc.fillColor(NAVY).font(F.bold).fontSize(15).text('TAX INVOICE', 250, 28, { align: 'center', width: 110 })
     doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, 64, 530, 92).stroke().moveTo(320, 64).lineTo(320, 156).stroke().restore()
-    doc.fontSize(11).text(company.name, 40, 70)
-    doc.fillColor('#111827').font(F.regular).fontSize(9)
+    doc.fontSize(invoice.billing_entity === 'FCAPL' ? 9.5 : 11).text(company.name, 40, 70, { width: 272 })
+    doc.fillColor('#111827').font(F.regular).fontSize(invoice.billing_entity === 'FCAPL' ? 7.6 : 9)
     company.address.forEach((line, index) => doc.text(`${index === 0 ? 'Regd Office: ' : ''}${line}`, { continued: false }))
     doc.text('Mobile: 9717773066  |  Tel: 9717773066')
     doc.text('Email: partner@fyndbridge.in  |  www.fyndbridge.in')
@@ -233,7 +236,7 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     pairs.forEach(([label, value]) => {
       doc.save().lineWidth(0.5).strokeColor(BORDER).rect(infoX - 8, py - 4, 232, 18).stroke().rect(infoX - 8, py - 4, 96, 18).fillAndStroke(LIGHT, BORDER).restore()
       doc.font(F.bold).fontSize(8.5).text(label, infoX, py, { width: 95 })
-      doc.font(F.regular).text(value || '-', infoX + 105, py, { width: 140 })
+      doc.font(F.regular).fontSize(label === 'Email' ? 7.5 : 8.5).text(value || '-', infoX + 96, py, { width: 120 })
       py += 18
     })
 
