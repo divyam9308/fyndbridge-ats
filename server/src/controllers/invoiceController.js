@@ -185,10 +185,20 @@ async function generate(req, res) {
       if (result.error.code !== '23505') throw result.error
     }
     if (!record) throw new Error('Unable to reserve invoice number')
-    const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: record, overrides: input })
+    const fileName = `Invoice-${record.invoice_number.replace(/\//g, '-')}.pdf`
+    let pdf
+    try {
+      pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: record, overrides: input })
+      const { data, error: updateError } = await supabase.from('invoices').update({ pdf_storage_path: fileName }).eq('id', record.id).select('*').single()
+      if (updateError) throw updateError
+      record = data
+    } catch (pdfError) {
+      await supabase.from('invoices').delete().eq('id', record.id)
+      throw pdfError
+    }
     return res.json({
       data: record,
-      fileName: `Invoice-${record.invoice_number.replace(/\//g, '-')}.pdf`,
+      fileName,
       pdfBase64: pdf.toString('base64')
     })
   } catch (err) {

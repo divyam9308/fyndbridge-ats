@@ -178,12 +178,18 @@ function setupFonts(doc) {
 
 function drawCell(doc, x, y, w, h, text, opts = {}) {
   const fonts = doc._invoiceFonts || { regular: 'Helvetica', bold: 'Helvetica-Bold' }
+  const padding = opts.padding ?? 6
   doc.save()
   doc.lineWidth(opts.lineWidth || 0.7).strokeColor(opts.strokeColor || BORDER)
   if (opts.fill) doc.rect(x, y, w, h).fillAndStroke(opts.fill, opts.strokeColor || BORDER)
   else doc.rect(x, y, w, h).stroke()
   doc.fillColor(opts.textColor || '#111827').font(opts.bold ? fonts.bold : fonts.regular).fontSize(opts.size || 8)
-  doc.text(String(text ?? ''), x + 4, y + 5, { width: w - 8, height: h - 8, align: opts.align || 'left' })
+  doc.text(String(text ?? ''), x + padding, y + padding, {
+    width: w - padding * 2,
+    height: h - padding * 2,
+    align: opts.align || 'left',
+    valign: opts.valign || 'top'
+  })
   doc.restore()
 }
 
@@ -202,7 +208,7 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     if (fs.existsSync(logo)) doc.image(logo, 32, 24, { width: 92 })
     doc.fillColor(NAVY).font(F.bold).fontSize(15).text('TAX INVOICE', 250, 28, { align: 'center', width: 110 })
     doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, 64, 530, 92).stroke().moveTo(320, 64).lineTo(320, 156).stroke().restore()
-    doc.fontSize(11).text(company.name, 32, 70)
+    doc.fontSize(11).text(company.name, 40, 70)
     doc.fillColor('#111827').font(F.regular).fontSize(8.5)
     company.address.forEach((line, index) => doc.text(`${index === 0 ? 'Regd Office: ' : ''}${line}`, { continued: false }))
     doc.text('Mobile: 9717773066  |  Tel: 9717773066')
@@ -210,18 +216,18 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     doc.text('State: Delhi   State Code: 07')
     doc.text(company.gst)
 
-    drawCell(doc, 390, 70, 100, 22, 'Invoice No.', { bold: true, fill: NAVY, textColor: WHITE })
-    drawCell(doc, 490, 70, 72, 22, 'Dated', { bold: true, fill: NAVY, textColor: WHITE })
-    drawCell(doc, 390, 92, 100, 30, invoice.invoice_number, { size: 7.5 })
-    drawCell(doc, 490, 92, 72, 30, dateDDMMYYYY(invoice.invoice_date))
+    drawCell(doc, 350, 72, 112, 22, 'Invoice No.', { bold: true, fill: NAVY, textColor: WHITE, align: 'center', valign: 'center' })
+    drawCell(doc, 462, 72, 80, 22, 'Dated', { bold: true, fill: NAVY, textColor: WHITE, align: 'center', valign: 'center' })
+    drawCell(doc, 350, 94, 112, 30, invoice.invoice_number, { size: 7.5, align: 'center', valign: 'center' })
+    drawCell(doc, 462, 94, 80, 30, dateDDMMYYYY(invoice.invoice_date), { align: 'center', valign: 'center' })
 
     let y = 165
     doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, y - 4, 530, 124).stroke().moveTo(320, y - 4).lineTo(320, y + 120).stroke().restore()
-    doc.fillColor(NAVY).font(F.bold).fontSize(9).text('Bill To:', 32, y)
+    doc.fillColor(NAVY).font(F.bold).fontSize(9).text('Bill To:', 40, y)
     y += 14
-    doc.fillColor('#111827').font(F.bold).fontSize(9).text(entity.legal_entity_name || '-', 32, y, { width: 260 })
+    doc.fillColor('#111827').font(F.bold).fontSize(9).text(entity.legal_entity_name || '-', 40, y, { width: 252 })
     y += 15
-    doc.font(F.regular).fontSize(8).text(entity.address || '-', 32, y, { width: 270 })
+    doc.font(F.regular).fontSize(8).text(entity.address || '-', 40, y, { width: 252 })
     const infoX = 330
     const pairs = [['PAN / IT No', entity.pan], ['Place of Supply', entity.place_of_supply], ['State', `${entity.state || '-'}   Code: ${entity.state_code || '-'}`], ['GSTIN', entity.gstin], ['Contact Person', entity.contact_person], ['Email', entity.email]]
     let py = 165
@@ -232,9 +238,9 @@ function createInvoicePdf({ entity, invoice, overrides }) {
       py += 18
     })
 
-    y = 315
-    const descH = invoice.rounding_type ? 108 : 90
-    const header = { bold: true, align: 'center', fill: NAVY, textColor: WHITE }
+    y = 288
+    const descH = 68
+    const header = { bold: true, align: 'center', valign: 'center', fill: NAVY, textColor: WHITE }
     drawCell(doc, 32, y, 42, 24, 'SL.No', header)
     drawCell(doc, 74, y, 255, 24, 'Description of Services', { ...header, align: 'left' })
     drawCell(doc, 329, y, 58, 24, 'SAC', header)
@@ -242,65 +248,61 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     drawCell(doc, 432, y, 25, 24, '%', header)
     drawCell(doc, 457, y, 105, 24, 'Amount', { ...header, align: 'right' })
     const desc = `${company.feeLabel}\n${normalizeInvoiceText(overrides.professional_fee_text || entity.professional_fee_text || '')}`
-    drawCell(doc, 32, y + 24, 42, descH, '1', { align: 'center' })
+    drawCell(doc, 32, y + 24, 42, descH, '1', { align: 'center', padding: 8 })
     drawCell(doc, 74, y + 24, 255, descH, desc)
     drawCell(doc, 329, y + 24, 58, descH, entity.sac || '998512', { align: 'center' })
     drawCell(doc, 387, y + 24, 45, descH, invoice.gst_component === 'IGST' ? invoice.igst_rate : '', { align: 'center' })
     drawCell(doc, 432, y + 24, 25, descH, invoice.gst_component === 'IGST' ? '%' : '', { align: 'center' })
     drawCell(doc, 457, y + 24, 105, descH, formatRs(invoice.taxable_amount, invoice.rounding_type ? 0 : 0), { align: 'right' })
     y += 24 + descH
+    const summaryRow = (label, amount, rate = '', percent = '') => {
+      drawCell(doc, 32, y, 42, 20, '')
+      drawCell(doc, 74, y, 255, 20, label, { bold: true, padding: 5 })
+      drawCell(doc, 329, y, 58, 20, '')
+      drawCell(doc, 387, y, 45, 20, rate, { align: 'center', padding: 5 })
+      drawCell(doc, 432, y, 25, 20, percent, { align: 'center', padding: 5 })
+      drawCell(doc, 457, y, 105, 20, amount, { align: 'right', padding: 5 })
+      y += 20
+    }
     if (invoice.gst_component === 'IGST') {
-      drawCell(doc, 329, y, 128, 22, 'Integrated GST (IGST)')
-      drawCell(doc, 457, y, 105, 22, formatRs(invoice.igst_amount, cents(invoice.igst_amount)), { align: 'right' })
-      y += 22
+      summaryRow('Integrated GST (IGST)', formatRs(invoice.igst_amount, cents(invoice.igst_amount)), invoice.igst_rate, '%')
     } else {
-      drawCell(doc, 329, y, 58, 22, 'SGST')
-      drawCell(doc, 387, y, 45, 22, invoice.sgst_rate, { align: 'center' })
-      drawCell(doc, 432, y, 25, 22, '%', { align: 'center' })
-      drawCell(doc, 457, y, 105, 22, formatRs(invoice.sgst_amount, cents(invoice.sgst_amount)), { align: 'right' })
-      y += 22
-      drawCell(doc, 329, y, 58, 22, 'CGST')
-      drawCell(doc, 387, y, 45, 22, invoice.cgst_rate, { align: 'center' })
-      drawCell(doc, 432, y, 25, 22, '%', { align: 'center' })
-      drawCell(doc, 457, y, 105, 22, formatRs(invoice.cgst_amount, cents(invoice.cgst_amount)), { align: 'right' })
-      y += 22
+      summaryRow('State GST (SGST)', formatRs(invoice.sgst_amount, cents(invoice.sgst_amount)), invoice.sgst_rate, '%')
+      summaryRow('Central GST (CGST)', formatRs(invoice.cgst_amount, cents(invoice.cgst_amount)), invoice.cgst_rate, '%')
     }
     if (invoice.rounding_type) {
-      drawCell(doc, 329, y, 128, 22, 'Total before Rounding Off', { bold: true, fill: LIGHT })
-      drawCell(doc, 457, y, 105, 22, formatRs(invoice.total_before_rounding, 2), { align: 'right' })
-      y += 22
-      drawCell(doc, 329, y, 128, 22, `${invoice.rounding_type === 'MORE' ? 'More' : 'Less'} : ROUNDING OFF`, { bold: true, fill: LIGHT })
-      drawCell(doc, 457, y, 105, 22, `${invoice.rounding_type === 'MORE' ? '(+)' : '(-)'}${invoice.rounding_amount.toFixed(2)}`, { align: 'right' })
-      y += 22
+      summaryRow('Total before Rounding Off', formatRs(invoice.total_before_rounding, 2))
+      summaryRow(`${invoice.rounding_type === 'MORE' ? 'More' : 'Less'} : ROUNDING OFF`, `${invoice.rounding_type === 'MORE' ? '(+)' : '(-)'}${invoice.rounding_amount.toFixed(2)}`)
     }
-    drawCell(doc, 329, y, 128, 24, 'Total', { bold: true, fill: NAVY, textColor: WHITE })
-    drawCell(doc, 457, y, 105, 24, formatRs(invoice.grand_total, invoice.rounding_type ? 2 : 0), { bold: true, align: 'right', fill: NAVY, textColor: WHITE })
-    y += 34
+    ;[[32, 42], [329, 58], [387, 45], [432, 25]].forEach(([x, w]) => drawCell(doc, x, y, w, 22, '', { fill: NAVY }))
+    drawCell(doc, 74, y, 255, 22, 'Total', { bold: true, fill: NAVY, textColor: WHITE, padding: 5 })
+    drawCell(doc, 457, y, 105, 22, formatRs(invoice.grand_total, invoice.rounding_type ? 2 : 0), { bold: true, align: 'right', fill: NAVY, textColor: WHITE, padding: 5 })
+    y += 30
 
     doc.save().rect(32, y, 530, 30).fillAndStroke(LIGHT, BORDER).restore()
     doc.fillColor(NAVY).font(F.bold).fontSize(7.3).text('Amount Chargeable (in words):', 36, y + 10, { width: 138 })
     doc.fillColor(NAVY).font(F.bold).fontSize(7.3).text(invoice.amount_in_words, 174, y + 10, { width: 378, align: 'right' })
     y += 40
     drawTaxBreakdown(doc, y, invoice, entity.sac || '998512')
-    y += invoice.gst_component === 'IGST' ? 76 : 98
+    y += invoice.gst_component === 'IGST' ? 74 : 96
     doc.fillColor(NAVY).font(F.bold).fontSize(8).text(`Tax Amount (in words): ${invoice.tax_amount_in_words}`, 32, y, { width: 520 })
     y += 24
 
-    const bottomY = Math.min(Math.max(y, 600), 620)
-    drawCell(doc, 32, bottomY, 300, 112, '', {})
-    drawCell(doc, 332, bottomY, 230, 112, '', {})
+    const bottomY = y
+    drawCell(doc, 32, bottomY, 300, 84, '', {})
+    drawCell(doc, 332, bottomY, 230, 84, '', {})
     doc.fillColor(NAVY).font(F.bold).fontSize(8).text('Description of Services', 40, bottomY + 10)
     doc.fillColor('#111827').font(F.regular).text('Permanent placement services, other than executive\nsearch services', 40, bottomY + 22)
     doc.font(F.bold).text(`Company's PAN: ${company.pan}`, 40, bottomY + 58)
     doc.font(F.regular).text('Tax Payable on reverse charge basis: No', 40, bottomY + 74)
-    drawCell(doc, 360, bottomY + 12, 172, 24, "Company's Bank Details", { bold: true, align: 'center', fill: NAVY, textColor: WHITE })
+    drawCell(doc, 344, bottomY + 8, 206, 20, "Company's Bank Details", { bold: true, align: 'center', valign: 'center', fill: NAVY, textColor: WHITE, padding: 4 })
     const bankLabels = ['Bank Name', 'A/c No.', 'IFSC Code', 'Branch']
     company.bank.forEach((value, index) => {
-      const by = bottomY + 36 + index * 14
-      drawCell(doc, 360, by, 68, 14, index <= 3 ? bankLabels[index] : '', { bold: true, size: 7 })
-      drawCell(doc, 428, by, 104, 14, value, { size: 7 })
+      const by = bottomY + 28 + index * 11
+      drawCell(doc, 344, by, 70, 11, index <= 3 ? bankLabels[index] : '', { bold: true, size: 6.5, padding: 2 })
+      drawCell(doc, 414, by, 136, 11, value, { size: 6.5, padding: 2 })
     })
-    const sigY = bottomY + 112
+    const sigY = bottomY + 84
     company.sign.slice(0, -1).forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8).text(line, 350, sigY + 10 + index * 12, { width: 190, align: 'center' }))
     doc.moveTo(372, sigY + 50).lineTo(540, sigY + 50).strokeColor(BORDER).stroke()
     doc.fillColor('#111827').font(F.regular).fontSize(8).text(company.sign.at(-1), 350, sigY + 56, { width: 190, align: 'center' })

@@ -186,6 +186,7 @@ function GenerateModal({ entities, onClose }) {
       if (calc.taxable < 0) throw new Error('Taxable amount cannot be negative.')
       const payload = await generateInvoicePdf({ ...form, invoice_entity_id: selectedId })
       setResult(payload)
+      setNextNumber(payload.data.invoice_number)
       download(payload)
     } catch (err) {
       setError(err.message)
