@@ -27,6 +27,7 @@ import {
   YAxis
 } from 'recharts'
 import { DASHBOARD_PERIODS, useDashboardStats } from '../hooks/useDashboardStats'
+import { useOnlineUsers } from '../hooks/useOnlineUsers'
 import OnlineUsersStrip from '../components/dashboard/OnlineUsersStrip'
 import './DashboardHome.css'
 
@@ -469,6 +470,7 @@ export default function DashboardHome() {
   const [selectedCard, setSelectedCard] = useState(null)
   const modalOpenCounter = useRef(0)
   const { loading, error, data } = useDashboardStats({ consultant, period })
+  const onlineUsers = useOnlineUsers()
 
   const names = Array.isArray(data?.consultantOptions) ? data.consultantOptions : []
   const consultantOptions = [OVERALL, ...names.filter(Boolean)]
@@ -564,7 +566,7 @@ export default function DashboardHome() {
         <div className="ats-dashboard-state is-error">{error}</div>
       ) : null}
 
-      <OnlineUsersStrip />
+      <OnlineUsersStrip users={onlineUsers} />
 
       <div className="ats-dashboard-kpi-grid">
         {kpis.map(item => (

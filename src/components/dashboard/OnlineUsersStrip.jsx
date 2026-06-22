@@ -2,17 +2,6 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import './OnlineUsersStrip.css'
 
-const MOCK_ONLINE_USERS = [
-  { id: '1', name: 'Divyam Aggarwal', email: 'divyam@fyndbridge.in', role: 'Admin', status: 'online' },
-  { id: '2', name: 'Rahul Sharma', email: 'rahul@fyndbridge.in', role: 'Consultant', status: 'online' },
-  { id: '3', name: 'Ananya Patel', email: 'ananya@fyndbridge.in', role: 'Consultant', status: 'online' },
-  { id: '4', name: 'Sneha Prakash', email: 'sneha@fyndbridge.in', role: 'Research Associate', status: 'online' },
-  { id: '5', name: 'Amit Kumar', email: 'amit@fyndbridge.in', role: 'Consultant', status: 'online' },
-  { id: '6', name: 'Neha Pillai', email: 'neha@fyndbridge.in', role: 'Research Associate', status: 'online' },
-  { id: '7', name: 'Mohit Bansal', email: 'mohit@fyndbridge.in', role: 'Consultant', status: 'online' },
-  { id: '8', name: 'Vivek Gupta', email: 'vivek@fyndbridge.in', role: 'Consultant', status: 'online' }
-]
-
 const AVATAR_GRADIENTS = [
   'linear-gradient(135deg, #001264, #31508f)',
   'linear-gradient(135deg, #0f766e, #2dd4bf)',
@@ -25,6 +14,7 @@ const AVATAR_GRADIENTS = [
 ]
 
 function userInitials(user) {
+  if (user?.initials) return user.initials
   const value = String(user?.name || user?.email || '').trim()
   if (!value) return 'U'
   const source = value.includes('@') ? value.split('@')[0].replace(/[._-]+/g, ' ') : value
@@ -52,7 +42,7 @@ function OnlineUserAvatar({ user, index, onShow, onHide }) {
   return <button type="button" className="online-users-avatar" style={{ '--avatar-gradient': AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }} aria-label={`${user.name || user.email || 'User'} is online`} onMouseEnter={show} onMouseLeave={onHide} onFocus={show} onBlur={onHide}>{userInitials(user)}</button>
 }
 
-export default function OnlineUsersStrip({ users = MOCK_ONLINE_USERS }) {
+export default function OnlineUsersStrip({ users = [] }) {
   const onlineUsers = users.filter(user => user.status === 'online')
   const visible = onlineUsers.slice(0, 8)
   const remaining = onlineUsers.slice(8)
