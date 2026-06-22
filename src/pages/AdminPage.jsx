@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Briefcase, Building2, Eye, EyeOff, Lock, Mail, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
+import { AlertTriangle, Briefcase, Building2, Eye, EyeOff, LoaderCircle, Lock, Mail, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
 import { notifyAdminPermissionsChanged, useAdminAccess } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import {
@@ -227,7 +227,9 @@ export default function AdminPage() {
   const selectedIsCurrentUser = Boolean(selectedAdmin?.is_current_user)
   const roleActionDisabled = !isSuperAdmin || !selectedAdmin || selectedIsCurrentUser || selectedIsLastSuper || savingRole
 
-  if (loading && !Object.keys(permissions || {}).length) return null
+  if (loading) {
+    return <div className="admin-access-loading" role="status"><LoaderCircle size={24} /><span>Checking admin access...</span></div>
+  }
   if (!isAdmin) {
     return (
       <div className="admin-page">

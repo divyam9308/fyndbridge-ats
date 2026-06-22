@@ -10,6 +10,34 @@
   padding-bottom: 86px;
 }
 
+.admin-access-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  min-height: 220px;
+  border: 1px solid #dbe3f1;
+  border-radius: 20px;
+  background: #fff;
+  color: #001264;
+  box-shadow: 0 12px 32px rgba(0, 18, 100, 0.08);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.admin-access-loading svg {
+  color: #DAB111;
+  animation: admin-access-spin 0.85s linear infinite;
+}
+
+@keyframes admin-access-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-access-loading svg { animation: none; }
+}
+
 .admin-error {
   border: 1px solid rgba(180, 35, 24, 0.22);
   border-radius: 14px;
