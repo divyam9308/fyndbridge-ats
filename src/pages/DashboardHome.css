@@ -44,6 +44,7 @@
 .modern-dashboard .gradient-warning { background-image: var(--modern-gradient-warning); }
 .modern-dashboard .gradient-info { background-image: var(--modern-gradient-info); }
 .modern-dashboard .gradient-pink { background-image: var(--modern-gradient-pink); }
+.modern-dashboard .gradient-fcapl { background-image: linear-gradient(135deg, #DAB111, #C99600, #F2C94C); }
 .modern-dashboard .gradient-teal { background-image: var(--modern-gradient-teal); }
 .modern-dashboard .shadow-soft { box-shadow: var(--modern-shadow-soft); }
 .modern-dashboard .shadow-card { box-shadow: var(--modern-shadow-card); }
@@ -313,6 +314,23 @@
   height: 140px;
   border-radius: 50%;
   background: rgba(255,255,255,0.16);
+}
+
+.ats-dashboard-billing-card.gradient-fcapl {
+  color: #fff;
+  box-shadow: 0 18px 38px rgba(201, 150, 0, 0.22);
+}
+
+.ats-dashboard-billing-card.gradient-fcapl::after {
+  background: rgba(255, 248, 214, 0.24);
+}
+
+.ats-dashboard-billing-card.gradient-fcapl .ats-dashboard-billing-progress {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.ats-dashboard-billing-card.gradient-fcapl .ats-dashboard-billing-progress em {
+  background: rgba(255, 252, 232, 0.92);
 }
 
 .ats-dashboard-kpi:hover,
