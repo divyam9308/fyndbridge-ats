@@ -10,6 +10,15 @@ create table if not exists invoice_entities (
   gstin text,
   contact_person text,
   email text,
+  model text check (model in ('joining_percentage', 'joining_flat_fee', 'retainer', 'jra_adjustment_percentage', 'jra_adjustment_flat_fee', 'project', 'others')),
+  ctc_lpa numeric,
+  model_percent numeric,
+  model_flat_fee numeric,
+  retainer_amount numeric,
+  jra_adjustment_value numeric,
+  jra_base_value numeric,
+  jra_flat_fee numeric,
+  others_amount numeric,
   sac text default '998512',
   billing_entity text not null check (billing_entity in ('FCS', 'FCAPL')),
   gst_component text check (gst_component in ('IGST', 'CGST_SGST')),
@@ -52,15 +61,15 @@ alter table invoice_entities enable row level security;
 alter table invoices enable row level security;
 
 alter table invoice_entities drop column if exists professional_fee_text;
-alter table invoice_entities drop column if exists model;
-alter table invoice_entities drop column if exists model_percent;
-alter table invoice_entities drop column if exists model_flat_fee;
-alter table invoice_entities drop column if exists retainer_amount;
-alter table invoice_entities drop column if exists jra_adjustment_value;
-alter table invoice_entities drop column if exists jra_base_value;
-alter table invoice_entities drop column if exists jra_flat_fee;
-alter table invoice_entities drop column if exists others_amount;
-alter table invoice_entities drop column if exists ctc_lpa;
+alter table invoice_entities add column if not exists model text check (model in ('joining_percentage', 'joining_flat_fee', 'retainer', 'jra_adjustment_percentage', 'jra_adjustment_flat_fee', 'project', 'others'));
+alter table invoice_entities add column if not exists ctc_lpa numeric;
+alter table invoice_entities add column if not exists model_percent numeric;
+alter table invoice_entities add column if not exists model_flat_fee numeric;
+alter table invoice_entities add column if not exists retainer_amount numeric;
+alter table invoice_entities add column if not exists jra_adjustment_value numeric;
+alter table invoice_entities add column if not exists jra_base_value numeric;
+alter table invoice_entities add column if not exists jra_flat_fee numeric;
+alter table invoice_entities add column if not exists others_amount numeric;
 
 alter table invoices add column if not exists professional_fee_text text;
 alter table invoices add column if not exists model text check (model in ('joining_percentage', 'joining_flat_fee', 'retainer', 'jra_adjustment_percentage', 'jra_adjustment_flat_fee', 'project', 'others'));

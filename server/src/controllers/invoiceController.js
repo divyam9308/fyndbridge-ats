@@ -10,7 +10,7 @@ const {
   createInvoicePdf
 } = require('../services/invoiceService')
 
-const ENTITY_FIELDS = 'id, invoice_id, legal_entity_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, sac, billing_entity, gst_component, igst_rate, cgst_rate, sgst_rate, created_at, updated_at'
+const ENTITY_FIELDS = 'id, invoice_id, legal_entity_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, model, ctc_lpa, model_percent, model_flat_fee, retainer_amount, jra_adjustment_value, jra_base_value, jra_flat_fee, others_amount, sac, billing_entity, gst_component, igst_rate, cgst_rate, sgst_rate, created_at, updated_at'
 
 function sendError(res, err) {
   return res.status(err.statusCode || 500).json({ error: err.message || 'Internal server error' })
@@ -22,7 +22,10 @@ function nullable(value) {
 }
 
 function numberOrNull(value) {
-  return value === '' || value === null || value === undefined ? null : Number(value)
+  if (value === '' || value === null || value === undefined) return null
+  const parsed = Number(String(value).replace(/₹|Rs\.?|,/gi, '').trim())
+  if (!Number.isFinite(parsed)) throw Object.assign(new Error('Amount fields must be numeric'), { statusCode: 400 })
+  return parsed
 }
 
 async function nextEntityId() {
@@ -40,7 +43,7 @@ function entityPayload(body) {
   if (!BILLING_ENTITIES.has(billing)) throw Object.assign(new Error('Billing Entity is required'), { statusCode: 400 })
   if (!clean(body.sac || '998512')) throw Object.assign(new Error('SAC is required'), { statusCode: 400 })
   if (!GST_COMPONENTS.has(gst)) throw Object.assign(new Error('Invalid GST component'), { statusCode: 400 })
-  return {
+  const payload = {
     legal_entity_name: clean(body.legal_entity_name),
     address: clean(body.address),
     pan: nullable(body.pan),
@@ -50,6 +53,15 @@ function entityPayload(body) {
     gstin: nullable(body.gstin),
     contact_person: nullable(body.contact_person),
     email: nullable(body.email),
+    model: body.model,
+    ctc_lpa: numberOrNull(body.ctc_lpa),
+    model_percent: numberOrNull(body.model_percent),
+    model_flat_fee: numberOrNull(body.model_flat_fee),
+    retainer_amount: numberOrNull(body.retainer_amount),
+    jra_adjustment_value: numberOrNull(body.jra_adjustment_value),
+    jra_base_value: numberOrNull(body.jra_base_value),
+    jra_flat_fee: numberOrNull(body.jra_flat_fee),
+    others_amount: numberOrNull(body.others_amount),
     sac: clean(body.sac || '998512'),
     billing_entity: billing,
     gst_component: gst,
@@ -58,6 +70,9 @@ function entityPayload(body) {
     sgst_rate: numberOrNull(body.sgst_rate) ?? 9,
     updated_at: new Date().toISOString()
   }
+  if (!MODELS.has(payload.model)) throw Object.assign(new Error('Model is required'), { statusCode: 400 })
+  calculateInvoice(payload)
+  return payload
 }
 
 async function listEntities(req, res) {

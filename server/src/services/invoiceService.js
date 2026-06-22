@@ -53,8 +53,8 @@ const FONT_PATHS = {
   ])
 }
 
-const n = (value) => Number(value || 0)
-const money = (value, decimals = 2) => Math.round(n(value) * 100) / 100
+const n = (value) => Number(String(value ?? '').replace(/₹|Rs\.?|,/gi, '').trim() || 0)
+const money = (value) => Math.round(n(value) * 100) / 100
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 
 function financialYear(dateValue) {
@@ -71,9 +71,10 @@ function detectGstComponent(...values) {
 function calculateTaxable(input) {
   const model = input.model
   if (!MODELS.has(model)) throw new Error('Invalid model')
-  const ctc = n(input.ctc_lpa) * 100000
+  const ctc = n(input.ctc_lpa)
   const required = (field, label) => {
     if (input[field] === '' || input[field] === null || input[field] === undefined) throw new Error(`${label} is required`)
+    if (!Number.isFinite(n(input[field]))) throw new Error(`${label} must be numeric`)
     if (n(input[field]) < 0) throw new Error(`${label} must be non-negative`)
   }
   if (['joining_percentage', 'project', 'jra_adjustment_percentage'].includes(model)) {
@@ -99,6 +100,9 @@ function calculateTaxable(input) {
 function calculateInvoice(input) {
   if (!BILLING_ENTITIES.has(input.billing_entity)) throw new Error('Invalid billing entity')
   const gstComponent = GST_COMPONENTS.has(input.gst_component) ? input.gst_component : detectGstComponent(input.address, input.state, input.place_of_supply)
+  ;['igst_rate', 'cgst_rate', 'sgst_rate'].forEach(field => {
+    if (input[field] !== '' && input[field] !== null && input[field] !== undefined && (!Number.isFinite(n(input[field])) || n(input[field]) < 0)) throw new Error('GST rates must be numeric and non-negative')
+  })
   const taxable = calculateTaxable(input)
   if (taxable < 0) throw new Error('Taxable amount cannot be negative')
   const igstAmount = gstComponent === 'IGST' ? money(taxable * n(input.igst_rate || 18) / 100) : null
@@ -157,8 +161,8 @@ function amountWords(value) {
   return paise ? `${rupeeWords(rupees)} and ${rupeeWords(paise)} Paise` : rupeeWords(rupees)
 }
 
-function formatRs(value, decimals = 0) {
-  return `₹${n(value).toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
+function formatRs(value) {
+  return `₹${n(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function normalizeInvoiceText(value) {
@@ -167,6 +171,7 @@ function normalizeInvoiceText(value) {
     .replace(/Â¹|â‚¹|¹|\?{1,3}(?=\d)/g, '₹')
     .replace(/\bRs\.?\s*/gi, '₹')
     .replace(/₹\s+/g, '₹')
+    .replace(/₹([\d,]+)(?:\.(\d{1,2}))?/g, (_, amount, decimals = '') => `₹${amount}.${decimals.padEnd(2, '0')}`)
 }
 
 function setupFonts(doc) {
@@ -274,7 +279,7 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     }
     if (invoice.rounding_type) {
       summaryRow('Total before Rounding Off', formatRs(invoice.total_before_rounding, 2))
-      summaryRow(`${invoice.rounding_type === 'MORE' ? 'More' : 'Less'} : ROUNDING OFF`, `${invoice.rounding_type === 'MORE' ? '(+)' : '(-)'}${invoice.rounding_amount.toFixed(2)}`)
+      summaryRow(`${invoice.rounding_type === 'MORE' ? 'More' : 'Less'} : ROUNDING OFF`, `${invoice.rounding_type === 'MORE' ? '(+)' : '(-)'}${formatRs(invoice.rounding_amount)}`)
     }
     ;[[32, 42], [329, 58], [387, 45], [432, 25]].forEach(([x, w]) => drawCell(doc, x, y, w, 22, '', { fill: LIGHT }))
     drawCell(doc, 74, y, 255, 22, 'Total', { bold: true, fill: LIGHT, textColor: NAVY, padding: 5 })
