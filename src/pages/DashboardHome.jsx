@@ -286,12 +286,31 @@ function ChartSkeleton() {
   return <div className="ats-dashboard-chart-skeleton"><span>Loading chart</span></div>
 }
 
+function ChartContainer({ children }) {
+  const ref = useRef(null)
+  const [ready, setReady] = useState(false)
+
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (!element) return undefined
+
+    const update = () => setReady(element.clientWidth > 0 && element.clientHeight > 0)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  return <div ref={ref} className="ats-dashboard-chart-content">{ready ? children : null}</div>
+}
+
 function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
   const chartData = (data || []).filter(item => Number(item.value || 0) > 0)
   if (!chartData.length) return <EmptyChart label="No chart data." />
 
   return (
-    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={modalMode ? 420 : 210}>
+    <ChartContainer>
+    <ResponsiveContainer width="100%" height="100%">
       <PieChart>
         <Pie
           data={chartData}
@@ -314,6 +333,7 @@ function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
         <text x="50%" y="58%" textAnchor="middle" className="ats-dashboard-donut-value">{Number(centerValue || 0).toLocaleString('en-IN')}</text>
       </PieChart>
     </ResponsiveContainer>
+    </ChartContainer>
   )
 }
 
@@ -335,7 +355,8 @@ function AnimatedChartDot({ cx, cy, stroke, index }) {
 
 function StatusTrendLines({ data, statuses, modalMode = false }) {
   return (
-    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={modalMode ? 420 : 210}>
+    <ChartContainer>
+    <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: modalMode ? 18 : 12, right: modalMode ? 26 : 16, bottom: 12, left: 0 }}>
         <CartesianGrid stroke="var(--modern-border)" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="m" interval="preserveStartEnd" minTickGap={18} />
@@ -361,6 +382,7 @@ function StatusTrendLines({ data, statuses, modalMode = false }) {
         ))}
       </LineChart>
     </ResponsiveContainer>
+    </ChartContainer>
   )
 }
 
