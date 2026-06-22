@@ -54,7 +54,7 @@ const MODELS = [
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const clean = value => String(value || '').replace(/\s+/g, ' ').trim()
 const n = value => Number(value || 0)
-const money = value => `Rs. ${n(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+const money = value => `₹${n(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 const isDelhi = form => /\b(new\s+delhi|delhi|south east delhi|north delhi|south delhi|east delhi|west delhi|central delhi)\b/i.test([form.address, form.state, form.place_of_supply].join(' '))
 
 function calculate(form) {
@@ -90,12 +90,12 @@ function Field({ label, children, full = false, error }) {
 }
 
 function ModelFields({ form, update }) {
-  if (['joining_percentage', 'project'].includes(form.model)) return <><Field label="CTC in LPA"><input className="form-control" name="ctc_lpa" value={form.ctc_lpa || ''} onChange={update} /></Field><Field label="Percent Value"><input className="form-control" name="model_percent" value={form.model_percent || ''} onChange={update} /></Field></>
-  if (form.model === 'joining_flat_fee') return <Field label="Flat Fee Value in Rs."><input className="form-control" name="model_flat_fee" value={form.model_flat_fee || ''} onChange={update} /></Field>
-  if (form.model === 'retainer') return <Field label="Retainer Amount in Rs."><input className="form-control" name="retainer_amount" value={form.retainer_amount || ''} onChange={update} /></Field>
-  if (form.model === 'jra_adjustment_percentage') return <><Field label="CTC in LPA"><input className="form-control" name="ctc_lpa" value={form.ctc_lpa || ''} onChange={update} /></Field><Field label="Percent Value"><input className="form-control" name="model_percent" value={form.model_percent || ''} onChange={update} /></Field><Field label="Adjustment Value in Rs."><input className="form-control" name="jra_adjustment_value" value={form.jra_adjustment_value || ''} onChange={update} /></Field></>
-  if (form.model === 'jra_adjustment_flat_fee') return <><Field label="Value in Rs."><input className="form-control" name="jra_base_value" value={form.jra_base_value || ''} onChange={update} /></Field><Field label="Flat Fee / Adjustment in Rs."><input className="form-control" name="jra_flat_fee" value={form.jra_flat_fee || ''} onChange={update} /></Field></>
-  return <Field label="Amount in Rs."><input className="form-control" name="others_amount" value={form.others_amount || ''} onChange={update} /></Field>
+  if (['joining_percentage', 'project'].includes(form.model)) return <><Field label="CTC"><input className="form-control" name="ctc_lpa" value={form.ctc_lpa || ''} onChange={update} /></Field><Field label="Percent Value"><input className="form-control" name="model_percent" value={form.model_percent || ''} onChange={update} /></Field></>
+  if (form.model === 'joining_flat_fee') return <Field label="Flat Fee Value in ₹"><input className="form-control" name="model_flat_fee" value={form.model_flat_fee || ''} onChange={update} /></Field>
+  if (form.model === 'retainer') return <Field label="Retainer Amount in ₹"><input className="form-control" name="retainer_amount" value={form.retainer_amount || ''} onChange={update} /></Field>
+  if (form.model === 'jra_adjustment_percentage') return <><Field label="CTC"><input className="form-control" name="ctc_lpa" value={form.ctc_lpa || ''} onChange={update} /></Field><Field label="Percent Value"><input className="form-control" name="model_percent" value={form.model_percent || ''} onChange={update} /></Field><Field label="Adjustment Value in ₹"><input className="form-control" name="jra_adjustment_value" value={form.jra_adjustment_value || ''} onChange={update} /></Field></>
+  if (form.model === 'jra_adjustment_flat_fee') return <><Field label="Value in ₹"><input className="form-control" name="jra_base_value" value={form.jra_base_value || ''} onChange={update} /></Field><Field label="Flat Fee / Adjustment in ₹"><input className="form-control" name="jra_flat_fee" value={form.jra_flat_fee || ''} onChange={update} /></Field></>
+  return <Field label="Amount in ₹"><input className="form-control" name="others_amount" value={form.others_amount || ''} onChange={update} /></Field>
 }
 
 function EntityModal({ initial, onClose, onSave }) {
