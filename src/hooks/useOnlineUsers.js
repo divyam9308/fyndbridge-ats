@@ -58,6 +58,8 @@ function usePresenceUsers() {
     let desiredPresence = false
     let reconciling = false
     let activityTimer
+    let retryTimer
+    let retryCount = 0
 
     const isPageActive = () => document.visibilityState === 'visible' && document.hasFocus()
 
@@ -95,12 +97,19 @@ function usePresenceUsers() {
         if (!subscribed || reconciling || cancelled) return
         reconciling = true
         while (!cancelled && subscribed && desiredPresence !== tracked) {
+          const shouldTrack = desiredPresence
           try {
-            if (desiredPresence) await channel.track(currentUser)
-            else await channel.untrack()
-            tracked = desiredPresence
+            const result = shouldTrack ? await channel.track(currentUser) : await channel.untrack()
+            if (result !== 'ok') throw new Error('Presence update failed')
+            tracked = shouldTrack
+            retryCount = 0
             sync()
           } catch {
+            tracked = !shouldTrack
+            if (retryCount++ < 3) {
+              window.clearTimeout(retryTimer)
+              retryTimer = window.setTimeout(reconcilePresence, 500)
+            }
             break
           }
         }
@@ -115,10 +124,13 @@ function usePresenceUsers() {
           updatePresence(true)
           return
         }
+        tracked = false
         window.clearTimeout(activityTimer)
+        window.clearTimeout(retryTimer)
         activityTimer = window.setTimeout(updatePresence, 0)
       }
       const handleFocus = () => {
+        tracked = false
         desiredPresence = document.visibilityState === 'visible'
         reconcilePresence()
       }
