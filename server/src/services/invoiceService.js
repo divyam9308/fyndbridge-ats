@@ -268,8 +268,8 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     drawCell(doc, 32, y + 24, 42, descH, '1', { align: 'center', padding: 8 })
     drawCell(doc, 74, y + 24, 255, descH, desc)
     drawCell(doc, 329, y + 24, 58, descH, entity.sac || '998512', { align: 'center' })
-    drawCell(doc, 387, y + 24, 45, descH, invoice.gst_component === 'IGST' ? invoice.igst_rate : '', { align: 'center' })
-    drawCell(doc, 432, y + 24, 25, descH, invoice.gst_component === 'IGST' ? '%' : '', { align: 'center' })
+    drawCell(doc, 387, y + 24, 45, descH, '', { align: 'center' })
+    drawCell(doc, 432, y + 24, 25, descH, '', { align: 'center' })
     drawCell(doc, 457, y + 24, 105, descH, formatRs(invoice.taxable_amount, invoice.rounding_type ? 0 : 0), { align: 'right' })
     y += 24 + descH
     const summaryRow = (label, amount, rate = '', percent = '') => {
@@ -326,11 +326,11 @@ function createInvoicePdf({ entity, invoice, overrides }) {
       bankY += rowHeight
     })
     const signatureY = bottomY + bankHeight + 8
-    drawCell(doc, 332, signatureY, 230, signatureBoxHeight, '', {})
+    drawCell(doc, 262, signatureY, 300, signatureBoxHeight, '', {})
     const signatureLines = company.sign.slice(0, -1)
-    signatureLines.forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(line, 340, signatureY + 8 + index * 12, { width: 214, align: 'center', lineBreak: false }))
+    signatureLines.forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(line, 270, signatureY + 5 + index * 12, { width: 284, align: 'center', lineBreak: false }))
     const authorizationY = signatureY + signatureBoxHeight - 16
-    doc.fillColor('#111827').font(F.regular).fontSize(8.5).text(company.sign.at(-1), 340, authorizationY, { width: 214, align: 'center' })
+    doc.fillColor('#111827').font(F.regular).fontSize(8.5).text(company.sign.at(-1), 270, authorizationY, { width: 284, align: 'center' })
     doc.end()
   })
 }
