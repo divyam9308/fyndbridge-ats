@@ -282,6 +282,11 @@
   overflow: hidden;
 }
 
+.invoice-generate-modal {
+  height: min(88vh, 900px);
+  max-height: calc(100vh - 32px);
+}
+
 .invoice-modal .modal-header {
   border-bottom-color: rgba(var(--brand-blue-rgb), 0.12);
   box-shadow: inset 4px 0 0 var(--gold);
@@ -296,6 +301,18 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 20px;
+}
+
+.invoice-generate-modal .modal-body {
+  max-height: none;
+  flex: 1;
+}
+
+.invoice-generate-modal .invoice-combobox-results {
+  position: static;
+  max-height: none;
+  margin-top: 6px;
+  overflow: visible;
 }
 
 .invoice-modal .modal-footer {

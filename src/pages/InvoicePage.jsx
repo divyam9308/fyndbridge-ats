@@ -235,7 +235,7 @@ function GenerateModal({ entities, onClose, onGenerated }) {
     onClose()
   }
   const calc = calculate(form)
-  return createPortal(<div className="modal-overlay"><div className="modal-card modal-card-lg invoice-modal" role="dialog" aria-modal="true">
+  return createPortal(<div className="modal-overlay"><div className="modal-card modal-card-lg invoice-modal invoice-generate-modal" role="dialog" aria-modal="true">
     <div className="modal-header"><span className="modal-title">Generate Invoice</span><button className="modal-close" onClick={onClose} aria-label="Close"><X size={16} /></button></div>
     <div className="modal-body">
       {error ? <div className="invoice-form-error">{error}</div> : null}
