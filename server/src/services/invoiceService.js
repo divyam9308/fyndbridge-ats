@@ -23,7 +23,7 @@ const COMPANY = {
     gst: 'GSTIN: 07AAFCF8821L1ZA  |  CIN: U70200DL2024PTC429251',
     pan: 'AAFCF8821L',
     bank: ['State Bank of India', '42926962136', 'SBIN0000727', '233 OKHLA INDUSTRIAL ESTATE,', 'New Delhi - 110020'],
-    sign: ['For FyndBridge Consultants & Advisors', 'Private Limited', 'Authorized Signatory'],
+    sign: ['For FyndBridge Consultants & Advisors Private Limited', 'Authorized Signatory'],
     prefix: 'FCAPL',
     feeLabel: 'Professional Fee'
   }
@@ -328,7 +328,12 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     const signatureY = bottomY + bankHeight + 8
     drawCell(doc, 332, signatureY, 230, signatureBoxHeight, '', {})
     const signatureLines = company.sign.slice(0, -1)
-    signatureLines.forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(line, 350, signatureY + 10 + index * 12, { width: 190, align: 'center' }))
+    signatureLines.forEach((line, index) => {
+      let size = 8.5
+      doc.font(F.bold)
+      while (size > 6 && doc.fontSize(size).widthOfString(line) > 190) size -= 0.5
+      doc.fillColor(NAVY).fontSize(size).text(line, 350, signatureY + 10 + index * 12, { width: 190, align: 'center', lineBreak: false })
+    })
     const authorizationY = signatureY + signatureBoxHeight - 16
     doc.fillColor('#111827').font(F.regular).fontSize(8.5).text(company.sign.at(-1), 350, authorizationY, { width: 190, align: 'center' })
     doc.end()
