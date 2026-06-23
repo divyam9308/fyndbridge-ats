@@ -307,8 +307,9 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     y += 24
 
     const bottomY = y
-    drawCell(doc, 32, bottomY, 300, 84, '', {})
-    drawCell(doc, 332, bottomY, 230, 84, '', {})
+    const signatureBoxHeight = 120
+    drawCell(doc, 32, bottomY, 300, signatureBoxHeight, '', {})
+    drawCell(doc, 332, bottomY, 230, signatureBoxHeight, '', {})
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Description of Services', 40, bottomY + 10)
     doc.fillColor('#111827').font(F.regular).text('Permanent placement services, other than executive\nsearch services', 40, bottomY + 22)
     doc.font(F.bold).text(`Company's PAN: ${company.pan}`, 40, bottomY + 58)
@@ -320,10 +321,11 @@ function createInvoicePdf({ entity, invoice, overrides }) {
       drawCell(doc, 344, by, 70, 12, index <= 3 ? bankLabels[index] : '', { bold: true, size: 7.5, padding: 2, fill: LIGHT, textColor: NAVY })
       drawCell(doc, 414, by, 136, 12, value, { size: 7.5, padding: 2 })
     })
-    const sigY = bottomY + 84
-    company.sign.slice(0, -1).forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8).text(line, 350, sigY + 10 + index * 12, { width: 190, align: 'center' }))
-    doc.moveTo(372, sigY + 50).lineTo(540, sigY + 50).strokeColor(BORDER).stroke()
-    doc.fillColor('#111827').font(F.regular).fontSize(8).text(company.sign.at(-1), 350, sigY + 56, { width: 190, align: 'center' })
+    const signatureLines = company.sign.slice(0, -1)
+    signatureLines.forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(line, 350, bottomY + 12 + index * 12, { width: 190, align: 'center' }))
+    const authorizationY = bottomY + signatureBoxHeight - 18
+    doc.moveTo(360, authorizationY - 12).lineTo(550, authorizationY - 12).strokeColor(BORDER).stroke()
+    doc.fillColor('#111827').font(F.regular).fontSize(8.5).text(company.sign.at(-1), 350, authorizationY, { width: 190, align: 'center' })
     doc.end()
   })
 }
