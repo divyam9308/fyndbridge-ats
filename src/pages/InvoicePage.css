@@ -389,13 +389,39 @@
   top: calc(100% + 6px);
   right: 0;
   left: 0;
-  z-index: 50;
-  max-height: 230px;
+  z-index: 60;
+  max-height: 280px;
   overflow-y: auto;
   border: 1px solid var(--gray-200);
   border-radius: 12px;
   background: var(--white);
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+}
+
+.invoice-button-spin {
+  animation: invoice-spin 0.85s linear infinite;
+}
+
+.invoice-number-control {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--navy);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invoice-number-option {
+  padding: 10px 12px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .invoice-combobox-results button {

@@ -80,7 +80,7 @@ async function listEntities(req, res) {
     const { data, error } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).order('created_at', { ascending: false })
     if (error) throw error
     const ids = (data || []).map(row => row.id)
-    let latest = new Map()
+    const invoiceNumbers = new Map()
     if (ids.length) {
       const { data: invoiceRows, error: invoiceError } = await supabase
         .from('invoices')
@@ -88,9 +88,16 @@ async function listEntities(req, res) {
         .in('invoice_entity_id', ids)
         .order('created_at', { ascending: false })
       if (invoiceError) throw invoiceError
-      for (const row of invoiceRows || []) if (!latest.has(row.invoice_entity_id)) latest.set(row.invoice_entity_id, row.invoice_number)
+      for (const row of invoiceRows || []) {
+        const current = invoiceNumbers.get(row.invoice_entity_id) || []
+        current.push(row.invoice_number)
+        invoiceNumbers.set(row.invoice_entity_id, current)
+      }
     }
-    return res.json({ data: (data || []).map(row => ({ ...row, latest_invoice_number: latest.get(row.id) || '' })) })
+    return res.json({ data: (data || []).map(row => {
+      const numbers = invoiceNumbers.get(row.id) || []
+      return { ...row, latest_invoice_number: numbers[0] || '', invoice_numbers: numbers }
+    }) })
   } catch (err) {
     return sendError(res, err)
   }

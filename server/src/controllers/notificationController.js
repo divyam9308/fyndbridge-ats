@@ -185,7 +185,6 @@ async function clearReadNotifications(req, res) {
       .from('notifications')
       .update({ cleared_at: new Date().toISOString() })
       .eq('recipient_user_id', req.user.id)
-      .eq('status', 'read')
       .is('cleared_at', null)
       .select('id')
     if (missingColumn(error, 'cleared_at')) {
@@ -193,7 +192,6 @@ async function clearReadNotifications(req, res) {
         .from('notifications')
         .select('id, title')
         .eq('recipient_user_id', req.user.id)
-        .eq('status', 'read')
       if (readError) throw readError
       const rows = (readRows || []).filter(row => !String(row.title || '').startsWith(CLEARED_TITLE_PREFIX))
       const updated = await Promise.all(rows.map(row => supabase
