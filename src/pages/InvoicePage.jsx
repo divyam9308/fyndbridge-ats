@@ -189,6 +189,7 @@ function GenerateModal({ entities, onClose, onGenerated }) {
   const [nextNumber, setNextNumber] = useState('')
   const [result, setResult] = useState(null)
   const [preparedRequest, setPreparedRequest] = useState(null)
+  const [previewBlob, setPreviewBlob] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewFailed, setPreviewFailed] = useState(false)
@@ -201,7 +202,7 @@ function GenerateModal({ entities, onClose, onGenerated }) {
     return () => { active = false }
   }, [form.billing_entity, form.invoice_date])
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
-  const clearPreview = () => { setResult(null); setPreparedRequest(null); setPreviewUrl(''); setPreviewFailed(false) }
+  const clearPreview = () => { setResult(null); setPreparedRequest(null); setPreviewBlob(null); setPreviewUrl(''); setPreviewFailed(false) }
   const selectEntity = entity => {
     setSelected(entity)
     clearPreview()
@@ -212,12 +213,11 @@ function GenerateModal({ entities, onClose, onGenerated }) {
     clearPreview()
     setForm(current => LOCATION_FIELDS.has(name) ? autoGst({ ...current, [name]: value }) : { ...current, [name]: value })
   }
-  const download = useCallback(payload => {
-    if (!payload?.pdfBase64) return
-    const bytes = Uint8Array.from(atob(payload.pdfBase64), c => c.charCodeAt(0))
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+  const download = useCallback((blob, fileName) => {
+    if (!blob) return
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.href = url; link.download = payload.fileName || 'Invoice.pdf'; link.click()
+    link.href = url; link.download = fileName || 'Invoice.pdf'; link.click()
     window.setTimeout(() => URL.revokeObjectURL(url), 0)
   }, [])
   const generate = async () => {
@@ -230,7 +230,8 @@ function GenerateModal({ entities, onClose, onGenerated }) {
       const request = { ...form, invoice_entity_id: selected.id }
       const payload = await previewInvoicePdf(request)
       const bytes = Uint8Array.from(atob(payload.pdfBase64), c => c.charCodeAt(0))
-      setResult(payload); setPreparedRequest(request); setNextNumber(payload.data.invoice_number); setPreviewUrl(URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))); setPreviewLoading(true)
+      const blob = new Blob([bytes], { type: 'application/pdf' })
+      setResult(payload); setPreparedRequest(request); setPreviewBlob(blob); setNextNumber(payload.data.invoice_number); setPreviewUrl(URL.createObjectURL(blob)); setPreviewLoading(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -241,7 +242,7 @@ function GenerateModal({ entities, onClose, onGenerated }) {
     if (!result || downloading) return
     setDownloading(true)
     commitInvoicePreview({ ...preparedRequest, invoice_number: result.data.invoice_number }).then(async () => {
-      download(result)
+      download(previewBlob, result.fileName)
       await onGenerated()
       onClose()
     }).catch(err => {
