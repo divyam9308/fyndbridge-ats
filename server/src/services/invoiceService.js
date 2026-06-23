@@ -309,13 +309,8 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     const bankLabels = ['Bank Name', 'A/c No.', 'IFSC Code', 'Branch']
     const bankRowHeights = company.bank.map(value => Math.max(14, doc.font(F.regular).fontSize(7.5).heightOfString(value, { width: 132 }) + 5))
     const bankHeight = 24 + bankRowHeights.reduce((sum, height) => sum + height, 0) + 6
-    const signatureBoxHeight = 92
-    const bottomHeight = Math.max(84, bankHeight) + 14 + signatureBoxHeight
-    let bottomY = y
-    if (bottomY + bottomHeight > doc.page.height - 28) {
-      doc.addPage()
-      bottomY = 32
-    }
+    const signatureBoxHeight = 64
+    const bottomY = y
     drawCell(doc, 32, bottomY, 300, Math.max(84, bankHeight), '', {})
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Description of Services', 40, bottomY + 10)
     doc.fillColor('#111827').font(F.regular).text('Permanent placement services, other than executive\nsearch services', 40, bottomY + 22)
@@ -330,12 +325,11 @@ function createInvoicePdf({ entity, invoice, overrides }) {
       drawCell(doc, 414, bankY, 136, rowHeight, value, { size: 7.5, padding: 2, minSize: 7 })
       bankY += rowHeight
     })
-    const signatureY = bottomY + bankHeight + 14
+    const signatureY = bottomY + bankHeight + 8
     drawCell(doc, 332, signatureY, 230, signatureBoxHeight, '', {})
     const signatureLines = company.sign.slice(0, -1)
     signatureLines.forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(line, 350, signatureY + 10 + index * 12, { width: 190, align: 'center' }))
-    const authorizationY = signatureY + signatureBoxHeight - 18
-    doc.moveTo(360, authorizationY - 12).lineTo(550, authorizationY - 12).strokeColor(BORDER).stroke()
+    const authorizationY = signatureY + signatureBoxHeight - 16
     doc.fillColor('#111827').font(F.regular).fontSize(8.5).text(company.sign.at(-1), 350, authorizationY, { width: 190, align: 'center' })
     doc.end()
   })
