@@ -190,10 +190,16 @@ function drawCell(doc, x, y, w, h, text, opts = {}) {
   doc.lineWidth(opts.lineWidth || 0.7).strokeColor(opts.strokeColor || BORDER)
   if (opts.fill) doc.rect(x, y, w, h).fillAndStroke(opts.fill, opts.strokeColor || BORDER)
   else doc.rect(x, y, w, h).stroke()
-  doc.fillColor(opts.textColor || '#111827').font(opts.bold ? fonts.bold : fonts.regular).fontSize(opts.size || 8.5)
+  const font = opts.bold ? fonts.bold : fonts.regular
+  let size = opts.size || 8.5
+  const usableWidth = w - padding * 2
+  const usableHeight = h - padding * 2
+  doc.font(font)
+  while (size > (opts.minSize || 7) && doc.fontSize(size).heightOfString(String(text ?? ''), { width: usableWidth }) > usableHeight) size -= 0.5
+  doc.fillColor(opts.textColor || '#111827').font(font).fontSize(size)
   doc.text(String(text ?? ''), x + padding, y + padding, {
-    width: w - padding * 2,
-    height: h - padding * 2,
+    width: usableWidth,
+    height: usableHeight,
     align: opts.align || 'left',
     valign: opts.valign || 'top'
   })
@@ -229,24 +235,29 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     drawCell(doc, 462, 94, 80, 30, dateDDMMYYYY(invoice.invoice_date), { size: 9, align: 'center', valign: 'center' })
 
     let y = 165
-    doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, y - 4, 530, 124).stroke().moveTo(320, y - 4).lineTo(320, y + 120).stroke().restore()
-    doc.fillColor(NAVY).font(F.bold).fontSize(9).text('Bill To:', 40, y)
-    y += 14
-    doc.fillColor('#111827').font(F.bold).fontSize(9).text(entity.legal_entity_name || '-', 40, y, { width: 252 })
-    y += 15
-    doc.font(F.regular).fontSize(9).text(entity.address || '-', 40, y, { width: 252 })
     const infoX = 330
     const pairs = [['PAN / IT No', entity.pan], ['Place of Supply', entity.place_of_supply], ['State', `${entity.state || '-'}   Code: ${entity.state_code || '-'}`], ['GSTIN', entity.gstin], ['Contact Person', entity.contact_person], ['Email', entity.email]]
-    let py = 165
-    pairs.forEach(([label, value]) => {
-      doc.save().lineWidth(0.5).strokeColor(BORDER).rect(infoX - 8, py - 4, 232, 18).stroke().rect(infoX - 8, py - 4, 96, 18).fillAndStroke(LIGHT, BORDER).restore()
-      doc.font(F.bold).fontSize(8.5).text(label, infoX, py, { width: 95 })
-      doc.font(F.regular).fontSize(label === 'Email' ? 7.5 : 8.5).text(value || '-', infoX + 96, py, { width: 120 })
-      py += 18
+    const leftWidth = 272
+    const leftHeight = 14 + doc.font(F.bold).fontSize(9).heightOfString(entity.legal_entity_name || '-', { width: leftWidth }) + 5 + doc.font(F.regular).fontSize(8.5).heightOfString(entity.address || '-', { width: leftWidth }) + 10
+    const rowHeights = pairs.map(([label, value]) => Math.max(18, doc.font(F.regular).fontSize(label === 'Email' ? 7.5 : 8.5).heightOfString(value || '-', { width: 120 }) + 8))
+    const detailHeight = Math.max(leftHeight, rowHeights.reduce((sum, height) => sum + height, 0), 124)
+    doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, y - 4, 530, detailHeight).stroke().moveTo(320, y - 4).lineTo(320, y - 4 + detailHeight).stroke().restore()
+    doc.fillColor(NAVY).font(F.bold).fontSize(9).text('Bill To:', 40, y + 4)
+    let leftY = y + 18
+    doc.fillColor('#111827').font(F.bold).fontSize(9).text(entity.legal_entity_name || '-', 40, leftY, { width: leftWidth })
+    leftY += doc.heightOfString(entity.legal_entity_name || '-', { width: leftWidth }) + 5
+    doc.font(F.regular).fontSize(8.5).text(entity.address || '-', 40, leftY, { width: leftWidth })
+    let py = y
+    pairs.forEach(([label, value], index) => {
+      const rowHeight = rowHeights[index]
+      drawCell(doc, infoX - 8, py - 4, 96, rowHeight, label, { bold: true, fill: LIGHT, size: 8.5, padding: 4 })
+      drawCell(doc, infoX + 88, py - 4, 136, rowHeight, value || '-', { size: label === 'Email' ? 7.5 : 8.5, padding: 4, minSize: 7 })
+      py += rowHeight
     })
 
-    y = 288
-    const descH = 68
+    y += detailHeight + 8
+    const desc = `${company.feeLabel}\n${normalizeInvoiceText(overrides.professional_fee_text || entity.professional_fee_text || '')}`
+    const descH = Math.max(68, doc.font(F.regular).fontSize(8.5).heightOfString(desc, { width: 245 }) + 12)
     const header = { bold: true, align: 'center', valign: 'center', fill: NAVY, textColor: WHITE }
     drawCell(doc, 32, y, 42, 24, 'SL.No', header)
     drawCell(doc, 74, y, 255, 24, 'Description of Services', { ...header, align: 'left' })
@@ -254,7 +265,6 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     drawCell(doc, 387, y, 45, 24, 'GST Rate', header)
     drawCell(doc, 432, y, 25, 24, '%', header)
     drawCell(doc, 457, y, 105, 24, 'Amount', { ...header, align: 'right' })
-    const desc = `${company.feeLabel}\n${normalizeInvoiceText(overrides.professional_fee_text || entity.professional_fee_text || '')}`
     drawCell(doc, 32, y + 24, 42, descH, '1', { align: 'center', padding: 8 })
     drawCell(doc, 74, y + 24, 255, descH, desc)
     drawCell(doc, 329, y + 24, 58, descH, entity.sac || '998512', { align: 'center' })
@@ -286,10 +296,11 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     drawCell(doc, 457, y, 105, 22, formatRs(invoice.grand_total, invoice.rounding_type ? 2 : 0), { bold: true, align: 'right', fill: LIGHT, textColor: NAVY, padding: 5 })
     y += 30
 
-    doc.save().rect(32, y, 530, 30).fillAndStroke(LIGHT, BORDER).restore()
+    const wordsHeight = Math.max(30, doc.font(F.bold).fontSize(8.5).heightOfString(invoice.amount_in_words, { width: 346 }) + 12)
+    doc.save().rect(32, y, 530, wordsHeight).fillAndStroke(LIGHT, BORDER).restore()
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Amount Chargeable (in words):', 36, y + 9, { width: 170 })
-    doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(invoice.amount_in_words, 206, y + 9, { width: 346, align: 'right' })
-    y += 40
+    doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(invoice.amount_in_words, 206, y + 6, { width: 346, align: 'right' })
+    y += wordsHeight + 10
     drawTaxBreakdown(doc, y, invoice, entity.sac || '998512')
     y += invoice.gst_component === 'IGST' ? 74 : 96
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(`Tax Amount (in words): ${invoice.tax_amount_in_words}`, 32, y, { width: 520 })
