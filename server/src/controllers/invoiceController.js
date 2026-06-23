@@ -163,42 +163,61 @@ async function nextNumber(req, res) {
   }
 }
 
+async function invoiceInput(body) {
+  const entityId = body.invoice_entity_id || body.entity_id
+  const { data: entity, error } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).eq('id', entityId).maybeSingle()
+  if (error) throw error
+  if (!entity) throw Object.assign(new Error('Entity not found'), { statusCode: 404 })
+  const input = { ...entity, ...body }
+  const invoiceDate = body.invoice_date || new Date().toISOString().slice(0, 10)
+  if (!clean(input.professional_fee_text)) throw Object.assign(new Error('Professional Fee Text is required'), { statusCode: 400 })
+  if (!MODELS.has(input.model)) throw Object.assign(new Error('Model is required'), { statusCode: 400 })
+  return { entity, input, invoiceDate, billing: input.billing_entity, calc: calculateInvoice(input) }
+}
+
+function invoicePayload(entity, input, invoiceDate, parts, calc) {
+  return {
+    invoice_entity_id: entity.id,
+    billing_entity: input.billing_entity,
+    invoice_number: parts.invoiceNumber,
+    financial_year: parts.financialYear,
+    sequence_number: parts.sequence,
+    invoice_date: invoiceDate,
+    professional_fee_text: clean(input.professional_fee_text),
+    model: input.model,
+    ctc_lpa: numberOrNull(input.ctc_lpa),
+    model_percent: numberOrNull(input.model_percent),
+    model_flat_fee: numberOrNull(input.model_flat_fee),
+    retainer_amount: numberOrNull(input.retainer_amount),
+    jra_adjustment_value: numberOrNull(input.jra_adjustment_value),
+    jra_base_value: numberOrNull(input.jra_base_value),
+    jra_flat_fee: numberOrNull(input.jra_flat_fee),
+    others_amount: numberOrNull(input.others_amount),
+    sac: clean(input.sac || entity.sac || '998512'),
+    ...calc
+  }
+}
+
+async function preview(req, res) {
+  try {
+    const { entity, input, invoiceDate, billing, calc } = await invoiceInput(req.body)
+    const parts = await nextNumberParts(billing, invoiceDate)
+    const record = invoicePayload(entity, input, invoiceDate, parts, calc)
+    const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: record, overrides: input })
+    return res.json({ data: record, fileName: `Invoice-${record.invoice_number.replace(/\//g, '-')}.pdf`, pdfBase64: pdf.toString('base64') })
+  } catch (err) {
+    return sendError(res, err)
+  }
+}
+
 async function generate(req, res) {
   try {
-    const entityId = req.body.invoice_entity_id || req.body.entity_id
-    const { data: entity, error } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).eq('id', entityId).maybeSingle()
-    if (error) throw error
-    if (!entity) return res.status(404).json({ error: 'Entity not found' })
-    const input = { ...entity, ...req.body }
-    const invoiceDate = req.body.invoice_date || new Date().toISOString().slice(0, 10)
-    const billing = input.billing_entity
-    if (!clean(input.professional_fee_text)) return res.status(400).json({ error: 'Professional Fee Text is required' })
-    if (!MODELS.has(input.model)) return res.status(400).json({ error: 'Model is required' })
-    const calc = calculateInvoice(input)
+    const { entity, input, invoiceDate, billing, calc } = await invoiceInput(req.body)
 
     let record
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const parts = await nextNumberParts(billing, invoiceDate)
-      const payload = {
-        invoice_entity_id: entity.id,
-        billing_entity: billing,
-        invoice_number: parts.invoiceNumber,
-        financial_year: parts.financialYear,
-        sequence_number: parts.sequence,
-        invoice_date: invoiceDate,
-        professional_fee_text: clean(input.professional_fee_text),
-        model: input.model,
-        ctc_lpa: numberOrNull(input.ctc_lpa),
-        model_percent: numberOrNull(input.model_percent),
-        model_flat_fee: numberOrNull(input.model_flat_fee),
-        retainer_amount: numberOrNull(input.retainer_amount),
-        jra_adjustment_value: numberOrNull(input.jra_adjustment_value),
-        jra_base_value: numberOrNull(input.jra_base_value),
-        jra_flat_fee: numberOrNull(input.jra_flat_fee),
-        others_amount: numberOrNull(input.others_amount),
-        sac: clean(input.sac || entity.sac || '998512'),
-        ...calc
-      }
+      const payload = invoicePayload(entity, input, invoiceDate, parts, calc)
       const result = await supabase.from('invoices').insert(payload).select('*').single()
       if (!result.error) {
         record = result.data
@@ -228,4 +247,18 @@ async function generate(req, res) {
   }
 }
 
-module.exports = { listEntities, createEntity, updateEntity, deleteEntity, nextNumber, generate }
+async function commitPreview(req, res) {
+  try {
+    const { entity, input, invoiceDate, billing, calc } = await invoiceInput(req.body)
+    const parts = await nextNumberParts(billing, invoiceDate)
+    if (parts.invoiceNumber !== clean(req.body.invoice_number)) return res.status(409).json({ error: 'Invoice number changed. Return to edit and generate again.' })
+    const fileName = `Invoice-${parts.invoiceNumber.replace(/\//g, '-')}.pdf`
+    const { data, error } = await supabase.from('invoices').insert({ ...invoicePayload(entity, input, invoiceDate, parts, calc), pdf_storage_path: fileName }).select('*').single()
+    if (error) throw error
+    return res.status(201).json({ data, fileName })
+  } catch (err) {
+    return sendError(res, err)
+  }
+}
+
+module.exports = { listEntities, createEntity, updateEntity, deleteEntity, nextNumber, preview, generate, commitPreview }

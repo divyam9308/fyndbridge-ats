@@ -3,10 +3,11 @@ import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Download, FileText, LoaderCircle, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import {
   createInvoiceEntity,
+  commitInvoicePreview,
   deleteInvoiceEntity,
   fetchInvoiceEntities,
   fetchNextInvoiceNumber,
-  generateInvoicePdf,
+  previewInvoicePdf,
   updateInvoiceEntity
 } from '../services/invoiceApi'
 import { useAdminAccess } from '../hooks/useAdminAccess'
@@ -187,6 +188,10 @@ function GenerateModal({ entities, onClose, onGenerated }) {
   const [form, setForm] = useState({ ...EMPTY, invoice_date: today() })
   const [nextNumber, setNextNumber] = useState('')
   const [result, setResult] = useState(null)
+  const [preparedRequest, setPreparedRequest] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewFailed, setPreviewFailed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState('')
@@ -195,13 +200,16 @@ function GenerateModal({ entities, onClose, onGenerated }) {
     fetchNextInvoiceNumber(form.billing_entity, form.invoice_date).then(data => { if (active) setNextNumber(data.invoiceNumber) }).catch(() => { if (active) setNextNumber('') })
     return () => { active = false }
   }, [form.billing_entity, form.invoice_date])
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
+  const clearPreview = () => { setResult(null); setPreparedRequest(null); setPreviewUrl(''); setPreviewFailed(false) }
   const selectEntity = entity => {
     setSelected(entity)
-    setResult(null)
+    clearPreview()
     setForm(current => ({ ...EMPTY, ...entity, model: entity.model || EMPTY.model, invoice_entity_id: entity.id, invoice_date: current.invoice_date || today(), professional_fee_text: '' }))
   }
   const update = event => {
     const { name, value } = event.target
+    clearPreview()
     setForm(current => LOCATION_FIELDS.has(name) ? autoGst({ ...current, [name]: value }) : { ...current, [name]: value })
   }
   const download = useCallback(payload => {
@@ -219,9 +227,10 @@ function GenerateModal({ entities, onClose, onGenerated }) {
       if (!form.invoice_date) throw new Error('Invoice Date is required.')
       if (!clean(form.professional_fee_text)) throw new Error('Professional Fee Text is required.')
       validateModel(form)
-      const payload = await generateInvoicePdf({ ...form, invoice_entity_id: selected.id })
-      setResult(payload); setNextNumber(payload.data.invoice_number)
-      await onGenerated()
+      const request = { ...form, invoice_entity_id: selected.id }
+      const payload = await previewInvoicePdf(request)
+      const bytes = Uint8Array.from(atob(payload.pdfBase64), c => c.charCodeAt(0))
+      setResult(payload); setPreparedRequest(request); setNextNumber(payload.data.invoice_number); setPreviewUrl(URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))); setPreviewLoading(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -231,9 +240,20 @@ function GenerateModal({ entities, onClose, onGenerated }) {
   const downloadAndClose = () => {
     if (!result || downloading) return
     setDownloading(true)
-    download(result)
-    onClose()
+    commitInvoicePreview({ ...preparedRequest, invoice_number: result.data.invoice_number }).then(async () => {
+      download(result)
+      await onGenerated()
+      onClose()
+    }).catch(err => {
+      setError(err.message)
+      setDownloading(false)
+    })
   }
+  if (result) return createPortal(<div className="modal-overlay"><div className="modal-card invoice-modal invoice-generate-modal invoice-preview-modal" role="dialog" aria-modal="true">
+    <div className="modal-header"><span className="modal-title">Invoice Preview</span><button className="modal-close" onClick={onClose} aria-label="Close"><X size={16} /></button></div>
+    <div className="modal-body"><section className="invoice-pdf-preview"><div><b>{result.data.invoice_number}</b><span>{selected?.legal_entity_name}</span></div>{previewLoading ? <InvoiceLoader label="Loading preview..." /> : null}{previewFailed ? <p>Preview unavailable. You can still download the invoice.</p> : <iframe title="Invoice PDF preview" src={previewUrl} onLoad={() => setPreviewLoading(false)} onError={() => { setPreviewLoading(false); setPreviewFailed(true) }} />}</section></div>
+    <div className="modal-footer"><button className="btn-secondary" onClick={clearPreview} disabled={downloading}>Back / Edit</button><button className="btn-primary" onClick={downloadAndClose} disabled={downloading}>{downloading ? <LoaderCircle size={14} className="invoice-button-spin" /> : <Download size={14} />}Download Invoice</button></div>
+  </div></div>, document.body)
   const calc = calculate(form)
   return createPortal(<div className="modal-overlay"><div className="modal-card modal-card-lg invoice-modal invoice-generate-modal" role="dialog" aria-modal="true">
     <div className="modal-header"><span className="modal-title">Generate Invoice</span><button className="modal-close" onClick={onClose} aria-label="Close"><X size={16} /></button></div>

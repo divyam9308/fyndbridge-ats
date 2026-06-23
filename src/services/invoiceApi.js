@@ -24,3 +24,13 @@ export const generateInvoicePdf = async (payload) => json(await apiFetch('/api/i
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
 }))
+export const previewInvoicePdf = async (payload) => json(await apiFetch('/api/invoice/preview', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload)
+}))
+export const commitInvoicePreview = async (payload) => json(await apiFetch('/api/invoice/commit-preview', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload)
+}))
