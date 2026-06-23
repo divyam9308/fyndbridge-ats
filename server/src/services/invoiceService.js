@@ -328,14 +328,9 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     const signatureY = bottomY + bankHeight + 8
     drawCell(doc, 332, signatureY, 230, signatureBoxHeight, '', {})
     const signatureLines = company.sign.slice(0, -1)
-    signatureLines.forEach((line, index) => {
-      let size = 8.5
-      doc.font(F.bold)
-      while (size > 6 && doc.fontSize(size).widthOfString(line) > 190) size -= 0.5
-      doc.fillColor(NAVY).fontSize(size).text(line, 350, signatureY + 10 + index * 12, { width: 190, align: 'center', lineBreak: false })
-    })
+    signatureLines.forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(line, 340, signatureY + 8 + index * 12, { width: 214, align: 'center', lineBreak: false }))
     const authorizationY = signatureY + signatureBoxHeight - 16
-    doc.fillColor('#111827').font(F.regular).fontSize(8.5).text(company.sign.at(-1), 350, authorizationY, { width: 190, align: 'center' })
+    doc.fillColor('#111827').font(F.regular).fontSize(8.5).text(company.sign.at(-1), 340, authorizationY, { width: 214, align: 'center' })
     doc.end()
   })
 }
