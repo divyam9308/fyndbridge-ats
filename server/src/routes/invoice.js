@@ -14,6 +14,8 @@ router.get('/next-number', controller.nextNumber)
 router.post('/preview', controller.preview)
 router.post('/commit-preview', controller.commitPreview)
 router.post('/generate', controller.generate)
+router.post('/invoices/:id/regeneration-preview', controller.previewRegeneration)
 router.put('/invoices/:id/regenerate', controller.regenerate)
+router.delete('/invoice-pdf-versions/:id', controller.deletePdfVersion)
 
 module.exports = router

@@ -54,3 +54,9 @@ export const regenerateInvoice = async (id, payload) => json(await apiFetch(`/ap
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
 }))
+export const previewRegeneratedInvoice = async (id, payload) => json(await apiFetch(`/api/invoice/invoices/${id}/regeneration-preview`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload)
+}))
+export const deleteInvoicePdfVersion = async (id) => json(await apiFetch(`/api/invoice/invoice-pdf-versions/${id}`, { method: 'DELETE' }))

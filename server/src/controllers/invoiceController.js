@@ -51,6 +51,7 @@ function entityPayload(body) {
 }
 
 const decorateInvoice = row => ({ ...row, invoice_open_url: documentOpenUrl('invoice', row.pdf_storage_path) })
+const decoratePdfVersion = row => ({ ...row, invoice_open_url: documentOpenUrl('invoice', row.storage_path) })
 
 async function listEntities(req, res) {
   try {
@@ -67,7 +68,16 @@ async function getEntity(req, res) {
     if (!entity) return res.status(404).json({ error: 'Entity not found' })
     const { data: invoices, error: invoiceError } = await supabase.from('invoices').select(INVOICE_FIELDS).eq('invoice_entity_id', entity.id).order('created_at', { ascending: false })
     if (invoiceError) throw invoiceError
-    return res.json({ data: { entity, invoices: (invoices || []).map(decorateInvoice) } })
+    const invoiceIds = (invoices || []).map(invoice => invoice.id)
+    let versions = []
+    if (invoiceIds.length) {
+      const result = await supabase.from('invoice_pdf_versions').select('*').in('invoice_id', invoiceIds).order('created_at', { ascending: false })
+      if (result.error) throw result.error
+      versions = result.data || []
+    }
+    const versionsByInvoice = new Map()
+    versions.forEach(version => versionsByInvoice.set(version.invoice_id, [...(versionsByInvoice.get(version.invoice_id) || []), decoratePdfVersion(version)]))
+    return res.json({ data: { entity, invoices: (invoices || []).map(row => ({ ...decorateInvoice(row), pdf_versions: versionsByInvoice.get(row.id) || [] })) } })
   } catch (err) { return sendError(res, err) }
 }
 
@@ -173,6 +183,12 @@ async function createStoredInvoice(body, expectedNumber = '') {
     await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([payload.pdf_storage_path])
     throw error
   }
+  const versionResult = await supabase.from('invoice_pdf_versions').insert({ invoice_id: data.id, storage_path: payload.pdf_storage_path })
+  if (versionResult.error) {
+    await supabase.from('invoices').delete().eq('id', data.id)
+    await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([payload.pdf_storage_path])
+    throw versionResult.error
+  }
   return { record: decorateInvoice(data), pdf }
 }
 
@@ -190,20 +206,59 @@ async function commitPreview(req, res) {
   } catch (err) { return sendError(res, err) }
 }
 
-async function regenerate(req, res) {
+async function regenerationData(invoiceId, body) {
+  const { data: existing, error } = await supabase.from('invoices').select('*').eq('id', invoiceId).maybeSingle()
+  if (error) throw error
+  if (!existing) throw Object.assign(new Error('Invoice not found'), { statusCode: 404 })
+  const { entity, input, calc } = await invoiceInput({ ...existing, ...body, invoice_entity_id: existing.invoice_entity_id })
+  const updated = { ...invoicePayload(entity, input, input.invoice_date || existing.invoice_date, { invoiceNumber: existing.invoice_number, financialYear: existing.financial_year, sequence: existing.sequence_number }, calc), invoice_display_id: existing.invoice_display_id }
+  const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: updated, overrides: input })
+  return { existing, entity, updated, pdf }
+}
+
+async function previewRegeneration(req, res) {
   try {
-    const { data: existing, error } = await supabase.from('invoices').select('*').eq('id', req.params.id).maybeSingle()
-    if (error) throw error
-    if (!existing) return res.status(404).json({ error: 'Invoice not found' })
-    const { entity, input, calc } = await invoiceInput({ ...existing, ...req.body, invoice_entity_id: existing.invoice_entity_id })
-    const updated = { ...invoicePayload(entity, input, input.invoice_date || existing.invoice_date, { invoiceNumber: existing.invoice_number, financialYear: existing.financial_year, sequence: existing.sequence_number }, calc), invoice_display_id: existing.invoice_display_id }
-    const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: updated, overrides: input })
-    updated.pdf_storage_path = await uploadInvoicePdf(entity.id, existing.invoice_display_id || 'IID', pdf)
-    const { data, error: updateError } = await supabase.from('invoices').update(updated).eq('id', existing.id).select(INVOICE_FIELDS).single()
-    if (updateError) throw updateError
-    if (existing.pdf_storage_path) await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([existing.pdf_storage_path])
-    return res.json({ data: decorateInvoice(data), fileName: `Invoice-${existing.invoice_number.replace(/\//g, '-')}.pdf`, pdfBase64: pdf.toString('base64') })
+    const { existing, updated, pdf } = await regenerationData(req.params.id, req.body)
+    return res.json({ data: { ...updated, id: existing.id }, fileName: `Invoice-${existing.invoice_number.replace(/\//g, '-')}.pdf`, pdfBase64: pdf.toString('base64') })
   } catch (err) { return sendError(res, err) }
 }
 
-module.exports = { listEntities, getEntity, createEntity, updateEntity, deleteEntity, nextNumber, preview, generate, commitPreview, regenerate }
+async function regenerate(req, res) {
+  try {
+    const { existing, entity, updated, pdf } = await regenerationData(req.params.id, req.body)
+    const storagePath = await uploadInvoicePdf(entity.id, existing.invoice_display_id || 'IID', pdf)
+    const versionResult = await supabase.from('invoice_pdf_versions').insert({ invoice_id: existing.id, storage_path: storagePath }).select('*').single()
+    if (versionResult.error) {
+      await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([storagePath])
+      throw versionResult.error
+    }
+    updated.pdf_storage_path = storagePath
+    const { data, error: updateError } = await supabase.from('invoices').update(updated).eq('id', existing.id).select(INVOICE_FIELDS).single()
+    if (updateError) {
+      await supabase.from('invoice_pdf_versions').delete().eq('id', versionResult.data.id)
+      await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([storagePath])
+      throw updateError
+    }
+    return res.json({ data: decorateInvoice(data), version: decoratePdfVersion(versionResult.data), fileName: `Invoice-${existing.invoice_number.replace(/\//g, '-')}.pdf`, pdfBase64: pdf.toString('base64') })
+  } catch (err) { return sendError(res, err) }
+}
+
+async function deletePdfVersion(req, res) {
+  try {
+    const { data: version, error } = await supabase.from('invoice_pdf_versions').select('*').eq('id', req.params.id).maybeSingle()
+    if (error) throw error
+    if (!version) return res.status(404).json({ error: 'Invoice PDF version not found' })
+    const { error: storageError } = await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([version.storage_path])
+    if (storageError) throw storageError
+    const { error: deleteError } = await supabase.from('invoice_pdf_versions').delete().eq('id', version.id)
+    if (deleteError) throw deleteError
+    const { data: invoice } = await supabase.from('invoices').select('pdf_storage_path').eq('id', version.invoice_id).maybeSingle()
+    if (invoice?.pdf_storage_path === version.storage_path) {
+      const { data: latest } = await supabase.from('invoice_pdf_versions').select('storage_path').eq('invoice_id', version.invoice_id).order('created_at', { ascending: false }).limit(1)
+      await supabase.from('invoices').update({ pdf_storage_path: latest?.[0]?.storage_path || null }).eq('id', version.invoice_id)
+    }
+    return res.json({ ok: true })
+  } catch (err) { return sendError(res, err) }
+}
+
+module.exports = { listEntities, getEntity, createEntity, updateEntity, deleteEntity, nextNumber, preview, generate, commitPreview, previewRegeneration, regenerate, deletePdfVersion }

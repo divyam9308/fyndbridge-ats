@@ -199,3 +199,27 @@ revoke all on function next_invoice_display_id() from public;
 grant execute on function next_invoice_display_id() to authenticated, service_role;
 create index if not exists invoices_invoice_entity_id_created_at_idx
   on invoices (invoice_entity_id, created_at desc);
+
+create table if not exists invoice_pdf_versions (
+  id uuid primary key default gen_random_uuid(),
+  invoice_id uuid not null references invoices(id) on delete cascade,
+  storage_path text unique not null,
+  created_at timestamptz default now()
+);
+
+insert into invoice_pdf_versions (invoice_id, storage_path, created_at)
+select id, pdf_storage_path, coalesce(created_at, now())
+from invoices
+where pdf_storage_path is not null and btrim(pdf_storage_path) <> ''
+on conflict (storage_path) do nothing;
+
+create index if not exists invoice_pdf_versions_invoice_id_created_at_idx
+  on invoice_pdf_versions (invoice_id, created_at desc);
+
+alter table invoice_pdf_versions enable row level security;
+drop policy if exists invoice_pdf_versions_admin_all on invoice_pdf_versions;
+create policy invoice_pdf_versions_admin_all on invoice_pdf_versions
+  for all to authenticated
+  using (exists (select 1 from admin_users where user_id = auth.uid() or lower(email) = lower(auth.jwt() ->> 'email')))
+  with check (exists (select 1 from admin_users where user_id = auth.uid() or lower(email) = lower(auth.jwt() ->> 'email')));
+grant select, insert, update, delete on invoice_pdf_versions to authenticated;
