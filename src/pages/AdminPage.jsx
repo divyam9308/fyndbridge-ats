@@ -169,7 +169,7 @@ export default function AdminPage() {
   const [savingRole, setSavingRole] = useState(false)
   const [lockModalType, setLockModalType] = useState('')
   const [dashboardRestricted, setDashboardRestricted] = useState(true)
-  const [savingDashboardVisibility, setSavingDashboardVisibility] = useState(false)
+  const [savedDashboardRestricted, setSavedDashboardRestricted] = useState(true)
   const profilePickerRef = useRef(null)
 
   const loadAdminData = useCallback(async () => {
@@ -200,7 +200,11 @@ export default function AdminPage() {
   }, [isAdmin, loadAdminData])
 
   useEffect(() => {
-    if (isAdmin) fetchDashboardVisibility().then(data => setDashboardRestricted(data.restrictNonAdminToSelf !== false)).catch(err => setError(err.message))
+    if (isAdmin) fetchDashboardVisibility().then(data => {
+      const value = data.restrictNonAdminToSelf !== false
+      setDashboardRestricted(value)
+      setSavedDashboardRestricted(value)
+    }).catch(err => setError(err.message))
   }, [isAdmin])
 
   useEffect(() => {
@@ -233,7 +237,8 @@ export default function AdminPage() {
     enabled: isAdmin
   })
 
-  const dirty = !isSamePermissions(savedPermissions, draftPermissions)
+  const dashboardVisibilityDirty = dashboardRestricted !== savedDashboardRestricted
+  const dirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty
   const filteredColumns = (columns[activeTab] || []).filter(column => {
     const query = columnSearch.trim().toLowerCase()
     return !query || column.label.toLowerCase().includes(query) || column.key.toLowerCase().includes(query)
@@ -288,17 +293,24 @@ export default function AdminPage() {
 
   const cancelPermissionChanges = () => {
     setDraftPermissions(savedPermissions)
+    setDashboardRestricted(savedDashboardRestricted)
     setError('')
   }
 
   const savePermissionChanges = async () => {
     const changes = changedPermissions(savedPermissions, draftPermissions)
-    if (!changes.length) return
+    if (!changes.length && !dashboardVisibilityDirty) return
     setSavingPermissions(true)
     setError('')
     try {
       for (const change of changes) {
         await updateColumnPermission(change.tableName, change.columnKey, change.accessMode)
+      }
+      if (dashboardVisibilityDirty) {
+        const data = await updateDashboardVisibility(dashboardRestricted)
+        const value = data.restrictNonAdminToSelf !== false
+        setDashboardRestricted(value)
+        setSavedDashboardRestricted(value)
       }
       setSavedPermissions(draftPermissions)
       setPermissions(draftPermissions)
@@ -442,13 +454,9 @@ export default function AdminPage() {
       </Section>
 
       <Section title="Dashboard Consultant Visibility" description="Control whether non-admin users can view only their own dashboard." icon={Shield}>
-        <div className="admin-advanced-card">
+        <div className="admin-advanced-card admin-dashboard-visibility">
           <div><h3>Restrict dashboard to own consultant data for non-admin users</h3><p>When enabled, only Admins/Super Admins can view Overall dashboard and other consultants’ dashboards.</p></div>
-          <button className={`admin-ios-switch${dashboardRestricted ? ' is-on' : ''}`} type="button" role="switch" aria-checked={dashboardRestricted} aria-label="Restrict dashboard to own consultant data for non-admin users" disabled={savingDashboardVisibility} onClick={async () => {
-            const next = !dashboardRestricted
-            setSavingDashboardVisibility(true); setError('')
-            try { const data = await updateDashboardVisibility(next); setDashboardRestricted(data.restrictNonAdminToSelf !== false) } catch (err) { setError(err.message) } finally { setSavingDashboardVisibility(false) }
-          }}><span /></button>
+          <button className={`admin-ios-switch${dashboardRestricted ? ' is-on' : ''}`} type="button" role="switch" aria-checked={dashboardRestricted} aria-label="Restrict dashboard to own consultant data for non-admin users" disabled={savingPermissions} onClick={() => setDashboardRestricted(current => !current)}><span /></button>
         </div>
       </Section>
 

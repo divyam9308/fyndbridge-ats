@@ -245,9 +245,9 @@
   width: 48px;
   height: 28px;
   padding: 3px;
-  border: 0;
+  border: 1px solid #9aa8bd;
   border-radius: 999px;
-  background: var(--gray-300);
+  background: #e6ebf2;
   cursor: pointer;
   transition: background 160ms ease;
 }
@@ -262,7 +262,12 @@
   transition: transform 160ms ease;
 }
 
-.admin-ios-switch.is-on { background: var(--brand-blue); }
+.admin-dashboard-visibility {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-right: 28px;
+}
+
+.admin-ios-switch.is-on { background: #25a768; border-color: #25a768; }
 .admin-ios-switch.is-on span { transform: translateX(20px); }
 .admin-ios-switch:disabled { cursor: wait; opacity: .6; }
 
