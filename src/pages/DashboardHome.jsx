@@ -29,6 +29,11 @@ import {
 import { DASHBOARD_PERIODS, useDashboardStats } from '../hooks/useDashboardStats'
 import { useOnlineUsers } from '../hooks/useOnlineUsers'
 import OnlineUsersStrip from '../components/dashboard/OnlineUsersStrip'
+import {
+  getCandidateStatusColor,
+  getClientStatusColor,
+  getMandateStatusColor
+} from '../constants/statusColors'
 import './DashboardHome.css'
 
 const OVERALL = 'Overall (All Consultants)'
@@ -134,7 +139,7 @@ function DashboardTooltip({ active, payload, label, coordinate, viewBox, floatin
       {label ? <strong>{label}</strong> : null}
       {rows.map(item => (
         <span key={item.name || item.dataKey}>
-          <i style={{ background: item.color || item.fill }} />
+          <i style={{ background: item.payload?.color || item.color || item.fill }} />
           <b>{item.name || item.dataKey}</b>
           <em>{Number(item.value || 0).toLocaleString('en-IN')}</em>
           {Number(raw[item.dataKey] || 0) > 0 ? <small>(+{Number(raw[item.dataKey] || 0).toLocaleString('en-IN')} added)</small> : null}
@@ -256,10 +261,10 @@ function ExpandableCard({ children, onOpen, className = '' }) {
 function StatusList({ data }) {
   return (
     <div className="ats-dashboard-status-list">
-      {data.map((item, index) => (
+      {data.map((item) => (
         <div className="ats-dashboard-status-row" key={item.name}>
           <span className="ats-dashboard-status-name">
-            <i style={{ background: chartColors[index % chartColors.length] }} />
+            <i style={{ background: item.color }} />
             {item.name}
           </span>
           <strong>{Number(item.value || 0).toLocaleString('en-IN')}</strong>
@@ -273,11 +278,11 @@ function StatusShareRows({ data, total }) {
   const denominator = Number(total || 0)
   return (
     <div className="ats-dashboard-share-list">
-      {(data || []).map((item, index) => {
+      {(data || []).map((item) => {
         const percent = denominator > 0 ? Math.round((Number(item.value || 0) / denominator) * 100) : 0
         return (
           <div className="ats-dashboard-share-row" key={item.name}>
-            <span><i style={{ background: chartColors[index % chartColors.length] }} />{item.name} share</span>
+            <span><i style={{ background: item.color }} />{item.name} share</span>
             <strong>{percent}%</strong>
           </div>
         )
@@ -337,7 +342,7 @@ const DonutChart = memo(function DonutChart({ data, centerLabel, centerValue, mo
           animationDuration={modalMode ? 1000 : 1000}
           animationEasing="ease-out"
         >
-          {chartData.map((item, index) => <Cell key={item.name} fill={seriesColor(index)} stroke="transparent" />)}
+          {chartData.map((item) => <Cell key={item.name} fill={item.color} stroke="transparent" />)}
         </Pie>
         <Tooltip content={<DashboardTooltip />} cursor={false} />
         <text x="50%" y="46%" textAnchor="middle" className="ats-dashboard-donut-label">{centerLabel}</text>
@@ -522,9 +527,18 @@ export default function DashboardHome() {
   const names = Array.isArray(data?.consultantOptions) ? data.consultantOptions : []
   const consultantOptions = [OVERALL, ...names.filter(Boolean)]
 
-  const clientStatusData = data?.clientStatusData || []
-  const candidateStatusData = data?.candidateStatusData || []
-  const mandateStatusData = data?.mandateStatusData || []
+  const clientStatusData = (data?.clientStatusData || []).map(item => ({
+    ...item,
+    color: getClientStatusColor(item.name)
+  }))
+  const candidateStatusData = (data?.candidateStatusData || []).map(item => ({
+    ...item,
+    color: getCandidateStatusColor(item.name)
+  }))
+  const mandateStatusData = (data?.mandateStatusData || []).map(item => ({
+    ...item,
+    color: getMandateStatusColor(item.name)
+  }))
   const billingEntityData = data?.billingEntityData || []
   const clientTrend = data?.clientTrend || []
   const candidateTrend = data?.candidateTrend || []
