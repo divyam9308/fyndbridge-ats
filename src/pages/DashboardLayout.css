@@ -17,6 +17,18 @@
   animation: fadeUp 0.2s ease forwards;
 }
 
+.dashboard-embed {
+  min-height: 100vh;
+  padding: 16px;
+  overflow: auto;
+}
+
+.dashboard-embed .candidate-page-header,
+.dashboard-embed .ai-filter-chips,
+.dashboard-embed .filter-bar {
+  display: none;
+}
+
 @keyframes fadeUp {
   from {
     opacity: 0;

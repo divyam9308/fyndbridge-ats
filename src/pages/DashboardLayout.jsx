@@ -5,6 +5,10 @@ import './DashboardLayout.css'
 
 export default function DashboardLayout() {
   const location = useLocation()
+  const isDashboardEmbed = new URLSearchParams(location.search).get('embed') === 'dashboard'
+  if (isDashboardEmbed) {
+    return <main className="dashboard-content dashboard-embed" key={`${location.pathname}${location.search}`}><Outlet /></main>
+  }
   return (
     <div className="dashboard-layout">
       <Sidebar />

@@ -535,12 +535,39 @@ function DashboardCardModal({ card, context, onClose }) {
   return typeof document === 'undefined' ? modal : createPortal(modal, document.body)
 }
 
+function DashboardDrilldownModal({ drilldown, onClose, onOpenFullPage }) {
+  useEffect(() => {
+    const onKeyDown = (event) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  if (!drilldown) return null
+  const entityLabel = drilldown.type === 'mandates' ? 'Mandates' : drilldown.type[0].toUpperCase() + drilldown.type.slice(1)
+  const consultantLabel = drilldown.consultant === OVERALL ? '' : drilldown.consultant
+  const source = `${buildDashboardDrilldownUrl(drilldown.type, { consultant: drilldown.consultant, status: drilldown.status, period: drilldown.period })}&embed=dashboard`
+  const modal = (
+    <div className="ats-dashboard-drilldown-layer" role="dialog" aria-modal="true" aria-label={`${entityLabel} drilldown`}>
+      <div className="ats-dashboard-drilldown-backdrop" onClick={onClose} />
+      <section className="ats-dashboard-drilldown-card">
+        <header className="ats-dashboard-drilldown-head">
+          <div><h3>{[entityLabel, drilldown.status, consultantLabel].filter(Boolean).join(' · ')}</h3><div className="ats-dashboard-drilldown-chips">{consultantLabel ? <span>Consultant = {consultantLabel}</span> : null}<span>Status = {drilldown.status}</span></div></div>
+          <div><button type="button" className="ats-dashboard-drilldown-open" onClick={onOpenFullPage}>Open full page</button><button type="button" className="ats-dashboard-modal-close" onClick={onClose} aria-label="Close drilldown"><X size={18} /></button></div>
+        </header>
+        <iframe className="ats-dashboard-drilldown-frame" title={`${entityLabel} filtered table`} src={source} />
+      </section>
+    </div>
+  )
+  return typeof document === 'undefined' ? modal : createPortal(modal, document.body)
+}
+
 export default function DashboardHome() {
   const navigate = useNavigate()
   const [consultant, setConsultant] = useState(OVERALL)
   const [period, setPeriod] = useState(DASHBOARD_PERIODS[0])
   const [consultantOpen, setConsultantOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState(null)
+  const [selectedDrilldown, setSelectedDrilldown] = useState(null)
   const modalOpenCounter = useRef(0)
   const consultantSelectRef = useRef(null)
   const { loading, error, data } = useDashboardStats({ consultant, period })
@@ -571,11 +598,12 @@ export default function DashboardHome() {
   const mandateTotal = Number(data?.kpis?.totalMandates || 0)
   const drilldown = (entityType) => (item) => {
     if (!Number(item?.value || 0)) return
-    navigate(buildDashboardDrilldownUrl(entityType, {
+    setSelectedDrilldown({
+      type: entityType,
       consultant,
       status: item.name,
       period
-    }))
+    })
   }
   const clientDrilldown = drilldown('clients')
   const candidateDrilldown = drilldown('candidates')
@@ -586,18 +614,21 @@ export default function DashboardHome() {
     { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning', sparkline: sparklineValues(mandateTrend, MANDATE_STATUSES), breakdown: mandateStatusData, onDrilldown: mandateDrilldown }
   ]
   useEffect(() => {
-    if (!selectedCard) return undefined
+    if (!selectedCard && !selectedDrilldown) return undefined
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     const onKeyDown = (event) => {
-      if (event.key === 'Escape') setSelectedCard(null)
+      if (event.key === 'Escape') {
+        setSelectedCard(null)
+        setSelectedDrilldown(null)
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => {
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [selectedCard])
+  }, [selectedCard, selectedDrilldown])
 
   useEffect(() => {
     if (!consultantOpen) return undefined
@@ -828,6 +859,15 @@ export default function DashboardHome() {
       </section>
       </ExpandableCard>
       <DashboardCardModal card={selectedCard} context={{ consultant, period }} onClose={() => setSelectedCard(null)} />
+      <DashboardDrilldownModal
+        drilldown={selectedDrilldown}
+        onClose={() => setSelectedDrilldown(null)}
+        onOpenFullPage={() => {
+          if (!selectedDrilldown) return
+          navigate(buildDashboardDrilldownUrl(selectedDrilldown.type, selectedDrilldown))
+          setSelectedDrilldown(null)
+        }}
+      />
     </div>
   )
 }
