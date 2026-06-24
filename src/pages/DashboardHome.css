@@ -308,8 +308,15 @@
   min-height: 0;
 }
 
-.ats-dashboard-client-billing-grid {
-  grid-template-columns: minmax(0, 1fr);
+.ats-dashboard-entity-stack > .ats-dashboard-expandable:first-child > .ats-dashboard-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.ats-dashboard-entity-stack > .ats-dashboard-expandable:first-child .ats-dashboard-chart {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 260px;
 }
 
 .ats-dashboard-state .spin {
@@ -826,6 +833,25 @@
 .ats-dashboard-billing-grid {
   display: grid;
   gap: 12px;
+}
+
+.ats-dashboard-clients-analytics .ats-dashboard-billing-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.ats-dashboard-clients-analytics .ats-dashboard-billing-card {
+  min-height: 92px;
+  padding: 13px 14px;
+}
+
+.ats-dashboard-clients-analytics .ats-dashboard-billing-card strong {
+  margin-top: 10px;
+  font-size: 26px;
+}
+
+.ats-dashboard-clients-analytics .ats-dashboard-billing-progress {
+  margin-top: 10px;
 }
 
 .ats-dashboard-billing-card {
@@ -1619,6 +1645,10 @@
   }
 
   .ats-dashboard-activity-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ats-dashboard-clients-analytics .ats-dashboard-billing-grid {
     grid-template-columns: 1fr;
   }
 

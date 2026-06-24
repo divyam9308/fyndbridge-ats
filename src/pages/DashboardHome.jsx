@@ -7,7 +7,6 @@ import {
   Building2,
   ChevronDown,
   Clock,
-  FileSignature,
   Loader2,
   TrendingUp,
   UserCheck,
@@ -796,7 +795,7 @@ export default function DashboardHome() {
       <section className="ats-dashboard-module" aria-label="Clients analytics">
       <div className="ats-dashboard-entity-layout">
         <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'clients-analytics', chart: 'donut', title: 'Clients Analytics', subtitle: 'Clients by Status', icon: Building2, value: data?.kpis?.totalClients, centerLabel: 'Clients', centerValue: data?.kpis?.totalClients, breakdown: clientStatusData, onDrilldown: clientDrilldown })}>
-        <section className="ats-dashboard-card card-3d">
+        <section className="ats-dashboard-card ats-dashboard-clients-analytics card-3d">
           <SectionTitle icon={Building2} title="Clients Analytics" subtitle="Clients by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalClients || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.clients ? <div className="ats-dashboard-section-error">{data.sectionErrors.clients}</div> : null}
           <div className="ats-dashboard-split">
@@ -807,6 +806,17 @@ export default function DashboardHome() {
             </div>
             <StatusList data={clientStatusData} onItemClick={clientDrilldown} />
           </div>
+          <div className="ats-dashboard-billing-grid">
+            {billingEntityData.map((item, index) => (
+              <div className={`ats-dashboard-billing-card kpi-3d ${index === 0 ? 'gradient-fcs-billing' : 'gradient-fcapl-billing'}`} key={item.label}>
+                <span>{item.label}</span>
+                <strong>{Number(item.value || 0).toLocaleString('en-IN')}</strong>
+                <small>{billingTotal ? Math.round((Number(item.value || 0) / billingTotal) * 100) : 0}% of signed</small>
+                <i className="ats-dashboard-billing-progress"><em style={{ width: `${billingTotal ? Math.round((Number(item.value || 0) / billingTotal) * 100) : 0}%` }} /></i>
+              </div>
+            ))}
+          </div>
+          <div className="ats-dashboard-total-row"><span>Total contracts signed</span><strong>{billingTotal.toLocaleString('en-IN')}</strong></div>
         </section>
         </ExpandableCard>
         <div className="ats-dashboard-entity-stack">
@@ -822,24 +832,6 @@ export default function DashboardHome() {
         </ExpandableCard>
         <KpiExpandableCard item={kpis[0]} isReady={dashboardDataReady} consultant={consultant} period={period} onOpen={openCard} />
         </div>
-      </div>
-      <div className="ats-dashboard-grid ats-dashboard-client-billing-grid">
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'billing-entity', title: 'Active Clients with Contract Signed', subtitle: 'Billing entity split', icon: FileSignature, value: billingTotal, breakdown: billingEntityData.map(item => ({ name: item.label, value: item.value })) })}>
-        <section className="ats-dashboard-card card-3d">
-          <SectionTitle icon={FileSignature} title="Active Clients with Contract Signed" subtitle="Billing entity split" />
-          <div className="ats-dashboard-billing-grid">
-            {billingEntityData.map((item, index) => (
-              <div className={`ats-dashboard-billing-card kpi-3d ${index === 0 ? 'gradient-fcs-billing' : 'gradient-fcapl-billing'}`} key={item.label}>
-                <span>{item.label}</span>
-                <strong>{Number(item.value || 0).toLocaleString('en-IN')}</strong>
-                <small>{billingTotal ? Math.round((Number(item.value || 0) / billingTotal) * 100) : 0}% of signed</small>
-                <i className="ats-dashboard-billing-progress"><em style={{ width: `${billingTotal ? Math.round((Number(item.value || 0) / billingTotal) * 100) : 0}%` }} /></i>
-              </div>
-            ))}
-          </div>
-          <div className="ats-dashboard-total-row"><span>Total contracts signed</span><strong>{billingTotal.toLocaleString('en-IN')}</strong></div>
-        </section>
-        </ExpandableCard>
       </div>
       </section>
 
