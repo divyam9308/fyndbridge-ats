@@ -729,8 +729,7 @@ export default function DashboardHome() {
       <OnlineUsersStrip users={onlineUsers} />
 
       <section className="ats-dashboard-module ats-dashboard-module-mandates" aria-label="Mandates analytics">
-      <div className="ats-dashboard-module-grid">
-        <KpiExpandableCard item={kpis[2]} isReady={dashboardDataReady} consultant={consultant} period={period} onOpen={openCard} />
+      <div className="ats-dashboard-entity-layout">
         <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'mandates-analytics', chart: 'donut', title: 'Mandates Analytics', subtitle: 'Mandates by Status', icon: Briefcase, value: data?.kpis?.totalMandates, centerLabel: 'Mandates', centerValue: data?.kpis?.totalMandates, breakdown: mandateStatusData, shareRows: true, onDrilldown: mandateDrilldown })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Briefcase} title="Mandates Analytics" subtitle="Mandates by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalMandates || 0).toLocaleString('en-IN')}</span>} />
@@ -746,6 +745,7 @@ export default function DashboardHome() {
           <StatusShareRows data={mandateStatusData} total={mandateTotal} />
         </section>
         </ExpandableCard>
+        <div className="ats-dashboard-entity-stack">
         <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', id: 'mandates-trend', title: 'Mandates Trend', subtitle: `${consultant} - ${period}`, icon: TrendingUp, trend: mandateTrend, statuses: MANDATE_STATUSES })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={TrendingUp} title="Mandates Trend" subtitle="Ongoing, completed, and scrapped mandates" />
@@ -756,12 +756,13 @@ export default function DashboardHome() {
           </div>
         </section>
         </ExpandableCard>
+        <KpiExpandableCard item={kpis[2]} isReady={dashboardDataReady} consultant={consultant} period={period} onOpen={openCard} />
+        </div>
       </div>
       </section>
 
       <section className="ats-dashboard-module" aria-label="Candidates analytics">
-      <div className="ats-dashboard-module-grid">
-        <KpiExpandableCard item={kpis[1]} isReady={dashboardDataReady} consultant={consultant} period={period} onOpen={openCard} />
+      <div className="ats-dashboard-entity-layout">
         <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'candidates-analytics', chart: 'donut', title: 'Candidates Analytics', subtitle: 'Candidates by Status', icon: Users, value: data?.kpis?.totalCandidates, centerLabel: 'Candidates', centerValue: data?.kpis?.totalCandidates, breakdown: candidateStatusData, onDrilldown: candidateDrilldown })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Users} title="Candidates Analytics" subtitle="Candidates by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalCandidates || 0).toLocaleString('en-IN')}</span>} />
@@ -776,6 +777,7 @@ export default function DashboardHome() {
           </div>
         </section>
         </ExpandableCard>
+        <div className="ats-dashboard-entity-stack">
         <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', id: 'candidate-movement-trend', title: 'Candidate Movement Trend', subtitle: `${consultant} - ${period}`, icon: Activity, trend: candidateTrend, statuses: CANDIDATE_STATUSES })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Activity} title="Candidate Movement Trend" subtitle="Candidate statuses over time" />
@@ -786,12 +788,13 @@ export default function DashboardHome() {
           </div>
         </section>
         </ExpandableCard>
+        <KpiExpandableCard item={kpis[1]} isReady={dashboardDataReady} consultant={consultant} period={period} onOpen={openCard} />
+        </div>
       </div>
       </section>
 
       <section className="ats-dashboard-module" aria-label="Clients analytics">
-      <div className="ats-dashboard-module-grid">
-        <KpiExpandableCard item={kpis[0]} isReady={dashboardDataReady} consultant={consultant} period={period} onOpen={openCard} />
+      <div className="ats-dashboard-entity-layout">
         <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'clients-analytics', chart: 'donut', title: 'Clients Analytics', subtitle: 'Clients by Status', icon: Building2, value: data?.kpis?.totalClients, centerLabel: 'Clients', centerValue: data?.kpis?.totalClients, breakdown: clientStatusData, onDrilldown: clientDrilldown })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Building2} title="Clients Analytics" subtitle="Clients by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalClients || 0).toLocaleString('en-IN')}</span>} />
@@ -806,7 +809,7 @@ export default function DashboardHome() {
           </div>
         </section>
         </ExpandableCard>
-
+        <div className="ats-dashboard-entity-stack">
         <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', id: 'client-acquisition-trend', title: 'Client Acquisition Trend', subtitle: `${consultant} - ${period}`, icon: TrendingUp, trend: clientTrend, statuses: CLIENT_STATUSES })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={TrendingUp} title="Client Acquisition Trend" subtitle="Client statuses over time" />
@@ -817,6 +820,8 @@ export default function DashboardHome() {
           </div>
         </section>
         </ExpandableCard>
+        <KpiExpandableCard item={kpis[0]} isReady={dashboardDataReady} consultant={consultant} period={period} onOpen={openCard} />
+        </div>
       </div>
       <div className="ats-dashboard-grid ats-dashboard-client-billing-grid">
         <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'billing-entity', title: 'Active Clients with Contract Signed', subtitle: 'Billing entity split', icon: FileSignature, value: billingTotal, breakdown: billingEntityData.map(item => ({ name: item.label, value: item.value })) })}>

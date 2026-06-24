@@ -279,16 +279,33 @@
   gap: 20px;
 }
 
-.ats-dashboard-module-grid {
+.ats-dashboard-entity-layout {
   display: grid;
-  grid-template-columns: minmax(220px, .75fr) minmax(300px, 1fr) minmax(360px, 1.4fr);
+  grid-template-columns: minmax(340px, .4fr) minmax(460px, .6fr);
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
 }
 
-.ats-dashboard-module-grid > .ats-dashboard-expandable > .ats-dashboard-card,
-.ats-dashboard-module-grid > .ats-dashboard-expandable > .ats-dashboard-kpi {
-  height: auto;
+.ats-dashboard-entity-layout > .ats-dashboard-expandable,
+.ats-dashboard-entity-stack,
+.ats-dashboard-entity-stack > .ats-dashboard-expandable {
+  min-height: 0;
+}
+
+.ats-dashboard-entity-layout > .ats-dashboard-expandable > .ats-dashboard-card,
+.ats-dashboard-entity-stack > .ats-dashboard-expandable > .ats-dashboard-card,
+.ats-dashboard-entity-stack > .ats-dashboard-expandable > .ats-dashboard-kpi {
+  height: 100%;
+}
+
+.ats-dashboard-entity-stack {
+  display: grid;
+  grid-template-rows: minmax(0, 65fr) minmax(0, 35fr);
+  gap: 20px;
+}
+
+.ats-dashboard-entity-stack > .ats-dashboard-expandable:last-child .ats-dashboard-kpi {
+  min-height: 0;
 }
 
 .ats-dashboard-client-billing-grid {
@@ -1545,12 +1562,8 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .ats-dashboard-module-grid {
+  .ats-dashboard-entity-layout {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .ats-dashboard-module-mandates .ats-dashboard-module-grid > :last-child {
-    grid-column: span 2;
   }
 }
 
@@ -1566,15 +1579,16 @@
 
   .ats-dashboard-kpi-grid,
   .ats-dashboard-grid,
-  .ats-dashboard-module-grid,
+  .ats-dashboard-entity-layout,
   .ats-dashboard-card.is-wide,
   .ats-dashboard-expandable.is-wide {
     grid-template-columns: 1fr;
     grid-column: auto;
   }
 
-  .ats-dashboard-module-mandates .ats-dashboard-module-grid > :last-child {
-    grid-column: auto;
+  .ats-dashboard-entity-stack {
+    grid-template-rows: auto;
+    gap: 20px;
   }
 
   .ats-dashboard-split,
