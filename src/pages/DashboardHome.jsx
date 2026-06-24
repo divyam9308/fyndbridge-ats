@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Activity,
@@ -302,7 +302,10 @@ function ChartContainer({ children }) {
     const element = ref.current
     if (!element) return undefined
 
-    const update = () => setReady(element.clientWidth > 0 && element.clientHeight > 0)
+    const update = () => {
+      const nextReady = element.clientWidth > 0 && element.clientHeight > 0
+      setReady(current => current === nextReady ? current : nextReady)
+    }
     update()
     const observer = new ResizeObserver(update)
     observer.observe(element)
@@ -312,7 +315,7 @@ function ChartContainer({ children }) {
   return <div ref={ref} className="ats-dashboard-chart-content">{ready ? children : null}</div>
 }
 
-function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
+const DonutChart = memo(function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
   const chartData = (data || []).filter(item => Number(item.value || 0) > 0)
   if (!chartData.length) return <EmptyChart label="No chart data." />
 
@@ -343,7 +346,7 @@ function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
     </ResponsiveContainer>
     </ChartContainer>
   )
-}
+})
 
 function AnimatedChartDot({ cx, cy, stroke, index }) {
   if (cx === undefined || cy === undefined) return null
@@ -361,7 +364,7 @@ function AnimatedChartDot({ cx, cy, stroke, index }) {
   )
 }
 
-function StatusTrendLines({ data, statuses, modalMode = false }) {
+const StatusTrendLines = memo(function StatusTrendLines({ data, statuses, modalMode = false }) {
   return (
     <ChartContainer>
     <ResponsiveContainer width="100%" height="100%">
@@ -381,7 +384,6 @@ function StatusTrendLines({ data, statuses, modalMode = false }) {
             strokeWidth={3}
             dot={modalMode ? <AnimatedChartDot /> : false}
             activeDot={{ r: 4, stroke: 'var(--white)', strokeWidth: 2 }}
-            filter={`drop-shadow(0 5px 8px ${seriesColor(index)})`}
             isAnimationActive
             animationBegin={modalMode ? 100 : 0}
             animationDuration={modalMode ? 1400 : 2000}
@@ -392,7 +394,7 @@ function StatusTrendLines({ data, statuses, modalMode = false }) {
     </ResponsiveContainer>
     </ChartContainer>
   )
-}
+})
 
 function DashboardCardModal({ card, context, onClose }) {
   const [readyKey, setReadyKey] = useState(null)

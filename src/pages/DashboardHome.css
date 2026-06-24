@@ -872,7 +872,6 @@
 }
 
 .modern-dashboard .recharts-line-curve {
-  filter: drop-shadow(0 8px 10px rgba(98, 83, 229, 0.22));
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -1286,7 +1285,6 @@
 }
 
 .ats-dashboard-modal-layer .recharts-line-curve {
-  filter: drop-shadow(0 8px 10px rgba(98, 83, 229, 0.22));
   stroke-linecap: round;
   stroke-linejoin: round;
 }
