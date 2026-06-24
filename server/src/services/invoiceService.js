@@ -338,6 +338,7 @@ function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
       signatureY = bottomY + bankHeight + 8
       signatureBoxHeight = pageBottom - signatureY
     }
+    signatureBoxHeight = Math.max(40, signatureBoxHeight * 0.85)
     drawCell(doc, 32, bottomY, 300, bottomHeight, '', {})
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Description of Services', 40, bottomY + 10)
     doc.fillColor('#111827').font(F.regular).text('Permanent placement services, other than executive\nsearch services', 40, bottomY + 22)
