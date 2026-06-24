@@ -300,12 +300,6 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     const bankLabels = ['Bank Name', 'A/c No.', 'IFSC Code', 'Branch']
     const bankRowHeights = company.bank.map(value => Math.max(14, doc.font(F.regular).fontSize(7.5).heightOfString(value, { width: 132 }) + 5))
     const bankHeight = 24 + bankRowHeights.reduce((sum, height) => sum + height, 0) + 6
-    const signatureBoxHeight = 64
-    const bottomBlockHeight = wordsHeight + 10 + (invoice.gst_component === 'IGST' ? 74 : 96) + 24 + Math.max(84, bankHeight) + 8 + signatureBoxHeight
-    if (y + bottomBlockHeight > doc.page.height - doc.page.margins.bottom) {
-      doc.addPage()
-      y = doc.page.margins.top
-    }
     doc.save().rect(32, y, 530, wordsHeight).fillAndStroke(LIGHT, BORDER).restore()
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Amount Chargeable (in words):', 36, y + 9, { width: 170 })
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(invoice.amount_in_words, 206, y + 6, { width: 346, align: 'right' })
@@ -315,8 +309,17 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(`Tax Amount (in words): ${invoice.tax_amount_in_words}`, 32, y, { width: 520 })
     y += 24
 
+    const bottomHeight = Math.max(84, bankHeight)
+    const pageBottom = doc.page.height - doc.page.margins.bottom
+    let signatureBoxHeight = 64
+    if (y + bottomHeight + 8 + signatureBoxHeight > pageBottom) signatureBoxHeight = Math.max(40, pageBottom - y - bottomHeight - 8)
+    if (y + bottomHeight + 8 + signatureBoxHeight > pageBottom) {
+      doc.addPage()
+      y = doc.page.margins.top
+      signatureBoxHeight = 64
+    }
     const bottomY = y
-    drawCell(doc, 32, bottomY, 300, Math.max(84, bankHeight), '', {})
+    drawCell(doc, 32, bottomY, 300, bottomHeight, '', {})
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Description of Services', 40, bottomY + 10)
     doc.fillColor('#111827').font(F.regular).text('Permanent placement services, other than executive\nsearch services', 40, bottomY + 22)
     doc.font(F.bold).text(`Company's PAN: ${company.pan}`, 40, bottomY + 58)
