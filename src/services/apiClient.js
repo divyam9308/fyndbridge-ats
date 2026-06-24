@@ -45,11 +45,21 @@ export function installApiFetchInterceptor() {
   window.fetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input?.url || ''
     const needsAuth = isPrivateApiUrl(url)
+    const trace = import.meta.env.VITE_DEBUG_PERF === 'true'
+    const startedAt = trace ? performance.now() : 0
     const headers = needsAuth
       ? await authHeaders(init.headers || (typeof input !== 'string' ? input.headers : undefined))
       : init.headers
 
-    const response = await nativeFetch(input, needsAuth ? { ...init, headers } : init)
+    let response
+    try {
+      response = await nativeFetch(input, needsAuth ? { ...init, headers } : init)
+    } finally {
+      if (trace) {
+        const path = new URL(url, window.location.origin).pathname
+        console.debug('[perf]', { request: path, method: init.method || 'GET', timestamp: new Date().toISOString(), durationMs: Number((performance.now() - startedAt).toFixed(1)) })
+      }
+    }
 
     if (needsAuth && response.status === 401) {
       window.dispatchEvent(new CustomEvent(API_UNAUTHORIZED_EVENT, { detail: { url } }))

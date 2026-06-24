@@ -1,5 +1,7 @@
 import { apiFetch } from './apiClient'
 
+let adminMeRequest = null
+
 async function json(response) {
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(payload.error || 'Request failed')
@@ -7,7 +9,11 @@ async function json(response) {
 }
 
 export async function fetchAdminMe() {
-  return json(await apiFetch('/api/admin/me', { cache: 'no-store' }))
+  if (!adminMeRequest) {
+    adminMeRequest = json(apiFetch('/api/admin/me', { cache: 'no-store' }))
+      .finally(() => { adminMeRequest = null })
+  }
+  return adminMeRequest
 }
 
 export async function fetchAdminUsers() {

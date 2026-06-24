@@ -257,10 +257,7 @@ async function getDashboardStats(req, res) {
     supabase.from('clients').select('id, client_group_id, client_name, name, status, consultant_name, connected_on_date, created_at, updated_at, contract_signed, billing_entity'),
     supabase.from('candidates').select('id, full_name, created_by, updated_by, created_at, updated_at'),
     supabase.from('candidate_associations').select('id, candidate_id, consultant_name, status, job_title, client_name, created_at, updated_at'),
-    supabase.from('jobs').select('id, title, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at'),
-    supabase.from('clients').select('id, client_name, name, consultant_name, created_at, updated_at, contract_signed').order('updated_at', { ascending: false }).limit(50),
-    supabase.from('candidates').select('id, full_name, created_by, updated_by, created_at, updated_at').order('updated_at', { ascending: false }).limit(50),
-    supabase.from('jobs').select('id, title, consultants, team_lead, created_at, updated_at').order('updated_at', { ascending: false }).limit(50)
+    supabase.from('jobs').select('id, title, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at')
   ])
 
   const readResult = (index, key) => {
@@ -282,9 +279,6 @@ async function getDashboardStats(req, res) {
     const candidates = readResult(2, 'candidates')
     const associations = readResult(3, 'candidates')
     const jobs = readResult(4, 'mandates')
-    const recentClients = readResult(5, 'recentActivity')
-    const recentCandidates = readResult(6, 'recentActivity')
-    const recentMandates = readResult(7, 'recentActivity')
 
     const consultantOptions = profiles
       .map((row) => clean(row.name))
@@ -349,7 +343,7 @@ async function getDashboardStats(req, res) {
       clientTrend,
       candidateTrend,
       mandateTrend,
-      recentActivity: buildRecentActivity({ clients: recentClients, candidates: recentCandidates, mandates: recentMandates, profiles }),
+      recentActivity: buildRecentActivity({ clients, candidates, mandates: jobs, profiles }),
       sectionErrors,
       clientOwnershipAvailable,
       period,

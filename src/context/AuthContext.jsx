@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { API_UNAUTHORIZED_EVENT, apiFetch } from '../services/apiClient'
@@ -40,12 +40,15 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
   const [loading, setLoading] = useState(true)
+  const profileRequestRef = useRef(null)
   const navigate = useNavigate()
 
   const loadProfile = useCallback(async ({ force = false } = {}) => {
     if (loading || !session?.user || (!force && profile)) return profile
+    if (!force && profileRequestRef.current) return profileRequestRef.current
     setProfileLoading(true)
-    try {
+    const request = (async () => {
+      try {
       const response = await apiFetch('/api/user-profiles', { cache: 'no-store' })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'Unable to load profile.')
@@ -61,9 +64,13 @@ export function AuthProvider({ children }) {
         })
       }
       return nextProfile
-    } finally {
-      setProfileLoading(false)
-    }
+      } finally {
+        setProfileLoading(false)
+        profileRequestRef.current = null
+      }
+    })()
+    profileRequestRef.current = request
+    return request
   }, [loading, profile, session])
 
   useEffect(() => {

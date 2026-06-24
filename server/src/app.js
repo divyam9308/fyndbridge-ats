@@ -5,6 +5,20 @@ const requireAuth = require('./middleware/requireAuth')
 
 const app = express()
 
+const PERF_ROUTES = /^\/api\/(candidates|clients|jobs|dashboard|notifications|invoice|admin)(?:\/|$)/
+
+app.use((req, res, next) => {
+  if (!(process.env.NODE_ENV !== 'production' || process.env.DEBUG_PERF === 'true') || !PERF_ROUTES.test(req.path)) return next()
+  const requestId = req.get('x-request-id') || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  const startedAt = process.hrtime.bigint()
+  res.setHeader('x-request-id', requestId)
+  res.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6
+    console.debug('[perf]', { route: req.path, method: req.method, requestId, status: res.statusCode, durationMs: Number(durationMs.toFixed(1)) })
+  })
+  next()
+})
+
 // Allow requests from the deployed Vercel frontend, any *.vercel.app domain,
 // and localhost for local development.
 const ALLOWED_ORIGINS = [
