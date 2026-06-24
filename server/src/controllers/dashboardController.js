@@ -31,9 +31,9 @@ function parseList(value) {
     const parsed = JSON.parse(text)
     if (Array.isArray(parsed)) return parsed.map(clean).filter(Boolean)
   } catch {
-    return text.split(',').map(clean).filter(Boolean)
+    return text.split(/[,;|\n]+/).map(clean).filter(Boolean)
   }
-  return text.split(',').map(clean).filter(Boolean)
+  return text.split(/[,;|\n]+/).map(clean).filter(Boolean)
 }
 
 function toDate(value) {
@@ -310,9 +310,7 @@ async function getDashboardStats(req, res) {
     const filteredCandidateIds = new Set(
       filteredAssociations.map((row) => row.candidate_id).filter(Boolean)
     )
-    const filteredCandidates = candidates
-      .filter((row) => withinPeriod(row.created_at, range))
-      .filter((row) => isOverall(consultant) || filteredCandidateIds.has(row.id))
+    const filteredCandidates = candidates.filter((row) => filteredCandidateIds.has(row.id))
 
     const filteredMandates = jobs
       .filter((row) => withinPeriod(row.allocation_date || row.created_at, range))

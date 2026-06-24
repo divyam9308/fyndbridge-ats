@@ -1,5 +1,6 @@
 const { randomUUID } = require('crypto')
 const supabase = require('../services/supabaseAdmin')
+const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
 const { uploadDocument } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
@@ -619,6 +620,8 @@ async function listClients(req, res) {
     const to = from + limit - 1
 
     let query = supabase.from('clients').select('*', { count: paginate ? 'exact' : undefined })
+    if (req.query.consultant) query = query.ilike('consultant_name', clean(req.query.consultant))
+    query = applyDashboardPeriod(query, 'connected_on_date', clean(req.query.period), { fallbackColumn: 'created_at', dateOnly: true })
     if (req.query.search) {
       const search = clean(req.query.search)
       query = query.or([
@@ -634,9 +637,9 @@ async function listClients(req, res) {
     }
     if (req.query.status && req.query.status !== 'All') {
       if (req.query.status === '-') {
-        query = query.or('status.is.null,status.eq.')
+        query = query.or('status.is.null,status.eq.,status.eq.-')
       } else {
-        query = query.eq('status', clean(req.query.status))
+        query = query.ilike('status', clean(req.query.status))
       }
     }
     if (!localAiFilter) {

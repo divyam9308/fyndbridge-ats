@@ -250,6 +250,7 @@ function ExpandableCard({ children, onOpen, className = '' }) {
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
           onOpen(event)
@@ -357,7 +358,8 @@ const DonutChart = memo(function DonutChart({ data, centerLabel, centerValue, mo
           className={onItemClick ? 'is-clickable' : ''}
           onClick={(item, _index, event) => {
             event?.stopPropagation?.()
-            if (onItemClick && Number(item?.value || 0)) onItemClick(item)
+            const selected = item?.payload || item
+            if (onItemClick && Number(selected?.value || 0)) onItemClick(selected)
           }}
         >
           {chartData.map((item) => <Cell key={item.name} fill={item.color} stroke="transparent" style={{ cursor: onItemClick ? 'pointer' : 'default' }} />)}
@@ -397,16 +399,16 @@ const StatusTrendLines = memo(function StatusTrendLines({ data, statuses, modalM
         <YAxis allowDecimals={false} />
         <Tooltip content={<DashboardTooltip floating />} position={{ x: 0, y: 0 }} wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }} />
         <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-        {statuses.map((status, index) => (
+        {statuses.map((status) => (
           <Line
             key={status}
             type="monotone"
             dataKey={status}
             name={status}
             stroke={getStatusColor(status)}
-            strokeWidth={3}
+            strokeWidth={3.5}
             dot={modalMode ? <AnimatedChartDot /> : false}
-            activeDot={{ r: 4, stroke: 'var(--white)', strokeWidth: 2 }}
+            activeDot={{ r: 5, stroke: 'var(--white)', strokeWidth: 2 }}
             isAnimationActive
             animationBegin={modalMode ? 100 : 0}
             animationDuration={modalMode ? 1400 : 2000}
@@ -624,7 +626,6 @@ export default function DashboardHome() {
       <div className="ats-dashboard-filter-row card-3d">
         <div>
           <h2>Recruitment Analytics</h2>
-          <p>{consultant} - {period}</p>
         </div>
 
         <div className="ats-dashboard-controls">

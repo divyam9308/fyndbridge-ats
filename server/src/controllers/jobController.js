@@ -1,4 +1,5 @@
 const supabase = require('../services/supabaseAdmin')
+const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
 const { uploadDocument } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
 const fs = require('fs/promises')
@@ -233,7 +234,8 @@ async function listJobs(req, res) {
   try {
     const aiFilters = parseJsonFilter(req.query.ai_filters)
     const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.rankingHints || []).length || (aiFilters?.conditions || []).some(condition => ['consultant', 'budget'].includes(condition.field))
-    const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter
+    const localConsultantFilter = clean(req.query.consultant)
+    const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter && !localConsultantFilter
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
@@ -242,6 +244,20 @@ async function listJobs(req, res) {
     const sortDirection = clean(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
     let query = supabase.from('jobs').select('*, clients(name, client_name, client_display_id)', { count: paginate ? 'exact' : undefined })
     if (req.query.client_id) query = query.eq('client_id', req.query.client_id)
+    if (req.query.status) query = query.ilike('mandate_status', clean(req.query.status))
+    if (req.query.teamLead) query = query.ilike('team_lead', clean(req.query.teamLead))
+    if (req.query.role) query = query.ilike('title', clean(req.query.role))
+    query = applyDashboardPeriod(query, 'allocation_date', clean(req.query.period), { dateOnly: true })
+    if (req.query.clientName) {
+      const name = clean(req.query.clientName)
+      const { data: matchingClients, error: matchingClientError } = await supabase
+        .from('clients')
+        .select('id')
+        .or(`client_name.ilike.%${name}%,name.ilike.%${name}%`)
+      if (matchingClientError) throw matchingClientError
+      const ids = (matchingClients || []).map(client => client.id)
+      query = ids.length ? query.in('client_id', ids) : query.eq('client_id', '__no_match__')
+    }
     const clientNameConditions = (aiFilters?.conditions || []).filter((condition) => ['client_name', 'client'].includes(String(condition.field || '').toLowerCase()))
     let matchedClientIds = null
     if (clientNameConditions.length) {
@@ -279,8 +295,13 @@ return res.json({ data: [], total: 0, page, totalPages: 1, limit })
     if (error) throw error
     let rows = (data || []).map(formatJob)
     if (!paginate) rows = applySharedFilters('mandates', rows, aiFilters, jobFilterValue)
+    if (localConsultantFilter) {
+      const expected = localConsultantFilter.toLowerCase()
+      rows = rows.filter(row => [...(row.consultants || []), row.team_lead]
+        .some(value => clean(value).toLowerCase() === expected))
+    }
     const filteredTotal = rows.length
-    if (localAiFilter) rows = rows.slice(from, to + 1)
+    if (localAiFilter || localConsultantFilter) rows = rows.slice(from, to + 1)
     const total = paginate ? count || 0 : filteredTotal
     const totalPages = Math.max(1, Math.ceil(total / limit))
 return res.json({ data: await stripHiddenFields('jobs', rows, await isAdmin(req.user)), total, page, totalPages, limit })

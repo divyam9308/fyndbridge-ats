@@ -271,6 +271,7 @@ export default function ClientsPage() {
   const [sortOpen, setSortOpen] = useState(false)
   const [sortAnchor, setSortAnchor] = useState(null)
   const [statusFilter, setStatusFilter] = useState(() => dashboardFilters?.status || 'All')
+  const effectiveStatusFilter = dashboardFilters?.status || statusFilter
   const [aiFilterText, setAiFilterText] = useState('')
   const [aiFilters, setAiFilters] = useState(null)
   const [aiFilterLoading, setAiFilterLoading] = useState(false)
@@ -336,7 +337,7 @@ export default function ClientsPage() {
         params.set('sortField', sortField)
         params.set('sortDirection', sortDirection)
       }
-      if (statusFilter !== 'All') params.set('status', statusFilter)
+      if (effectiveStatusFilter !== 'All') params.set('status', effectiveStatusFilter)
       if (dashboardFilters?.consultant) params.set('consultant', dashboardFilters.consultant)
       if (dashboardFilters?.period) params.set('period', dashboardFilters.period)
       if (aiFilters) params.set('ai_filters', JSON.stringify(aiFilters))
@@ -353,12 +354,7 @@ export default function ClientsPage() {
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [aiFilters, dashboardFilters?.consultant, dashboardFilters?.period, page, pageSize, sortDirection, sortField, statusFilter])
-
-  useEffect(() => {
-    setStatusFilter(dashboardFilters?.status || 'All')
-    setPage(1)
-  }, [dashboardFilters?.status])
+  }, [aiFilters, dashboardFilters, effectiveStatusFilter, page, pageSize, sortDirection, sortField])
 
   const clearDashboardFilter = () => {
     setStatusFilter('All')

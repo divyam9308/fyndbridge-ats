@@ -4,6 +4,7 @@ const os = require('os')
 const axios = require('axios')
 const { v4: uuidv4 } = require('uuid')
 const supabase = require('../services/supabaseAdmin')
+const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
 const { parseResume } = require('../services/resumeParser')
 const { RESUME_BUCKET, prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplicate, checkLinkedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
 const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
@@ -922,7 +923,9 @@ async function listCandidates(req, res) {
                             req.query.job_id ||
                             req.query.client_id ||
                             req.query.client_name || 
-                            req.query.status || 
+                            req.query.status ||
+                            req.query.consultant ||
+                            req.query.period ||
                             req.query.salary_min || 
                             req.query.salary_max || 
                             aiAssociationFilter
@@ -960,14 +963,17 @@ async function listCandidates(req, res) {
       query = query.eq('candidate_associations.client_id', cleanText(req.query.client_id))
     }
 
+    if (req.query.consultant) {
+      query = query.ilike('candidate_associations.consultant_name', cleanText(req.query.consultant))
+    }
+
+    query = applyDashboardPeriod(query, 'candidate_associations.created_at', cleanText(req.query.period))
+
     if (req.query.status) {
-      query = query.in(
-        'candidate_associations.status',
-        String(req.query.status)
-          .split(',')
-          .map((status) => status.trim())
-          .filter(Boolean)
-      )
+      const statuses = String(req.query.status).split(',').map(status => status.trim()).filter(Boolean)
+      query = statuses.length === 1
+        ? query.ilike('candidate_associations.status', statuses[0])
+        : query.in('candidate_associations.status', statuses)
     }
 
     if (req.query.salary_min) {
