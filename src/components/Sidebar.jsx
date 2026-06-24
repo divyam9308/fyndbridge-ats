@@ -26,13 +26,17 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="sidebar-logo">
         <picture>
-          <source srcSet="/assets/fyndbridge-official-logo.webp" type="image/webp" />
+          <source
+            srcSet="/assets/fyndbridge-official-logo-380.webp 380w, /assets/fyndbridge-official-logo.webp 543w"
+            sizes="212px"
+            type="image/webp"
+          />
           <img
             src="/assets/fyndbridge-official-logo.png"
             alt="FYNDBRIDGE"
             className="sidebar-logo-image"
-            width="543"
-            height="90"
+            width="380"
+            height="63"
             decoding="async"
             onError={() => console.error('FYNDBRIDGE logo failed to load')}
           />

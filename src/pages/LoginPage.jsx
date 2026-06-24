@@ -73,20 +73,24 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="login-root">
+    <main className="login-root">
       <section className="login-panel login-panel-left" aria-label="Product introduction">
         <div className="login-panel-circle login-panel-circle-left-lg" aria-hidden="true" />
         <div className="login-panel-circle login-panel-circle-left-sm" aria-hidden="true" />
 
         <div className="login-brand" role="banner">
           <picture>
-            <source srcSet="/assets/fyndbridge-official-logo.webp" type="image/webp" />
+            <source
+              srcSet="/assets/fyndbridge-official-logo-380.webp 380w, /assets/fyndbridge-official-logo.webp 543w"
+              sizes="(max-width: 480px) calc(100vw - 40px), 380px"
+              type="image/webp"
+            />
             <img
               src="/assets/fyndbridge-official-logo.png"
               alt="FYNDBRIDGE"
               className="login-brand-logo"
-              width="543"
-              height="90"
+              width="380"
+              height="63"
               fetchPriority="high"
               decoding="async"
               onError={() => console.error('FYNDBRIDGE logo failed to load')}
@@ -158,6 +162,6 @@ export default function LoginPage() {
 
         <p className="login-footer-note">© 2025 FyndBridge. Internal use only.</p>
       </section>
-    </div>
+    </main>
   )
 }

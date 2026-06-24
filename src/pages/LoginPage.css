@@ -189,7 +189,7 @@
 }
 
 .login-subheading {
-  color: rgba(255, 255, 255, 0.48);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 16px;
   line-height: 1.5;
   margin: 0;
@@ -267,7 +267,7 @@
 }
 
 .login-permission-note {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.76);
   font-size: 13px;
   line-height: 1.5;
   text-align: center;
