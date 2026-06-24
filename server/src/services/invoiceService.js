@@ -229,9 +229,9 @@ function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
     const company = COMPANY[invoice.billing_entity]
     const logo = path.join(__dirname, '../../../public/assets/fyndbridge-official-logo.png')
     const top = compact ? 18 : 24
-    const headerY = compact ? 54 : 64
-    const headerHeight = compact ? 88 : 92
-    const headerTextY = compact ? 60 : 70
+    const headerY = compact ? 50 : 64
+    const headerHeight = compact ? 96 : 92
+    const headerTextY = compact ? 56 : 70
     if (fs.existsSync(logo)) doc.image(logo, 32, top, { width: 92 })
     doc.fillColor(NAVY).font(F.bold).fontSize(15).text('TAX INVOICE', 250, compact ? 20 : 28, { align: 'center', width: 110 })
     doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, headerY, 530, headerHeight).stroke().moveTo(320, headerY).lineTo(320, headerY + headerHeight).stroke().restore()
@@ -338,7 +338,7 @@ function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
       signatureY = bottomY + bankHeight + 8
       signatureBoxHeight = pageBottom - signatureY
     }
-    signatureBoxHeight = Math.max(40, signatureBoxHeight * 0.85)
+    signatureBoxHeight = Math.max(40, signatureBoxHeight * 0.8)
     drawCell(doc, 32, bottomY, 300, bottomHeight, '', {})
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Description of Services', 40, bottomY + 10)
     doc.fillColor('#111827').font(F.regular).text('Permanent placement services, other than executive\nsearch services', 40, bottomY + 22)
