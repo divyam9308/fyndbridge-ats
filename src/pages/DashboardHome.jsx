@@ -51,6 +51,14 @@ const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
 const seriesColor = (index) => chartColors[index % chartColors.length]
 const TOOLTIP_GAP = 6
 
+function formatActivityDate(value, exact = false) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString('en-IN', exact
+    ? { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+    : { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
 function floatingTooltipStyle(coordinate, viewBox, size) {
   const x = Number(coordinate?.x) || 0
   const y = Number(coordinate?.y) || 0
@@ -477,6 +485,20 @@ function DashboardCardModal({ card, context, onClose }) {
               {card.shareRows ? <StatusShareRows data={card.breakdown || []} total={card.centerValue ?? card.value} /> : null}
             </div>
           ) : null}
+          {card.type === 'activity' ? (
+            <div className="ats-dashboard-activity-modal-list">
+              {card.activities?.length ? card.activities.map((item) => (
+                <article className="ats-dashboard-activity-modal-row" key={item.id}>
+                  <div>
+                    <span className="ats-dashboard-activity-module">{item.module}</span>
+                    <strong>{item.text}</strong>
+                    <small>{item.actorName || 'Unknown user'}</small>
+                  </div>
+                  <time>{formatActivityDate(item.date, true)}</time>
+                </article>
+              )) : <div className="ats-dashboard-empty-chart">No recent activity yet.</div>}
+            </div>
+          ) : null}
         </div>
       </section>
     </div>
@@ -542,6 +564,13 @@ export default function DashboardHome() {
     modalOpenCounter.current += 1
     setSelectedCard({ ...card, rect, openKey: modalOpenCounter.current })
   }
+  const openRecentActivity = (event) => openCard(event, {
+    type: 'activity',
+    title: 'Recent Activity',
+    subtitle: 'Latest 50 client, candidate, and mandate changes',
+    icon: Clock,
+    activities: recentActivity
+  })
 
   return (
     <div className="ats-dashboard-page modern-dashboard" id="page-dashboard">
@@ -724,21 +753,28 @@ export default function DashboardHome() {
 
       </div>
 
-      <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', title: 'Recent Activity', subtitle: 'Latest client, candidate, and mandate updates', icon: Clock, breakdown: recentActivity.map((item, index) => ({ name: item.text, value: index + 1 })) })}>
+      <ExpandableCard onOpen={openRecentActivity}>
       <section className="ats-dashboard-card card-3d">
-        <SectionTitle icon={Clock} title="Recent Activity" subtitle="Latest client, candidate, and mandate updates" />
-        {recentActivity.length ? (
+        <SectionTitle icon={Clock} title="Recent Activity" subtitle="Latest client, candidate, and mandate updates" right={<button type="button" className="ats-dashboard-activity-view-all" onClick={(event) => { event.stopPropagation(); openRecentActivity(event) }}>View all</button>} />
+        {!dashboardDataReady ? (
+          <div className="ats-dashboard-activity-state"><Loader2 size={16} className="spin" /> Loading recent activity...</div>
+        ) : error ? (
+          <div className="ats-dashboard-activity-state is-error">Could not load recent activity.</div>
+        ) : recentActivity.length ? (
           <div className="ats-dashboard-activity">
-            {recentActivity.map((item, index) => (
-              <div className="ats-dashboard-activity-row" key={`${item.text}-${index}`}>
+            {recentActivity.slice(0, 7).map((item, index) => (
+              <div className="ats-dashboard-activity-row" key={item.id}>
                 <span style={{ background: seriesColor(index) }}><UserCheck size={15} /></span>
-                <p>{item.text}</p>
-                <time>{item.date}</time>
+                <div>
+                  <p>{item.text}</p>
+                  <small>{item.actorName || 'Unknown user'}</small>
+                </div>
+                <time>{formatActivityDate(item.date)}</time>
               </div>
             ))}
           </div>
         ) : (
-          <div className="ats-dashboard-empty-chart">No recent activity for this period.</div>
+          <div className="ats-dashboard-empty-chart">No recent activity yet.</div>
         )}
       </section>
       </ExpandableCard>

@@ -19,9 +19,12 @@ export function useDashboardStats({ consultant, period }) {
   })
 
   useEffect(() => {
-    const controller = new AbortController()
+    let activeController = null
 
     async function loadDashboardStats() {
+      activeController?.abort()
+      const controller = new AbortController()
+      activeController = controller
       setState(current => ({ ...current, loading: true, error: '' }))
       try {
         const params = new URLSearchParams({
@@ -29,6 +32,7 @@ export function useDashboardStats({ consultant, period }) {
           period: period || DASHBOARD_PERIODS[0]
         })
         const response = await apiFetch(`/api/dashboard?${params.toString()}`, {
+          cache: 'no-store',
           signal: controller.signal
         })
         const payload = await response.json().catch(() => ({}))
@@ -41,7 +45,11 @@ export function useDashboardStats({ consultant, period }) {
     }
 
     loadDashboardStats()
-    return () => controller.abort()
+    window.addEventListener('focus', loadDashboardStats)
+    return () => {
+      activeController?.abort()
+      window.removeEventListener('focus', loadDashboardStats)
+    }
   }, [consultant, period])
 
   return useMemo(() => state, [state])

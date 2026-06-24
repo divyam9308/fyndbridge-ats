@@ -958,10 +958,97 @@
   font-weight: 650;
 }
 
+.ats-dashboard-activity-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--gray-500);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .ats-dashboard-activity-row time {
   color: var(--gray-500);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.ats-dashboard-activity-view-all {
+  border: 0;
+  padding: 4px 0;
+  background: transparent;
+  color: var(--modern-chart-1);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ats-dashboard-activity-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 120px;
+  color: var(--gray-500);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ats-dashboard-activity-state.is-error { color: var(--danger); }
+
+.ats-dashboard-activity-modal-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ats-dashboard-activity-modal-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--modern-border);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.82);
+}
+
+.ats-dashboard-activity-modal-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ats-dashboard-activity-modal-row strong {
+  color: var(--gray-700);
+  font-size: 13px;
+}
+
+.ats-dashboard-activity-modal-row small,
+.ats-dashboard-activity-modal-row time {
+  color: var(--gray-500);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ats-dashboard-activity-modal-row time {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.ats-dashboard-activity-module {
+  width: fit-content;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(var(--brand-blue-rgb), 0.1);
+  color: var(--modern-chart-1);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  .ats-dashboard-activity-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .ats-dashboard-activity-row time { padding-left: 0; }
+  .ats-dashboard-activity-modal-row { flex-direction: column; gap: 8px; }
+  .ats-dashboard-activity-modal-row time { text-align: left; }
 }
 
 .ats-dashboard-empty-chart {

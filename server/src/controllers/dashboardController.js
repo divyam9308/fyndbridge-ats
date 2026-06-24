@@ -42,11 +42,6 @@ function toDate(value) {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-function dateKey(value) {
-  const date = toDate(value)
-  return date ? date.toISOString().slice(0, 10) : ''
-}
-
 function periodRange(period) {
   const now = new Date()
   const year = now.getFullYear()
@@ -196,42 +191,59 @@ function dedupeClients(rows) {
   return [...map.values()]
 }
 
-function buildRecentActivity({ clients, candidates, mandates }) {
+function hasUpdatedSinceCreation(row) {
+  const created = toDate(row.created_at)
+  const updated = toDate(row.updated_at)
+  return Boolean(created && updated && updated.getTime() - created.getTime() > 1000)
+}
+
+function activityActor({ userId, name, email }, profilesById) {
+  const profile = userId ? profilesById.get(userId) : null
+  const actorName = clean(profile?.name || name || profile?.email || email) || 'Unknown user'
+  return { actorName, actorEmail: clean(profile?.email || email) }
+}
+
+function buildRecentActivity({ clients, candidates, mandates, profiles }) {
+  const profilesById = new Map((profiles || []).map((profile) => [profile.user_id, profile]))
   const events = []
   for (const client of clients) {
+    const updated = hasUpdatedSinceCreation(client)
+    const actor = activityActor({ userId: client.consultant_user_id, name: client.consultant_name || client.consultant }, profilesById)
+    const clientName = client.client_name || client.name || 'Unnamed client'
     events.push({
       date: client.updated_at || client.created_at || client.connected_on_date,
-      text: `Client added: ${client.client_name || client.name || 'Unnamed client'}`
+      module: (client.contract_signed === true || same(client.contract_signed, 'Yes')) ? 'Contract' : 'Client',
+      text: (client.contract_signed === true || same(client.contract_signed, 'Yes'))
+        ? `Contract signed with ${clientName}`
+        : `Client ${updated ? 'updated' : 'added'}: ${clientName}`,
+      ...actor,
+      id: `client-${client.id}`
     })
-    if ((client.contract_signed === true || same(client.contract_signed, 'Yes')) && clean(client.billing_entity)) {
-      events.push({
-        date: client.updated_at || client.created_at || client.connected_on_date,
-        text: `Contract signed with ${client.client_name || client.name || 'client'}`
-      })
-    }
   }
-  for (const item of candidates) {
-    const status = normalizeCandidateStatus(item.status)
-    if (['Interview', 'Hired', 'Offered'].includes(status)) {
-      events.push({
-        date: item.updated_at || item.created_at,
-        text: `Candidate moved to ${status}: ${item.full_name || 'Candidate'}`
-      })
-    }
+  for (const candidate of candidates) {
+    const updated = hasUpdatedSinceCreation(candidate)
+    events.push({
+      date: candidate.updated_at || candidate.created_at,
+      module: 'Candidate',
+      text: `Candidate ${updated ? 'updated' : 'added'}: ${candidate.full_name || 'Unnamed candidate'}`,
+      ...activityActor({ userId: candidate.updated_by || candidate.created_by }, profilesById),
+      id: `candidate-${candidate.id}`
+    })
   }
   for (const mandate of mandates) {
-    if (normalizeMandateStatus(mandate.mandate_status || mandate.status) === 'Completed') {
-      events.push({
-        date: mandate.updated_at || mandate.allocation_date || mandate.created_at,
-        text: `Mandate completed: ${mandate.title || 'Untitled mandate'}`
-      })
-    }
+    const updated = hasUpdatedSinceCreation(mandate)
+    events.push({
+      date: mandate.updated_at || mandate.created_at || mandate.allocation_date,
+      module: 'Mandate',
+      text: `Mandate ${updated ? 'updated' : 'added'}: ${mandate.title || 'Untitled mandate'}`,
+      ...activityActor({ name: mandate.team_lead || parseList(mandate.consultants)[0] }, profilesById),
+      id: `mandate-${mandate.id}`
+    })
   }
   return events
     .filter((item) => toDate(item.date))
     .sort((a, b) => toDate(b.date) - toDate(a.date))
-    .slice(0, 8)
-    .map((item) => ({ ...item, date: dateKey(item.date) }))
+    .slice(0, 50)
 }
 
 async function getDashboardStats(req, res) {
@@ -241,11 +253,14 @@ async function getDashboardStats(req, res) {
   const sectionErrors = {}
 
   const settled = await Promise.allSettled([
-    supabase.from('user_profiles').select('user_id, name, email').not('name', 'is', null).order('name'),
-    supabase.from('clients').select('id, client_group_id, client_name, name, status, consultant_name, connected_on_date, created_at, updated_at, contract_signed, billing_entity'),
-    supabase.from('candidates').select('id, full_name, created_at, updated_at'),
+    supabase.from('user_profiles').select('user_id, name, email').order('name'),
+    supabase.from('clients').select('id, client_group_id, client_name, name, status, consultant_user_id, consultant_name, connected_on_date, created_at, updated_at, contract_signed, billing_entity'),
+    supabase.from('candidates').select('id, full_name, created_by, updated_by, created_at, updated_at'),
     supabase.from('candidate_associations').select('id, candidate_id, consultant_name, status, job_title, client_name, created_at, updated_at'),
-    supabase.from('jobs').select('id, title, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at')
+    supabase.from('jobs').select('id, title, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at'),
+    supabase.from('clients').select('id, client_name, name, consultant_user_id, consultant_name, created_at, updated_at, contract_signed').order('updated_at', { ascending: false }).limit(50),
+    supabase.from('candidates').select('id, full_name, created_by, updated_by, created_at, updated_at').order('updated_at', { ascending: false }).limit(50),
+    supabase.from('jobs').select('id, title, consultants, team_lead, created_at, updated_at').order('updated_at', { ascending: false }).limit(50)
   ])
 
   const readResult = (index, key) => {
@@ -267,6 +282,9 @@ async function getDashboardStats(req, res) {
     const candidates = readResult(2, 'candidates')
     const associations = readResult(3, 'candidates')
     const jobs = readResult(4, 'mandates')
+    const recentClients = readResult(5, 'recentActivity')
+    const recentCandidates = readResult(6, 'recentActivity')
+    const recentMandates = readResult(7, 'recentActivity')
 
     const consultantOptions = profiles
       .map((row) => clean(row.name))
@@ -333,7 +351,7 @@ async function getDashboardStats(req, res) {
       clientTrend,
       candidateTrend,
       mandateTrend,
-      recentActivity: buildRecentActivity({ clients: uniqueClients, candidates: filteredAssociations, mandates: filteredMandates }),
+      recentActivity: buildRecentActivity({ clients: recentClients, candidates: recentCandidates, mandates: recentMandates, profiles }),
       sectionErrors,
       clientOwnershipAvailable,
       period,
