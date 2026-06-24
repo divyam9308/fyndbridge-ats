@@ -14,6 +14,7 @@ const AdminPage = lazy(() => import('./pages/AdminPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const ProfileSettingsPage = lazy(() => import('./pages/ProfileSettingsPage'))
 const InvoicePage = lazy(() => import('./pages/InvoicePage'))
+const InvoiceEntityDetailPage = lazy(() => import('./pages/InvoiceEntityDetailPage'))
 
 function App() {
   const [aiQuotaNotice, setAiQuotaNotice] = useState('')
@@ -58,6 +59,7 @@ function App() {
           </Route>
           <Route path="/invoice" element={<RequireAuth><Suspense fallback={<div className="route-loading" role="status">Loading...</div>}><AuthenticatedShell /></Suspense></RequireAuth>}>
             <Route index element={<InvoicePage />} />
+            <Route path="entities/:entityId" element={<InvoiceEntityDetailPage />} />
           </Route>
         </Routes>
       </AuthProvider>

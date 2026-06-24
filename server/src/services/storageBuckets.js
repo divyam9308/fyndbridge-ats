@@ -1,7 +1,8 @@
 const STORAGE_BUCKETS = {
   CV: 'resumes',
   JD: 'jds',
-  CONTRACT: 'contract-pdfs'
+  CONTRACT: 'contract-pdfs',
+  INVOICE: 'invoice'
 }
 
 const STORAGE_BUCKET_TYPES = {
@@ -9,13 +10,15 @@ const STORAGE_BUCKET_TYPES = {
   resume: STORAGE_BUCKETS.CV,
   jd: STORAGE_BUCKETS.JD,
   contract: STORAGE_BUCKETS.CONTRACT,
-  'contract-pdf': STORAGE_BUCKETS.CONTRACT
+  'contract-pdf': STORAGE_BUCKETS.CONTRACT,
+  invoice: STORAGE_BUCKETS.INVOICE
 }
 
 const LEGACY_BUCKET_NAMES = [
   STORAGE_BUCKETS.CV,
   STORAGE_BUCKETS.JD,
   STORAGE_BUCKETS.CONTRACT,
+  STORAGE_BUCKETS.INVOICE,
   'resume',
   'cvs',
   'cv',

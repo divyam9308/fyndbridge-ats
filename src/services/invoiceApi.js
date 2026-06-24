@@ -7,6 +7,7 @@ async function json(response) {
 }
 
 export const fetchInvoiceEntities = async () => json(await apiFetch('/api/invoice/entities', { cache: 'no-store' }))
+export const fetchInvoiceEntity = async (id) => json(await apiFetch(`/api/invoice/entities/${id}`, { cache: 'no-store' }))
 export const createInvoiceEntity = async (payload) => json(await apiFetch('/api/invoice/entities', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -45,6 +46,11 @@ export const previewInvoicePdf = async (payload) => json(await apiFetch('/api/in
 }))
 export const commitInvoicePreview = async (payload) => json(await apiFetch('/api/invoice/commit-preview', {
   method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload)
+}))
+export const regenerateInvoice = async (id, payload) => json(await apiFetch(`/api/invoice/invoices/${id}/regenerate`, {
+  method: 'PUT',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
 }))

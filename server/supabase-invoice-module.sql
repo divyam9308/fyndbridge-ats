@@ -104,3 +104,43 @@ create policy invoices_admin_all on invoices
 
 grant select, insert, update, delete on invoice_entities to authenticated;
 grant select, insert, update, delete on invoices to authenticated;
+
+-- Entity master/invoice history upgrade (safe for existing data).
+alter table invoice_entities add column if not exists optional_name text default '-';
+alter table invoice_entities add column if not exists entity_display_id text;
+alter table invoice_entities alter column legal_entity_name drop not null;
+alter table invoice_entities alter column address drop not null;
+alter table invoice_entities alter column billing_entity set default 'FCS';
+
+with numbered as (
+  select id, row_number() over (order by created_at, id) as number
+  from invoice_entities
+  where entity_display_id is null or btrim(entity_display_id) = ''
+)
+update invoice_entities entity
+set entity_display_id = 'EID' || numbered.number
+from numbered
+where entity.id = numbered.id;
+
+create unique index if not exists invoice_entities_entity_display_id_key
+  on invoice_entities (entity_display_id) where entity_display_id is not null;
+
+alter table invoices add column if not exists invoice_display_id text;
+alter table invoices add column if not exists consultant_name text;
+alter table invoices add column if not exists candidate_name text;
+alter table invoices add column if not exists project_amount numeric;
+
+with numbered as (
+  select id, row_number() over (order by created_at, id) as number
+  from invoices
+  where invoice_display_id is null or btrim(invoice_display_id) = ''
+)
+update invoices invoice
+set invoice_display_id = 'IID' || numbered.number
+from numbered
+where invoice.id = numbered.id;
+
+create unique index if not exists invoices_invoice_display_id_key
+  on invoices (invoice_display_id) where invoice_display_id is not null;
+create index if not exists invoices_invoice_entity_id_created_at_idx
+  on invoices (invoice_entity_id, created_at desc);

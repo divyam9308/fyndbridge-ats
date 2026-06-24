@@ -1,132 +1,88 @@
 const supabase = require('../services/supabaseAdmin')
 const { normalizeGstin } = require('../services/gstLookup')
+const { STORAGE_BUCKETS, documentOpenUrl } = require('../services/storageBuckets')
 const {
-  BILLING_ENTITIES,
-  GST_COMPONENTS,
-  MODELS,
-  clean,
-  financialYear,
-  detectGstComponent,
-  calculateInvoice,
-  createInvoicePdf
+  BILLING_ENTITIES, GST_COMPONENTS, MODELS, clean, financialYear,
+  detectGstComponent, calculateInvoice, createInvoicePdf
 } = require('../services/invoiceService')
 
-const ENTITY_FIELDS = 'id, invoice_id, legal_entity_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, model, ctc_lpa, model_percent, model_flat_fee, retainer_amount, jra_adjustment_value, jra_base_value, jra_flat_fee, others_amount, sac, billing_entity, gst_component, igst_rate, cgst_rate, sgst_rate, created_at, updated_at'
+const ENTITY_FIELDS = 'id, invoice_id, entity_display_id, legal_entity_name, optional_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, sac, billing_entity, gst_component, igst_rate, cgst_rate, sgst_rate, created_at, updated_at'
+const INVOICE_FIELDS = 'id, invoice_entity_id, invoice_display_id, invoice_number, invoice_date, consultant_name, candidate_name, professional_fee_text, model, ctc_lpa, model_percent, model_flat_fee, retainer_amount, project_amount, jra_adjustment_value, jra_base_value, jra_flat_fee, others_amount, sac, billing_entity, taxable_amount, gst_component, igst_rate, igst_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount, total_tax_amount, total_before_rounding, rounding_type, rounding_amount, grand_total, pdf_storage_path, created_at'
 
-function sendError(res, err) {
-  return res.status(err.statusCode || 500).json({ error: err.message || 'Internal server error' })
-}
-
-function nullable(value) {
-  const text = clean(value)
-  return text || null
-}
-
+const sendError = (res, err) => res.status(err.statusCode || 500).json({ error: err.message || 'Internal server error' })
+const nullable = value => clean(value) || null
 function numberOrNull(value) {
   if (value === '' || value === null || value === undefined) return null
-  const parsed = Number(String(value).replace(/₹|Rs\.?|,/gi, '').trim())
+  const parsed = Number(String(value).replace(/₹|â‚¹|Rs\.?|,/gi, '').trim())
   if (!Number.isFinite(parsed)) throw Object.assign(new Error('Amount fields must be numeric'), { statusCode: 400 })
   return parsed
 }
 
-async function nextEntityId() {
-  const { data, error } = await supabase.from('invoice_entities').select('invoice_id')
+async function nextDisplayId(table, field, prefix) {
+  const { data, error } = await supabase.from(table).select(field)
   if (error) throw error
-  const max = (data || []).reduce((acc, row) => Math.max(acc, Number(String(row.invoice_id || '').replace(/^IID/i, '')) || 0), 0)
-  return `IID${max + 1}`
+  const max = (data || []).reduce((value, row) => Math.max(value, Number(String(row[field] || '').replace(new RegExp(`^${prefix}`, 'i'), '')) || 0), 0)
+  return `${prefix}${max + 1}`
 }
 
 function entityPayload(body) {
-  const billing = body.billing_entity
-  const gst = body.gst_component || detectGstComponent(body.address, body.state, body.place_of_supply)
-  if (!clean(body.legal_entity_name)) throw Object.assign(new Error('Legal Entity Name is required'), { statusCode: 400 })
-  if (!clean(body.address)) throw Object.assign(new Error('Address is required'), { statusCode: 400 })
-  if (!BILLING_ENTITIES.has(billing)) throw Object.assign(new Error('Billing Entity is required'), { statusCode: 400 })
-  if (!clean(body.sac || '998512')) throw Object.assign(new Error('SAC is required'), { statusCode: 400 })
-  if (!GST_COMPONENTS.has(gst)) throw Object.assign(new Error('Invalid GST component'), { statusCode: 400 })
+  const billing = BILLING_ENTITIES.has(body.billing_entity) ? body.billing_entity : 'FCS'
+  const gst = GST_COMPONENTS.has(body.gst_component) ? body.gst_component : detectGstComponent(body.address, body.state, body.place_of_supply)
   const gstin = nullable(body.gstin)
-  const payload = {
-    legal_entity_name: clean(body.legal_entity_name),
-    address: clean(body.address),
-    pan: nullable(body.pan),
-    place_of_supply: nullable(body.place_of_supply),
-    state: nullable(body.state),
-    state_code: nullable(body.state_code),
+  return {
+    legal_entity_name: nullable(body.legal_entity_name),
+    optional_name: clean(body.optional_name) || '-',
+    address: nullable(body.address), pan: nullable(body.pan), place_of_supply: nullable(body.place_of_supply),
+    state: nullable(body.state), state_code: nullable(body.state_code),
     gstin: gstin ? normalizeGstin(gstin) : null,
-    contact_person: nullable(body.contact_person),
-    email: nullable(body.email),
-    model: body.model,
-    ctc_lpa: numberOrNull(body.ctc_lpa),
-    model_percent: numberOrNull(body.model_percent),
-    model_flat_fee: numberOrNull(body.model_flat_fee),
-    retainer_amount: numberOrNull(body.retainer_amount),
-    jra_adjustment_value: numberOrNull(body.jra_adjustment_value),
-    jra_base_value: numberOrNull(body.jra_base_value),
-    jra_flat_fee: numberOrNull(body.jra_flat_fee),
-    others_amount: numberOrNull(body.others_amount),
-    sac: clean(body.sac || '998512'),
-    billing_entity: billing,
-    gst_component: gst,
+    contact_person: nullable(body.contact_person), email: nullable(body.email),
+    sac: clean(body.sac) || '998512', billing_entity: billing, gst_component: gst,
     igst_rate: numberOrNull(body.igst_rate) ?? 18,
     cgst_rate: numberOrNull(body.cgst_rate) ?? 9,
     sgst_rate: numberOrNull(body.sgst_rate) ?? 9,
     updated_at: new Date().toISOString()
   }
-  if (!MODELS.has(payload.model)) throw Object.assign(new Error('Model is required'), { statusCode: 400 })
-  calculateInvoice(payload)
-  return payload
 }
+
+const decorateInvoice = row => ({ ...row, invoice_open_url: documentOpenUrl('invoice', row.pdf_storage_path) })
 
 async function listEntities(req, res) {
   try {
     const { data, error } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).order('created_at', { ascending: false })
     if (error) throw error
-    const ids = (data || []).map(row => row.id)
-    const invoiceNumbers = new Map()
-    if (ids.length) {
-      const { data: invoiceRows, error: invoiceError } = await supabase
-        .from('invoices')
-        .select('invoice_entity_id, invoice_number, created_at')
-        .in('invoice_entity_id', ids)
-        .order('created_at', { ascending: false })
-      if (invoiceError) throw invoiceError
-      for (const row of invoiceRows || []) {
-        const current = invoiceNumbers.get(row.invoice_entity_id) || []
-        current.push(row.invoice_number)
-        invoiceNumbers.set(row.invoice_entity_id, current)
-      }
-    }
-    return res.json({ data: (data || []).map(row => {
-      const numbers = invoiceNumbers.get(row.id) || []
-      return { ...row, latest_invoice_number: numbers[0] || '', invoice_numbers: numbers }
-    }) })
-  } catch (err) {
-    return sendError(res, err)
-  }
+    return res.json({ data: data || [] })
+  } catch (err) { return sendError(res, err) }
+}
+
+async function getEntity(req, res) {
+  try {
+    const { data: entity, error } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).eq('id', req.params.id).maybeSingle()
+    if (error) throw error
+    if (!entity) return res.status(404).json({ error: 'Entity not found' })
+    const { data: invoices, error: invoiceError } = await supabase.from('invoices').select(INVOICE_FIELDS).eq('invoice_entity_id', entity.id).order('created_at', { ascending: false })
+    if (invoiceError) throw invoiceError
+    return res.json({ data: { entity, invoices: (invoices || []).map(decorateInvoice) } })
+  } catch (err) { return sendError(res, err) }
 }
 
 async function createEntity(req, res) {
   try {
     const payload = entityPayload(req.body)
-    payload.invoice_id = await nextEntityId()
+    payload.entity_display_id = await nextDisplayId('invoice_entities', 'entity_display_id', 'EID')
+    payload.invoice_id = payload.entity_display_id
     const { data, error } = await supabase.from('invoice_entities').insert(payload).select(ENTITY_FIELDS).single()
     if (error) throw error
     return res.status(201).json({ data })
-  } catch (err) {
-    return sendError(res, err)
-  }
+  } catch (err) { return sendError(res, err) }
 }
 
 async function updateEntity(req, res) {
   try {
-    const payload = entityPayload(req.body)
-    const { data, error } = await supabase.from('invoice_entities').update(payload).eq('id', req.params.id).select(ENTITY_FIELDS).maybeSingle()
+    const { data, error } = await supabase.from('invoice_entities').update(entityPayload(req.body)).eq('id', req.params.id).select(ENTITY_FIELDS).maybeSingle()
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Entity not found' })
     return res.json({ data })
-  } catch (err) {
-    return sendError(res, err)
-  }
+  } catch (err) { return sendError(res, err) }
 }
 
 async function deleteEntity(req, res) {
@@ -134,70 +90,58 @@ async function deleteEntity(req, res) {
     const { error } = await supabase.from('invoice_entities').delete().eq('id', req.params.id)
     if (error) throw error
     return res.json({ ok: true })
-  } catch (err) {
-    return sendError(res, err)
-  }
+  } catch (err) { return sendError(res, err) }
 }
 
 async function nextNumberParts(billingEntity, invoiceDate) {
   const fy = financialYear(invoiceDate)
-  const { data, error } = await supabase
-    .from('invoices')
-    .select('sequence_number')
-    .eq('billing_entity', billingEntity)
-    .eq('financial_year', fy)
-    .order('sequence_number', { ascending: false })
-    .limit(1)
+  const { data, error } = await supabase.from('invoices').select('sequence_number').eq('billing_entity', billingEntity).eq('financial_year', fy).order('sequence_number', { ascending: false }).limit(1)
   if (error) throw error
   const sequence = Number(data?.[0]?.sequence_number || 0) + 1
-  const prefix = billingEntity === 'FCAPL' ? 'FCAPL' : 'FB'
-  return { financialYear: fy, sequence, invoiceNumber: `${prefix}/${fy}/${String(sequence).padStart(3, '0')}` }
+  return { financialYear: fy, sequence, invoiceNumber: `${billingEntity === 'FCAPL' ? 'FCAPL' : 'FB'}/${fy}/${String(sequence).padStart(3, '0')}` }
 }
 
 async function nextNumber(req, res) {
   try {
-    const billing = req.query.billing_entity || 'FCS'
-    if (!BILLING_ENTITIES.has(billing)) return res.status(400).json({ error: 'Invalid billing entity' })
-    const parts = await nextNumberParts(billing, req.query.invoice_date || new Date().toISOString().slice(0, 10))
-    return res.json(parts)
-  } catch (err) {
-    return sendError(res, err)
-  }
+    const billing = BILLING_ENTITIES.has(req.query.billing_entity) ? req.query.billing_entity : 'FCS'
+    return res.json(await nextNumberParts(billing, req.query.invoice_date || new Date().toISOString().slice(0, 10)))
+  } catch (err) { return sendError(res, err) }
 }
 
 async function invoiceInput(body) {
-  const entityId = body.invoice_entity_id || body.entity_id
-  const { data: entity, error } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).eq('id', entityId).maybeSingle()
+  const { data: entity, error } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).eq('id', body.invoice_entity_id || body.entity_id).maybeSingle()
   if (error) throw error
   if (!entity) throw Object.assign(new Error('Entity not found'), { statusCode: 404 })
-  const input = { ...entity, ...body }
+  const input = {
+    ...entity, ...body,
+    billing_entity: BILLING_ENTITIES.has(body.billing_entity) ? body.billing_entity : entity.billing_entity || 'FCS',
+    model: MODELS.has(body.model) ? body.model : 'joining_percentage',
+    gst_component: GST_COMPONENTS.has(body.gst_component) ? body.gst_component : entity.gst_component || detectGstComponent(entity.address, entity.state, entity.place_of_supply)
+  }
   const invoiceDate = body.invoice_date || new Date().toISOString().slice(0, 10)
-  if (!clean(input.professional_fee_text)) throw Object.assign(new Error('Professional Fee Text is required'), { statusCode: 400 })
-  if (!MODELS.has(input.model)) throw Object.assign(new Error('Model is required'), { statusCode: 400 })
   return { entity, input, invoiceDate, billing: input.billing_entity, calc: calculateInvoice(input) }
 }
 
 function invoicePayload(entity, input, invoiceDate, parts, calc) {
   return {
-    invoice_entity_id: entity.id,
-    billing_entity: input.billing_entity,
-    invoice_number: parts.invoiceNumber,
-    financial_year: parts.financialYear,
-    sequence_number: parts.sequence,
-    invoice_date: invoiceDate,
-    professional_fee_text: clean(input.professional_fee_text),
-    model: input.model,
-    ctc_lpa: numberOrNull(input.ctc_lpa),
-    model_percent: numberOrNull(input.model_percent),
-    model_flat_fee: numberOrNull(input.model_flat_fee),
-    retainer_amount: numberOrNull(input.retainer_amount),
-    jra_adjustment_value: numberOrNull(input.jra_adjustment_value),
-    jra_base_value: numberOrNull(input.jra_base_value),
-    jra_flat_fee: numberOrNull(input.jra_flat_fee),
-    others_amount: numberOrNull(input.others_amount),
-    sac: clean(input.sac || entity.sac || '998512'),
-    ...calc
+    invoice_entity_id: entity.id, billing_entity: input.billing_entity,
+    invoice_number: parts.invoiceNumber, financial_year: parts.financialYear,
+    sequence_number: parts.sequence, invoice_date: invoiceDate,
+    consultant_name: nullable(input.consultant_name), candidate_name: nullable(input.candidate_name),
+    professional_fee_text: clean(input.professional_fee_text), model: input.model,
+    ctc_lpa: numberOrNull(input.ctc_lpa), model_percent: numberOrNull(input.model_percent),
+    model_flat_fee: numberOrNull(input.model_flat_fee), retainer_amount: numberOrNull(input.retainer_amount),
+    project_amount: numberOrNull(input.project_amount), jra_adjustment_value: numberOrNull(input.jra_adjustment_value),
+    jra_base_value: numberOrNull(input.jra_base_value), jra_flat_fee: numberOrNull(input.jra_flat_fee),
+    others_amount: numberOrNull(input.others_amount), sac: clean(input.sac || entity.sac) || '998512', ...calc
   }
+}
+
+async function uploadInvoicePdf(entityId, displayId, pdf) {
+  const path = `invoices/${entityId}/${displayId}-v${Date.now()}.pdf`
+  const { error } = await supabase.storage.from(STORAGE_BUCKETS.INVOICE).upload(path, pdf, { contentType: 'application/pdf', upsert: false })
+  if (error) throw new Error(`Invoice PDF upload failed: ${error.message}`)
+  return path
 }
 
 async function preview(req, res) {
@@ -207,60 +151,53 @@ async function preview(req, res) {
     const record = invoicePayload(entity, input, invoiceDate, parts, calc)
     const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: record, overrides: input })
     return res.json({ data: record, fileName: `Invoice-${record.invoice_number.replace(/\//g, '-')}.pdf`, pdfBase64: pdf.toString('base64') })
-  } catch (err) {
-    return sendError(res, err)
+  } catch (err) { return sendError(res, err) }
+}
+
+async function createStoredInvoice(body, expectedNumber = '') {
+  const { entity, input, invoiceDate, billing, calc } = await invoiceInput(body)
+  const parts = await nextNumberParts(billing, invoiceDate)
+  if (expectedNumber && parts.invoiceNumber !== clean(expectedNumber)) throw Object.assign(new Error('Invoice number changed. Return to edit and generate again.'), { statusCode: 409 })
+  const payload = invoicePayload(entity, input, invoiceDate, parts, calc)
+  payload.invoice_display_id = await nextDisplayId('invoices', 'invoice_display_id', 'IID')
+  const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: payload, overrides: input })
+  payload.pdf_storage_path = await uploadInvoicePdf(entity.id, payload.invoice_display_id, pdf)
+  const { data, error } = await supabase.from('invoices').insert(payload).select(INVOICE_FIELDS).single()
+  if (error) {
+    await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([payload.pdf_storage_path])
+    throw error
   }
+  return { record: decorateInvoice(data), pdf }
 }
 
 async function generate(req, res) {
   try {
-    const { entity, input, invoiceDate, billing, calc } = await invoiceInput(req.body)
-
-    let record
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const parts = await nextNumberParts(billing, invoiceDate)
-      const payload = invoicePayload(entity, input, invoiceDate, parts, calc)
-      const result = await supabase.from('invoices').insert(payload).select('*').single()
-      if (!result.error) {
-        record = result.data
-        break
-      }
-      if (result.error.code !== '23505') throw result.error
-    }
-    if (!record) throw new Error('Unable to reserve invoice number')
-    const fileName = `Invoice-${record.invoice_number.replace(/\//g, '-')}.pdf`
-    let pdf
-    try {
-      pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: record, overrides: input })
-      const { data, error: updateError } = await supabase.from('invoices').update({ pdf_storage_path: fileName }).eq('id', record.id).select('*').single()
-      if (updateError) throw updateError
-      record = data
-    } catch (pdfError) {
-      await supabase.from('invoices').delete().eq('id', record.id)
-      throw pdfError
-    }
-    return res.json({
-      data: record,
-      fileName,
-      pdfBase64: pdf.toString('base64')
-    })
-  } catch (err) {
-    return sendError(res, err)
-  }
+    const { record, pdf } = await createStoredInvoice(req.body)
+    return res.status(201).json({ data: record, fileName: `Invoice-${record.invoice_number.replace(/\//g, '-')}.pdf`, pdfBase64: pdf.toString('base64') })
+  } catch (err) { return sendError(res, err) }
 }
 
 async function commitPreview(req, res) {
   try {
-    const { entity, input, invoiceDate, billing, calc } = await invoiceInput(req.body)
-    const parts = await nextNumberParts(billing, invoiceDate)
-    if (parts.invoiceNumber !== clean(req.body.invoice_number)) return res.status(409).json({ error: 'Invoice number changed. Return to edit and generate again.' })
-    const fileName = `Invoice-${parts.invoiceNumber.replace(/\//g, '-')}.pdf`
-    const { data, error } = await supabase.from('invoices').insert({ ...invoicePayload(entity, input, invoiceDate, parts, calc), pdf_storage_path: fileName }).select('*').single()
-    if (error) throw error
-    return res.status(201).json({ data, fileName })
-  } catch (err) {
-    return sendError(res, err)
-  }
+    const { record } = await createStoredInvoice(req.body, req.body.invoice_number)
+    return res.status(201).json({ data: record, fileName: `Invoice-${record.invoice_number.replace(/\//g, '-')}.pdf` })
+  } catch (err) { return sendError(res, err) }
 }
 
-module.exports = { listEntities, createEntity, updateEntity, deleteEntity, nextNumber, preview, generate, commitPreview }
+async function regenerate(req, res) {
+  try {
+    const { data: existing, error } = await supabase.from('invoices').select('*').eq('id', req.params.id).maybeSingle()
+    if (error) throw error
+    if (!existing) return res.status(404).json({ error: 'Invoice not found' })
+    const { entity, input, calc } = await invoiceInput({ ...existing, ...req.body, invoice_entity_id: existing.invoice_entity_id })
+    const updated = { ...invoicePayload(entity, input, input.invoice_date || existing.invoice_date, { invoiceNumber: existing.invoice_number, financialYear: existing.financial_year, sequence: existing.sequence_number }, calc), invoice_display_id: existing.invoice_display_id }
+    const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: updated, overrides: input })
+    updated.pdf_storage_path = await uploadInvoicePdf(entity.id, existing.invoice_display_id || 'IID', pdf)
+    const { data, error: updateError } = await supabase.from('invoices').update(updated).eq('id', existing.id).select(INVOICE_FIELDS).single()
+    if (updateError) throw updateError
+    if (existing.pdf_storage_path) await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([existing.pdf_storage_path])
+    return res.json({ data: decorateInvoice(data), fileName: `Invoice-${existing.invoice_number.replace(/\//g, '-')}.pdf`, pdfBase64: pdf.toString('base64') })
+  } catch (err) { return sendError(res, err) }
+}
+
+module.exports = { listEntities, getEntity, createEntity, updateEntity, deleteEntity, nextNumber, preview, generate, commitPreview, regenerate }

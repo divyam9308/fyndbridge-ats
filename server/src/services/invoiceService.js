@@ -69,29 +69,16 @@ function detectGstComponent(...values) {
 }
 
 function calculateTaxable(input) {
-  const model = input.model
+  const model = MODELS.has(input.model) ? input.model : 'joining_percentage'
   if (!MODELS.has(model)) throw new Error('Invalid model')
   const ctc = n(input.ctc_lpa)
-  const required = (field, label) => {
-    if (input[field] === '' || input[field] === null || input[field] === undefined) throw new Error(`${label} is required`)
-    if (!Number.isFinite(n(input[field]))) throw new Error(`${label} must be numeric`)
-    if (n(input[field]) < 0) throw new Error(`${label} must be non-negative`)
-  }
-  if (['joining_percentage', 'project', 'jra_adjustment_percentage'].includes(model)) {
-    required('ctc_lpa', 'CTC')
-    required('model_percent', 'Percent Value')
-  }
-  if (model === 'joining_flat_fee') required('model_flat_fee', 'Flat Fee Value')
-  if (model === 'retainer') required('retainer_amount', 'Retainer Amount')
-  if (model === 'jra_adjustment_percentage') required('jra_adjustment_value', 'Adjustment Value')
-  if (model === 'jra_adjustment_flat_fee') {
-    required('jra_base_value', 'Value')
-    required('jra_flat_fee', 'Flat Fee / Adjustment')
-  }
-  if (model === 'others') required('others_amount', 'Amount')
-  if (['joining_percentage', 'project'].includes(model)) return money(ctc * n(input.model_percent) / 100)
+  ;['ctc_lpa', 'model_percent', 'model_flat_fee', 'retainer_amount', 'project_amount', 'jra_adjustment_value', 'jra_base_value', 'jra_flat_fee', 'others_amount'].forEach(field => {
+    if (input[field] !== '' && input[field] !== null && input[field] !== undefined && (!Number.isFinite(n(input[field])) || n(input[field]) < 0)) throw new Error('Calculation fields must be numeric and non-negative')
+  })
+  if (model === 'joining_percentage') return money(ctc * n(input.model_percent) / 100)
   if (model === 'joining_flat_fee') return money(input.model_flat_fee)
   if (model === 'retainer') return money(input.retainer_amount)
+  if (model === 'project') return money(input.project_amount)
   if (model === 'jra_adjustment_percentage') return money(ctc * n(input.model_percent) / 100 - n(input.jra_adjustment_value))
   if (model === 'jra_adjustment_flat_fee') return money(n(input.jra_base_value) - n(input.jra_flat_fee))
   return money(input.others_amount)
@@ -253,7 +240,8 @@ function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
     const infoX = 330
     const pairs = [['PAN / IT No', entity.pan], ['Place of Supply', entity.place_of_supply], ['State', `${entity.state || '-'}   Code: ${entity.state_code || '-'}`], ['GSTIN', entity.gstin], ['Contact Person', entity.contact_person], ['Email', entity.email]]
     const leftWidth = 272
-    const leftHeight = 14 + doc.font(F.bold).fontSize(9).heightOfString(entity.legal_entity_name || '-', { width: leftWidth }) + 5 + doc.font(F.regular).fontSize(8.5).heightOfString(entity.address || '-', { width: leftWidth }) + 10
+    const optionalName = clean(entity.optional_name) && clean(entity.optional_name) !== '-' ? clean(entity.optional_name) : ''
+    const leftHeight = 14 + doc.font(F.bold).fontSize(9).heightOfString(entity.legal_entity_name || '-', { width: leftWidth }) + (optionalName ? doc.heightOfString(optionalName, { width: leftWidth }) + 3 : 0) + 5 + doc.font(F.regular).fontSize(8.5).heightOfString(entity.address || '-', { width: leftWidth }) + 10
     const rowHeights = pairs.map(([label, value]) => Math.max(compact ? 16 : 18, doc.font(F.regular).fontSize(label === 'Email' ? 7.5 : 8.5).heightOfString(value || '-', { width: 120 }) + (compact ? 6 : 8)))
     const detailHeight = Math.max(leftHeight, rowHeights.reduce((sum, height) => sum + height, 0), compact ? 112 : 124)
     doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, y - 4, 530, detailHeight).stroke().moveTo(320, y - 4).lineTo(320, y - 4 + detailHeight).stroke().restore()
@@ -261,6 +249,10 @@ function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
     let leftY = y + 18
     doc.fillColor('#111827').font(F.bold).fontSize(9).text(entity.legal_entity_name || '-', 40, leftY, { width: leftWidth })
     leftY += doc.heightOfString(entity.legal_entity_name || '-', { width: leftWidth }) + 5
+    if (optionalName) {
+      doc.font(F.regular).fontSize(8.5).text(optionalName, 40, leftY, { width: leftWidth })
+      leftY += doc.heightOfString(optionalName, { width: leftWidth }) + 3
+    }
     doc.font(F.regular).fontSize(8.5).text(entity.address || '-', 40, leftY, { width: leftWidth })
     let py = y
     pairs.forEach(([label, value], index) => {
