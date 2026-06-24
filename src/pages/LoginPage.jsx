@@ -79,15 +79,19 @@ export default function LoginPage() {
         <div className="login-panel-circle login-panel-circle-left-sm" aria-hidden="true" />
 
         <div className="login-brand" role="banner">
-          <img
-            src="/assets/fyndbridge-official-logo.png"
-            alt="FYNDBRIDGE"
-            className="login-brand-logo"
-            width="543"
-            height="90"
-            fetchPriority="high"
-            onError={() => console.error('FYNDBRIDGE logo failed to load: /assets/fyndbridge-official-logo.png')}
-          />
+          <picture>
+            <source srcSet="/assets/fyndbridge-official-logo.webp" type="image/webp" />
+            <img
+              src="/assets/fyndbridge-official-logo.png"
+              alt="FYNDBRIDGE"
+              className="login-brand-logo"
+              width="543"
+              height="90"
+              fetchPriority="high"
+              decoding="async"
+              onError={() => console.error('FYNDBRIDGE logo failed to load')}
+            />
+          </picture>
         </div>
 
         <div className="login-left-content">
