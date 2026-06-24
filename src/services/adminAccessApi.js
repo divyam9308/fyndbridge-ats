@@ -14,11 +14,15 @@ export async function fetchAdminUsers() {
   return json(await apiFetch('/api/admin/users', { cache: 'no-store' }))
 }
 
-export async function addAdminUser(email, role = 'admin') {
+export async function fetchAdminProfileOptions() {
+  return json(await apiFetch('/api/admin/user-profiles', { cache: 'no-store' }))
+}
+
+export async function addAdminUser(userId, role = 'admin') {
   return json(await apiFetch('/api/admin/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, role })
+    body: JSON.stringify({ user_id: userId, role })
   }))
 }
 

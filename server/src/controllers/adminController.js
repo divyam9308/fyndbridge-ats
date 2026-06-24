@@ -25,6 +25,20 @@ function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
 }
 
+async function profileOptions() {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('user_id, name, email')
+    .not('name', 'is', null)
+    .order('name')
+  if (error) throw error
+  return (data || []).map((profile) => ({
+    user_id: clean(profile.user_id),
+    name: clean(profile.name),
+    email: normalizeEmail(profile.email)
+  })).filter((profile) => profile.user_id && profile.name && profile.email)
+}
+
 async function lockedByNameMap(rows) {
   const userIds = [...new Set((rows || []).map(row => row.locked_by).filter(Boolean))]
   if (!userIds.length) return new Map()
@@ -68,8 +82,21 @@ async function me(req, res) {
 
 async function users(req, res) {
   try {
-    const admins = await listAdminUsers()
-    return res.json({ data: admins.map(admin => serializeAdminUser(admin, req.user)) })
+    const [admins, profiles] = await Promise.all([listAdminUsers(), profileOptions()])
+    const profilesByEmail = new Map(profiles.map((profile) => [profile.email, profile]))
+    const profilesById = new Map(profiles.map((profile) => [profile.user_id, profile]))
+    return res.json({ data: admins.map((admin) => {
+      const profile = profilesById.get(admin.user_id) || profilesByEmail.get(normalizeEmail(admin.email))
+      return serializeAdminUser({ ...admin, user_id: admin.user_id || profile?.user_id || null, name: profile?.name || admin.name }, req.user)
+    }) })
+  } catch (err) {
+    return sendError(res, err)
+  }
+}
+
+async function userProfiles(req, res) {
+  try {
+    return res.json({ data: await profileOptions() })
   } catch (err) {
     return sendError(res, err)
   }
@@ -78,14 +105,16 @@ async function users(req, res) {
 async function addUser(req, res) {
   try {
     await assertCanManageAdminUsers(req.user)
-    const email = normalizeEmail(req.body.email)
-    if (!validEmail(email)) return res.status(400).json({ error: 'Valid email is required' })
+    const userId = clean(req.body.user_id)
+    const profile = (await profileOptions()).find((item) => item.user_id === userId)
+    if (!profile) return res.status(400).json({ error: 'Select a saved user profile' })
+    const email = profile.email
+    if (!validEmail(email)) return res.status(400).json({ error: 'Selected profile has no valid email' })
     const role = req.body.role || (req.body.isSuperAdmin ? 'super_admin' : 'admin')
     if (!['admin', 'super_admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' })
-    const name = email.split('@')[0]
     const { data, error } = await supabase
       .from('admin_users')
-      .insert({ email, name, added_by: req.user.id, role, is_super_admin: role === 'super_admin' })
+      .insert({ user_id: profile.user_id, email, name: profile.name, added_by: req.user.id, role, is_super_admin: role === 'super_admin' })
       .select('*')
       .single()
     if (error?.code === '23505') return res.status(409).json({ error: 'Admin already exists' })
@@ -215,6 +244,7 @@ async function setLock(req, res) {
 module.exports = {
   me,
   users,
+  userProfiles,
   addUser,
   removeUser,
   updateUserRole,

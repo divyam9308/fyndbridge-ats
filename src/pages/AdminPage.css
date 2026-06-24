@@ -135,6 +135,43 @@
   padding: 0 16px;
 }
 
+.admin-profile-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.admin-profile-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--admin-border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 16px 30px rgba(0, 18, 100, 0.16);
+}
+
+.admin-profile-options button,
+.admin-profile-options > span {
+  display: grid;
+  width: 100%;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--admin-border);
+  background: transparent;
+  color: var(--admin-navy);
+  text-align: left;
+}
+
+.admin-profile-options button:hover { background: var(--admin-soft); }
+.admin-profile-options button:last-child { border-bottom: 0; }
+.admin-profile-options small,
+.admin-profile-options > span { color: var(--admin-muted); font-size: 12px; }
+
 .admin-email-field input,
 .admin-column-search input {
   min-width: 0;

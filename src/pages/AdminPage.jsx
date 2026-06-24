@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Briefcase, Building2, Eye, EyeOff, LoaderCircle, Lock, Mail, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
+import { AlertTriangle, Briefcase, Building2, Eye, EyeOff, LoaderCircle, Lock, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
 import { notifyAdminPermissionsChanged, useAdminAccess } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import {
   addAdminUser,
+  fetchAdminProfileOptions,
   fetchAdminUsers,
   fetchLockedRecords,
   removeAdminUser,
@@ -151,7 +152,10 @@ export default function AdminPage() {
   const hadAdminAccessRef = useRef(false)
   const [activeTab, setActiveTab] = useState('clients')
   const [admins, setAdmins] = useState([])
-  const [email, setEmail] = useState('')
+  const [profiles, setProfiles] = useState([])
+  const [profileQuery, setProfileQuery] = useState('')
+  const [selectedProfileId, setSelectedProfileId] = useState('')
+  const [profileOpen, setProfileOpen] = useState(false)
   const [selectedAdminEmail, setSelectedAdminEmail] = useState('')
   const [lockedRecords, setLockedRecords] = useState([])
   const [error, setError] = useState('')
@@ -162,11 +166,13 @@ export default function AdminPage() {
   const [savingAdmin, setSavingAdmin] = useState(false)
   const [savingRole, setSavingRole] = useState(false)
   const [lockModalType, setLockModalType] = useState('')
+  const profilePickerRef = useRef(null)
 
   const loadAdminData = useCallback(async () => {
-    const [users, locks] = await Promise.all([fetchAdminUsers(), fetchLockedRecords()])
+    const [users, locks, profileOptions] = await Promise.all([fetchAdminUsers(), fetchLockedRecords(), fetchAdminProfileOptions()])
     setAdmins(users.data || [])
     setLockedRecords(locks.data || [])
+    setProfiles(profileOptions.data || [])
   }, [])
 
   useEffect(() => {
@@ -188,6 +194,15 @@ export default function AdminPage() {
     }
     return () => { active = false }
   }, [isAdmin, loadAdminData])
+
+  useEffect(() => {
+    if (!profileOpen) return undefined
+    const close = (event) => {
+      if (!profilePickerRef.current?.contains(event.target)) setProfileOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [profileOpen])
 
   useEffect(() => {
     if (loading) return
@@ -226,6 +241,11 @@ export default function AdminPage() {
   const selectedIsLastSuper = selectedIsSuper && superAdminCount <= 1
   const selectedIsCurrentUser = Boolean(selectedAdmin?.is_current_user)
   const roleActionDisabled = !isSuperAdmin || !selectedAdmin || selectedIsCurrentUser || selectedIsLastSuper || savingRole
+  const selectedProfile = profiles.find((profile) => profile.user_id === selectedProfileId)
+  const profileMatches = profiles.filter((profile) => {
+    const query = profileQuery.trim().toLowerCase()
+    return !query || profile.name.toLowerCase().includes(query) || profile.email.toLowerCase().includes(query)
+  }).filter((profile) => !admins.some((admin) => admin.email === profile.email))
 
   if (loading) {
     return <div className="admin-access-loading" role="status"><LoaderCircle size={24} /><span>Checking admin access...</span></div>
@@ -288,11 +308,13 @@ export default function AdminPage() {
 
   const submitAdmin = async (event) => {
     event.preventDefault()
+    if (!selectedProfile) return
     setError('')
     setSavingAdmin(true)
     try {
-      await addAdminUser(email, 'admin')
-      setEmail('')
+      await addAdminUser(selectedProfile.user_id, 'admin')
+      setProfileQuery('')
+      setSelectedProfileId('')
       await loadAdminData()
       await refresh()
     } catch (err) {
@@ -350,15 +372,20 @@ export default function AdminPage() {
         action={<span className="admin-count-pill">{admins.length} active</span>}
       >
         <form className="admin-invite-card" onSubmit={submitAdmin}>
-          <div className="admin-email-field">
-            <Mail size={17} />
-            <input value={email} onChange={event => setEmail(event.target.value)} placeholder="Enter admin email address" disabled={!isSuperAdmin} />
+          <div className="admin-profile-picker" ref={profilePickerRef}>
+            <div className="admin-email-field">
+              <Search size={17} />
+              <input value={profileQuery} onFocus={() => setProfileOpen(true)} onChange={event => { setProfileQuery(event.target.value); setSelectedProfileId(''); setProfileOpen(true) }} placeholder="Enter name" disabled={!isSuperAdmin} role="combobox" aria-expanded={profileOpen} aria-controls="admin-profile-options" />
+            </div>
+            {profileOpen ? <div className="admin-profile-options" id="admin-profile-options" role="listbox">
+              {profileMatches.length ? profileMatches.map((profile) => <button type="button" role="option" key={profile.user_id} onClick={() => { setSelectedProfileId(profile.user_id); setProfileQuery(profile.name); setProfileOpen(false) }}><strong>{profile.name}</strong><small>{profile.email}</small></button>) : <span>No eligible saved profiles found.</span>}
+            </div> : null}
           </div>
-          <button className="admin-add-btn" type="submit" disabled={savingAdmin || !isSuperAdmin}>
+          <button className="admin-add-btn" type="submit" disabled={savingAdmin || !isSuperAdmin || !selectedProfile}>
             <UserPlus size={16} />
             {savingAdmin ? 'Adding...' : 'Add Admin'}
           </button>
-          <p>{isSuperAdmin ? 'Users added here receive Admin access.' : 'Super Admin required to add or change admin users.'}</p>
+          <p>{isSuperAdmin ? 'Choose a saved profile to grant Admin access.' : 'Super Admin required to add or change admin users.'}</p>
         </form>
 
         <div className="admin-advanced-card">
