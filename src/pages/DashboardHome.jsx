@@ -491,6 +491,7 @@ export default function DashboardHome() {
   const [consultantOpen, setConsultantOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState(null)
   const modalOpenCounter = useRef(0)
+  const consultantSelectRef = useRef(null)
   const { loading, error, data } = useDashboardStats({ consultant, period })
   const onlineUsers = useOnlineUsers()
 
@@ -527,6 +528,15 @@ export default function DashboardHome() {
     }
   }, [selectedCard])
 
+  useEffect(() => {
+    if (!consultantOpen) return undefined
+    const close = (event) => {
+      if (!consultantSelectRef.current?.contains(event.target)) setConsultantOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [consultantOpen])
+
   const openCard = (event, card) => {
     const rect = event?.currentTarget?.getBoundingClientRect?.()
     modalOpenCounter.current += 1
@@ -542,7 +552,7 @@ export default function DashboardHome() {
         </div>
 
         <div className="ats-dashboard-controls">
-          <div className="ats-dashboard-select">
+          <div className="ats-dashboard-select" ref={consultantSelectRef}>
             <button type="button" onClick={() => setConsultantOpen(open => !open)}>
               <span>{consultant}</span>
               <ChevronDown size={15} />
