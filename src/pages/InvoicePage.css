@@ -37,6 +37,8 @@
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.07);
 }
 
+.invoice-table-card { min-width: 0; overflow: hidden; }
+
 .invoice-access-card {
   display: grid;
   min-height: 180px;
@@ -133,6 +135,7 @@
 }
 
 .invoice-table-card .table-scroll {
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
@@ -140,7 +143,8 @@
 }
 
 .invoice-table {
-  min-width: 1860px;
+  width: 2830px;
+  min-width: 2830px;
   table-layout: fixed;
 }
 
@@ -152,6 +156,9 @@
   font-size: 10.5px;
   font-weight: 800;
   letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
 }
 
 .invoice-table td {
@@ -173,21 +180,24 @@
   background: #fafbfe;
 }
 
-.invoice-table th:nth-child(1), .invoice-table td:nth-child(1) { width: 135px; }
-.invoice-table th:nth-child(2), .invoice-table td:nth-child(2) { width: 190px; }
-.invoice-table th:nth-child(3), .invoice-table td:nth-child(3) { width: 250px; }
-.invoice-table th:nth-child(4), .invoice-table td:nth-child(4) { width: 120px; }
-.invoice-table th:nth-child(5), .invoice-table td:nth-child(5) { width: 135px; }
-.invoice-table th:nth-child(6), .invoice-table td:nth-child(6) { width: 125px; }
-.invoice-table th:nth-child(7), .invoice-table td:nth-child(7) { width: 90px; }
-.invoice-table th:nth-child(8), .invoice-table td:nth-child(8) { width: 150px; }
-.invoice-table th:nth-child(9), .invoice-table td:nth-child(9) { width: 155px; }
-.invoice-table th:nth-child(10), .invoice-table td:nth-child(10) { width: 220px; }
-.invoice-table th:nth-child(11), .invoice-table td:nth-child(11) { width: 165px; }
-.invoice-table th:nth-child(12), .invoice-table td:nth-child(12) { width: 125px; }
-.invoice-table th:nth-child(13), .invoice-table td:nth-child(13) { width: 95px; }
-.invoice-table th:nth-child(14), .invoice-table td:nth-child(14) { width: 245px; }
-.invoice-table th:nth-child(15), .invoice-table td:nth-child(15) { width: 90px; }
+.invoice-table th:nth-child(1), .invoice-table td:nth-child(1) { width: 90px; }
+.invoice-table th:nth-child(2), .invoice-table td:nth-child(2) { width: 160px; }
+.invoice-table th:nth-child(3), .invoice-table td:nth-child(3) { width: 260px; }
+.invoice-table th:nth-child(4), .invoice-table td:nth-child(4) { width: 180px; }
+.invoice-table th:nth-child(5), .invoice-table td:nth-child(5) { width: 320px; }
+.invoice-table th:nth-child(6), .invoice-table td:nth-child(6) { width: 180px; }
+.invoice-table th:nth-child(7), .invoice-table td:nth-child(7) { width: 160px; }
+.invoice-table th:nth-child(8), .invoice-table td:nth-child(8) { width: 180px; }
+.invoice-table th:nth-child(9), .invoice-table td:nth-child(9) { width: 160px; }
+.invoice-table th:nth-child(10), .invoice-table td:nth-child(10) { width: 120px; }
+.invoice-table th:nth-child(11), .invoice-table td:nth-child(11) { width: 180px; }
+.invoice-table th:nth-child(12), .invoice-table td:nth-child(12) { width: 240px; }
+.invoice-table th:nth-child(13), .invoice-table td:nth-child(13) { width: 120px; }
+.invoice-table th:nth-child(14), .invoice-table td:nth-child(14) { width: 180px; }
+.invoice-table th:nth-child(15), .invoice-table td:nth-child(15) { width: 180px; }
+.invoice-table th:nth-child(16), .invoice-table td:nth-child(16) { width: 120px; }
+
+.invoice-table .invoice-badge { max-width: none; white-space: nowrap; }
 
 .invoice-name {
   color: var(--navy) !important;
@@ -218,7 +228,7 @@
 
 .invoice-address {
   display: -webkit-box;
-  max-width: 225px;
+  max-width: 290px;
   overflow: hidden;
   white-space: normal;
   -webkit-box-orient: vertical;

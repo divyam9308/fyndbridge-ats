@@ -130,17 +130,72 @@ alter table invoices add column if not exists consultant_name text;
 alter table invoices add column if not exists candidate_name text;
 alter table invoices add column if not exists project_amount numeric;
 
-with numbered as (
-  select id, row_number() over (order by created_at, id) as number
+-- Preserve the first valid IID and safely reassign null, invalid, or duplicate IDs.
+with parsed as (
+  select
+    id,
+    created_at,
+    case when invoice_display_id ~* '^IID[0-9]+$'
+      then substring(invoice_display_id from '[0-9]+$')::bigint
+    end as numeric_id,
+    row_number() over (
+      partition by case when invoice_display_id ~* '^IID[0-9]+$'
+        then substring(invoice_display_id from '[0-9]+$')::bigint
+      end
+      order by created_at, id
+    ) as duplicate_rank
   from invoices
-  where invoice_display_id is null or btrim(invoice_display_id) = ''
+), maximum as (
+  select coalesce(max(numeric_id), 0) as max_id from parsed
+), replacements as (
+  select
+    parsed.id,
+    row_number() over (order by parsed.created_at, parsed.id) as allocation_number
+  from parsed
+  where parsed.numeric_id is null or parsed.duplicate_rank > 1
 )
 update invoices invoice
-set invoice_display_id = 'IID' || numbered.number
-from numbered
-where invoice.id = numbered.id;
+set invoice_display_id = 'IID' || (maximum.max_id + replacements.allocation_number)
+from replacements cross join maximum
+where invoice.id = replacements.id;
 
-create unique index if not exists invoices_invoice_display_id_key
-  on invoices (invoice_display_id) where invoice_display_id is not null;
+drop index if exists invoices_invoice_display_id_key;
+create unique index invoices_invoice_display_id_key
+  on invoices (upper(invoice_display_id)) where invoice_display_id is not null;
+
+create sequence if not exists invoice_display_id_seq start 1;
+do $$
+declare
+  max_id bigint;
+  sequence_value bigint;
+  sequence_called boolean;
+begin
+  select coalesce(max(substring(invoice_display_id from '[0-9]+$')::bigint), 0)
+    into max_id
+  from invoices
+  where invoice_display_id ~* '^IID[0-9]+$';
+
+  select last_value, is_called
+    into sequence_value, sequence_called
+  from invoice_display_id_seq;
+
+  if max_id > 0 or sequence_called then
+    perform setval('invoice_display_id_seq', greatest(max_id, sequence_value), true);
+  else
+    perform setval('invoice_display_id_seq', 1, false);
+  end if;
+end $$;
+
+create or replace function next_invoice_display_id()
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  select 'IID' || nextval('invoice_display_id_seq')::text;
+$$;
+
+revoke all on function next_invoice_display_id() from public;
+grant execute on function next_invoice_display_id() to authenticated, service_role;
 create index if not exists invoices_invoice_entity_id_created_at_idx
   on invoices (invoice_entity_id, created_at desc);

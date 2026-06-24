@@ -27,6 +27,9 @@ export default function Topbar() {
     if (path.startsWith('/dashboard/clients/')) {
       return { title: 'Client Details', crumb: 'Home / Clients / Client Details' }
     }
+    if (path.startsWith('/invoice/entities/')) {
+      return { title: 'Entity Details', crumb: 'Home / Invoice / Entity Details' }
+    }
     return { title: 'Dashboard', crumb: 'Home / Dashboard' }
   }
 

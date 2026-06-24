@@ -25,6 +25,12 @@ async function nextDisplayId(table, field, prefix) {
   return `${prefix}${max + 1}`
 }
 
+async function nextInvoiceDisplayId() {
+  const { data, error } = await supabase.rpc('next_invoice_display_id')
+  if (error) throw error
+  return data
+}
+
 function entityPayload(body) {
   const billing = BILLING_ENTITIES.has(body.billing_entity) ? body.billing_entity : 'FCS'
   const gst = GST_COMPONENTS.has(body.gst_component) ? body.gst_component : detectGstComponent(body.address, body.state, body.place_of_supply)
@@ -159,7 +165,7 @@ async function createStoredInvoice(body, expectedNumber = '') {
   const parts = await nextNumberParts(billing, invoiceDate)
   if (expectedNumber && parts.invoiceNumber !== clean(expectedNumber)) throw Object.assign(new Error('Invoice number changed. Return to edit and generate again.'), { statusCode: 409 })
   const payload = invoicePayload(entity, input, invoiceDate, parts, calc)
-  payload.invoice_display_id = await nextDisplayId('invoices', 'invoice_display_id', 'IID')
+  payload.invoice_display_id = await nextInvoiceDisplayId()
   const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: payload, overrides: input })
   payload.pdf_storage_path = await uploadInvoicePdf(entity.id, payload.invoice_display_id, pdf)
   const { data, error } = await supabase.from('invoices').insert(payload).select(INVOICE_FIELDS).single()
