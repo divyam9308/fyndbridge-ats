@@ -589,6 +589,15 @@ function validateAiFilters(page, data, prompt = '') {
 function parsePrompt(page, prompt) {
   const config = configs[page]
   let text = clean(prompt).replace(/^(?:clients|candidates|mandates|jobs)\s+(?=with|in|from)\b/i, '')
+  if (page === 'candidates') {
+    const one = (field, operator, value) => ({ conditions: [normalizeCondition(config, { field, operator, value })] })
+    if (/\b(?:without|no)\s+(?:cv|resume)\b|\b(?:cv|resume)\s+(?:missing|empty)\b/i.test(text)) return one('cv', 'is_empty', null)
+    if (/\blinkedin\s+(?:missing|empty)\b|\bwithout\s+linkedin\b/i.test(text)) return one('linkedin', 'is_empty', null)
+    if (/\bnot\s+open\s+to\s+relocate\b/i.test(text)) return one('open_to_relocate', 'equals', false)
+    if (/\bopen\s+to\s+relocate\b/i.test(text)) return one('open_to_relocate', 'equals', true)
+    const skills = text.match(/(?:with|have|has)\s+([a-z0-9+#.]+)\s+(and|or)\s+([a-z0-9+#.]+)\s+skills?\b/i)
+    if (skills) return { ...(skills[2].toLowerCase() === 'or' ? { mode: 'any' } : {}), conditions: [normalizeCondition(config, { field: 'skills', operator: 'contains', value: skills[1] }), normalizeCondition(config, { field: 'skills', operator: 'contains', value: skills[3] })] }
+  }
   const logical = parseLogicalPrompt(page, text)
   if (logical) return logical
   const conditions = []
