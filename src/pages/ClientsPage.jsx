@@ -12,12 +12,14 @@ import FloatingDropdown from '../components/FloatingDropdown'
 import TablePopover from '../components/TablePopover'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
+import DashboardFilterBanner from '../components/DashboardFilterBanner'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { highlightText, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
+import { clearDashboardFilters, parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 
 const STATUSES = ['Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const STATUS_OPTIONS = ['', ...STATUSES]
@@ -238,6 +240,7 @@ export default function ClientsPage() {
   const { isAdmin, permissions } = useAdminAccess()
   const location = useLocation()
   const navigate = useNavigate()
+  const dashboardFilters = useMemo(() => parseDashboardFiltersFromUrl(location.search), [location.search])
   const [clients, setClients] = useState([])
   const [allClients, setAllClients] = useState([])
   const [loading, setLoading] = useState(true)
@@ -267,7 +270,7 @@ export default function ClientsPage() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
   const [sortAnchor, setSortAnchor] = useState(null)
-  const [statusFilter, setStatusFilter] = useState('All')
+  const [statusFilter, setStatusFilter] = useState(() => dashboardFilters?.status || 'All')
   const [aiFilterText, setAiFilterText] = useState('')
   const [aiFilters, setAiFilters] = useState(null)
   const [aiFilterLoading, setAiFilterLoading] = useState(false)
@@ -334,6 +337,8 @@ export default function ClientsPage() {
         params.set('sortDirection', sortDirection)
       }
       if (statusFilter !== 'All') params.set('status', statusFilter)
+      if (dashboardFilters?.consultant) params.set('consultant', dashboardFilters.consultant)
+      if (dashboardFilters?.period) params.set('period', dashboardFilters.period)
       if (aiFilters) params.set('ai_filters', JSON.stringify(aiFilters))
       const res = await fetch(`/api/clients${params.toString() ? `?${params.toString()}` : ''}`)
       if (!res.ok) throw new Error('Failed to fetch clients from server.')
@@ -348,7 +353,19 @@ export default function ClientsPage() {
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [aiFilters, page, pageSize, sortDirection, sortField, statusFilter])
+  }, [aiFilters, dashboardFilters?.consultant, dashboardFilters?.period, page, pageSize, sortDirection, sortField, statusFilter])
+
+  useEffect(() => {
+    setStatusFilter(dashboardFilters?.status || 'All')
+    setPage(1)
+  }, [dashboardFilters?.status])
+
+  const clearDashboardFilter = () => {
+    setStatusFilter('All')
+    setPage(1)
+    const search = clearDashboardFilters(location.search)
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : '' }, { replace: true })
+  }
 
   const refreshClientsRealtime = useCallback(() => {
     if (Date.now() < suppressRealtimeUntilRef.current) return
@@ -1188,6 +1205,7 @@ export default function ClientsPage() {
 
   return (
     <div>
+      <DashboardFilterBanner filters={dashboardFilters} onClear={clearDashboardFilter} />
       <div className="candidate-columns-toolbar">
         <NewActionDropdown
           onUploadResumes={() => navigate('/dashboard/candidates', { state: { action: 'upload-resumes' } })}

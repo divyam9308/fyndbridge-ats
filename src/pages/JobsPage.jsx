@@ -11,6 +11,7 @@ import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
+import DashboardFilterBanner from '../components/DashboardFilterBanner'
 import { supabase } from '../services/supabaseClient'
 import { openProtectedUrl } from '../services/apiClient'
 import '../styles/Shared.css'
@@ -18,6 +19,7 @@ import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } fr
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { highlightText, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
+import { clearDashboardFilters, parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const SORT_OPTIONS = [
@@ -133,6 +135,7 @@ const normalizeConsultantFields = (values) => {
 export default function JobsPage() {
   const location = useLocation()
   const navigate = useNavigate()
+  const dashboardFilters = useMemo(() => parseDashboardFiltersFromUrl(location.search), [location.search])
   const { isAdmin, permissions } = useAdminAccess()
   const [jobs, setJobs] = useState([])
   const [allJobs, setAllJobs] = useState([])
@@ -189,6 +192,12 @@ export default function JobsPage() {
       params.set('page', String(page))
       params.set('limit', String(pageSize))
       if (aiFilters) params.set('ai_filters', JSON.stringify(aiFilters))
+      if (dashboardFilters?.consultant) params.set('consultant', dashboardFilters.consultant)
+      if (dashboardFilters?.teamLead) params.set('teamLead', dashboardFilters.teamLead)
+      if (dashboardFilters?.status) params.set('status', dashboardFilters.status)
+      if (dashboardFilters?.clientName) params.set('clientName', dashboardFilters.clientName)
+      if (dashboardFilters?.role) params.set('role', dashboardFilters.role)
+      if (dashboardFilters?.period) params.set('period', dashboardFilters.period)
       if (sortField) {
         params.set('sortField', sortField)
         params.set('sortDirection', sortDirection)
@@ -215,7 +224,13 @@ export default function JobsPage() {
     } finally {
       setLoading(false)
     }
-  }, [aiFilters, page, pageSize, sortDirection, sortField])
+  }, [aiFilters, dashboardFilters, page, pageSize, sortDirection, sortField])
+
+  const clearDashboardFilter = () => {
+    setPage(1)
+    const search = clearDashboardFilters(location.search)
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : '' }, { replace: true })
+  }
 
   const openDocument = useCallback(async (key, url) => {
     setOpeningDocument(key)
@@ -738,6 +753,7 @@ export default function JobsPage() {
 
   return (
     <div>
+      <DashboardFilterBanner filters={dashboardFilters} onClear={clearDashboardFilter} />
       <div className="candidate-columns-toolbar">
         <NewActionDropdown
           onUploadResumes={() => navigate('/dashboard/candidates', { state: { action: 'upload-resumes' } })}

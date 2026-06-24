@@ -731,6 +731,10 @@
 }
 
 .ats-dashboard-status-row {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -740,6 +744,23 @@
   border: 1px solid rgba(var(--brand-blue-rgb),0.06);
   border-radius: 10px;
   background: rgba(247,247,245,0.72);
+}
+
+.ats-dashboard-status-row.is-clickable:not(:disabled) {
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.ats-dashboard-status-row.is-clickable:not(:disabled):hover,
+.ats-dashboard-status-row.is-clickable:not(:disabled):focus-visible {
+  border-color: rgba(var(--brand-blue-rgb), .22);
+  background: rgba(var(--brand-blue-rgb), .06);
+  transform: translateY(-1px);
+}
+
+.ats-dashboard-status-row:disabled {
+  cursor: default;
+  opacity: .48;
 }
 
 .ats-dashboard-status-name {

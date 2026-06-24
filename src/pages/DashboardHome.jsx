@@ -1,5 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   Activity,
   Briefcase,
@@ -30,10 +31,12 @@ import { DASHBOARD_PERIODS, useDashboardStats } from '../hooks/useDashboardStats
 import { useOnlineUsers } from '../hooks/useOnlineUsers'
 import OnlineUsersStrip from '../components/dashboard/OnlineUsersStrip'
 import {
+  getStatusColor,
   getCandidateStatusColor,
   getClientStatusColor,
   getMandateStatusColor
 } from '../constants/statusColors'
+import { buildDashboardDrilldownUrl } from '../utils/dashboardDrilldown'
 import './DashboardHome.css'
 
 const OVERALL = 'Overall (All Consultants)'
@@ -258,17 +261,27 @@ function ExpandableCard({ children, onOpen, className = '' }) {
   )
 }
 
-function StatusList({ data }) {
+function StatusList({ data, onItemClick }) {
   return (
     <div className="ats-dashboard-status-list">
       {data.map((item) => (
-        <div className="ats-dashboard-status-row" key={item.name}>
+        <button
+          type="button"
+          className={`ats-dashboard-status-row${onItemClick ? ' is-clickable' : ''}`}
+          key={item.name}
+          disabled={!Number(item.value || 0)}
+          onClick={(event) => {
+            if (!onItemClick || !Number(item.value || 0)) return
+            event.stopPropagation()
+            onItemClick(item)
+          }}
+        >
           <span className="ats-dashboard-status-name">
             <i style={{ background: item.color }} />
             {item.name}
           </span>
           <strong>{Number(item.value || 0).toLocaleString('en-IN')}</strong>
-        </div>
+        </button>
       ))}
     </div>
   )
@@ -320,7 +333,7 @@ function ChartContainer({ children }) {
   return <div ref={ref} className="ats-dashboard-chart-content">{ready ? children : null}</div>
 }
 
-const DonutChart = memo(function DonutChart({ data, centerLabel, centerValue, modalMode = false }) {
+const DonutChart = memo(function DonutChart({ data, centerLabel, centerValue, modalMode = false, onItemClick }) {
   const chartData = (data || []).filter(item => Number(item.value || 0) > 0)
   if (!chartData.length) return <EmptyChart label="No chart data." />
 
@@ -341,8 +354,13 @@ const DonutChart = memo(function DonutChart({ data, centerLabel, centerValue, mo
           animationBegin={modalMode ? 100 : 100}
           animationDuration={modalMode ? 1000 : 1000}
           animationEasing="ease-out"
+          className={onItemClick ? 'is-clickable' : ''}
+          onClick={(item, _index, event) => {
+            event?.stopPropagation?.()
+            if (onItemClick && Number(item?.value || 0)) onItemClick(item)
+          }}
         >
-          {chartData.map((item) => <Cell key={item.name} fill={item.color} stroke="transparent" />)}
+          {chartData.map((item) => <Cell key={item.name} fill={item.color} stroke="transparent" style={{ cursor: onItemClick ? 'pointer' : 'default' }} />)}
         </Pie>
         <Tooltip content={<DashboardTooltip />} cursor={false} />
         <text x="50%" y="46%" textAnchor="middle" className="ats-dashboard-donut-label">{centerLabel}</text>
@@ -385,7 +403,7 @@ const StatusTrendLines = memo(function StatusTrendLines({ data, statuses, modalM
             type="monotone"
             dataKey={status}
             name={status}
-            stroke={seriesColor(index)}
+            stroke={getStatusColor(status)}
             strokeWidth={3}
             dot={modalMode ? <AnimatedChartDot /> : false}
             activeDot={{ r: 4, stroke: 'var(--white)', strokeWidth: 2 }}
@@ -462,7 +480,7 @@ function DashboardCardModal({ card, context, onClose }) {
                 <span>Period</span>
                 <b>{context.period}</b>
               </div>
-              {card.breakdown?.length ? <StatusList data={card.breakdown} /> : null}
+              {card.breakdown?.length ? <StatusList data={card.breakdown} onItemClick={card.onDrilldown} /> : null}
             </>
           ) : null}
           {card.type === 'trend' ? (
@@ -484,11 +502,12 @@ function DashboardCardModal({ card, context, onClose }) {
                       centerLabel={card.centerLabel || card.title}
                       centerValue={card.centerValue ?? card.value}
                       modalMode
+                      onItemClick={card.onDrilldown}
                     />
                   ) : <div className="ats-dashboard-chart-skeleton"><span>Loading chart</span></div>}
                 </div>
               ) : null}
-              {card.breakdown?.length ? <StatusList data={card.breakdown} /> : null}
+              {card.breakdown?.length ? <StatusList data={card.breakdown} onItemClick={card.onDrilldown} /> : null}
               {card.shareRows ? <StatusShareRows data={card.breakdown || []} total={card.centerValue ?? card.value} /> : null}
             </div>
           ) : null}
@@ -515,6 +534,7 @@ function DashboardCardModal({ card, context, onClose }) {
 }
 
 export default function DashboardHome() {
+  const navigate = useNavigate()
   const [consultant, setConsultant] = useState(OVERALL)
   const [period, setPeriod] = useState(DASHBOARD_PERIODS[0])
   const [consultantOpen, setConsultantOpen] = useState(false)
@@ -547,10 +567,21 @@ export default function DashboardHome() {
   const dashboardDataReady = !loading && Boolean(data)
   const billingTotal = billingEntityData.reduce((sum, item) => sum + Number(item.value || 0), 0)
   const mandateTotal = Number(data?.kpis?.totalMandates || 0)
+  const drilldown = (entityType) => (item) => {
+    if (!Number(item?.value || 0)) return
+    navigate(buildDashboardDrilldownUrl(entityType, {
+      consultant,
+      status: item.name,
+      period
+    }))
+  }
+  const clientDrilldown = drilldown('clients')
+  const candidateDrilldown = drilldown('candidates')
+  const mandateDrilldown = drilldown('mandates')
   const kpis = [
-    { label: 'Total Clients', value: data?.kpis?.totalClients, icon: Building2, accent: 'gradient-primary', sparkline: sparklineValues(clientTrend, CLIENT_STATUSES), breakdown: clientStatusData },
-    { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info', sparkline: sparklineValues(candidateTrend, CANDIDATE_STATUSES), breakdown: candidateStatusData },
-    { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning', sparkline: sparklineValues(mandateTrend, MANDATE_STATUSES), breakdown: mandateStatusData }
+    { label: 'Total Clients', value: data?.kpis?.totalClients, icon: Building2, accent: 'gradient-primary', sparkline: sparklineValues(clientTrend, CLIENT_STATUSES), breakdown: clientStatusData, onDrilldown: clientDrilldown },
+    { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info', sparkline: sparklineValues(candidateTrend, CANDIDATE_STATUSES), breakdown: candidateStatusData, onDrilldown: candidateDrilldown },
+    { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning', sparkline: sparklineValues(mandateTrend, MANDATE_STATUSES), breakdown: mandateStatusData, onDrilldown: mandateDrilldown }
   ]
   useEffect(() => {
     if (!selectedCard) return undefined
@@ -657,7 +688,8 @@ export default function DashboardHome() {
               icon: item.icon,
               accent: item.accent,
               sparkline: item.sparkline,
-              breakdown: item.breakdown
+              breakdown: item.breakdown,
+              onDrilldown: item.onDrilldown
             })}
           >
             <StatCard {...item} isReady={dashboardDataReady} animationKey={`${item.label}-${consultant}-${period}-${item.sparkline.join(',')}`} />
@@ -666,17 +698,17 @@ export default function DashboardHome() {
       </div>
 
       <div className="ats-dashboard-grid">
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'clients-analytics', chart: 'donut', title: 'Clients Analytics', subtitle: 'Clients by Status', icon: Building2, value: data?.kpis?.totalClients, centerLabel: 'Clients', centerValue: data?.kpis?.totalClients, breakdown: clientStatusData })}>
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'clients-analytics', chart: 'donut', title: 'Clients Analytics', subtitle: 'Clients by Status', icon: Building2, value: data?.kpis?.totalClients, centerLabel: 'Clients', centerValue: data?.kpis?.totalClients, breakdown: clientStatusData, onDrilldown: clientDrilldown })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Building2} title="Clients Analytics" subtitle="Clients by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalClients || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.clients ? <div className="ats-dashboard-section-error">{data.sectionErrors.clients}</div> : null}
           <div className="ats-dashboard-split">
             <div className="ats-dashboard-chart">
               {!dashboardDataReady ? <ChartSkeleton /> : clientStatusData.some(item => item.value) ? (
-                <DonutChart data={clientStatusData} centerLabel="CLIENTS" centerValue={data?.kpis?.totalClients} />
+                <DonutChart data={clientStatusData} centerLabel="CLIENTS" centerValue={data?.kpis?.totalClients} onItemClick={clientDrilldown} />
               ) : <EmptyChart label="No client data for this period." />}
             </div>
-            <StatusList data={clientStatusData} />
+            <StatusList data={clientStatusData} onItemClick={clientDrilldown} />
           </div>
         </section>
         </ExpandableCard>
@@ -711,17 +743,17 @@ export default function DashboardHome() {
       </div>
 
       <div className="ats-dashboard-grid">
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'candidates-analytics', chart: 'donut', title: 'Candidates Analytics', subtitle: 'Candidates by Status', icon: Users, value: data?.kpis?.totalCandidates, centerLabel: 'Candidates', centerValue: data?.kpis?.totalCandidates, breakdown: candidateStatusData })}>
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'candidates-analytics', chart: 'donut', title: 'Candidates Analytics', subtitle: 'Candidates by Status', icon: Users, value: data?.kpis?.totalCandidates, centerLabel: 'Candidates', centerValue: data?.kpis?.totalCandidates, breakdown: candidateStatusData, onDrilldown: candidateDrilldown })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Users} title="Candidates Analytics" subtitle="Candidates by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalCandidates || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.candidates ? <div className="ats-dashboard-section-error">{data.sectionErrors.candidates}</div> : null}
           <div className="ats-dashboard-split is-vertical">
             <div className="ats-dashboard-chart is-small">
               {!dashboardDataReady ? <ChartSkeleton /> : candidateStatusData.some(item => item.value) ? (
-                <DonutChart data={candidateStatusData} centerLabel="CANDIDATES" centerValue={data?.kpis?.totalCandidates} />
+                <DonutChart data={candidateStatusData} centerLabel="CANDIDATES" centerValue={data?.kpis?.totalCandidates} onItemClick={candidateDrilldown} />
               ) : <EmptyChart label="No candidate data for this period." />}
             </div>
-            <StatusList data={candidateStatusData} />
+            <StatusList data={candidateStatusData} onItemClick={candidateDrilldown} />
           </div>
         </section>
         </ExpandableCard>
@@ -740,17 +772,17 @@ export default function DashboardHome() {
       </div>
 
       <div className="ats-dashboard-grid">
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'mandates-analytics', chart: 'donut', title: 'Mandates Analytics', subtitle: 'Mandates by Status', icon: Briefcase, value: data?.kpis?.totalMandates, centerLabel: 'Mandates', centerValue: data?.kpis?.totalMandates, breakdown: mandateStatusData, shareRows: true })}>
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'mandates-analytics', chart: 'donut', title: 'Mandates Analytics', subtitle: 'Mandates by Status', icon: Briefcase, value: data?.kpis?.totalMandates, centerLabel: 'Mandates', centerValue: data?.kpis?.totalMandates, breakdown: mandateStatusData, shareRows: true, onDrilldown: mandateDrilldown })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Briefcase} title="Mandates Analytics" subtitle="Mandates by Status" right={<span className="ats-dashboard-total">Total {Number(data?.kpis?.totalMandates || 0).toLocaleString('en-IN')}</span>} />
           {data?.sectionErrors?.mandates ? <div className="ats-dashboard-section-error">{data.sectionErrors.mandates}</div> : null}
           <div className="ats-dashboard-split is-compact">
             <div className="ats-dashboard-chart is-small">
               {!dashboardDataReady ? <ChartSkeleton /> : mandateStatusData.some(item => item.value) ? (
-                <DonutChart data={mandateStatusData} centerLabel="MANDATES" centerValue={data?.kpis?.totalMandates} />
+                <DonutChart data={mandateStatusData} centerLabel="MANDATES" centerValue={data?.kpis?.totalMandates} onItemClick={mandateDrilldown} />
               ) : <EmptyChart label="No mandate data." />}
             </div>
-            <StatusList data={mandateStatusData} />
+            <StatusList data={mandateStatusData} onItemClick={mandateDrilldown} />
           </div>
           <StatusShareRows data={mandateStatusData} total={mandateTotal} />
         </section>
