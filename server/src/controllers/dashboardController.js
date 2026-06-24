@@ -254,11 +254,11 @@ async function getDashboardStats(req, res) {
 
   const settled = await Promise.allSettled([
     supabase.from('user_profiles').select('user_id, name, email').order('name'),
-    supabase.from('clients').select('id, client_group_id, client_name, name, status, consultant_user_id, consultant_name, connected_on_date, created_at, updated_at, contract_signed, billing_entity'),
+    supabase.from('clients').select('id, client_group_id, client_name, name, status, consultant_name, connected_on_date, created_at, updated_at, contract_signed, billing_entity'),
     supabase.from('candidates').select('id, full_name, created_by, updated_by, created_at, updated_at'),
     supabase.from('candidate_associations').select('id, candidate_id, consultant_name, status, job_title, client_name, created_at, updated_at'),
     supabase.from('jobs').select('id, title, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at'),
-    supabase.from('clients').select('id, client_name, name, consultant_user_id, consultant_name, created_at, updated_at, contract_signed').order('updated_at', { ascending: false }).limit(50),
+    supabase.from('clients').select('id, client_name, name, consultant_name, created_at, updated_at, contract_signed').order('updated_at', { ascending: false }).limit(50),
     supabase.from('candidates').select('id, full_name, created_by, updated_by, created_at, updated_at').order('updated_at', { ascending: false }).limit(50),
     supabase.from('jobs').select('id, title, consultants, team_lead, created_at, updated_at').order('updated_at', { ascending: false }).limit(50)
   ])
