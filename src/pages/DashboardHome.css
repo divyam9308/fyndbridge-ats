@@ -274,6 +274,27 @@
   gap: 20px;
 }
 
+.ats-dashboard-module {
+  display: grid;
+  gap: 20px;
+}
+
+.ats-dashboard-module-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, .75fr) minmax(300px, 1fr) minmax(360px, 1.4fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.ats-dashboard-module-grid > .ats-dashboard-expandable > .ats-dashboard-card,
+.ats-dashboard-module-grid > .ats-dashboard-expandable > .ats-dashboard-kpi {
+  height: auto;
+}
+
+.ats-dashboard-client-billing-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .ats-dashboard-state .spin {
   animation: dashboard-spin 0.7s linear infinite;
 }
@@ -1523,6 +1544,14 @@
   .ats-dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .ats-dashboard-module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ats-dashboard-module-mandates .ats-dashboard-module-grid > :last-child {
+    grid-column: span 2;
+  }
 }
 
 @media (max-width: 980px) {
@@ -1537,9 +1566,14 @@
 
   .ats-dashboard-kpi-grid,
   .ats-dashboard-grid,
+  .ats-dashboard-module-grid,
   .ats-dashboard-card.is-wide,
   .ats-dashboard-expandable.is-wide {
     grid-template-columns: 1fr;
+    grid-column: auto;
+  }
+
+  .ats-dashboard-module-mandates .ats-dashboard-module-grid > :last-child {
     grid-column: auto;
   }
 
