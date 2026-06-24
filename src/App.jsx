@@ -3,7 +3,17 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import { AuthProvider, RequireAuth } from './context/AuthContext'
 
-const AuthenticatedApp = lazy(() => import('./pages/AuthenticatedApp'))
+const AuthenticatedShell = lazy(() => import('./pages/AuthenticatedShell'))
+const DashboardHome = lazy(() => import('./pages/DashboardHome'))
+const JobsPage = lazy(() => import('./pages/JobsPage'))
+const ClientsPage = lazy(() => import('./pages/ClientsPage'))
+const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage'))
+const ClientJobCandidatesPage = lazy(() => import('./pages/ClientJobCandidatesPage'))
+const CandidatesPage = lazy(() => import('./pages/CandidatesPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const ProfileSettingsPage = lazy(() => import('./pages/ProfileSettingsPage'))
+const InvoicePage = lazy(() => import('./pages/InvoicePage'))
 
 function App() {
   const [aiQuotaNotice, setAiQuotaNotice] = useState('')
@@ -34,8 +44,21 @@ function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/dashboard/*" element={<RequireAuth><Suspense fallback={<div className="route-loading" role="status">Loading...</div>}><AuthenticatedApp /></Suspense></RequireAuth>} />
-          <Route path="/invoice" element={<RequireAuth><Suspense fallback={<div className="route-loading" role="status">Loading...</div>}><AuthenticatedApp /></Suspense></RequireAuth>} />
+          <Route path="/dashboard" element={<RequireAuth><Suspense fallback={<div className="route-loading" role="status">Loading...</div>}><AuthenticatedShell /></Suspense></RequireAuth>}>
+            <Route index element={<DashboardHome />} />
+            <Route path="jobs" element={<JobsPage />} />
+            <Route path="clients" element={<ClientsPage />} />
+            <Route path="clients/:clientId" element={<ClientDetailPage />} />
+            <Route path="clients/:clientId/jobs/:jobId/candidates" element={<ClientJobCandidatesPage />} />
+            <Route path="candidates" element={<CandidatesPage />} />
+            <Route path="admin" element={<AdminPage />} />
+            <Route path="cvs" element={<Navigate to="/dashboard/candidates" replace />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="profile" element={<ProfileSettingsPage />} />
+          </Route>
+          <Route path="/invoice" element={<RequireAuth><Suspense fallback={<div className="route-loading" role="status">Loading...</div>}><AuthenticatedShell /></Suspense></RequireAuth>}>
+            <Route index element={<InvoicePage />} />
+          </Route>
         </Routes>
       </AuthProvider>
     </BrowserRouter>
