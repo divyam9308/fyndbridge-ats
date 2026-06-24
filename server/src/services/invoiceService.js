@@ -206,22 +206,36 @@ function drawCell(doc, x, y, w, h, text, opts = {}) {
   doc.restore()
 }
 
-function createInvoicePdf({ entity, invoice, overrides }) {
+async function createInvoicePdf(data) {
+  const standard = await renderInvoicePdf(data)
+  if (standard.pageCount > 1 && data.invoice.gst_component === 'CGST_SGST') {
+    return (await renderInvoicePdf(data, true)).buffer
+  }
+  return standard.buffer
+}
+
+function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 28 })
+    const doc = new PDFDocument({ size: 'A4', margin: compact ? 18 : 28 })
     const chunks = []
+    let pageCount = 1
     doc.on('data', chunk => chunks.push(chunk))
-    doc.on('end', () => resolve(Buffer.concat(chunks)))
+    doc.on('pageAdded', () => { pageCount += 1 })
+    doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), pageCount }))
     doc.on('error', reject)
     doc._invoiceFonts = setupFonts(doc)
     const F = doc._invoiceFonts
 
     const company = COMPANY[invoice.billing_entity]
     const logo = path.join(__dirname, '../../../public/assets/fyndbridge-official-logo.png')
-    if (fs.existsSync(logo)) doc.image(logo, 32, 24, { width: 92 })
-    doc.fillColor(NAVY).font(F.bold).fontSize(15).text('TAX INVOICE', 250, 28, { align: 'center', width: 110 })
-    doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, 64, 530, 92).stroke().moveTo(320, 64).lineTo(320, 156).stroke().restore()
-    doc.fontSize(invoice.billing_entity === 'FCAPL' ? 9.5 : 11).text(company.name, 40, 70, { width: 272 })
+    const top = compact ? 18 : 24
+    const headerY = compact ? 54 : 64
+    const headerHeight = compact ? 88 : 92
+    const headerTextY = compact ? 60 : 70
+    if (fs.existsSync(logo)) doc.image(logo, 32, top, { width: 92 })
+    doc.fillColor(NAVY).font(F.bold).fontSize(15).text('TAX INVOICE', 250, compact ? 20 : 28, { align: 'center', width: 110 })
+    doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, headerY, 530, headerHeight).stroke().moveTo(320, headerY).lineTo(320, headerY + headerHeight).stroke().restore()
+    doc.fontSize(invoice.billing_entity === 'FCAPL' ? 9.5 : 11).text(company.name, 40, headerTextY, { width: 272 })
     doc.fillColor('#111827').font(F.regular).fontSize(invoice.billing_entity === 'FCAPL' ? 7.6 : 9)
     company.address.forEach((line, index) => doc.text(`${index === 0 ? 'Regd Office: ' : ''}${line}`, { continued: false }))
     doc.text('Mobile: 9717773066  |  Tel: 9717773066')
@@ -229,18 +243,19 @@ function createInvoicePdf({ entity, invoice, overrides }) {
     doc.text('State: Delhi   State Code: 07')
     doc.text(company.gst)
 
-    drawCell(doc, 350, 72, 112, 22, 'Invoice No.', { bold: true, fill: NAVY, textColor: WHITE, align: 'center', valign: 'center' })
-    drawCell(doc, 462, 72, 80, 22, 'Dated', { bold: true, fill: NAVY, textColor: WHITE, align: 'center', valign: 'center' })
-    drawCell(doc, 350, 94, 112, 30, invoice.invoice_number, { size: 9, align: 'center', valign: 'center' })
-    drawCell(doc, 462, 94, 80, 30, dateDDMMYYYY(invoice.invoice_date), { size: 9, align: 'center', valign: 'center' })
+    const metaY = compact ? 62 : 72
+    drawCell(doc, 350, metaY, 112, 22, 'Invoice No.', { bold: true, fill: NAVY, textColor: WHITE, align: 'center', valign: 'center' })
+    drawCell(doc, 462, metaY, 80, 22, 'Dated', { bold: true, fill: NAVY, textColor: WHITE, align: 'center', valign: 'center' })
+    drawCell(doc, 350, metaY + 22, 112, 30, invoice.invoice_number, { size: 9, align: 'center', valign: 'center' })
+    drawCell(doc, 462, metaY + 22, 80, 30, dateDDMMYYYY(invoice.invoice_date), { size: 9, align: 'center', valign: 'center' })
 
-    let y = 165
+    let y = compact ? 150 : 165
     const infoX = 330
     const pairs = [['PAN / IT No', entity.pan], ['Place of Supply', entity.place_of_supply], ['State', `${entity.state || '-'}   Code: ${entity.state_code || '-'}`], ['GSTIN', entity.gstin], ['Contact Person', entity.contact_person], ['Email', entity.email]]
     const leftWidth = 272
     const leftHeight = 14 + doc.font(F.bold).fontSize(9).heightOfString(entity.legal_entity_name || '-', { width: leftWidth }) + 5 + doc.font(F.regular).fontSize(8.5).heightOfString(entity.address || '-', { width: leftWidth }) + 10
-    const rowHeights = pairs.map(([label, value]) => Math.max(18, doc.font(F.regular).fontSize(label === 'Email' ? 7.5 : 8.5).heightOfString(value || '-', { width: 120 }) + 8))
-    const detailHeight = Math.max(leftHeight, rowHeights.reduce((sum, height) => sum + height, 0), 124)
+    const rowHeights = pairs.map(([label, value]) => Math.max(compact ? 16 : 18, doc.font(F.regular).fontSize(label === 'Email' ? 7.5 : 8.5).heightOfString(value || '-', { width: 120 }) + (compact ? 6 : 8)))
+    const detailHeight = Math.max(leftHeight, rowHeights.reduce((sum, height) => sum + height, 0), compact ? 112 : 124)
     doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, y - 4, 530, detailHeight).stroke().moveTo(320, y - 4).lineTo(320, y - 4 + detailHeight).stroke().restore()
     doc.fillColor(NAVY).font(F.bold).fontSize(9).text('Bill To:', 40, y + 4)
     let leftY = y + 18
@@ -255,31 +270,34 @@ function createInvoicePdf({ entity, invoice, overrides }) {
       py += rowHeight
     })
 
-    y += detailHeight + 8
+    y += detailHeight + (compact ? 6 : 8)
     const desc = `${company.feeLabel}\n${normalizeInvoiceText(overrides.professional_fee_text || entity.professional_fee_text || '')}`
-    const descH = Math.max(68, doc.font(F.regular).fontSize(8.5).heightOfString(desc, { width: 245 }) + 12)
+    const descH = Math.max(compact ? 60 : 68, doc.font(F.regular).fontSize(8.5).heightOfString(desc, { width: 245 }) + (compact ? 9 : 12))
+    const tableHeaderHeight = compact ? 22 : 24
+    const summaryHeight = compact ? 18 : 20
+    const totalHeight = compact ? 20 : 22
     const header = { bold: true, align: 'center', valign: 'center', fill: NAVY, textColor: WHITE }
-    drawCell(doc, 32, y, 42, 24, 'SL.No', header)
-    drawCell(doc, 74, y, 255, 24, 'Description of Services', { ...header, align: 'left' })
-    drawCell(doc, 329, y, 58, 24, 'SAC', header)
-    drawCell(doc, 387, y, 45, 24, 'GST Rate', header)
-    drawCell(doc, 432, y, 25, 24, '%', header)
-    drawCell(doc, 457, y, 105, 24, 'Amount', { ...header, align: 'right' })
-    drawCell(doc, 32, y + 24, 42, descH, '1', { align: 'center', padding: 8 })
-    drawCell(doc, 74, y + 24, 255, descH, desc)
-    drawCell(doc, 329, y + 24, 58, descH, entity.sac || '998512', { align: 'center' })
-    drawCell(doc, 387, y + 24, 45, descH, '', { align: 'center' })
-    drawCell(doc, 432, y + 24, 25, descH, '', { align: 'center' })
-    drawCell(doc, 457, y + 24, 105, descH, formatRs(invoice.taxable_amount, invoice.rounding_type ? 0 : 0), { align: 'right' })
-    y += 24 + descH
+    drawCell(doc, 32, y, 42, tableHeaderHeight, 'SL.No', header)
+    drawCell(doc, 74, y, 255, tableHeaderHeight, 'Description of Services', { ...header, align: 'left' })
+    drawCell(doc, 329, y, 58, tableHeaderHeight, 'SAC', header)
+    drawCell(doc, 387, y, 45, tableHeaderHeight, 'GST Rate', header)
+    drawCell(doc, 432, y, 25, tableHeaderHeight, '%', header)
+    drawCell(doc, 457, y, 105, tableHeaderHeight, 'Amount', { ...header, align: 'right' })
+    drawCell(doc, 32, y + tableHeaderHeight, 42, descH, '1', { align: 'center', padding: 8 })
+    drawCell(doc, 74, y + tableHeaderHeight, 255, descH, desc)
+    drawCell(doc, 329, y + tableHeaderHeight, 58, descH, entity.sac || '998512', { align: 'center' })
+    drawCell(doc, 387, y + tableHeaderHeight, 45, descH, '', { align: 'center' })
+    drawCell(doc, 432, y + tableHeaderHeight, 25, descH, '', { align: 'center' })
+    drawCell(doc, 457, y + tableHeaderHeight, 105, descH, formatRs(invoice.taxable_amount, invoice.rounding_type ? 0 : 0), { align: 'right' })
+    y += tableHeaderHeight + descH
     const summaryRow = (label, amount, rate = '', percent = '') => {
-      drawCell(doc, 32, y, 42, 20, '')
-      drawCell(doc, 74, y, 255, 20, label, { bold: true, padding: 5 })
-      drawCell(doc, 329, y, 58, 20, '')
-      drawCell(doc, 387, y, 45, 20, rate, { align: 'center', padding: 5 })
-      drawCell(doc, 432, y, 25, 20, percent, { align: 'center', padding: 5 })
-      drawCell(doc, 457, y, 105, 20, amount, { align: 'right', padding: 5 })
-      y += 20
+      drawCell(doc, 32, y, 42, summaryHeight, '')
+      drawCell(doc, 74, y, 255, summaryHeight, label, { bold: true, padding: 5 })
+      drawCell(doc, 329, y, 58, summaryHeight, '')
+      drawCell(doc, 387, y, 45, summaryHeight, rate, { align: 'center', padding: 5 })
+      drawCell(doc, 432, y, 25, summaryHeight, percent, { align: 'center', padding: 5 })
+      drawCell(doc, 457, y, 105, summaryHeight, amount, { align: 'right', padding: 5 })
+      y += summaryHeight
     }
     if (invoice.gst_component === 'IGST') {
       summaryRow('Integrated GST (IGST)', formatRs(invoice.igst_amount, cents(invoice.igst_amount)), invoice.igst_rate, '%')
@@ -291,27 +309,27 @@ function createInvoicePdf({ entity, invoice, overrides }) {
       summaryRow('Total before Rounding Off', formatRs(invoice.total_before_rounding, 2))
       summaryRow(`${invoice.rounding_type === 'MORE' ? 'More' : 'Less'} : ROUNDING OFF`, `${invoice.rounding_type === 'MORE' ? '(+)' : '(-)'}${formatRs(invoice.rounding_amount)}`)
     }
-    ;[[32, 42], [329, 58], [387, 45], [432, 25]].forEach(([x, w]) => drawCell(doc, x, y, w, 22, '', { fill: LIGHT }))
-    drawCell(doc, 74, y, 255, 22, 'Total', { bold: true, fill: LIGHT, textColor: NAVY, padding: 5 })
-    drawCell(doc, 457, y, 105, 22, formatRs(invoice.grand_total, invoice.rounding_type ? 2 : 0), { bold: true, align: 'right', fill: LIGHT, textColor: NAVY, padding: 5 })
-    y += 30
+    ;[[32, 42], [329, 58], [387, 45], [432, 25]].forEach(([x, w]) => drawCell(doc, x, y, w, totalHeight, '', { fill: LIGHT }))
+    drawCell(doc, 74, y, 255, totalHeight, 'Total', { bold: true, fill: LIGHT, textColor: NAVY, padding: 5 })
+    drawCell(doc, 457, y, 105, totalHeight, formatRs(invoice.grand_total, invoice.rounding_type ? 2 : 0), { bold: true, align: 'right', fill: LIGHT, textColor: NAVY, padding: 5 })
+    y += compact ? 24 : 30
 
-    const wordsHeight = Math.max(30, doc.font(F.bold).fontSize(8.5).heightOfString(invoice.amount_in_words, { width: 346 }) + 12)
+    const wordsHeight = Math.max(compact ? 28 : 30, doc.font(F.bold).fontSize(8.5).heightOfString(invoice.amount_in_words, { width: 346 }) + (compact ? 9 : 12))
     const bankLabels = ['Bank Name', 'A/c No.', 'IFSC Code', 'Branch']
     const bankRowHeights = company.bank.map(value => Math.max(14, doc.font(F.regular).fontSize(7.5).heightOfString(value, { width: 132 }) + 5))
     const bankHeight = 24 + bankRowHeights.reduce((sum, height) => sum + height, 0) + 6
     doc.save().rect(32, y, 530, wordsHeight).fillAndStroke(LIGHT, BORDER).restore()
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Amount Chargeable (in words):', 36, y + 9, { width: 170 })
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(invoice.amount_in_words, 206, y + 6, { width: 346, align: 'right' })
-    y += wordsHeight + 10
-    drawTaxBreakdown(doc, y, invoice, entity.sac || '998512')
-    y += invoice.gst_component === 'IGST' ? 74 : 96
+    y += wordsHeight + (compact ? 6 : 10)
+    drawTaxBreakdown(doc, y, invoice, entity.sac || '998512', compact)
+    y += invoice.gst_component === 'IGST' ? (compact ? 68 : 74) : (compact ? 88 : 96)
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(`Tax Amount (in words): ${invoice.tax_amount_in_words}`, 32, y, { width: 520 })
-    y += 24
+    y += compact ? 20 : 24
 
-    const bottomHeight = Math.max(84, bankHeight)
+    const bottomHeight = Math.max(compact ? 78 : 84, bankHeight)
     const pageBottom = doc.page.height - doc.page.margins.bottom
-    let signatureBoxHeight = 64
+    let signatureBoxHeight = compact ? 56 : 64
     if (y + bottomHeight + 8 + signatureBoxHeight > pageBottom) signatureBoxHeight = Math.max(40, pageBottom - y - bottomHeight - 8)
     if (y + bottomHeight + 8 + signatureBoxHeight > pageBottom) {
       doc.addPage()
