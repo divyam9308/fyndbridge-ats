@@ -208,7 +208,7 @@ function drawCell(doc, x, y, w, h, text, opts = {}) {
 
 async function createInvoicePdf(data) {
   const standard = await renderInvoicePdf(data)
-  if (standard.pageCount > 1 && data.invoice.gst_component === 'CGST_SGST') {
+  if (data.invoice.gst_component === 'CGST_SGST') {
     return (await renderInvoicePdf(data, true)).buffer
   }
   return standard.buffer
@@ -329,14 +329,14 @@ function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
 
     const bottomHeight = Math.max(compact ? 78 : 84, bankHeight)
     const pageBottom = doc.page.height - doc.page.margins.bottom
-    const availableSignatureHeight = pageBottom - y - bottomHeight - 8
-    let signatureBoxHeight = Math.max(40, availableSignatureHeight)
-    if (y + bottomHeight + 8 + signatureBoxHeight > pageBottom) {
+    const signatureBoxHeight = 64
+    let bottomY = y
+    let signatureY = pageBottom - signatureBoxHeight
+    if (signatureY < bottomY + bankHeight + 8) {
       doc.addPage()
-      y = doc.page.margins.top
-      signatureBoxHeight = 64
+      bottomY = doc.page.margins.top
+      signatureY = bottomY + bankHeight + 8
     }
-    const bottomY = y
     drawCell(doc, 32, bottomY, 300, bottomHeight, '', {})
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Description of Services', 40, bottomY + 10)
     doc.fillColor('#111827').font(F.regular).text('Permanent placement services, other than executive\nsearch services', 40, bottomY + 22)
@@ -351,7 +351,6 @@ function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
       drawCell(doc, 414, bankY, 136, rowHeight, value, { size: 7.5, padding: 2, minSize: 7 })
       bankY += rowHeight
     })
-    const signatureY = bottomY + bankHeight + 8
     drawCell(doc, 262, signatureY, 300, signatureBoxHeight, '', {})
     const signatureLines = company.sign.slice(0, -1)
     signatureLines.forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(line, 270, signatureY + 3 + index * 12, { width: 284, align: 'center', lineBreak: false }))
