@@ -329,13 +329,14 @@ function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
 
     const bottomHeight = Math.max(compact ? 78 : 84, bankHeight)
     const pageBottom = doc.page.height - doc.page.margins.bottom
-    const signatureBoxHeight = 64
     let bottomY = y
-    let signatureY = pageBottom - signatureBoxHeight
-    if (signatureY < bottomY + bankHeight + 8) {
+    let signatureY = bottomY + bankHeight + 8
+    let signatureBoxHeight = pageBottom - signatureY
+    if (signatureBoxHeight < 40) {
       doc.addPage()
       bottomY = doc.page.margins.top
       signatureY = bottomY + bankHeight + 8
+      signatureBoxHeight = pageBottom - signatureY
     }
     drawCell(doc, 32, bottomY, 300, bottomHeight, '', {})
     doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Description of Services', 40, bottomY + 10)
