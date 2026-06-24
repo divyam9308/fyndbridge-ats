@@ -1,4 +1,5 @@
 const supabase = require('../services/supabaseAdmin')
+const { getDashboardAccess } = require('../services/dashboardAccess')
 
 const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Rejected by Recruiter', 'Client Submission', 'Interview', 'Rejected by Client', 'Offered', 'Offer Declined', 'Dropout', 'Hired']
@@ -247,7 +248,9 @@ function buildRecentActivity({ clients, candidates, mandates, profiles }) {
 }
 
 async function getDashboardStats(req, res) {
-  const consultant = clean(req.query.consultant) || 'Overall (All Consultants)'
+  const access = await getDashboardAccess(req.user)
+  const requestedConsultant = clean(req.query.consultant) || 'Overall (All Consultants)'
+  const consultant = access.restrictedToSelf && access.consultantName ? access.consultantName : requestedConsultant
   const period = clean(req.query.period) || 'This Month'
   const range = periodRange(period)
   const sectionErrors = {}
@@ -280,7 +283,7 @@ async function getDashboardStats(req, res) {
     const associations = readResult(3, 'candidates')
     const jobs = readResult(4, 'mandates')
 
-    const consultantOptions = profiles
+    const consultantOptions = (access.restrictedToSelf ? profiles.filter(row => same(row.name, consultant)) : profiles)
       .map((row) => clean(row.name))
       .filter(Boolean)
       .filter((name, index, list) => list.findIndex((item) => same(item, name)) === index)
@@ -348,6 +351,7 @@ async function getDashboardStats(req, res) {
       clientOwnershipAvailable,
       period,
       consultant
+      ,dashboardAccess: access
     })
   } catch (err) {
     console.error('getDashboardStats error:', err.message || err)

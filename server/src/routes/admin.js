@@ -5,6 +5,7 @@ const { requireAdmin } = require('../middleware/adminAccessMiddleware')
 const router = express.Router()
 
 router.get('/me', controller.me)
+router.route('/dashboard-visibility').get(controller.dashboardVisibility).patch(controller.dashboardVisibility)
 router.get('/column-permissions', controller.columnPermissions)
 router.use(requireAdmin)
 router.get('/users', controller.users)

@@ -13,6 +13,8 @@ import {
   updateAdminUserRole,
   updateColumnPermission,
   setRecordLock
+  ,fetchDashboardVisibility
+  ,updateDashboardVisibility
 } from '../services/adminAccessApi'
 import AdminPermissionPicker from '../components/admin/AdminPermissionPicker'
 import './AdminPage.css'
@@ -166,6 +168,8 @@ export default function AdminPage() {
   const [savingAdmin, setSavingAdmin] = useState(false)
   const [savingRole, setSavingRole] = useState(false)
   const [lockModalType, setLockModalType] = useState('')
+  const [dashboardRestricted, setDashboardRestricted] = useState(true)
+  const [savingDashboardVisibility, setSavingDashboardVisibility] = useState(false)
   const profilePickerRef = useRef(null)
 
   const loadAdminData = useCallback(async () => {
@@ -194,6 +198,10 @@ export default function AdminPage() {
     }
     return () => { active = false }
   }, [isAdmin, loadAdminData])
+
+  useEffect(() => {
+    if (isAdmin) fetchDashboardVisibility().then(data => setDashboardRestricted(data.restrictNonAdminToSelf !== false)).catch(err => setError(err.message))
+  }, [isAdmin])
 
   useEffect(() => {
     if (!profileOpen) return undefined
@@ -431,6 +439,17 @@ export default function AdminPage() {
             </div>
           )})}
         </div>
+      </Section>
+
+      <Section title="Dashboard Consultant Visibility" description="Control whether non-admin users can view only their own dashboard." icon={Shield}>
+        <label className="admin-advanced-card">
+          <div><h3>Restrict dashboard to own consultant data for non-admin users</h3><p>When enabled, only Admins/Super Admins can view Overall dashboard and other consultants’ dashboards.</p></div>
+          <input type="checkbox" checked={dashboardRestricted} disabled={savingDashboardVisibility} onChange={async event => {
+            const next = event.target.checked
+            setSavingDashboardVisibility(true); setError('')
+            try { const data = await updateDashboardVisibility(next); setDashboardRestricted(data.restrictNonAdminToSelf !== false) } catch (err) { setError(err.message) } finally { setSavingDashboardVisibility(false) }
+          }} />
+        </label>
       </Section>
 
       <Section

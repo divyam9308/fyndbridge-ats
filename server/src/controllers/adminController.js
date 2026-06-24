@@ -12,6 +12,7 @@ const {
   serializeColumnDefs,
   getAllColumnPermissions
 } = require('../services/adminAccess')
+const { getDashboardVisibility, setDashboardVisibility } = require('../services/dashboardAccess')
 
 function sendError(res, err) {
   return res.status(err.statusCode || 500).json({ error: err.message || 'Internal server error' })
@@ -173,6 +174,14 @@ async function columnPermissions(req, res) {
   }
 }
 
+async function dashboardVisibility(req, res) {
+  try {
+    if (!(await isAdmin(req.user))) return res.status(403).json({ error: 'Admin required' })
+    if (req.method === 'PATCH') return res.json(await setDashboardVisibility(req.body?.restrictNonAdminToSelf))
+    return res.json(await getDashboardVisibility())
+  } catch (err) { return sendError(res, err) }
+}
+
 async function updateColumnPermission(req, res) {
   try {
     const { tableName, columnKey, accessMode } = req.body
@@ -249,6 +258,7 @@ module.exports = {
   removeUser,
   updateUserRole,
   columnPermissions,
+  dashboardVisibility,
   updateColumnPermission,
   lockedRecords,
   setLock

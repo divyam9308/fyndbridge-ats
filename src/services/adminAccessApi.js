@@ -10,6 +10,11 @@ export async function fetchAdminMe() {
   return json(await apiFetch('/api/admin/me', { cache: 'no-store' }))
 }
 
+export async function fetchDashboardVisibility() { return json(await apiFetch('/api/admin/dashboard-visibility', { cache: 'no-store' })) }
+export async function updateDashboardVisibility(restrictNonAdminToSelf) {
+  return json(await apiFetch('/api/admin/dashboard-visibility', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restrictNonAdminToSelf }) }))
+}
+
 export async function fetchAdminUsers() {
   return json(await apiFetch('/api/admin/users', { cache: 'no-store' }))
 }

@@ -594,6 +594,12 @@ export default function DashboardHome() {
 
   const names = Array.isArray(data?.consultantOptions) ? data.consultantOptions : []
   const consultantOptions = [OVERALL, ...names.filter(Boolean)]
+  const dashboardAccess = data?.dashboardAccess
+  const consultantLocked = Boolean(dashboardAccess?.restrictedToSelf && dashboardAccess?.consultantName)
+
+  useEffect(() => {
+    if (consultantLocked && consultant !== dashboardAccess.consultantName) setConsultant(dashboardAccess.consultantName)
+  }, [consultant, consultantLocked, dashboardAccess?.consultantName])
 
   const clientStatusData = (data?.clientStatusData || []).map(item => ({
     ...item,
@@ -679,7 +685,7 @@ export default function DashboardHome() {
         </div>
 
         <div className="ats-dashboard-controls">
-          <div className="ats-dashboard-select" ref={consultantSelectRef}>
+          {consultantLocked ? <div className="ats-dashboard-locked-filter">Showing your dashboard: {dashboardAccess.consultantName}</div> : <div className="ats-dashboard-select" ref={consultantSelectRef}>
             <button type="button" onClick={() => setConsultantOpen(open => !open)}>
               <span>{consultant}</span>
               <ChevronDown size={15} />
@@ -701,7 +707,7 @@ export default function DashboardHome() {
                 ))}
               </div>
             ) : null}
-          </div>
+          </div>}
 
           <div className="ats-dashboard-periods">
             {DASHBOARD_PERIODS.map(item => (
