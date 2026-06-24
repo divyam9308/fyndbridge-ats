@@ -133,11 +133,11 @@ function EntityModal({ initial, onClose, onSave }) {
         address: data.address || current.address
       }))
       const warnings = []
-      if (!data.legalEntityName || !data.address) warnings.push('GSTIN parsed, but legal name/address was not returned by provider.')
       if (data.status && !/^(active|act)$/i.test(data.status)) warnings.push(`GSTIN status is ${data.status}. Please verify before invoicing.`)
-      setLookupMessage(['GSTIN details fetched successfully.', ...warnings].join(' '))
-    } catch {
-      setLookupMessage('GST lookup failed. You can enter details manually.')
+      setLookupMessage([data.legalEntityName || data.address ? 'GSTIN details fetched successfully.' : 'GSTIN parsed locally. API did not return legal name/address.', ...warnings].join(' '))
+    } catch (err) {
+      if (err.fallback) setForm(current => autoGst({ ...current, pan: err.fallback.pan || current.pan, state_code: err.fallback.stateCode || current.state_code, state: err.fallback.state || current.state }))
+      setLookupMessage(/GSTINCheck API key missing|provider is not configured/i.test(err.message) ? 'GST lookup provider is not configured. PAN/state were filled locally.' : 'GST lookup failed. You can enter details manually.')
     } finally {
       setLookupLoading(false)
     }

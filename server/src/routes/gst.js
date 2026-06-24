@@ -8,7 +8,7 @@ router.post('/lookup', requireAdmin, async (req, res) => {
   try {
     return res.json(await lookupGstin(req.body?.gstin))
   } catch (err) {
-    return res.status(err.statusCode || 500).json({ error: err.message || 'GST lookup failed. You can enter details manually.' })
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message || 'GST lookup failed. You can enter details manually.', ...(err.fallback ? { fallback: err.fallback } : {}) })
   }
 })
 
