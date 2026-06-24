@@ -12,14 +12,14 @@ import FloatingDropdown from '../components/FloatingDropdown'
 import TablePopover from '../components/TablePopover'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
-import DashboardFilterBanner from '../components/DashboardFilterBanner'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { highlightText, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
-import { clearDashboardFilters, parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
+import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
+import { ConsultantPill } from '../components/ConsultantPill'
 
 const STATUSES = ['Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const STATUS_OPTIONS = ['', ...STATUSES]
@@ -355,13 +355,6 @@ export default function ClientsPage() {
       if (showLoading) setLoading(false)
     }
   }, [aiFilters, dashboardFilters, effectiveStatusFilter, page, pageSize, sortDirection, sortField])
-
-  const clearDashboardFilter = () => {
-    setStatusFilter('All')
-    setPage(1)
-    const search = clearDashboardFilters(location.search)
-    navigate({ pathname: location.pathname, search: search ? `?${search}` : '' }, { replace: true })
-  }
 
   const refreshClientsRealtime = useCallback(() => {
     if (Date.now() < suppressRealtimeUntilRef.current) return
@@ -1097,7 +1090,7 @@ export default function ClientsPage() {
       case 'clientId':
         return <td key={key}>{client.client_display_id ? <span className="table-id-chip table-client-id-chip">{client.client_display_id}</span> : mutedDash}</td>
       case 'consultant':
-        return <td key={key}>{highlightText(dash(client.consultant_name || client.consultant), aiFilters)}</td>
+        return <td key={key}><ConsultantPill name={client.consultant_name || client.consultant} /></td>
       case 'clientName':
         return (
           <td key={key}>
@@ -1201,7 +1194,6 @@ export default function ClientsPage() {
 
   return (
     <div>
-      <DashboardFilterBanner filters={dashboardFilters} onClear={clearDashboardFilter} />
       <div className="candidate-columns-toolbar">
         <NewActionDropdown
           onUploadResumes={() => navigate('/dashboard/candidates', { state: { action: 'upload-resumes' } })}

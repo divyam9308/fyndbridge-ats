@@ -11,7 +11,6 @@ import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
-import DashboardFilterBanner from '../components/DashboardFilterBanner'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
@@ -20,7 +19,7 @@ import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/c
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
 import { highlightText, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
-import { clearDashboardFilters, parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
+import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 
 /* ====== Static reference data ====== */
 const STATUS_OPTIONS = CANDIDATE_STATUS_OPTIONS
@@ -577,12 +576,6 @@ export default function CandidatesPage() {
       if (showLoading) setLoadingCandidates(false)
     }
   }, [aiAppliedPrompt, aiFilters, dashboardFilters, filterJob, page, pageSize, sortDirection, sortField])
-
-  const clearDashboardFilter = () => {
-    setPage(1)
-    const search = clearDashboardFilters(location.search)
-    navigate({ pathname: location.pathname, search: search ? `?${search}` : '' }, { replace: true })
-  }
 
   const openDocument = useCallback(async (key, url) => {
     setOpeningDocument(key)
@@ -2007,7 +2000,6 @@ export default function CandidatesPage() {
 
   return (
     <div>
-      <DashboardFilterBanner filters={dashboardFilters} onClear={clearDashboardFilter} />
       <input
         ref={fileInputRef}
         type="file"

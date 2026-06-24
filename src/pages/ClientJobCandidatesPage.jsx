@@ -6,6 +6,7 @@ import './ClientJobCandidatesPage.css'
 import { apiCandidateToUi, logCandidateCvOpen, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUSES } from '../utils/candidateStatuses'
 import { supabase } from '../services/supabaseClient'
+import { ConsultantPill } from '../components/ConsultantPill'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
 const ALL_FILTER_STATUSES = ['All', ...CANDIDATE_STATUSES, 'Rejected']
@@ -246,7 +247,7 @@ export default function ClientJobCandidatesPage() {
                       <span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span>
                     </td>
                     <td>{c.location || c.city || '—'}</td>
-                    <td>{c.consultant || '—'}</td>
+                    <td><ConsultantPill name={c.consultant} /></td>
                     <td>
                       {resolveCandidateCvHref(c) ? (
                         <a href="#" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={(event) => { event.preventDefault(); event.stopPropagation(); event.nativeEvent?.stopImmediatePropagation?.(); logCandidateCvOpen(c); openDocument(`cv-${c.associationId || c.id}`, resolveCandidateCvHref(c)) }}>

@@ -11,7 +11,6 @@ import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
-import DashboardFilterBanner from '../components/DashboardFilterBanner'
 import { supabase } from '../services/supabaseClient'
 import { openProtectedUrl } from '../services/apiClient'
 import '../styles/Shared.css'
@@ -19,7 +18,8 @@ import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } fr
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { highlightText, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
-import { clearDashboardFilters, parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
+import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
+import { ConsultantPill, ConsultantPillGroup } from '../components/ConsultantPill'
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const SORT_OPTIONS = [
@@ -225,12 +225,6 @@ export default function JobsPage() {
       setLoading(false)
     }
   }, [aiFilters, dashboardFilters, page, pageSize, sortDirection, sortField])
-
-  const clearDashboardFilter = () => {
-    setPage(1)
-    const search = clearDashboardFilters(location.search)
-    navigate({ pathname: location.pathname, search: search ? `?${search}` : '' }, { replace: true })
-  }
 
   const openDocument = useCallback(async (key, url) => {
     setOpeningDocument(key)
@@ -715,7 +709,7 @@ export default function JobsPage() {
       case 'jobId':
         return <td key={column.key}>{job.job_display_id ? <span className="table-id-chip table-job-id-chip">{job.job_display_id}</span> : mutedDash}</td>
       case 'consultant':
-        return <td key={column.key}>{(job.consultants || []).length <= 1 ? highlightText(dash(job.consultants?.[0]), aiFilters) : <div className="candidate-columns-control mandate-consultants-control"><button className="filter-select compact-select" type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('consultants', job.id, event.currentTarget)}>{highlightText(job.consultants[0], aiFilters)} +{job.consultants.length - 1}</button></div>}</td>
+        return <td key={column.key}><ConsultantPillGroup consultants={job.consultants} onClick={(event) => toggleTablePopover('consultants', job.id, event.currentTarget)} /></td>
       case 'teamLead':
         return <td key={column.key}>{highlightText(dash(job.team_lead), aiFilters)}</td>
       case 'clientId':
@@ -753,7 +747,6 @@ export default function JobsPage() {
 
   return (
     <div>
-      <DashboardFilterBanner filters={dashboardFilters} onClear={clearDashboardFilter} />
       <div className="candidate-columns-toolbar">
         <NewActionDropdown
           onUploadResumes={() => navigate('/dashboard/candidates', { state: { action: 'upload-resumes' } })}
@@ -861,7 +854,7 @@ export default function JobsPage() {
         return (
           <TablePopover anchorRect={tablePopover.anchorRect} width={tablePopover.type === 'status' ? 150 : 180} onClose={() => setTablePopover(null)}>
             {tablePopover.type === 'consultants' ? (
-              job.consultants.map(name => <div className="candidate-column-option" key={name}>{name}</div>)
+              job.consultants.map(name => <div className="candidate-column-option" key={name}><ConsultantPill name={name} /></div>)
             ) : (
               MANDATE_STATUSES.map(status => (
                 <button className="candidate-columns-action" type="button" key={status} onClick={() => updateMandateStatus(job, status)}>

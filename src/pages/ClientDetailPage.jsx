@@ -13,6 +13,7 @@ import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
+import { ConsultantPill } from '../components/ConsultantPill'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
 const MANDATE_SUMMARY_COLUMNS = [
@@ -563,7 +564,7 @@ export default function ClientDetailPage() {
     switch (key) {
       case 'candidateDisplayId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.candidateDisplayId || '-'}</td>
       case 'date': return <td key={key}>{formatDate(c.createdAt)}</td>
-      case 'consultant': return <td key={key}>{c.consultant || '-'}</td>
+      case 'consultant': return <td key={key}><ConsultantPill name={c.consultant} /></td>
       case 'client': return <td key={key}>{c.client || '-'}</td>
       case 'clientId': return <td key={key}>{client?.client_display_id ? <span className="table-id-chip table-client-id-chip">{client.client_display_id}</span> : mutedDash}</td>
       case 'jobId': return <td key={key}>{c.jobDisplayId ? <span className="table-id-chip table-job-id-chip">{c.jobDisplayId}</span> : mutedDash}</td>
