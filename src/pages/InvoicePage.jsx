@@ -7,6 +7,7 @@ import {
   deleteInvoiceEntity,
   fetchInvoiceEntities,
   fetchNextInvoiceNumber,
+  lookupGstin,
   previewInvoicePdf,
   updateInvoiceEntity
 } from '../services/invoiceApi'
@@ -32,6 +33,7 @@ const SEARCH_FIELDS = ['invoice_id', 'legal_entity_name', 'gstin', 'pan', 'conta
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const clean = value => String(value || '').replace(/\s+/g, ' ').trim()
+const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
 const n = value => Number(String(value ?? '').replace(/₹|Rs\.?|,/gi, '').trim() || 0)
 const money = value => Number.isFinite(n(value)) ? `₹${n(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
 const isDelhi = form => /\b(new\s+delhi|delhi|south east delhi|north delhi|south delhi|east delhi|west delhi|central delhi)\b/i.test([form.address, form.state, form.place_of_supply].join(' '))
@@ -107,9 +109,38 @@ function EntityModal({ initial, onClose, onSave }) {
   const [form, setForm] = useState(() => initial ? { ...EMPTY, ...initial, model: initial.model || EMPTY.model } : autoGst({ ...EMPTY }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [lookupMessage, setLookupMessage] = useState('')
+  const normalizedGstin = String(form.gstin || '').replace(/\s+/g, '').toUpperCase()
+  const gstinInvalid = Boolean(normalizedGstin) && !GSTIN_PATTERN.test(normalizedGstin)
   const update = event => {
     const { name, value } = event.target
+    if (name === 'gstin') setLookupMessage('')
     setForm(current => LOCATION_FIELDS.has(name) ? autoGst({ ...current, [name]: value }) : { ...current, [name]: value })
+  }
+  const searchGstin = async () => {
+    if (gstinInvalid || !normalizedGstin) return
+    setLookupLoading(true); setLookupMessage('')
+    try {
+      const data = await lookupGstin(normalizedGstin)
+      setForm(current => autoGst({
+        ...current,
+        gstin: data.gstin,
+        legal_entity_name: data.legalEntityName || current.legal_entity_name,
+        pan: data.pan || current.pan,
+        state_code: data.stateCode || current.state_code,
+        state: data.state || current.state,
+        address: data.address || current.address
+      }))
+      const warnings = []
+      if (!data.legalEntityName || !data.address) warnings.push('GSTIN parsed, but legal name/address was not returned by provider.')
+      if (data.status && !/^(active|act)$/i.test(data.status)) warnings.push(`GSTIN status is ${data.status}. Please verify before invoicing.`)
+      setLookupMessage(['GSTIN details fetched successfully.', ...warnings].join(' '))
+    } catch {
+      setLookupMessage('GST lookup failed. You can enter details manually.')
+    } finally {
+      setLookupLoading(false)
+    }
   }
   const save = async () => {
     setSaving(true); setError('')
@@ -133,7 +164,8 @@ function EntityModal({ initial, onClose, onSave }) {
         <Field label="Default Billing Entity"><select className="form-control" name="billing_entity" value={form.billing_entity} onChange={update}><option>FCS</option><option>FCAPL</option></select></Field>
         <Field label="Legal Entity Name"><input className="form-control" name="legal_entity_name" value={form.legal_entity_name} onChange={update} /></Field>
         <Field label="Address" full><textarea className="form-control" name="address" value={form.address} onChange={update} rows={3} /></Field>
-        {['pan', 'place_of_supply', 'state', 'state_code', 'gstin', 'contact_person', 'email'].map(key => <Field label={key.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase())} key={key}><input className="form-control" name={key} value={form[key] || ''} onChange={update} /></Field>)}
+        <Field label="GSTIN"><div style={{ display: 'flex', gap: 8 }}><input className="form-control" name="gstin" value={form.gstin || ''} onChange={update} /><button type="button" className="btn-secondary" onClick={searchGstin} disabled={!normalizedGstin || gstinInvalid || lookupLoading}>{lookupLoading ? <><LoaderCircle size={14} className="invoice-button-spin" /> Searching...</> : 'Search'}</button></div>{gstinInvalid ? <small className="invoice-form-error">Invalid GSTIN format</small> : null}{lookupMessage ? <small>{lookupMessage}</small> : null}</Field>
+        {['pan', 'place_of_supply', 'state', 'state_code', 'contact_person', 'email'].map(key => <Field label={key.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase())} key={key}><input className="form-control" name={key} value={form[key] || ''} onChange={update} /></Field>)}
       </div></section>
       <section className="invoice-form-section"><h3>Tax Defaults</h3><div className="form-grid-2">
         <Field label="SAC"><input className="form-control" name="sac" value={form.sac || ''} onChange={update} /></Field>

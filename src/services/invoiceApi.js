@@ -18,6 +18,11 @@ export const updateInvoiceEntity = async (id, payload) => json(await apiFetch(`/
   body: JSON.stringify(payload)
 }))
 export const deleteInvoiceEntity = async (id) => json(await apiFetch(`/api/invoice/entities/${id}`, { method: 'DELETE' }))
+export const lookupGstin = async (gstin) => json(await apiFetch('/api/gst/lookup', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ gstin })
+}))
 export const fetchNextInvoiceNumber = async (billingEntity, invoiceDate) => json(await apiFetch(`/api/invoice/next-number?billing_entity=${encodeURIComponent(billingEntity)}&invoice_date=${encodeURIComponent(invoiceDate)}`, { cache: 'no-store' }))
 export const generateInvoicePdf = async (payload) => json(await apiFetch('/api/invoice/generate', {
   method: 'POST',

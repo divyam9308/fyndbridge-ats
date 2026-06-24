@@ -1,4 +1,5 @@
 const supabase = require('../services/supabaseAdmin')
+const { normalizeGstin } = require('../services/gstLookup')
 const {
   BILLING_ENTITIES,
   GST_COMPONENTS,
@@ -43,6 +44,7 @@ function entityPayload(body) {
   if (!BILLING_ENTITIES.has(billing)) throw Object.assign(new Error('Billing Entity is required'), { statusCode: 400 })
   if (!clean(body.sac || '998512')) throw Object.assign(new Error('SAC is required'), { statusCode: 400 })
   if (!GST_COMPONENTS.has(gst)) throw Object.assign(new Error('Invalid GST component'), { statusCode: 400 })
+  const gstin = nullable(body.gstin)
   const payload = {
     legal_entity_name: clean(body.legal_entity_name),
     address: clean(body.address),
@@ -50,7 +52,7 @@ function entityPayload(body) {
     place_of_supply: nullable(body.place_of_supply),
     state: nullable(body.state),
     state_code: nullable(body.state_code),
-    gstin: nullable(body.gstin),
+    gstin: gstin ? normalizeGstin(gstin) : null,
     contact_person: nullable(body.contact_person),
     email: nullable(body.email),
     model: body.model,
