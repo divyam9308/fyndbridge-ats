@@ -7,7 +7,7 @@ Measurement basis: static execution-path inspection plus the opt-in `VITE_DEBUG_
 | `GET /api/dashboard?consultant=&period=` | 1 | 0 | 0 | 0 | 1 | Yes; provides all dashboard cards/charts. | Already merged: one response supplies all dashboard data. Existing state is reused by modals. Do not cache without a freshness requirement; focus intentionally refreshes it. |
 | `GET /api/notifications` | 1 | 0 | 0 | 0 | 0 | Yes; Topbar bell mounts with the authenticated shell. | Cannot merge with dashboard without coupling global shell state. Realtime handles changes; no polling occurs. |
 | `GET /api/user-profiles` | 0-1 | 0 | 0 | 0 | 0 | Needed only when the auth profile is absent; presence needs the name. | Reuses `AuthContext.profile` when available. Concurrent calls are now in-flight deduplicated. |
-| `GET /api/admin/me` | 1 | 0 | 0 | 0 | 0 | Needed by online presence to label the current user role. | Concurrent calls are now in-flight deduplicated. Do not persist-cache role access because changes must be reflected promptly. |
+| `GET /api/admin/me` | 1 | 0 | 0 | 0 | 0 | Needed by online presence to label the current user role. | Do not cache or merge role access; changes must be reflected promptly. |
 
 The online-users presence websocket is not an HTTP API call. It opens once while the tab is active and closes on blur, hidden, pagehide, or unmount.
 
@@ -22,5 +22,4 @@ The online-users presence websocket is not an HTTP API call. It opens once while
 ## Applied fixes
 
 - Shared concurrent `/api/user-profiles` loads in `AuthContext` now reuse one promise.
-- Shared concurrent `/api/admin/me` loads now reuse one promise.
 - No dashboard caching or endpoint merging was added because the current request count does not demonstrate a production duplicate and dashboard freshness has no documented TTL.
