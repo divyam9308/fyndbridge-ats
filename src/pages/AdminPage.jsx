@@ -442,14 +442,14 @@ export default function AdminPage() {
       </Section>
 
       <Section title="Dashboard Consultant Visibility" description="Control whether non-admin users can view only their own dashboard." icon={Shield}>
-        <label className="admin-advanced-card">
+        <div className="admin-advanced-card">
           <div><h3>Restrict dashboard to own consultant data for non-admin users</h3><p>When enabled, only Admins/Super Admins can view Overall dashboard and other consultants’ dashboards.</p></div>
-          <input type="checkbox" checked={dashboardRestricted} disabled={savingDashboardVisibility} onChange={async event => {
-            const next = event.target.checked
+          <button className={`admin-ios-switch${dashboardRestricted ? ' is-on' : ''}`} type="button" role="switch" aria-checked={dashboardRestricted} aria-label="Restrict dashboard to own consultant data for non-admin users" disabled={savingDashboardVisibility} onClick={async () => {
+            const next = !dashboardRestricted
             setSavingDashboardVisibility(true); setError('')
             try { const data = await updateDashboardVisibility(next); setDashboardRestricted(data.restrictNonAdminToSelf !== false) } catch (err) { setError(err.message) } finally { setSavingDashboardVisibility(false) }
-          }} />
-        </label>
+          }}><span /></button>
+        </div>
       </Section>
 
       <Section

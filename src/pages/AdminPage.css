@@ -239,6 +239,33 @@
   font-size: 13px;
 }
 
+.admin-ios-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 28px;
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--gray-300);
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.admin-ios-switch span {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+  transition: transform 160ms ease;
+}
+
+.admin-ios-switch.is-on { background: var(--brand-blue); }
+.admin-ios-switch.is-on span { transform: translateX(20px); }
+.admin-ios-switch:disabled { cursor: wait; opacity: .6; }
+
 .admin-role-controls {
   display: flex;
   align-items: center;
