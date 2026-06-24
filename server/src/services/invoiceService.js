@@ -329,8 +329,8 @@ function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
 
     const bottomHeight = Math.max(compact ? 78 : 84, bankHeight)
     const pageBottom = doc.page.height - doc.page.margins.bottom
-    let signatureBoxHeight = compact ? 56 : 64
-    if (y + bottomHeight + 8 + signatureBoxHeight > pageBottom) signatureBoxHeight = Math.max(40, pageBottom - y - bottomHeight - 8)
+    const availableSignatureHeight = pageBottom - y - bottomHeight - 8
+    let signatureBoxHeight = Math.max(40, availableSignatureHeight)
     if (y + bottomHeight + 8 + signatureBoxHeight > pageBottom) {
       doc.addPage()
       y = doc.page.margins.top
