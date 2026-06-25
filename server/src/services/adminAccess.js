@@ -31,7 +31,7 @@ const COLUMN_DEFS = {
     ['Address on Invoice', 'address_on_invoice', ['address_on_invoice']],
     ['Designation', 'designation', ['designation']],
     ['Contract Signed', 'contract_signed', ['contract_signed']],
-    ['Contract Document', 'contract_document', ['contract_document', 'contract_pdf_url', 'contract_pdf_storage_path']],
+    ['Contract Document', 'contract_document', ['contract_document', 'contract_document_path', 'contract_document_name', 'contract_pdf_url', 'contract_pdf_storage_path']],
     ['Value', 'terms_value', ['terms_value', 'billing_entity']],
     ['Comments', 'comments', ['comments', 'notes']]
   ],

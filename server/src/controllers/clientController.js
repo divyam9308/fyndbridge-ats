@@ -1,7 +1,6 @@
 const { randomUUID } = require('crypto')
 const supabase = require('../services/supabaseAdmin')
 const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
-const { uploadDocument } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
@@ -300,11 +299,6 @@ function normalizeClient(row, activeJobs = 0, followUps = [], jobs = []) {
   }
 }
 
-async function uploadContractPdf(file) {
-  if (!file) return null
-  return uploadDocument(file, STORAGE_BUCKETS.CONTRACT, String(new Date().getFullYear()))
-}
-
 function clientPayload(body) {
   const status = clean(body.status) || null
   if (status && !CLIENT_STATUSES.includes(status)) {
@@ -325,7 +319,9 @@ function clientPayload(body) {
   const email = clean(body.email)
   const contactPerson = clean(body.contact_person || body.contact)
   const contractSigned = normalizeBoolean(body.contract_signed)
-  const contractPath = normalizeStoragePath(body.contract_pdf_storage_path || body.contract_pdf_url || body.contract_document, STORAGE_BUCKETS.CONTRACT)
+  const rawContractPath = body.contract_document_path || body.contract_pdf_storage_path || body.contract_pdf_url || body.contract_document
+  const contractPath = normalizeStoragePath(rawContractPath, STORAGE_BUCKETS.CONTRACT)
+  const contractDocumentName = nullable(body.contract_document_name)
 
   if (!clientName) {
     const err = new Error('Client Name is required')
@@ -344,6 +340,11 @@ function clientPayload(body) {
   }
   if (body.client_group_id && isPlaceholderContactPayload({ contactPerson, mobile, email, linkedin: body.linkedin, designation: body.designation })) {
     const err = new Error('Enter real contact details before saving a contact person')
+    err.statusCode = 400
+    throw err
+  }
+  if ((body.contract_document_path || body.contract_document_name) && !contractPath) {
+    const err = new Error('Contract document path is required after upload.')
     err.statusCode = 400
     throw err
   }
@@ -379,10 +380,17 @@ function clientPayload(body) {
     contract_document: contractSigned ? nullable(contractPath) : null,
     contract_pdf_url: contractSigned ? nullable(contractPath) : null,
     contract_pdf_storage_path: contractSigned ? nullable(contractPath) : null,
+    contract_document_name: contractSigned ? contractDocumentName : null,
     gstin: contractSigned ? nullable(body.gstin) : null,
     pan: contractSigned ? nullable(body.pan) : null,
     address_on_invoice: contractSigned ? nullable(body.address_on_invoice) : null
   }
+}
+
+function rejectMultipartContractUpload(req, res) {
+  if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('multipart/form-data')) return false
+  res.status(400).json({ error: 'Contract PDF files must be uploaded directly to storage before saving client metadata.' })
+  return true
 }
 
 async function findClientDuplicate(name) {
@@ -730,12 +738,8 @@ async function getClient(req, res) {
 
 async function createClient(req, res) {
   try {
-    if (req.file) {
-      const contract = await uploadContractPdf(req.file)
-      req.body.contract_document = contract.path
-      req.body.contract_pdf_url = contract.path
-      req.body.contract_pdf_storage_path = contract.path
-    }
+    if (rejectMultipartContractUpload(req, res)) return
+    req.body = req.body || {}
     const initialFollowUpDate = normalizeFollowUpDateValue(req.body.follow_up_date)
     const initialFollowUpComments = req.body.comments || req.body.notes
     const payload = clientPayload(req.body)
@@ -835,6 +839,8 @@ async function createClient(req, res) {
 
 async function updateClient(req, res) {
   try {
+    if (rejectMultipartContractUpload(req, res)) return
+    req.body = req.body || {}
     const admin = await isAdmin(req.user)
     await assertRowEditable('clients', req.params.id, admin)
     await assertCanUpdateColumns('clients', req.body, admin)
@@ -842,12 +848,6 @@ async function updateClient(req, res) {
     if (existingError) throw existingError
     if (!existing) return res.status(404).json({ error: 'Client not found' })
 
-    if (req.file) {
-      const contract = await uploadContractPdf(req.file)
-      req.body.contract_document = contract.path
-      req.body.contract_pdf_url = contract.path
-      req.body.contract_pdf_storage_path = contract.path
-    }
     await syncEditedClientFollowUp(req.params.id, req.body)
     const payload = clientPayload({ ...existing, ...req.body })
     delete payload.follow_up_date

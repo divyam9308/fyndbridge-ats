@@ -15,6 +15,7 @@ import FormattedDateInput from '../components/FormattedDateInput'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'
+import { STORAGE_BUCKETS } from '../utils/storageBuckets'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { highlightText, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
@@ -249,6 +250,7 @@ export default function ClientsPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const [contractUploading, setContractUploading] = useState(false)
   const [editingClient, setEditingClient] = useState(null)
   const [selectedFollowUps, setSelectedFollowUps] = useState({})
   const [selectedContacts, setSelectedContacts] = useState({})
@@ -580,8 +582,8 @@ export default function ClientsPage() {
 
   const handleContractFile = (event) => {
     const file = event.target.files?.[0] || null
-    if (file && !['pdf', 'doc', 'docx'].includes(String(file.name || '').split('.').pop()?.toLowerCase())) {
-      setErrors((current) => ({ ...current, contract_document: 'Contract document must be PDF, DOC, or DOCX' }))
+    if (file && file.type !== 'application/pdf') {
+      setErrors((current) => ({ ...current, contract_document: 'Contract document must be a PDF file.' }))
       setContractFile(null)
       event.target.value = ''
       return
@@ -700,14 +702,37 @@ export default function ClientsPage() {
     setIsOpen(true)
   }
 
-  const saveClientToApi = async (duplicateAction = '') => {
-    const body = new FormData()
-    Object.entries(form).forEach(([key, value]) => body.append(key, value ?? ''))
-    if (duplicateAction) body.append('duplicate_action', duplicateAction)
-    if (contractFile) body.append('contract_document_file', contractFile)
-    const res = await fetch(editingClient ? `/api/clients/${editingClient.id}` : '/api/clients', {
-      method: editingClient ? 'PATCH' : 'POST',
-      body
+  const contractStoragePath = (clientId, file) => {
+    const baseName = String(file.name || 'contract.pdf')
+      .replace(/\.pdf$/i, '')
+      .replace(/[^a-z0-9._-]+/gi, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80) || 'contract'
+    return `contracts/${clientId}/${Date.now()}-${baseName}.pdf`
+  }
+
+  const uploadContractFile = async (clientId) => {
+    if (!contractFile) return null
+    if (!supabase) throw new Error('Supabase is not configured.')
+    if (!clientId) throw new Error('Client ID is required before uploading contract.')
+    if (contractFile.type !== 'application/pdf') throw new Error('Contract document must be a PDF file.')
+
+    const path = contractStoragePath(clientId, contractFile)
+    setContractUploading(true)
+    const { error } = await supabase.storage.from(STORAGE_BUCKETS.CONTRACT).upload(path, contractFile, {
+      contentType: 'application/pdf',
+      upsert: true
+    })
+    setContractUploading(false)
+    if (error) throw new Error(error.message || 'Contract upload failed.')
+    return { path, name: contractFile.name }
+  }
+
+  const saveClientMetadata = async ({ method, url, payload }) => {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     })
     const data = await res.json().catch(() => ({}))
     if (res.status === 409 && data.duplicate) {
@@ -716,6 +741,50 @@ export default function ClientsPage() {
       throw error
     }
     if (!res.ok) throw new Error(data.detail || data.error || 'Failed to save client.')
+    return data
+  }
+
+  const saveClientToApi = async (duplicateAction = '') => {
+    const payload = { ...form }
+    if (duplicateAction) payload.duplicate_action = duplicateAction
+
+    if (editingClient) {
+      const contract = await uploadContractFile(editingClient.id)
+      if (contract) {
+        payload.contract_signed = true
+        payload.contract_document_path = contract.path
+        payload.contract_document_name = contract.name
+        try {
+          const data = await saveClientMetadata({ method: 'PATCH', url: `/api/clients/${editingClient.id}`, payload })
+          window.dispatchEvent(new Event('ats:clients-updated'))
+          return data
+        } catch {
+          throw new Error('Contract uploaded, but client record update failed. Please retry saving.')
+        }
+      }
+      const data = await saveClientMetadata({ method: 'PATCH', url: `/api/clients/${editingClient.id}`, payload })
+      window.dispatchEvent(new Event('ats:clients-updated'))
+      return data
+    }
+
+    const data = await saveClientMetadata({ method: 'POST', url: '/api/clients', payload })
+    const clientId = data.id || data.data?.id
+    if (contractFile) {
+      const contract = await uploadContractFile(clientId)
+      try {
+        await saveClientMetadata({
+          method: 'PATCH',
+          url: `/api/clients/${clientId}`,
+          payload: {
+            contract_signed: true,
+            contract_document_path: contract.path,
+            contract_document_name: contract.name
+          }
+        })
+      } catch {
+        throw new Error('Contract uploaded, but client record update failed. Please retry saving.')
+      }
+    }
     window.dispatchEvent(new Event('ats:clients-updated'))
     return data
   }
@@ -746,8 +815,9 @@ export default function ClientsPage() {
         setDuplicateMoreOpen(false)
         return
       }
-      setErrors({ client_name: err.message })
+      setErrors(contractFile ? { contract_document: err.message } : { client_name: err.message })
     } finally {
+      setContractUploading(false)
       setSaving(false)
     }
   }
@@ -1505,8 +1575,9 @@ export default function ClientsPage() {
                 {form.contract_signed === 'Yes' && !isClientFieldHidden('contract_document') && (
                   <div className="form-group">
                     <label className="form-label">Contract PDF</label>
-                    <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving || isClientFieldDisabled('contract_document')} />
+                    <input type="file" accept="application/pdf,.pdf" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving || contractUploading || isClientFieldDisabled('contract_document')} />
                     {form.contract_document && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('contract-form', form.contract_document) }}>{openingDocument === 'contract-form' ? 'Opening...' : 'Current Contract'}</a>}
+                    {contractUploading && <span className="form-error">Uploading contract...</span>}
                     {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
                   </div>
                 )}
@@ -1551,8 +1622,8 @@ export default function ClientsPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setIsOpen(false)} disabled={saving}>Cancel</button>
-              <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving}>{saving ? 'Saving...' : editingClient ? 'Update Client' : 'Save Client'}</button>
+              <button className="btn-secondary" onClick={() => setIsOpen(false)} disabled={saving || contractUploading}>Cancel</button>
+              <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving || contractUploading}>{contractUploading ? 'Uploading...' : saving ? 'Saving...' : editingClient ? 'Update Client' : 'Save Client'}</button>
             </div>
           </div>
         </div>
