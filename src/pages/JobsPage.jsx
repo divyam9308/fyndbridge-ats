@@ -175,6 +175,7 @@ export default function JobsPage() {
   const [roleSearch, setRoleSearch] = useState('')
   const [roleSuggestionsOpen, setRoleSuggestionsOpen] = useState(false)
   const [addingNewRole, setAddingNewRole] = useState(false)
+  const [roleSelectionConfirmed, setRoleSelectionConfirmed] = useState(false)
   const [sectorSearch, setSectorSearch] = useState('')
   const [sectorOpen, setSectorOpen] = useState(false)
   const [teamLeadSearch, setTeamLeadSearch] = useState('')
@@ -342,6 +343,7 @@ export default function JobsPage() {
     setForm({ ...EMPTY_FORM, consultants: ['-'], team_lead: '-', team_lead_user_id: '', job_display_id: 'Loading...', allocation_date: todayLocal() })
     setClientSearch('')
     setRoleSearch('')
+    setRoleSelectionConfirmed(false)
     setSectorSearch('')
     setTeamLeadSearch('')
     setTeamLeadOpen(false)
@@ -401,6 +403,7 @@ export default function JobsPage() {
     setJdFile(null)
     setClientSearch(job.client_name || '')
     setRoleSearch(job.role || job.title || '')
+    setRoleSelectionConfirmed(true)
     setSectorSearch(job.vertical || '')
     setConsultantSearch({})
     setConsultantPickerOpen({})
@@ -511,6 +514,7 @@ export default function JobsPage() {
     if (!form.job_display_id) next.job_display_id = 'Job ID is required'
     if (!form.client_id) next.client_id = clientSearch.trim() ? 'Please select a valid client from the dropdown.' : 'Client Name is required'
     if (!form.role.trim()) next.role = 'Role is required'
+    if (!editingJob && form.role.trim() && !roleSelectionConfirmed) next.role = 'Select a role from the dropdown or choose Add New Role first.'
     const realConsultants = selectedConsultants.filter(name => name !== '-')
     if (new Set(realConsultants).size !== realConsultants.length) next.consultants = 'Consultants cannot be duplicated'
     const invalidConsultant = Object.entries(consultantSearch).some(([index, value]) => {
@@ -1000,6 +1004,7 @@ export default function JobsPage() {
                         <button type="button" className="filter-clear" style={{ marginLeft: 8 }} onMouseDown={(event) => {
                           event.preventDefault()
                           setAddingNewRole(false)
+                          setRoleSelectionConfirmed(false)
                           setRoleSearch('')
                           setForm(current => ({ ...current, role: '' }))
                           setRoleSuggestionsOpen(true)
@@ -1013,6 +1018,7 @@ export default function JobsPage() {
                       onChange={e => {
                         setRoleSearch(e.target.value)
                         setForm(current => ({ ...current, role: e.target.value }))
+                        if (!addingNewRole) setRoleSelectionConfirmed(false)
                         if (!addingNewRole) setRoleSuggestionsOpen(true)
                       }}
                       onFocus={() => !addingNewRole && setRoleSuggestionsOpen(true)}
@@ -1025,6 +1031,7 @@ export default function JobsPage() {
                         <button type="button" onMouseDown={(event) => {
                           event.preventDefault()
                           setAddingNewRole(true)
+                          setRoleSelectionConfirmed(true)
                           setRoleSearch('')
                           setForm(current => ({ ...current, role: '' }))
                           setRoleSuggestionsOpen(false)
@@ -1038,6 +1045,7 @@ export default function JobsPage() {
                             setRoleSearch(job.role)
                             setForm(current => ({ ...current, role: job.role }))
                             setAddingNewRole(false)
+                            setRoleSelectionConfirmed(true)
                             setRoleSuggestionsOpen(false)
                           }}>
                             <span>{job.role}</span>
