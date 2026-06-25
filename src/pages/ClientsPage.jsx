@@ -141,7 +141,9 @@ const readStoredClientColumns = () => {
 }
 const storeClientColumns = (value) => {
   if (typeof window === 'undefined') return
-  try { window.localStorage.setItem(CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY, JSON.stringify(value)) } catch {}
+  try { window.localStorage.setItem(CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY, JSON.stringify(value)) } catch {
+    // Ignore storage failures; backend preference remains the source of truth.
+  }
 }
 function TableSkeleton({ columns, tableMinWidth, label }) {
   return (
@@ -447,6 +449,7 @@ export default function ClientsPage() {
           storeClientColumns(value)
         }
       } catch {
+        // Keep the synchronously loaded local/default columns.
       }
     }, 0)
 
