@@ -929,6 +929,7 @@ export default function CandidatesPage() {
     const e = {}
     if (!f.name.trim()) e.name = 'Full Name is required'
     if (!f.mobile.trim()) e.mobile = 'Mobile is required'
+    if (f.job?.trim() && !f.jobId) e.job = 'Select an existing mandate. Create it in Mandates first.'
     if (assigningAnother) {
       if (!f.clientId) e.client = 'Client is required'
       if (!f.jobId) e.job = 'Mandate is required'

@@ -535,6 +535,24 @@ async function findExactAssociationDuplicate({ email, mobileNumber, clientId, jo
   )) || null
 }
 
+async function validateMandateReference(payload) {
+  const hasJobTitle = cleanText(payload.job_title) && cleanText(payload.job_title) !== '-'
+  if (!hasJobTitle && !payload.job_id) return
+  if (!payload.job_id) {
+    throw Object.assign(new Error('Select an existing mandate. Create it in Mandates first.'), { statusCode: 400 })
+  }
+  const { data, error } = await supabase.from('jobs').select('id, title, client_id').eq('id', payload.job_id).maybeSingle()
+  if (error) throw error
+  if (!data) {
+    throw Object.assign(new Error('Selected mandate was not found. Create it in Mandates first.'), { statusCode: 400 })
+  }
+  if (payload.client_id && data.client_id && payload.client_id !== data.client_id) {
+    throw Object.assign(new Error('Selected mandate does not belong to the selected client.'), { statusCode: 400 })
+  }
+  payload.job_title = data.title || payload.job_title
+  payload.client_id = data.client_id || payload.client_id
+}
+
 const CANDIDATE_FILTER_MAPPING = {
   candidate_id: [{ column: 'candidate_display_id', kind: 'text' }],
   candidate_name: [{ column: 'full_name', kind: 'text' }],
@@ -1148,6 +1166,7 @@ async function createCandidate(req, res) {
       typeof associationPayload.status === "string" && associationPayload.status.trim()
         ? associationPayload.status.trim()
         : "-";
+    await validateMandateReference(associationPayload)
 
     const duplicateMatch = await findMatchingCandidates(candidatePayload.email, candidatePayload.mobile_number)
     const exactAssociation = duplicateMatch.matches.length
@@ -1319,6 +1338,7 @@ async function updateCandidate(req, res) {
           ? associationPayload.status.trim()
           : '-';
     }
+    await validateMandateReference(associationPayload)
 
     let existingCandidateId = null
     let existingAssociation = null
