@@ -58,21 +58,45 @@ const MANDATE_PERMISSION_BY_AI_FIELD = {
   jd: 'jd_storage_path'
 }
 const MANDATE_TABLE_COLUMNS = [
-  { key: 'jobId', label: 'Job ID' },
-  { key: 'consultant', label: 'Consultant' },
-  { key: 'teamLead', label: 'Team Lead' },
-  { key: 'clientId', label: 'Client ID' },
-  { key: 'clientName', label: 'Client Name' },
-  { key: 'role', label: 'Role' },
-  { key: 'budget', label: 'Budget' },
-  { key: 'mandateStatus', label: 'Mandate Status' },
-  { key: 'sector', label: 'Sector' },
-  { key: 'allocationDate', label: 'Date of Allocation' },
-  { key: 'jd', label: 'JD' },
-  { key: 'action', label: 'Action' }
+  { key: 'jobId', label: 'Job ID', width: 130 },
+  { key: 'consultant', label: 'Consultant', width: 220 },
+  { key: 'teamLead', label: 'Team Lead', width: 180 },
+  { key: 'clientId', label: 'Client ID', width: 130 },
+  { key: 'clientName', label: 'Client Name', width: 240 },
+  { key: 'role', label: 'Role', width: 240 },
+  { key: 'budget', label: 'Budget', width: 150 },
+  { key: 'mandateStatus', label: 'Mandate Status', width: 190 },
+  { key: 'sector', label: 'Sector', width: 180 },
+  { key: 'allocationDate', label: 'Date of Allocation', width: 180 },
+  { key: 'jd', label: 'JD', width: 110 },
+  { key: 'action', label: 'Action', width: 130 }
 ]
 const DEFAULT_MANDATE_COLUMN_KEYS = MANDATE_TABLE_COLUMNS.map(column => column.key)
 const REMOVED_MANDATE_COLUMN_KEYS = new Set(['location'])
+const MANDATES_TABLE_COLUMNS_PREFERENCE_KEY = 'mandates_columns_preference'
+const readStoredMandateColumns = () => {
+  if (typeof window === 'undefined') return null
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(MANDATES_TABLE_COLUMNS_PREFERENCE_KEY) || 'null')
+    const value = Array.isArray(saved) ? saved.filter(key => !REMOVED_MANDATE_COLUMN_KEYS.has(key) && DEFAULT_MANDATE_COLUMN_KEYS.includes(key)) : []
+    return value.length ? value : null
+  } catch {
+    return null
+  }
+}
+const storeMandateColumns = (value) => {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(MANDATES_TABLE_COLUMNS_PREFERENCE_KEY, JSON.stringify(value)) } catch {}
+}
+function TableSkeleton({ columns, tableMinWidth, label }) {
+  return (
+    <table className="data-table fb-theme-table candidates-master-table candidates-table candidates-table-skeleton" aria-label={label} style={{ minWidth: tableMinWidth }}>
+      <colgroup>{columns.map(column => <col key={column.key} style={{ width: column.width }} />)}</colgroup>
+      <thead><tr>{columns.map(column => <th key={column.key}><span className="candidate-skeleton-cell candidate-skeleton-header" /></th>)}</tr></thead>
+      <tbody>{Array.from({ length: 10 }).map((_, rowIndex) => <tr key={rowIndex}>{columns.map(column => <td key={column.key}><span className="candidate-skeleton-cell" /></td>)}</tr>)}</tbody>
+    </table>
+  )
+}
 const EMPTY_FORM = {
   id: '',
   job_display_id: '',
@@ -164,9 +188,10 @@ export default function JobsPage() {
   const [pageSize, setPageSize] = useState(50)
   const [totalJobs, setTotalJobs] = useState(0)
   const [openingDocument, setOpeningDocument] = useState('')
-  const [visibleColumns, setVisibleColumns] = useState(DEFAULT_MANDATE_COLUMN_KEYS)
-  const [pendingColumns, setPendingColumns] = useState(DEFAULT_MANDATE_COLUMN_KEYS)
-  const [savedColumns, setSavedColumns] = useState(null)
+  const initialMandateColumns = useMemo(() => readStoredMandateColumns() || DEFAULT_MANDATE_COLUMN_KEYS, [])
+  const [visibleColumns, setVisibleColumns] = useState(initialMandateColumns)
+  const [pendingColumns, setPendingColumns] = useState(initialMandateColumns)
+  const [savedColumns, setSavedColumns] = useState(initialMandateColumns)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
   const [clientSearch, setClientSearch] = useState('')
@@ -288,10 +313,9 @@ export default function JobsPage() {
           setVisibleColumns(value)
           setPendingColumns(value)
           setSavedColumns(value)
+          storeMandateColumns(value)
         }
       } catch {
-        setVisibleColumns(DEFAULT_MANDATE_COLUMN_KEYS)
-        setPendingColumns(DEFAULT_MANDATE_COLUMN_KEYS)
       }
     }, 0)
     return () => window.clearTimeout(timer)
@@ -451,6 +475,7 @@ export default function JobsPage() {
   const selectedConsultants = normalizeConsultantFields(consultantFields)
   const activeColumns = MANDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) && !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
   const availableColumns = MANDATE_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  const mandateTableMinWidth = activeColumns.reduce((sum, column) => sum + (column.width || 140), 0)
   const visibleAiFields = MANDATE_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_AI_FIELD[field], isAdmin))
   const jobFieldPermission = {
     job_display_id: 'job_display_id',
@@ -485,6 +510,7 @@ export default function JobsPage() {
     const allowed = availableColumns.map(column => column.key)
     const next = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
     setVisibleColumns(next.length ? next : allowed)
+    storeMandateColumns(next.length ? next : allowed)
     setColumnsOpen(false)
   }
 
@@ -504,6 +530,7 @@ export default function JobsPage() {
         throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
       }
       setSavedColumns(value)
+      storeMandateColumns(value)
     } catch (err) {
       setError(err.message)
     }
@@ -753,8 +780,8 @@ export default function JobsPage() {
   }
 
   return (
-    <div>
-      <div className="candidate-columns-toolbar">
+    <div className="candidates-page">
+      <div className="candidate-columns-toolbar candidates-toolbar">
         <NewActionDropdown
           onUploadResumes={() => navigate('/dashboard/candidates', { state: { action: 'upload-resumes' } })}
           onAddCandidate={() => navigate('/dashboard/candidates', { state: { action: 'add-candidate' } })}
@@ -785,7 +812,7 @@ export default function JobsPage() {
         </div>
       </div>
 
-      <div className="filter-bar candidates-filter-bar">
+      <div className="filter-bar candidates-filter-bar candidates-toolbar">
         <form onSubmit={applyAiFilter} className="candidate-ai-filter-form">
           <span className="filter-label">AI Filter</span>
           <input className="filter-input candidate-ai-filter-input" value={aiText} onChange={e => { setAiText(e.target.value); setAiError('') }} />
@@ -816,19 +843,21 @@ export default function JobsPage() {
       </div>
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}
 
-      <div className="table-card table-card-popovers">
+      <div className="table-card table-card-popovers candidates-table-card">
         {loading ? (
-          <div className="empty-state">
-            <div className="empty-state-icon"><Loader2 size={28} color="var(--gold)" className="spin" /></div>
-            <div className="empty-state-title">Loading mandates</div>
+          <div className="table-wrapper candidates-table-scroll">
+            <TableSkeleton columns={activeColumns} tableMinWidth={mandateTableMinWidth} label="Loading mandates" />
           </div>
         ) : error ? (
           <div className="empty-state"><div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div><div className="empty-state-title">Error loading data</div><div className="empty-state-desc">{error}</div></div>
         ) : jobs.length === 0 ? (
           <div className="empty-state"><div className="empty-state-title">No mandates found</div><div className="empty-state-desc">Create a mandate to get started.</div></div>
         ) : (
-          <div className="table-wrapper">
-            <table className="data-table fb-theme-table candidates-master-table" aria-label="Mandates">
+          <div className="table-wrapper candidates-table-scroll">
+            <table className="data-table fb-theme-table candidates-master-table candidates-table" aria-label="Mandates" style={{ minWidth: mandateTableMinWidth }}>
+              <colgroup>
+                {activeColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}
+              </colgroup>
               <thead>
                 <tr>
                   {activeColumns.map(column => <th key={column.key}>{column.label}</th>)}

@@ -99,28 +99,28 @@ const normalizeFollowUpDate = (value) => {
   return new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 10)
 }
 const CLIENT_TABLE_COLUMNS = [
-  { key: 'clientId', label: 'Client ID' },
-  { key: 'clientName', label: 'Client Name' },
-  { key: 'consultant', label: 'Consultant' },
-  { key: 'contactPerson', label: 'Contact Person' },
-  { key: 'mobile', label: 'Mobile' },
-  { key: 'email', label: 'Email' },
-  { key: 'designation', label: 'Designation' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'sector', label: 'Sector' },
-  { key: 'connectedOnDate', label: 'Connected On Date' },
-  { key: 'comments', label: 'Comments' },
-  { key: 'followUpDate', label: 'Follow Up Date' },
-  { key: 'status', label: 'Status' },
-  { key: 'contractSigned', label: 'Contract Signed' },
-  { key: 'termsSigned', label: 'Terms Signed' },
-  { key: 'value', label: 'Value' },
-  { key: 'billingEntity', label: 'Billing Entity' },
-  { key: 'gstin', label: 'GSTIN' },
-  { key: 'pan', label: 'PAN' },
-  { key: 'addressOnInvoice', label: 'Address on Invoice' },
-  { key: 'contractPdf', label: 'Contract PDF' },
-  { key: 'actions', label: 'Actions' }
+  { key: 'clientId', label: 'Client ID', width: 130 },
+  { key: 'clientName', label: 'Client Name', width: 240 },
+  { key: 'consultant', label: 'Consultant', width: 180 },
+  { key: 'contactPerson', label: 'Contact Person', width: 200 },
+  { key: 'mobile', label: 'Mobile', width: 150 },
+  { key: 'email', label: 'Email', width: 240 },
+  { key: 'designation', label: 'Designation', width: 200 },
+  { key: 'linkedin', label: 'LinkedIn', width: 130 },
+  { key: 'sector', label: 'Sector', width: 170 },
+  { key: 'connectedOnDate', label: 'Connected On Date', width: 170 },
+  { key: 'comments', label: 'Comments', width: 260 },
+  { key: 'followUpDate', label: 'Follow Up Date', width: 170 },
+  { key: 'status', label: 'Status', width: 190 },
+  { key: 'contractSigned', label: 'Contract Signed', width: 160 },
+  { key: 'termsSigned', label: 'Terms Signed', width: 170 },
+  { key: 'value', label: 'Value', width: 130 },
+  { key: 'billingEntity', label: 'Billing Entity', width: 160 },
+  { key: 'gstin', label: 'GSTIN', width: 180 },
+  { key: 'pan', label: 'PAN', width: 150 },
+  { key: 'addressOnInvoice', label: 'Address on Invoice', width: 260 },
+  { key: 'contractPdf', label: 'Contract PDF', width: 130 },
+  { key: 'actions', label: 'Actions', width: 130 }
 ]
 const DEFAULT_CLIENT_COLUMN_KEYS = CLIENT_TABLE_COLUMNS.map(column => column.key)
 const REMOVED_CLIENT_COLUMN_KEYS = new Set(['location', 'region'])
@@ -129,6 +129,29 @@ const SORT_OPTIONS = [
   { field: 'client_name', label: 'Alphabetical Order' }
 ]
 const CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY = 'clientsTableColumns'
+const readStoredClientColumns = () => {
+  if (typeof window === 'undefined') return null
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY) || 'null')
+    const value = Array.isArray(saved) ? saved.filter(key => !REMOVED_CLIENT_COLUMN_KEYS.has(key) && DEFAULT_CLIENT_COLUMN_KEYS.includes(key)) : []
+    return value.length ? value : null
+  } catch {
+    return null
+  }
+}
+const storeClientColumns = (value) => {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY, JSON.stringify(value)) } catch {}
+}
+function TableSkeleton({ columns, tableMinWidth, label }) {
+  return (
+    <table className="data-table fb-theme-table candidates-master-table candidates-table candidates-table-skeleton" aria-label={label} style={{ minWidth: tableMinWidth }}>
+      <colgroup>{columns.map(column => <col key={column.key} style={{ width: column.width }} />)}</colgroup>
+      <thead><tr>{columns.map(column => <th key={column.key}><span className="candidate-skeleton-cell candidate-skeleton-header" /></th>)}</tr></thead>
+      <tbody>{Array.from({ length: 10 }).map((_, rowIndex) => <tr key={rowIndex}>{columns.map(column => <td key={column.key}><span className="candidate-skeleton-cell" /></td>)}</tr>)}</tbody>
+    </table>
+  )
+}
 const CLIENT_AI_SEARCH_FIELDS = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'billing_entity', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
 const CLIENT_PERMISSION_BY_COLUMN = {
   clientId: 'client_display_id',
@@ -267,9 +290,10 @@ export default function ClientsPage() {
   const [contractFile, setContractFile] = useState(null)
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [columnsAnchor, setColumnsAnchor] = useState(null)
-  const [visibleColumns, setVisibleColumns] = useState(DEFAULT_CLIENT_COLUMN_KEYS)
-  const [pendingColumns, setPendingColumns] = useState(DEFAULT_CLIENT_COLUMN_KEYS)
-  const [savedColumns, setSavedColumns] = useState(null)
+  const initialClientColumns = useMemo(() => readStoredClientColumns() || DEFAULT_CLIENT_COLUMN_KEYS, [])
+  const [visibleColumns, setVisibleColumns] = useState(initialClientColumns)
+  const [pendingColumns, setPendingColumns] = useState(initialClientColumns)
+  const [savedColumns, setSavedColumns] = useState(initialClientColumns)
   const [sortField, setSortField] = useState('')
   const [sortDirection, setSortDirection] = useState('asc')
   const [sortOpen, setSortOpen] = useState(false)
@@ -420,10 +444,9 @@ export default function ClientsPage() {
           setVisibleColumns(value)
           setPendingColumns(value)
           setSavedColumns(value)
+          storeClientColumns(value)
         }
       } catch {
-        setVisibleColumns(DEFAULT_CLIENT_COLUMN_KEYS)
-        setPendingColumns(DEFAULT_CLIENT_COLUMN_KEYS)
       }
     }, 0)
 
@@ -458,6 +481,7 @@ export default function ClientsPage() {
 
   const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) && !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_COLUMN[column.key], isAdmin))
   const availableColumns = CLIENT_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  const clientTableMinWidth = activeColumns.reduce((sum, column) => sum + (column.width || 140), 0)
   const visibleAiFields = CLIENT_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_AI_FIELD[field], isAdmin))
   const clientFieldPermission = {
     client_display_id: 'client_display_id',
@@ -1044,6 +1068,7 @@ export default function ClientsPage() {
     const allowed = availableColumns.map(column => column.key)
     const next = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
     setVisibleColumns(next.length ? next : allowed)
+    storeClientColumns(next.length ? next : allowed)
     setColumnsOpen(false)
   }
 
@@ -1063,6 +1088,7 @@ export default function ClientsPage() {
         throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
       }
       setSavedColumns(value)
+      storeClientColumns(value)
     } catch (err) {
       setError(err.message)
     }
@@ -1344,8 +1370,8 @@ export default function ClientsPage() {
   }
 
   return (
-    <div>
-      <div className="candidate-columns-toolbar">
+    <div className="candidates-page">
+      <div className="candidate-columns-toolbar candidates-toolbar">
         <NewActionDropdown
           onUploadResumes={() => navigate('/dashboard/candidates', { state: { action: 'upload-resumes' } })}
           onAddCandidate={() => navigate('/dashboard/candidates', { state: { action: 'add-candidate' } })}
@@ -1376,7 +1402,7 @@ export default function ClientsPage() {
         </div>
       </div>
 
-      <div className="filter-bar candidates-filter-bar">
+      <div className="filter-bar candidates-filter-bar candidates-toolbar">
         <span className="filter-label">Filter</span>
         <div className="candidate-sort-control" ref={statusDropdownRef}>
           <button className="filter-select candidate-sort-btn" type="button" onClick={() => setStatusOpen(open => !open)}>
@@ -1444,11 +1470,10 @@ export default function ClientsPage() {
         </div>
       )}
 
-      <div className="table-card">
+      <div className="table-card candidates-table-card">
         {loading ? (
-          <div className="empty-state">
-            <div className="empty-state-icon"><Loader2 size={28} color="var(--gold)" className="spin" /></div>
-            <div className="empty-state-title">Loading clients</div>
+          <div className="table-wrapper candidates-table-scroll">
+            <TableSkeleton columns={activeColumns} tableMinWidth={clientTableMinWidth} label="Loading clients" />
           </div>
         ) : error ? (
           <div className="empty-state">
@@ -1463,8 +1488,11 @@ export default function ClientsPage() {
             <div className="empty-state-desc">Add your first client to get started.</div>
           </div>
         ) : (
-          <div className="table-wrapper">
-          <table className="data-table fb-theme-table" aria-label="Clients">
+          <div className="table-wrapper candidates-table-scroll">
+          <table className="data-table fb-theme-table candidates-master-table candidates-table" aria-label="Clients" style={{ minWidth: clientTableMinWidth }}>
+            <colgroup>
+              {activeColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}
+            </colgroup>
             <thead>
               <tr>
                 {activeColumns.map(column => <th key={column.key}>{column.label}</th>)}
