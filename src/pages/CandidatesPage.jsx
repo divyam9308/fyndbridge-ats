@@ -296,8 +296,8 @@ const getUniqueSortedJobs = (jobs, clientId = '', search = '') => {
 }
 
 const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) => {
-  const matchingClient = dbClients.find(c => c.id === f.clientId) || dbClients.find(c => c.name === f.client)
-  const matchingJob = dbJobs.find(j => j.id === f.jobId) || dbJobs.find(j => (j.title || j.role) === f.job && (matchingClient ? j.client_id === matchingClient.id : true))
+  const matchingClient = dbClients.find(c => c.id === f.clientId)
+  const matchingJob = dbJobs.find(j => j.id === f.jobId)
   return {
     association_id: f.associationId || undefined,
     full_name: f.name,
@@ -316,8 +316,8 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     education: f.education,
     client_name: f.client,
     job_title: f.job,
-    client_id: f.clientId || (matchingClient ? matchingClient.id : undefined),
-    job_id: f.jobId || (matchingJob ? matchingJob.id : undefined),
+    client_id: matchingClient?.id || '',
+    job_id: matchingJob?.id || '',
     status: f.status,
     current_salary: cleanNumberForApi(f.salary),
     expected_salary: cleanNumberForApi(f.expectedSalary),
@@ -644,6 +644,7 @@ export default function CandidatesPage() {
       const error = new Error(payload.error || 'Duplicate candidate found.')
       error.duplicate = payload
       error.exactAssociation = Boolean(payload.exactAssociation)
+      error.identityDuplicate = /^Another candidate already exists with this (email|mobile number)\.$/.test(error.message)
       throw error
     }
 
@@ -692,9 +693,9 @@ export default function CandidatesPage() {
   const clientName = (client) => client?.name || client?.client_name || ''
   const canonicalClients = getCanonicalClients(dbClients)
   const findClientByName = (name) => canonicalClients.find(c => normalizeText(clientName(c)) === normalizeText(name))
-  const findClientByInput = (value) => canonicalClients.find(c => c.id === value) || findClientByName(value)
+  const findClientByInput = (value) => canonicalClients.find(c => c.id === value)
   const clientDisplayIdForForm = (candidate) => {
-    const client = canonicalClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
+    const client = canonicalClients.find(c => c.id === candidate.clientId)
     return client?.client_display_id || ''
   }
   const jobName = (job) => job?.title || job?.role || ''
@@ -707,15 +708,11 @@ export default function CandidatesPage() {
     return [...names].sort((a, b) => a.localeCompare(b))
   }, [dbJobs])
   const jobDisplayIdForForm = (candidate) => {
-    const job = dbJobs.find(j => j.id === candidate.jobId) || dbJobs.find(j => jobName(j) === candidate.job && (!candidate.clientId || j.client_id === candidate.clientId))
+    const job = dbJobs.find(j => j.id === candidate.jobId)
     return job?.job_display_id || candidate.jobDisplayId || ''
   }
 
-  const ensureCandidateClient = async (candidate) => {
-    if (candidate.clientId) return candidate
-    const client = findClientByName(candidate.client)
-    return client ? { ...candidate, clientId: client.id, client: client.name || client.client_name } : candidate
-  }
+  const ensureCandidateClient = async (candidate) => candidate
 
   const filtered = candidates
 
@@ -929,7 +926,9 @@ export default function CandidatesPage() {
     const e = {}
     if (!f.name.trim()) e.name = 'Full Name is required'
     if (!f.mobile.trim()) e.mobile = 'Mobile is required'
-    if (f.job?.trim() && !f.jobId) e.job = 'Select an existing mandate. Create it in Mandates first.'
+    if (f.client?.trim() && !f.clientId) e.client = 'Please select a valid client from the dropdown.'
+    if (f.job?.trim() && !f.jobId) e.job = 'Please select a valid mandate from the dropdown.'
+    if (f.consultantName?.trim() && f.consultantName !== '-' && !f.consultantUserId) e.consultantName = 'Please select a valid consultant from the dropdown.'
     if (assigningAnother) {
       if (!f.clientId) e.client = 'Client is required'
       if (!f.jobId) e.job = 'Mandate is required'
@@ -986,7 +985,7 @@ export default function CandidatesPage() {
   }, [location.pathname, location.state?.action, navigate, openAddModal])
 
   const candidateToForm = (candidate) => {
-    const matchedClient = dbClients.find(c => c.id === candidate.clientId) || findClientByName(candidate.client)
+    const matchedClient = dbClients.find(c => c.id === candidate.clientId)
     return {
       ...EMPTY_CAND,
       ...candidate,
@@ -1137,6 +1136,10 @@ export default function CandidatesPage() {
         .then(candidateDisplayId => setForm(current => ({ ...current, candidateDisplayId })))
         .catch(() => setForm(current => ({ ...current, candidateDisplayId: '' })))
     } catch (err) {
+      if (err.identityDuplicate) {
+        setErrors({ form: err.message })
+        return
+      }
       if (err.duplicate) {
         setCandidateDuplicate({ source: 'manual', candidate: form, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, allowAddDuplicate: err.duplicate.allowAddDuplicate !== false, message: err.message })
         return
@@ -1360,6 +1363,10 @@ export default function CandidatesPage() {
       setPage(1)
       await advanceResumeReview('Candidate saved.')
     } catch (err) {
+      if (err.identityDuplicate) {
+        setImportError(err.message)
+        return
+      }
       if (err.duplicate) {
         setCandidateDuplicate({ source: 'resume', candidate: candidateToSave, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, allowAddDuplicate: err.duplicate.allowAddDuplicate !== false, message: err.message })
         return
@@ -1508,7 +1515,7 @@ export default function CandidatesPage() {
       setClientSuggestionsOpen(!matchedClient)
     }
     const setJobValue = (value) => {
-      const matchedJob = dbJobs.find(job => job.id === value) || dbJobs.find(job => jobName(job) === value && (!f.clientId || job.client_id === f.clientId))
+      const matchedJob = dbJobs.find(job => job.id === value)
       setF(prev => ({
         ...prev,
         job: matchedJob ? jobName(matchedJob) : value,
@@ -1595,6 +1602,7 @@ export default function CandidatesPage() {
               </div>
             )}
           </div>
+          {errs?.consultantName && <span className="form-error">{errs.consultantName}</span>}
         </div>}
 
         {!isCandidateFieldHidden('designation') && <div className="form-group">

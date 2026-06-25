@@ -408,13 +408,18 @@ function rejectMultipartContractUpload(req, res) {
   return true
 }
 
-async function findClientDuplicate(name) {
+async function findClientDuplicate(name, excludeGroupId = '') {
   const normalizedName = normalizeDuplicateText(name)
   if (!normalizedName) return null
 
   const { data, error } = await supabase.from('clients').select('*')
   if (error) throw error
-  return (data || []).find((client) => normalizeDuplicateText(client.client_name || client.name) === normalizedName) || null
+  return (data || []).find((client) => {
+    const groupId = client.client_group_id || client.id
+    if (excludeGroupId && groupId === excludeGroupId) return false
+    if (client.client_group_id && client.client_group_id !== client.id) return false
+    return normalizeDuplicateText(client.client_name || client.name) === normalizedName
+  }) || null
 }
 
 async function findContactDuplicate(payload) {
@@ -442,6 +447,28 @@ async function findContactDuplicate(payload) {
     if (mobile && rowMobile) return mobile === rowMobile
     return !email && !mobile
   }) || null
+}
+
+async function validateConsultantReference(payload) {
+  const name = clean(payload.consultant_name || payload.consultant)
+  const userId = clean(payload.consultant_user_id)
+  if (!name || name === '-') return
+  if (!userId) {
+    const err = new Error('Please select a valid consultant from the dropdown.')
+    err.statusCode = 400
+    throw err
+  }
+  const [{ data: userProfile, error: userProfileError }, { data: profile, error: profileError }] = await Promise.all([
+    supabase.from('user_profiles').select('user_id').eq('user_id', userId).maybeSingle(),
+    supabase.from('profiles').select('id').eq('id', userId).maybeSingle()
+  ])
+  if (userProfileError) throw userProfileError
+  if (profileError) throw profileError
+  if (!userProfile && !profile) {
+    const err = new Error('Please select a valid consultant from the dropdown.')
+    err.statusCode = 400
+    throw err
+  }
 }
 
 async function checkClientDuplicate(req, res) {
@@ -783,38 +810,33 @@ async function createClient(req, res) {
     if (rejectMultipartContractUpload(req, res)) return
     req.body = req.body || {}
     const payload = clientPayload(req.body)
+    await validateConsultantReference(payload)
     const isContactPersonAdd = Boolean(payload.client_group_id)
     const initialFollowUpDate = isContactPersonAdd ? '' : normalizeFollowUpDateValue(req.body.follow_up_date)
     const initialFollowUpComments = req.body.comments || req.body.notes
-    const duplicateAction = req.body.duplicate_action
     const duplicate = await findClientDuplicate(payload.client_name)
 
-    if (duplicate && !payload.client_group_id && duplicateAction !== 'update_current') {
-      return res.status(409).json({ error: 'A client with the same name already exists.', duplicate: true, existing: duplicate })
-    }
-
-    if (duplicate && duplicateAction === 'update_current') {
-      const { data, error } = await updateClientRow(duplicate.id, { ...payload, client_group_id: duplicate.client_group_id || duplicate.id, updated_at: new Date().toISOString() })
-      if (error) throw error
-      if (initialFollowUpDate) await createClientFollowUp(data.id, initialFollowUpDate, initialFollowUpComments)
-      await notifyClientConsultantAssignment(req, data, duplicate.consultant_name || duplicate.consultant)
-      return res.json(await loadClientWithRelations(data.id))
+    if (duplicate && !payload.client_group_id) {
+      return res.status(409).json({ error: 'Client already exists. Select it from the dropdown or add a contact person under the existing client.', duplicate: true, existing: duplicate })
     }
 
     if (payload.client_group_id) {
+      const { data: parent, error: parentLookupError } = await supabase
+        .from('clients')
+        .select('id, client_display_id')
+        .or(`id.eq.${payload.client_group_id},client_group_id.eq.${payload.client_group_id}`)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (parentLookupError) throw parentLookupError
+      if (!parent) {
+        return res.status(400).json({ error: 'Please select a valid client from the dropdown.' })
+      }
       const duplicateContact = await findContactDuplicate(payload)
       if (duplicateContact) {
         return res.status(409).json({ error: 'This contact person already exists for this client.', duplicate_contact: true, existing: duplicateContact })
       }
       if (!payload.client_display_id) {
-        const { data: parent, error: parentError } = await supabase
-          .from('clients')
-          .select('client_display_id')
-          .eq('client_group_id', payload.client_group_id)
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle()
-        if (parentError) throw parentError
         payload.client_display_id = parent?.client_display_id || null
       }
     }
@@ -904,7 +926,15 @@ async function updateClient(req, res) {
 
     await syncEditedClientFollowUp(req.params.id, req.body)
     const payload = clientPayload({ ...existing, ...req.body }, { validateContactPerson: false })
+    await validateConsultantReference(payload)
     delete payload.follow_up_date
+    const existingGroupId = existing.client_group_id || existing.id
+    if (!payload.client_group_id || payload.client_group_id === existing.id) {
+      const duplicate = await findClientDuplicate(payload.client_name, existingGroupId)
+      if (duplicate) {
+        return res.status(409).json({ error: 'Client already exists. Select the existing client or add this as a contact person under that client.', duplicate: true, existing: duplicate })
+      }
+    }
     if (!payload.client_display_id) {
       payload.client_display_id = existing?.client_display_id || await nextClientDisplayId(payload.client_name)
     }

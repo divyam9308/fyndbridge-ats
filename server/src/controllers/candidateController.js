@@ -217,6 +217,40 @@ async function findCandidateAnyDuplicate(email, mobileNumber) {
   }) || null
 }
 
+async function findCandidateIdentityDuplicate(email, mobileNumber, excludeCandidateId = '') {
+  const normalizedEmail = normalizeDuplicateEmail(email)
+  const normalizedMobile = normalizeDuplicateMobile(mobileNumber)
+
+  if (!isDuplicateValue(normalizedEmail) && !isDuplicateValue(normalizedMobile)) return null
+
+  const { data, error } = await supabase
+    .from('candidates')
+    .select('id, email, mobile_number')
+    .limit(10000)
+
+  if (error) throw error
+
+  return (data || []).find((candidate) => {
+    if (excludeCandidateId && candidate.id === excludeCandidateId) return false
+    const emailMatches = isDuplicateValue(normalizedEmail) && normalizeDuplicateEmail(candidate.email) === normalizedEmail
+    const mobileMatches = isDuplicateValue(normalizedMobile) && normalizeDuplicateMobile(candidate.mobile_number) === normalizedMobile
+    if (emailMatches) return 'email'
+    if (mobileMatches) return 'mobile'
+    return false
+  }) || null
+}
+
+function candidateDuplicateError(duplicate, email, mobileNumber) {
+  if (!duplicate) return null
+  const emailMatches = isDuplicateValue(normalizeDuplicateEmail(email)) && normalizeDuplicateEmail(duplicate.email) === normalizeDuplicateEmail(email)
+  const mobileMatches = isDuplicateValue(normalizeDuplicateMobile(mobileNumber)) && normalizeDuplicateMobile(duplicate.mobile_number) === normalizeDuplicateMobile(mobileNumber)
+  return emailMatches
+    ? 'Another candidate already exists with this email.'
+    : mobileMatches
+      ? 'Another candidate already exists with this mobile number.'
+      : 'Duplicate candidate found.'
+}
+
 async function findMatchingCandidates(email, mobileNumber) {
   const normalizedEmail = normalizeDuplicateEmail(email)
   const normalizedMobile = normalizeDuplicateMobile(mobileNumber)
@@ -536,21 +570,45 @@ async function findExactAssociationDuplicate({ email, mobileNumber, clientId, jo
 }
 
 async function validateMandateReference(payload) {
+  const hasClientName = cleanText(payload.client_name) && cleanText(payload.client_name) !== '-'
   const hasJobTitle = cleanText(payload.job_title) && cleanText(payload.job_title) !== '-'
-  if (!hasJobTitle && !payload.job_id) return
-  if (!payload.job_id) {
-    throw Object.assign(new Error('Select an existing mandate. Create it in Mandates first.'), { statusCode: 400 })
+  if ((hasClientName || hasJobTitle || payload.client_id || payload.job_id) && !payload.client_id) {
+    throw Object.assign(new Error('Please select a valid client from the dropdown.'), { statusCode: 400 })
   }
-  const { data, error } = await supabase.from('jobs').select('id, title, client_id').eq('id', payload.job_id).maybeSingle()
+  if (hasClientName || hasJobTitle || payload.client_id || payload.job_id) {
+    if (!payload.job_id) {
+      throw Object.assign(new Error('Please select a valid mandate from the dropdown.'), { statusCode: 400 })
+    }
+  } else {
+    return
+  }
+  if (!payload.job_id) {
+    throw Object.assign(new Error('Please select a valid mandate from the dropdown.'), { statusCode: 400 })
+  }
+  const { data, error } = await supabase.from('jobs').select('id, title, client_id, clients(client_name, name)').eq('id', payload.job_id).maybeSingle()
   if (error) throw error
   if (!data) {
-    throw Object.assign(new Error('Selected mandate was not found. Create it in Mandates first.'), { statusCode: 400 })
+    throw Object.assign(new Error('Please select a valid mandate from the dropdown.'), { statusCode: 400 })
   }
-  if (payload.client_id && data.client_id && payload.client_id !== data.client_id) {
+  if (!data.client_id || payload.client_id !== data.client_id) {
     throw Object.assign(new Error('Selected mandate does not belong to the selected client.'), { statusCode: 400 })
   }
   payload.job_title = data.title || payload.job_title
-  payload.client_id = data.client_id || payload.client_id
+  payload.client_name = data.clients?.client_name || data.clients?.name || payload.client_name
+}
+
+async function validateConsultantReference(payload) {
+  const name = cleanText(payload.consultant_name)
+  const userId = cleanText(payload.consultant_user_id)
+  if (!name || name === '-') return
+  if (!userId) throw Object.assign(new Error('Please select a valid consultant from the dropdown.'), { statusCode: 400 })
+  const [{ data: userProfile, error: userProfileError }, { data: profile, error: profileError }] = await Promise.all([
+    supabase.from('user_profiles').select('user_id').eq('user_id', userId).maybeSingle(),
+    supabase.from('profiles').select('id').eq('id', userId).maybeSingle()
+  ])
+  if (userProfileError) throw userProfileError
+  if (profileError) throw profileError
+  if (!userProfile && !profile) throw Object.assign(new Error('Please select a valid consultant from the dropdown.'), { statusCode: 400 })
 }
 
 const CANDIDATE_FILTER_MAPPING = {
@@ -1167,6 +1225,13 @@ async function createCandidate(req, res) {
         ? associationPayload.status.trim()
         : "-";
     await validateMandateReference(associationPayload)
+    await validateConsultantReference(associationPayload)
+
+    const identityDuplicate = await findCandidateIdentityDuplicate(candidatePayload.email, candidatePayload.mobile_number)
+    const identityError = candidateDuplicateError(identityDuplicate, candidatePayload.email, candidatePayload.mobile_number)
+    if (identityError) {
+      return res.status(409).json({ error: identityError, duplicate: true, existing: identityDuplicate })
+    }
 
     const duplicateMatch = await findMatchingCandidates(candidatePayload.email, candidatePayload.mobile_number)
     const exactAssociation = duplicateMatch.matches.length
@@ -1339,6 +1404,7 @@ async function updateCandidate(req, res) {
           : '-';
     }
     await validateMandateReference(associationPayload)
+    await validateConsultantReference(associationPayload)
 
     let existingCandidateId = null
     let existingAssociation = null
@@ -1375,6 +1441,16 @@ async function updateCandidate(req, res) {
       return res.status(404).json({ error: 'Candidate or association not found' })
     }
     await assertRowEditable('candidates', existingCandidateId, admin)
+
+    const identityDuplicate = await findCandidateIdentityDuplicate(
+      candidatePayload.email,
+      candidatePayload.mobile_number,
+      existingCandidateId
+    )
+    const identityError = candidateDuplicateError(identityDuplicate, candidatePayload.email, candidatePayload.mobile_number)
+    if (identityError) {
+      return res.status(409).json({ error: identityError, duplicate: true, existing: identityDuplicate })
+    }
 
     if (Object.keys(candidatePayload).length) {
       const updatePayload = {

@@ -587,7 +587,9 @@ export default function ClientsPage() {
   const validate = () => {
     const next = {}
     if (addingNewClient && !form.client_display_id.trim()) next.client_display_id = 'Client ID is loading'
+    if (!editingClient && !addingNewClient && !form.client_group_id && form.client_name.trim()) next.client_name = 'Typed text is not a selected record. Please choose an option from the list.'
     if (!form.client_name.trim()) next.client_name = 'Client Name is required'
+    if (form.consultant_name.trim() && form.consultant_name !== '-' && !form.consultant_user_id) next.consultant_name = 'Please select a valid consultant from the dropdown.'
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
     if (form.client_group_id && !form.contact_person.trim()) next.contact_person = 'Contact Person is required'
     if (form.status && !STATUSES.includes(form.status)) next.status = 'Select a valid status'
@@ -736,7 +738,9 @@ export default function ClientsPage() {
 
   const validateContactPerson = () => {
     const next = {}
+    if (!form.client_group_id) next.client_name = 'Please select a valid client from the dropdown.'
     if (!form.contact_person.trim()) next.contact_person = 'Contact Person is required'
+    if (form.consultant_name.trim() && form.consultant_name !== '-' && !form.consultant_user_id) next.consultant_name = 'Please select a valid consultant from the dropdown.'
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
     if (!form.mobile.trim() && !form.email.trim()) next.mobile = 'Enter mobile or email'
     return next

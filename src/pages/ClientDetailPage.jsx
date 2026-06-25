@@ -303,9 +303,9 @@ export default function ClientDetailPage() {
     })
     candidates.forEach((candidate) => {
       const matchedJob = clientJobs.find(job => job.id === candidate.jobId) || clientJobs.find(job => (job.job_display_id || '') === (candidate.jobDisplayId || '') && normalizeText(job.title || job.role) === normalizeText(getJobText(candidate)))
-      const title = matchedJob ? matchedJob.title || matchedJob.role : getJobText(candidate) || 'Unassigned Mandate'
-      const key = matchedJob?.id || candidate.jobId || candidate.jobDisplayId || normalizeText(`${title}-${candidate.associationId || candidate.id}`)
-      if (!groups.has(key)) groups.set(key, { key, title, candidates: [], relatedJob: matchedJob })
+      if (!matchedJob) return
+      const title = matchedJob.title || matchedJob.role || 'Unassigned Mandate'
+      const key = matchedJob.id
       groups.get(key).candidates.push(candidate)
     })
 

@@ -509,10 +509,16 @@ export default function JobsPage() {
   const validate = () => {
     const next = {}
     if (!form.job_display_id) next.job_display_id = 'Job ID is required'
-    if (!form.client_id) next.client_id = 'Client Name is required'
+    if (!form.client_id) next.client_id = clientSearch.trim() ? 'Please select a valid client from the dropdown.' : 'Client Name is required'
     if (!form.role.trim()) next.role = 'Role is required'
     const realConsultants = selectedConsultants.filter(name => name !== '-')
     if (new Set(realConsultants).size !== realConsultants.length) next.consultants = 'Consultants cannot be duplicated'
+    const invalidConsultant = Object.entries(consultantSearch).some(([index, value]) => {
+      const text = String(value || '').trim()
+      return text && text !== selectedConsultants[Number(index)] && !userByName.has(text)
+    })
+    if (invalidConsultant) next.consultants = 'Please select a valid consultant from the dropdown.'
+    if (teamLeadSearch.trim() && teamLeadSearch !== '-' && !form.team_lead) next.team_lead = 'Please select a valid team lead from the dropdown.'
     return next
   }
 
@@ -941,6 +947,7 @@ export default function JobsPage() {
                       </div>
                     )}
                   </div>
+                  {errors.team_lead && <span className="form-error">{errors.team_lead}</span>}
                 </div>}
                 {!isJobFieldHidden('client_name') && <div className="form-group">
                   <label className="form-label">Client Name <span className="req">*</span></label>
