@@ -708,7 +708,7 @@ export default function ClientsPage() {
       .replace(/[^a-z0-9._-]+/gi, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 80) || 'contract'
-    return `contracts/${clientId}/${Date.now()}-${baseName}.pdf`
+    return `${new Date().getFullYear()}/${clientId}/${Date.now()}-${baseName}.pdf`
   }
 
   const uploadContractFile = async (clientId) => {
@@ -899,6 +899,24 @@ export default function ClientsPage() {
     if (!contacts.length) return {}
     const selected = selectedContacts[client._contact_group_id]
     return contacts.find((item) => item.id === selected) || contacts[0]
+  }
+
+  const deleteSelectedContact = async (client) => {
+    const contacts = client._contacts || []
+    const contact = selectedContact(client)
+    if (!contact?.id || contacts.length <= 1) return
+    if (!window.confirm(`Delete ${contactNameFor(contact)}?`)) return
+    try {
+      const res = await fetch(`/api/clients/${contact.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Unable to delete contact.')
+      const nextContact = contacts.find(item => item.id !== contact.id)
+      setSelectedContacts(current => ({ ...current, [client._contact_group_id]: nextContact?.id || '' }))
+      await fetchClients({ showLoading: false })
+      await fetchClientOptions()
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   const openAddFollowUp = (client) => {
@@ -1175,9 +1193,12 @@ export default function ClientsPage() {
           <td key={key}>
             <span className="inline-action-cell">
               {(client._contacts || []).length > 1 ? (
-                <select className="filter-select compact-select" value={contact.id || ''} onChange={(event) => setSelectedContacts((current) => ({ ...current, [client._contact_group_id]: event.target.value }))}>
-                  {client._contacts.map((item) => <option key={item.id} value={item.id}>{contactNameFor(item)}</option>)}
-                </select>
+                <>
+                  <select className="filter-select compact-select" value={contact.id || ''} onChange={(event) => setSelectedContacts((current) => ({ ...current, [client._contact_group_id]: event.target.value }))}>
+                    {client._contacts.map((item) => <option key={item.id} value={item.id}>{contactNameFor(item)}</option>)}
+                  </select>
+                  <button className="row-action-btn" type="button" title="Delete Contact" onClick={(event) => { event.stopPropagation(); deleteSelectedContact(client) }}><Trash2 size={12} /></button>
+                </>
               ) : (
                 <span>{highlightText(dash(contactNameFor(contact)), aiFilters)}</span>
               )}
