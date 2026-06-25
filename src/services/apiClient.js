@@ -94,7 +94,7 @@ function openUrlInNewTab(url) {
 
   if (!normalized) return false
 
-  console.log('[document open] window.open', { ok: true })
+  if (import.meta.env.DEV) console.debug('[document open] window.open', { ok: true })
 
   const opened = window.open(normalized, '_blank')
 
@@ -160,7 +160,7 @@ export async function openProtectedUrl(url, options = {}) {
   }
 
   try {
-    console.log('[document open] request', { url: rawUrl })
+    if (import.meta.env.DEV) console.debug('[document open] request', { url: rawUrl })
 
     const response = await apiFetch(rawUrl)
     const contentType = response.headers.get('content-type') || ''
@@ -175,7 +175,7 @@ export async function openProtectedUrl(url, options = {}) {
 
     const payload = await response.json().catch(() => ({}))
 
-    console.log('[document open] signed URL result', {
+    if (import.meta.env.DEV) console.debug('[document open] signed URL result', {
       ok: Boolean(payload.url),
       path: payload.path || '',
     })

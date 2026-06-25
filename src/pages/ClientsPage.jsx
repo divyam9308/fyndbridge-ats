@@ -251,6 +251,7 @@ export default function ClientsPage() {
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [contractUploading, setContractUploading] = useState(false)
+  const [saveStep, setSaveStep] = useState('')
   const [editingClient, setEditingClient] = useState(null)
   const [selectedFollowUps, setSelectedFollowUps] = useState({})
   const [selectedContacts, setSelectedContacts] = useState({})
@@ -709,7 +710,7 @@ export default function ClientsPage() {
       .replace(/[^a-z0-9._-]+/gi, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 80) || 'contract'
-    return `${new Date().getFullYear()}/${clientId}-${Date.now()}-${baseName}.pdf`
+    return `contracts/${clientId}/${Date.now()}-${baseName}.pdf`
   }
 
   const uploadContractFile = async (clientId) => {
@@ -719,6 +720,8 @@ export default function ClientsPage() {
     if (contractFile.type !== 'application/pdf') throw new Error('Contract document must be a PDF file.')
 
     const path = contractStoragePath(clientId, contractFile)
+    if (import.meta.env.DEV) console.debug('[clients:contract-upload]', { clientId, path, fileName: contractFile.name, fileSize: contractFile.size })
+    setSaveStep('Uploading contract...')
     setContractUploading(true)
     const { error } = await supabase.storage.from(STORAGE_BUCKETS.CONTRACT).upload(path, contractFile, {
       contentType: 'application/pdf',
@@ -730,12 +733,14 @@ export default function ClientsPage() {
   }
 
   const saveClientMetadata = async ({ method, url, payload }) => {
+    if (import.meta.env.DEV) console.debug('[clients:metadata-request]', { method, url, payload })
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
     const data = await res.json().catch(() => ({}))
+    if (import.meta.env.DEV) console.debug('[clients:metadata-response]', { method, url, status: res.status, body: data })
     if (res.status === 409 && data.duplicate) {
       const error = new Error(data.error || 'Duplicate client found.')
       error.duplicate = data
@@ -790,28 +795,44 @@ export default function ClientsPage() {
     if (duplicateAction) payload.duplicate_action = duplicateAction
 
     if (editingClient) {
+      setSaveStep(contractFile ? 'Uploading contract...' : 'Saving client...')
       const contract = await uploadContractFile(editingClient.id)
       if (contract) {
-        payload.contract_signed = true
-        payload.contract_document_path = contract.path
-        payload.contract_document_name = contract.name
+        setSaveStep('Finalizing contract...')
         try {
-          const data = await saveClientMetadata({ method: 'PATCH', url: `/api/clients/${editingClient.id}`, payload })
+          const data = await saveClientMetadata({
+            method: 'PATCH',
+            url: `/api/clients/${editingClient.id}`,
+            payload: {
+              contract_signed: true,
+              contract_document_path: contract.path,
+              contract_document_name: contract.name
+            }
+          })
           window.dispatchEvent(new Event('ats:clients-updated'))
+          setSaveStep('Done')
           return data
-        } catch {
-          throw new Error('Contract uploaded, but client record update failed. Please retry saving.')
+        } catch (err) {
+          throw new Error(import.meta.env.DEV ? `Contract uploaded, but client record update failed: ${err.message}` : 'Contract uploaded, but client record update failed. Please retry saving.', { cause: err })
         }
       }
       const data = await saveClientMetadata({ method: 'PATCH', url: `/api/clients/${editingClient.id}`, payload })
       window.dispatchEvent(new Event('ats:clients-updated'))
+      setSaveStep('Done')
       return data
     }
 
+    setSaveStep('Saving client...')
     const data = await saveClientMetadata({ method: 'POST', url: '/api/clients', payload })
     const clientId = data.id || data.data?.id
     if (contractFile) {
-      const contract = await uploadContractFile(clientId)
+      let contract
+      try {
+        contract = await uploadContractFile(clientId)
+      } catch (err) {
+        throw new Error(import.meta.env.DEV ? `Client was saved, but contract upload failed: ${err.message}` : 'Client was saved, but contract upload failed. Please upload the contract again from Edit Client.', { cause: err })
+      }
+      setSaveStep('Finalizing contract...')
       try {
         await saveClientMetadata({
           method: 'PATCH',
@@ -822,11 +843,12 @@ export default function ClientsPage() {
             contract_document_name: contract.name
           }
         })
-      } catch {
-        throw new Error('Contract uploaded, but client record update failed. Please retry saving.')
+      } catch (err) {
+        throw new Error(import.meta.env.DEV ? `Contract uploaded, but client record update failed: ${err.message}` : 'Contract uploaded, but client record update failed. Please retry saving.', { cause: err })
       }
     }
     window.dispatchEvent(new Event('ats:clients-updated'))
+    setSaveStep('Done')
     return data
   }
 
@@ -864,6 +886,7 @@ export default function ClientsPage() {
     } finally {
       setContractUploading(false)
       setSaving(false)
+      setSaveStep('')
     }
   }
 
@@ -1074,11 +1097,10 @@ export default function ClientsPage() {
     setStatusSaving(current => ({ ...current, [client.id]: true }))
     setTablePopover(null)
     try {
-      const body = new FormData()
-      body.append('status', nextStatus)
       const response = await fetch(`/api/clients/${client.id}`, {
         method: 'PATCH',
-        body
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus })
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.detail || data.error || 'Unable to update client status.')
@@ -1695,7 +1717,7 @@ export default function ClientsPage() {
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setIsOpen(false)} disabled={saving || contractUploading}>Cancel</button>
-              <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving || contractUploading}>{contractUploading ? 'Uploading...' : saving ? 'Saving...' : editingClient ? 'Update Client' : 'Save Client'}</button>
+              <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving || contractUploading}>{saveStep || (editingClient ? 'Update Client' : 'Save Client')}</button>
             </div>
           </div>
         </div>

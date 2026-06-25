@@ -34,6 +34,11 @@ function logAndSendInternal(res, method, err) {
   return res.status(500).json({ error: message, detail: err.message })
 }
 
+function debugClientContract(message, details) {
+  if (process.env.NODE_ENV === 'production') return
+  console.debug(`[clients:contract] ${message}`, details)
+}
+
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
 }
@@ -301,13 +306,15 @@ function normalizeClient(row, activeJobs = 0, followUps = [], jobs = []) {
     contract_document: documentOpenUrl('contract', row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document),
     contract_pdf_url: documentOpenUrl('contract', row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document),
     contract_pdf_storage_path: normalizeStoragePath(row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document, STORAGE_BUCKETS.CONTRACT),
+    contract_document_name: row.contract_document_name || '',
     activeJobs,
     follow_up_date: latestFollowUp?.follow_up_date || '',
     follow_ups: followUps
   }
 }
 
-function clientPayload(body) {
+function clientPayload(body, options = {}) {
+  const validateContactPerson = options.validateContactPerson !== false
   const status = clean(body.status) || null
   if (status && !CLIENT_STATUSES.includes(status)) {
     const err = new Error(`Status must be one of: ${CLIENT_STATUSES.join(', ')}`)
@@ -315,7 +322,7 @@ function clientPayload(body) {
     throw err
   }
 
-  const termsType = body.terms_signed_type || body.terms_type || ''
+  const termsType = body.terms_signed_type || body.terms_signed || body.terms_type || ''
   if (termsType && !TERMS_TYPES.includes(termsType)) {
     const err = new Error(`Terms Signed must be one of: ${TERMS_TYPES.join(', ')}`)
     err.statusCode = 400
@@ -341,12 +348,12 @@ function clientPayload(body) {
     err.statusCode = 400
     throw err
   }
-  if (body.client_group_id && !contactPerson) {
+  if (validateContactPerson && body.client_group_id && !contactPerson) {
     const err = new Error('Contact Person is required')
     err.statusCode = 400
     throw err
   }
-  if (body.client_group_id && isPlaceholderContactPayload({ contactPerson, mobile, email, linkedin: body.linkedin, designation: body.designation })) {
+  if (validateContactPerson && body.client_group_id && isPlaceholderContactPayload({ contactPerson, mobile, email, linkedin: body.linkedin, designation: body.designation })) {
     const err = new Error('Enter real contact details before saving a contact person')
     err.statusCode = 400
     throw err
@@ -382,15 +389,15 @@ function clientPayload(body) {
     status: status || '',
     terms_signed_type: contractSigned ? nullable(termsType) : null,
     terms_signed_custom: contractSigned && termsType === 'Any Other' ? nullable(body.terms_signed_custom) : null,
-    terms_value: contractSigned ? nullable(body.terms_value) : null,
+    terms_value: contractSigned ? nullable(body.terms_value || body.value) : null,
     billing_entity: contractSigned ? nullable(body.billing_entity) : null,
     contract_signed: contractSigned,
     contract_document: contractSigned ? nullable(contractPath) : null,
     contract_pdf_url: contractSigned ? nullable(contractPath) : null,
     contract_pdf_storage_path: contractSigned ? nullable(contractPath) : null,
     contract_document_name: contractSigned ? contractDocumentName : null,
-    gstin: contractSigned ? nullable(body.gstin) : null,
-    pan: contractSigned ? nullable(body.pan) : null,
+    gstin: contractSigned ? nullable(body.gstin || body.GSTIN) : null,
+    pan: contractSigned ? nullable(body.pan || body.PAN) : null,
     address_on_invoice: contractSigned ? nullable(body.address_on_invoice) : null
   }
 }
@@ -882,6 +889,13 @@ async function updateClient(req, res) {
     if (rejectMultipartContractUpload(req, res)) return
     req.body = req.body || {}
     const admin = await isAdmin(req.user)
+    debugClientContract('patch received', {
+      clientId: req.params.id,
+      url: req.originalUrl,
+      body: req.body,
+      userEmail: req.user?.email || '',
+      admin
+    })
     await assertRowEditable('clients', req.params.id, admin)
     await assertCanUpdateColumns('clients', req.body, admin)
     const { data: existing, error: existingError } = await supabase.from('clients').select('*').eq('id', req.params.id).maybeSingle()
@@ -889,14 +903,29 @@ async function updateClient(req, res) {
     if (!existing) return res.status(404).json({ error: 'Client not found' })
 
     await syncEditedClientFollowUp(req.params.id, req.body)
-    const payload = clientPayload({ ...existing, ...req.body })
+    const payload = clientPayload({ ...existing, ...req.body }, { validateContactPerson: false })
     delete payload.follow_up_date
     if (!payload.client_display_id) {
       payload.client_display_id = existing?.client_display_id || await nextClientDisplayId(payload.client_name)
     }
+    debugClientContract('payload resolved', {
+      clientId: req.params.id,
+      contract_document_path: payload.contract_pdf_storage_path,
+      contract_document_name: payload.contract_document_name,
+      payload
+    })
     const { data, error } = await updateClientRow(req.params.id, { ...payload, updated_at: new Date().toISOString() })
 
-    if (error) throw error
+    if (error) {
+      debugClientContract('supabase update failed', {
+        clientId: req.params.id,
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      })
+      throw error
+    }
     await notifyClientConsultantAssignment(req, data, existing.consultant_name || existing.consultant)
     return res.json(await stripHiddenFields('clients', await loadClientWithRelations(data.id), admin))
   } catch (err) {
