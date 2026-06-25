@@ -199,6 +199,30 @@
   flex-wrap: nowrap;
   overflow: visible;
 }
+.candidates-page {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.candidates-toolbar .filter-select,
+.candidates-toolbar .filter-input,
+.candidates-toolbar .candidate-sort-btn {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+}
+.candidates-toolbar .candidate-columns-btn {
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
+}
+.candidates-toolbar .filter-label,
+.candidates-toolbar .filter-select,
+.candidates-toolbar .candidate-sort-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .filter-bar-spacer {
   flex: 1 1 auto;
   min-width: 16px;
@@ -212,7 +236,8 @@
 }
 .candidate-ai-filter-input {
   width: 220px;
-  min-width: 180px;
+  min-width: 220px;
+  max-width: 220px;
   flex: 0 0 220px;
 }
 .candidate-sort-control {
@@ -598,6 +623,18 @@
 .table-wrapper {
   overflow-x: auto;
 }
+.candidates-table-card {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  min-height: 620px;
+}
+.candidates-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -661,7 +698,8 @@
 
 /* ===== Sticky Candidates Master Table ===== */
 .candidates-master-table {
-  min-width: 2500px;
+  table-layout: fixed;
+  border-collapse: collapse;
 }
 .fb-theme-table thead tr,
 .candidates-master-table thead tr {
@@ -1232,6 +1270,71 @@
   background: inherit;
 }
 
+.candidates-master-table th,
+.candidates-master-table td {
+  height: 48px;
+  max-height: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidates-master-table th,
+.candidates-master-table td,
+.candidates-master-table th:nth-child(1),
+.candidates-master-table td:nth-child(1),
+.candidates-master-table th:nth-child(2),
+.candidates-master-table td:nth-child(2),
+.candidates-master-table th:nth-child(3),
+.candidates-master-table td:nth-child(3),
+.candidates-master-table th:nth-child(4),
+.candidates-master-table td:nth-child(4),
+.candidates-master-table th:nth-child(5),
+.candidates-master-table td:nth-child(5),
+.candidates-master-table th:nth-child(6),
+.candidates-master-table td:nth-child(6),
+.candidates-master-table th:nth-child(8),
+.candidates-master-table td:nth-child(8) {
+  min-width: 0;
+}
+
+.candidates-master-table .candidate-consultant-chip span:last-child,
+.candidates-master-table .table-comment-cell,
+.candidates-master-table .table-comment-text,
+.candidates-master-table .table-chip-cell {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.candidates-master-table .table-chip-list {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.candidates-master-table .table-view-more {
+  display: none;
+}
+
+.candidates-table-skeleton td,
+.candidates-table-skeleton th {
+  background: inherit;
+}
+
+.candidate-skeleton-cell {
+  display: block;
+  width: 78%;
+  height: 14px;
+  border-radius: 5px;
+  background: #e8edf5;
+}
+
+.candidate-skeleton-header {
+  width: 64%;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.32);
+}
+
 .candidates-master-table th:nth-child(1),
 .candidates-master-table td:nth-child(1) {
   min-width: 50px;
@@ -1260,6 +1363,25 @@
 .candidates-master-table th:nth-child(6),
 .candidates-master-table td:nth-child(6) {
   min-width: 190px;
+}
+
+.candidates-master-table th,
+.candidates-master-table td,
+.candidates-master-table th:nth-child(1),
+.candidates-master-table td:nth-child(1),
+.candidates-master-table th:nth-child(2),
+.candidates-master-table td:nth-child(2),
+.candidates-master-table th:nth-child(3),
+.candidates-master-table td:nth-child(3),
+.candidates-master-table th:nth-child(4),
+.candidates-master-table td:nth-child(4),
+.candidates-master-table th:nth-child(5),
+.candidates-master-table td:nth-child(5),
+.candidates-master-table th:nth-child(6),
+.candidates-master-table td:nth-child(6),
+.candidates-master-table th:nth-child(8),
+.candidates-master-table td:nth-child(8) {
+  min-width: 0;
 }
 
 .cell-ellipsis {

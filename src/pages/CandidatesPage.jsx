@@ -127,6 +127,47 @@ const getCurrentUser = () => {
     return {}
   }
 }
+const readStoredCandidateColumns = () => {
+  if (typeof window === 'undefined') return null
+  try {
+    return mergeCandidateColumnPreference(JSON.parse(window.localStorage.getItem(CANDIDATES_TABLE_COLUMNS_PREFERENCE_KEY) || 'null'))
+  } catch {
+    return null
+  }
+}
+const storeCandidateColumns = (value) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(CANDIDATES_TABLE_COLUMNS_PREFERENCE_KEY, JSON.stringify(value))
+  } catch {
+    // Ignore storage failures; backend preference remains the source of truth.
+  }
+}
+function CandidatesTableSkeleton({ columns, tableMinWidth }) {
+  return (
+    <table className="data-table candidates-master-table candidates-table candidates-table-skeleton" aria-label="Loading candidates" style={{ minWidth: tableMinWidth }}>
+      <colgroup>
+        {columns.map(column => <col key={column.key} style={{ width: column.width }} />)}
+      </colgroup>
+      <thead>
+        <tr>
+          {columns.map(column => (
+            <th key={column.key}><span className="candidate-skeleton-cell candidate-skeleton-header" /></th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: 10 }).map((_, rowIndex) => (
+          <tr key={rowIndex}>
+            {columns.map(column => (
+              <td key={column.key}><span className="candidate-skeleton-cell" /></td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
 const AI_FILTER_FIELDS = [
   'candidate_id',
   'name',
@@ -379,9 +420,10 @@ export default function CandidatesPage() {
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [columnsAnchor, setColumnsAnchor] = useState(null)
   const [sortAnchor, setSortAnchor] = useState(null)
-  const [visibleColumns, setVisibleColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
-  const [pendingColumns, setPendingColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
-  const [savedColumns, setSavedColumns] = useState(null)
+  const initialCandidateColumns = useMemo(() => readStoredCandidateColumns() || DEFAULT_CANDIDATE_COLUMN_KEYS, [])
+  const [visibleColumns, setVisibleColumns] = useState(initialCandidateColumns)
+  const [pendingColumns, setPendingColumns] = useState(initialCandidateColumns)
+  const [savedColumns, setSavedColumns] = useState(initialCandidateColumns)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
   const columnsDropdownRef = useRef(null)
@@ -454,10 +496,9 @@ export default function CandidatesPage() {
           setVisibleColumns(value)
           setPendingColumns(value)
           setSavedColumns(value)
+          storeCandidateColumns(value)
         }
       } catch {
-        setVisibleColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)
-        setPendingColumns(DEFAULT_CANDIDATE_COLUMN_KEYS)
       }
     }, 0)
 
@@ -832,6 +873,7 @@ export default function CandidatesPage() {
     const allowed = allowedCandidateColumnKeys()
     const next = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
     setVisibleColumns(next.length ? next : allowed)
+    storeCandidateColumns(next.length ? next : allowed)
     setColumnsOpen(false)
   }
 
@@ -852,6 +894,7 @@ export default function CandidatesPage() {
         throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
       }
       setSavedColumns(value)
+      storeCandidateColumns(value)
     } catch (err) {
       setApiError(err.message)
     }
@@ -1838,6 +1881,7 @@ export default function CandidatesPage() {
   }
   const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => (visibleColumns.includes(column.key) || column.key === 'jobId') && !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
   const availableColumns = CANDIDATE_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  const candidateTableMinWidth = activeColumns.reduce((sum, column) => sum + (column.width || 140), 0)
 
   const updateCandidateLockState = async (record) => {
     setCandidates(current => current.map(candidate => candidate.candidateId === record.id ? { ...candidate, isLocked: record.is_locked } : candidate))
@@ -2030,7 +2074,7 @@ export default function CandidatesPage() {
   }
 
   return (
-    <div>
+    <div className="candidates-page">
       <input
         ref={fileInputRef}
         type="file"
@@ -2045,7 +2089,7 @@ export default function CandidatesPage() {
         </div>
       )}
 
-      <div className="candidate-columns-toolbar">
+      <div className="candidate-columns-toolbar candidates-toolbar">
         <NewActionDropdown
           onUploadResumes={() => fileInputRef.current?.click()}
           onAddCandidate={openAddModal}
@@ -2095,7 +2139,7 @@ export default function CandidatesPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="filter-bar candidates-filter-bar">
+      <div className="filter-bar candidates-filter-bar candidates-toolbar">
         <span className="filter-label">Mandate</span>
         <select className="filter-select" value={filterJob}
           onChange={e => { setFilterJob(e.target.value); setPage(1) }} id="filter-candidate-job">
@@ -2151,11 +2195,10 @@ export default function CandidatesPage() {
 
 
       {/* Table */}
-      <div className="table-card">
+      <div className="table-card candidates-table-card">
         {loadingCandidates ? (
-          <div className="empty-state">
-            <div className="empty-state-icon"><Loader2 size={28} color="var(--gold)" className="spin" /></div>
-            <div className="empty-state-title">Loading candidates</div>
+          <div className="table-wrapper candidates-table-scroll">
+            <CandidatesTableSkeleton columns={activeColumns} tableMinWidth={candidateTableMinWidth} />
           </div>
         ) : filtered.length === 0 ? (
           <div className="empty-state">
@@ -2164,8 +2207,11 @@ export default function CandidatesPage() {
             <div className="empty-state-desc">Try adjusting your filters or add a new candidate.</div>
           </div>
         ) : (
-          <div className="table-wrapper">
-            <table className="data-table candidates-master-table" aria-label="Candidates">
+          <div className="table-wrapper candidates-table-scroll">
+            <table className="data-table candidates-master-table candidates-table" aria-label="Candidates" style={{ minWidth: candidateTableMinWidth }}>
+              <colgroup>
+                {activeColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}
+              </colgroup>
               <thead>
                 <tr>
                   {activeColumns.map(column => <th key={column.key}>{column.label}</th>)}
