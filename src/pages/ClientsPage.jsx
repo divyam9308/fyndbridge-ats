@@ -708,7 +708,7 @@ export default function ClientsPage() {
       .replace(/[^a-z0-9._-]+/gi, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 80) || 'contract'
-    return `${new Date().getFullYear()}/${clientId}/${Date.now()}-${baseName}.pdf`
+    return `${new Date().getFullYear()}/${clientId}-${Date.now()}-${baseName}.pdf`
   }
 
   const uploadContractFile = async (clientId) => {
