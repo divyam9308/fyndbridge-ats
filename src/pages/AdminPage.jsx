@@ -179,6 +179,11 @@ export default function AdminPage() {
     setProfiles(profileOptions.data || [])
   }, [])
 
+  const loadLockedRecords = useCallback(async () => {
+    const locks = await fetchLockedRecords()
+    setLockedRecords(locks.data || [])
+  }, [])
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setSavedPermissions(currentSaved => {
@@ -231,7 +236,6 @@ export default function AdminPage() {
     onChange: () => {
       if (isAdmin) {
         loadAdminData().catch(err => setError(err.message))
-        refresh()
       }
     },
     enabled: isAdmin
@@ -241,7 +245,7 @@ export default function AdminPage() {
     channelName: 'realtime:admin-page-locks',
     tables: ['clients', 'candidates', 'jobs'],
     onChange: () => {
-      if (isAdmin) loadAdminData().catch(err => setError(err.message))
+      if (isAdmin) loadLockedRecords().catch(err => setError(err.message))
     },
     enabled: isAdmin
   })
@@ -325,11 +329,9 @@ export default function AdminPage() {
       setPermissions(draftPermissions)
       await refreshPermissions()
       notifyAdminPermissionsChanged()
-      await refresh()
     } catch (err) {
       setError(err.message)
       await refreshPermissions().catch(() => null)
-      await refresh()
     } finally {
       setSavingPermissions(false)
     }
@@ -387,7 +389,7 @@ export default function AdminPage() {
     const tableName = TYPE_META[record.type]?.key
     if (!tableName) return
     await setRecordLock(tableName, record.id, false)
-    await loadAdminData()
+    await loadLockedRecords()
   }
 
   return (
