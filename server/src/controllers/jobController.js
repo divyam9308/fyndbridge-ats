@@ -186,6 +186,17 @@ async function nextJobDisplayId() {
   return allocateNextDisplayId({ supabase, table: 'jobs', column: 'job_display_id', prefix: 'JB' })
 }
 
+async function findDuplicateMandate(clientId, title) {
+  const normalizedTitle = clean(title).toLowerCase()
+  if (!clientId || !normalizedTitle) return null
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('id, title, job_display_id')
+    .eq('client_id', clientId)
+  if (error) throw error
+  return (data || []).find(job => clean(job.title).toLowerCase() === normalizedTitle) || null
+}
+
 function jobFilterValue(row, field) {
   return {
     job_id: row.job_display_id,
@@ -380,6 +391,10 @@ async function updateJobRow(id, payload) {
 async function createJob(req, res) {
   try {
     const payload = await payloadFromBody(req.body)
+    const duplicate = await findDuplicateMandate(payload.client_id, payload.title)
+    if (duplicate) {
+      return res.status(409).json({ error: 'Duplicate mandate found for this client and job name.', duplicate: true, existing: duplicate })
+    }
     if (req.file) {
       const jd = await uploadDocument(req.file, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
       payload.jd_url = jd.path
