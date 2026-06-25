@@ -285,6 +285,7 @@ export default function ClientsPage() {
   const [statusOpen, setStatusOpen] = useState(false)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
+  const [contactSaving, setContactSaving] = useState({})
   const [statusUpdateError, setStatusUpdateError] = useState('')
   const [expandedCells, setExpandedCells] = useState({})
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
@@ -304,6 +305,7 @@ export default function ClientsPage() {
   const clientIdRequestRef = useRef(0)
   const followUpModalRef = useRef(null)
   const duplicateModalRef = useRef(null)
+  const contactSavingRef = useRef({})
   const pendingRealtimeRefreshRef = useRef(false)
   const suppressRealtimeUntilRef = useRef(0)
 
@@ -674,14 +676,13 @@ export default function ClientsPage() {
     const source = isRealContact(currentContact)
       ? currentContact
       : (client._contacts || []).find(isRealContact) || client
-    const followUp = selectedFollowUp(client)
     setForm({
       ...clientToForm({ ...client, ...source }),
       client_group_id: client.client_group_id || client.id,
       client_display_id: client.client_display_id || source.client_display_id || '',
-      follow_up_id: followUp?.id || '',
-      follow_up_date: followUp?.follow_up_date || '',
-      comments: followUp?.follow_up_comments || source.comments || client.comments || '',
+      follow_up_id: '',
+      follow_up_date: '',
+      comments: source.comments || client.comments || '',
       contact_person: '',
       mobile: '',
       email: '',
@@ -744,6 +745,46 @@ export default function ClientsPage() {
     return data
   }
 
+  const validateContactPerson = () => {
+    const next = {}
+    if (!form.contact_person.trim()) next.contact_person = 'Contact Person is required'
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
+    if (!form.mobile.trim() && !form.email.trim()) next.mobile = 'Enter mobile or email'
+    return next
+  }
+
+  const handleAddContactPerson = async () => {
+    const clientId = form.client_group_id || selectedExistingClientId
+    if (!clientId || contactSavingRef.current[clientId]) return
+    const nextErrors = validateContactPerson()
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors)
+      return
+    }
+    const payload = { ...form }
+    delete payload.follow_up_id
+    delete payload.follow_up_date
+    if (import.meta.env.DEV) console.debug('[clients]', { actionType: 'add_contact_person', clientId, payload })
+    contactSavingRef.current[clientId] = true
+    setContactSaving(current => ({ ...current, [clientId]: true }))
+    setSaving(true)
+    try {
+      const data = await saveClientMetadata({ method: 'POST', url: '/api/clients', payload })
+      if (import.meta.env.DEV) console.debug('[clients]', { actionType: 'add_contact_person', clientId, status: 201 })
+      setIsOpen(false)
+      setAddingContactPerson(false)
+      setSelectedContacts(current => ({ ...current, [clientId]: data.id || data.data?.id || current[clientId] || '' }))
+      await fetchClients({ showLoading: false })
+      await fetchClientOptions()
+    } catch (err) {
+      setErrors({ contact_person: err.message })
+    } finally {
+      setSaving(false)
+      contactSavingRef.current[clientId] = false
+      setContactSaving(current => ({ ...current, [clientId]: false }))
+    }
+  }
+
   const saveClientToApi = async (duplicateAction = '') => {
     const payload = { ...form }
     if (duplicateAction) payload.duplicate_action = duplicateAction
@@ -790,6 +831,10 @@ export default function ClientsPage() {
   }
 
   const handleSave = async () => {
+    if (addingContactPerson) {
+      await handleAddContactPerson()
+      return
+    }
     const nextErrors = validate()
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors)
@@ -953,13 +998,16 @@ export default function ClientsPage() {
       setError(null)
       setFollowUpError('')
       const clientId = followUpClientKey(followUpClient)
+      const payload = { ...followUpForm, follow_up_date: normalizedDate }
+      if (import.meta.env.DEV) console.debug('[clients]', { actionType: 'add_follow_up_date', clientId, payload })
       suppressRealtimeUntilRef.current = Date.now() + 2500
       const res = await fetch(editingFollowUp ? `/api/clients/${clientId}/follow-ups/${editingFollowUp.id}` : `/api/clients/${clientId}/follow-ups`, {
         method: editingFollowUp ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...followUpForm, follow_up_date: normalizedDate })
+        body: JSON.stringify(payload)
       })
       const data = await res.json().catch(() => ({}))
+      if (import.meta.env.DEV) console.debug('[clients]', { actionType: 'add_follow_up_date', clientId, status: res.status })
       if (!res.ok) throw new Error(data.error || 'Unable to save follow-up.')
       if (data.client) mergeClientUpdate(data.client)
       const latestFollowUps = Array.isArray(data.client?.follow_ups) ? data.client.follow_ups : []
@@ -1188,7 +1236,9 @@ export default function ClientsPage() {
             </div>
           </td>
         )
-      case 'contactPerson':
+      case 'contactPerson': {
+        const contactSaveKey = client._contact_group_id || client.client_group_id || client.id
+        const isContactSaving = Boolean(contactSaving[contactSaveKey])
         return (
           <td key={key}>
             <span className="inline-action-cell">
@@ -1202,10 +1252,11 @@ export default function ClientsPage() {
               ) : (
                 <span>{highlightText(dash(contactNameFor(contact)), aiFilters)}</span>
               )}
-              <button className="row-action-btn" type="button" title="Add Contact" onClick={() => openContactModal(client)}><Plus size={12} /></button>
+              <button className="row-action-btn" type="button" title="Add Contact" disabled={isContactSaving} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openContactModal(client) }}>{isContactSaving ? <Loader2 size={12} className="spin" /> : <Plus size={12} />}</button>
             </span>
           </td>
         )
+      }
       case 'mobile':
         return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12.5 }}>{highlightText(dash(contact.mobile || contact.phone), aiFilters)}</td>
       case 'email':

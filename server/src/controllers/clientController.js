@@ -58,7 +58,15 @@ function normalizeBoolean(value) {
 }
 
 function normalizeDuplicateText(value) {
-  return clean(value).toLowerCase()
+  return clean(value).replace(/[\u200B-\u200D\uFEFF\u2060]/g, '').toLowerCase()
+}
+
+function normalizeContactValue(value) {
+  return clean(value).replace(/[\u200B-\u200D\uFEFF\u2060]/g, '').toLowerCase()
+}
+
+function normalizeContactPhone(value) {
+  return clean(value).replace(/[\u200B-\u200D\uFEFF\u2060]/g, '').replace(/\s+/g, '')
 }
 
 function isPlaceholderContactPayload({ contactPerson, mobile, email, linkedin, designation }) {
@@ -402,6 +410,33 @@ async function findClientDuplicate(name) {
   return (data || []).find((client) => normalizeDuplicateText(client.client_name || client.name) === normalizedName) || null
 }
 
+async function findContactDuplicate(payload) {
+  const groupId = clean(payload.client_group_id)
+  if (!groupId) return null
+  const name = normalizeContactValue(payload.contact_person || payload.contact)
+  const email = normalizeContactValue(payload.email)
+  const mobile = normalizeContactPhone(payload.mobile || payload.phone)
+  if (!name && !email && !mobile) return null
+
+  const { data, error } = await supabase
+    .from('clients')
+    .select('id, contact_person, contact, email, mobile, phone')
+    .or(`id.eq.${groupId},client_group_id.eq.${groupId}`)
+  if (error) throw error
+
+  return (data || []).find((row) => {
+    const rowName = normalizeContactValue(row.contact_person || row.contact)
+    const rowEmail = normalizeContactValue(row.email)
+    const rowMobile = normalizeContactPhone(row.mobile || row.phone)
+    if (email && rowEmail === email) return true
+    if (mobile && rowMobile === mobile) return true
+    if (name !== rowName) return false
+    if (email && rowEmail) return email === rowEmail
+    if (mobile && rowMobile) return mobile === rowMobile
+    return !email && !mobile
+  }) || null
+}
+
 async function checkClientDuplicate(req, res) {
   try {
     const existing = await findClientDuplicate(req.query.name)
@@ -740,9 +775,10 @@ async function createClient(req, res) {
   try {
     if (rejectMultipartContractUpload(req, res)) return
     req.body = req.body || {}
-    const initialFollowUpDate = normalizeFollowUpDateValue(req.body.follow_up_date)
-    const initialFollowUpComments = req.body.comments || req.body.notes
     const payload = clientPayload(req.body)
+    const isContactPersonAdd = Boolean(payload.client_group_id)
+    const initialFollowUpDate = isContactPersonAdd ? '' : normalizeFollowUpDateValue(req.body.follow_up_date)
+    const initialFollowUpComments = req.body.comments || req.body.notes
     const duplicateAction = req.body.duplicate_action
     const duplicate = await findClientDuplicate(payload.client_name)
 
@@ -759,6 +795,10 @@ async function createClient(req, res) {
     }
 
     if (payload.client_group_id) {
+      const duplicateContact = await findContactDuplicate(payload)
+      if (duplicateContact) {
+        return res.status(409).json({ error: 'This contact person already exists for this client.', duplicate_contact: true, existing: duplicateContact })
+      }
       if (!payload.client_display_id) {
         const { data: parent, error: parentError } = await supabase
           .from('clients')
