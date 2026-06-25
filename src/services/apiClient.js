@@ -2,6 +2,13 @@ import { supabase } from './supabaseClient'
 
 const API_UNAUTHORIZED_EVENT = 'fb:api-unauthorized'
 const documentOpenLocks = new Map()
+const DOCUMENT_OPEN_TYPES = {
+  cv: { bucket: 'resumes', endpoint: '/api/resumes/open' },
+  resume: { bucket: 'resumes', endpoint: '/api/resumes/open' },
+  contract: { bucket: 'contract-pdfs', endpoint: '/api/documents/open/contract' },
+  jd: { bucket: 'jds', endpoint: '/api/documents/open/jd' },
+  invoice: { bucket: 'invoice', endpoint: '/api/documents/open/invoice' }
+}
 
 const isPrivateApiUrl = (value) => {
   const text = String(value || '')
@@ -119,6 +126,18 @@ function showDocumentToast(message) {
   window.setTimeout(() => toast.remove(), 5000)
 }
 
+export function isValidStoragePath(path) {
+  const text = String(path ?? '').trim()
+  return Boolean(text && text !== '-' && !text.startsWith('/tmp/'))
+}
+
+export function documentOpenUrl(type, path) {
+  const config = DOCUMENT_OPEN_TYPES[type]
+  if (!config || !isValidStoragePath(path)) return ''
+  const params = new URLSearchParams({ path: String(path).trim() })
+  return `${config.endpoint}?${params.toString()}`
+}
+
 export function openExternalUrl(url) {
   const normalized = normalizeExternalUrl(url)
   if (!normalized) return false
@@ -198,6 +217,16 @@ export async function openProtectedUrl(url, options = {}) {
     showDocumentToast(err.message || notFoundMessage)
     return false
   }
+}
+
+export async function openProtectedDocumentPath(type, path, options = {}) {
+  const config = DOCUMENT_OPEN_TYPES[type]
+  if (!config || !isValidStoragePath(path)) {
+    showDocumentToast(options.missingMessage || 'Document is missing or needs to be reuploaded')
+    return false
+  }
+  if (import.meta.env.DEV) console.debug('[storage] generating signed URL only after click', { bucket: config.bucket, path })
+  return openProtectedUrl(documentOpenUrl(type, path), options)
 }
 
 export { API_UNAUTHORIZED_EVENT }

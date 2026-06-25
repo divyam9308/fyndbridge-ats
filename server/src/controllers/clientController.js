@@ -1,7 +1,7 @@
 const { randomUUID } = require('crypto')
 const supabase = require('../services/supabaseAdmin')
 const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
-const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
+const { STORAGE_BUCKETS, normalizeStoragePath } = require('../services/storageBuckets')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { parseAiFilters } = require('../services/aiFilterParser')
@@ -303,8 +303,8 @@ function normalizeClient(row, activeJobs = 0, followUps = [], jobs = []) {
     terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
     billing_entity: row.billing_entity || '',
     contract_signed: Boolean(row.contract_signed),
-    contract_document: documentOpenUrl('contract', row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document),
-    contract_pdf_url: documentOpenUrl('contract', row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document),
+    contract_document: normalizeStoragePath(row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document, STORAGE_BUCKETS.CONTRACT),
+    contract_pdf_url: normalizeStoragePath(row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document, STORAGE_BUCKETS.CONTRACT),
     contract_pdf_storage_path: normalizeStoragePath(row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document, STORAGE_BUCKETS.CONTRACT),
     contract_document_name: row.contract_document_name || '',
     activeJobs,

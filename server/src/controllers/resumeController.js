@@ -18,6 +18,11 @@ function isTempResumePath(value) {
   return [path.resolve('/tmp'), path.resolve(os.tmpdir())].some((tmpRoot) => resolved === tmpRoot || resolved.startsWith(`${tmpRoot}${path.sep}`))
 }
 
+function isValidStoragePath(value) {
+  const text = String(value || '').trim()
+  return Boolean(text && text !== '-' && !text.startsWith('/tmp/'))
+}
+
 function rowFromParsed(file, parsed, error = null, storage = {}, warnings = []) {
   const extracted = parsed?.extracted || {}
   const ai = parsed?.ai_extracted || {}
@@ -123,7 +128,7 @@ async function openResume(req, res) {
     const storagePath = normalizeResumeStoragePath(decodeURIComponent(rawPath))
     console.log('[CV open] storage path', { path: storagePath })
 
-    if (!storagePath) {
+    if (!isValidStoragePath(storagePath)) {
       return res.status(400).json({ error: 'Resume path is required' })
     }
 

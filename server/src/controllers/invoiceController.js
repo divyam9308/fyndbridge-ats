@@ -1,6 +1,6 @@
 const supabase = require('../services/supabaseAdmin')
 const { normalizeGstin } = require('../services/gstLookup')
-const { STORAGE_BUCKETS, documentOpenUrl } = require('../services/storageBuckets')
+const { STORAGE_BUCKETS } = require('../services/storageBuckets')
 const {
   BILLING_ENTITIES, GST_COMPONENTS, MODELS, clean, financialYear,
   detectGstComponent, calculateInvoice, createInvoicePdf
@@ -50,8 +50,8 @@ function entityPayload(body) {
   }
 }
 
-const decorateInvoice = row => ({ ...row, invoice_open_url: documentOpenUrl('invoice', row.pdf_storage_path) })
-const decoratePdfVersion = row => ({ ...row, invoice_open_url: documentOpenUrl('invoice', row.storage_path) })
+const decorateInvoice = row => ({ ...row })
+const decoratePdfVersion = row => ({ ...row })
 
 async function listEntities(req, res) {
   try {

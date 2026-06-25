@@ -3,7 +3,7 @@ import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, Users, AlertCircle, Loader2, FileText } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientJobCandidatesPage.css'
-import { apiCandidateToUi, logCandidateCvOpen, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
+import { apiCandidateToUi, logCandidateCvOpen, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUSES } from '../utils/candidateStatuses'
 import { supabase } from '../services/supabaseClient'
 import { ConsultantPill } from '../components/ConsultantPill'
@@ -25,10 +25,13 @@ export default function ClientJobCandidatesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const openDocument = async (key, url) => {
+  const openDocument = async (key, path) => {
     setOpeningDocument(key)
     try {
-      await openProtectedUrl(url, { notFoundMessage: 'Document file not found. Please re-upload the CV.' })
+      await openProtectedDocumentPath('cv', path, {
+        missingMessage: 'CV is missing or needs to be reuploaded',
+        notFoundMessage: 'Document file not found. Please re-upload the CV.'
+      })
     } finally {
       setOpeningDocument('')
     }

@@ -1,7 +1,7 @@
 const supabase = require('../services/supabaseAdmin')
 const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
 const { uploadDocument } = require('../services/documentStorage')
-const { STORAGE_BUCKETS, documentOpenUrl, normalizeStoragePath } = require('../services/storageBuckets')
+const { STORAGE_BUCKETS, normalizeStoragePath } = require('../services/storageBuckets')
 const fs = require('fs/promises')
 const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { parseAiFilters } = require('../services/aiFilterParser')
@@ -170,7 +170,7 @@ function formatJob(row) {
     consultant: Array.isArray(row.consultants) && row.consultants.length ? row.consultants[0] : '-',
     team_lead: row.team_lead || '-',
     allocation_date: row.allocation_date || (row.created_at ? row.created_at.slice(0, 10) : ''),
-    jd_url: documentOpenUrl('jd', row.jd_storage_path || row.jd_url),
+    jd_url: normalizeStoragePath(row.jd_storage_path || row.jd_url, STORAGE_BUCKETS.JD),
     jd_storage_path: normalizeStoragePath(row.jd_storage_path || row.jd_url, STORAGE_BUCKETS.JD),
     client_display_id: row.clients?.client_display_id || '',
     client: clientName,

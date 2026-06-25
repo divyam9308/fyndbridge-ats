@@ -12,7 +12,7 @@ import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
 import { supabase } from '../services/supabaseClient'
-import { openProtectedUrl } from '../services/apiClient'
+import { isValidStoragePath, openProtectedDocumentPath } from '../services/apiClient'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -226,10 +226,13 @@ export default function JobsPage() {
     }
   }, [aiFilters, dashboardFilters, page, pageSize, sortDirection, sortField])
 
-  const openDocument = useCallback(async (key, url) => {
+  const openDocument = useCallback(async (key, path) => {
     setOpeningDocument(key)
     try {
-      await openProtectedUrl(url)
+      await openProtectedDocumentPath('jd', path, {
+        missingMessage: 'JD is missing or needs to be reuploaded',
+        notFoundMessage: 'JD not found.'
+      })
     } finally {
       setOpeningDocument('')
     }
@@ -407,7 +410,7 @@ export default function JobsPage() {
       mandate_status: normalizeMandateStatus(job.mandate_status || job.status || job.priority) === '-' ? '' : normalizeMandateStatus(job.mandate_status || job.status || job.priority),
       vertical: job.vertical || '',
       allocation_date: job.allocation_date || todayLocal(),
-      jd_url: job.jd_url || '',
+      jd_url: job.jd_storage_path || job.jd_url || '',
       jd_storage_path: job.jd_storage_path || ''
     })
     setJdFile(null)
@@ -747,7 +750,7 @@ export default function JobsPage() {
       case 'jd':
         {
           const docKey = `jd-${job.id}`
-          return <td key={column.key}>{job.jd_url ? <a href="#" target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument(docKey, job.jd_url) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
+          return <td key={column.key}>{isValidStoragePath(job.jd_storage_path) ? <a href="#" target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument(docKey, job.jd_storage_path) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
         }
       case 'action':
         return <td key={column.key}><div className="row-actions"><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)} disabled={job.is_locked && !isAdmin}><Pencil size={13} /></button>{isAdmin && <RecordLockButton tableName="jobs" recordId={job.id} locked={job.is_locked} onChanged={updateJobLockState} />}</div></td>
@@ -1099,7 +1102,7 @@ export default function JobsPage() {
                 {!isJobFieldHidden('jd_file') && <div className="form-group">
                   <label className="form-label">JD File</label>
                   <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="form-control" onChange={e => setJdFile(e.target.files?.[0] || null)} disabled={saving || isJobFieldDisabled('jd_file')} />
-                  {form.jd_url && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('jd-form', form.jd_url) }}>{openingDocument === 'jd-form' ? <Loader2 size={13} className="spin" /> : <FileText size={13} />} Current JD</a>}
+                  {isValidStoragePath(form.jd_storage_path) && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('jd-form', form.jd_storage_path) }}>{openingDocument === 'jd-form' ? <Loader2 size={13} className="spin" /> : <FileText size={13} />} Current JD</a>}
                 </div>}
               </div>
             </div>

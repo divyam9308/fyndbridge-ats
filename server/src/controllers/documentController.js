@@ -7,6 +7,11 @@ function debugDocumentOpen(message, details) {
   console.debug(`[document open] ${message}`, details)
 }
 
+function isValidStoragePath(path) {
+  const text = String(path || '').trim()
+  return Boolean(text && text !== '-' && !text.startsWith('/tmp/'))
+}
+
 async function fileExists(bucket, objectPath) {
   const slash = objectPath.lastIndexOf('/')
   const folder = slash === -1 ? '' : objectPath.slice(0, slash)
@@ -21,7 +26,7 @@ async function openDocument(req, res) {
     const bucket = bucketForType(req.params.type)
     const path = normalizeStoragePath(req.query.path || '', bucket)
     debugDocumentOpen('storage path', { type: req.params.type, bucket, path })
-    if (!bucket || !path) return res.status(400).json({ error: 'Document path is required' })
+    if (!bucket || !isValidStoragePath(path)) return res.status(400).json({ error: 'Document path is required' })
 
     const extension = pathExtension(path)
     const fileName = path.split('/').pop() || `document.${extension || 'pdf'}`

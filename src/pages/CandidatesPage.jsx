@@ -14,7 +14,7 @@ import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
-import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
+import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
@@ -580,10 +580,13 @@ export default function CandidatesPage() {
     }
   }, [aiAppliedPrompt, aiFilters, dashboardFilters, filterJob, page, pageSize, sortDirection, sortField])
 
-  const openDocument = useCallback(async (key, url) => {
+  const openDocument = useCallback(async (key, path) => {
     setOpeningDocument(key)
     try {
-      await openProtectedUrl(url, { notFoundMessage: 'Document file not found. Please re-upload the CV.' })
+      await openProtectedDocumentPath('cv', path, {
+        missingMessage: 'CV is missing or needs to be reuploaded',
+        notFoundMessage: 'Document file not found. Please re-upload the CV.'
+      })
     } finally {
       setOpeningDocument('')
     }

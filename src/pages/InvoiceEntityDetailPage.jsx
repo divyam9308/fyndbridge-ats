@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link, useParams } from 'react-router-dom'
 import { ChevronLeft, Download, FileText, LoaderCircle, Pencil, Trash2, X } from 'lucide-react'
 import { deleteInvoicePdfVersion, fetchInvoiceEntity, previewRegeneratedInvoice, regenerateInvoice } from '../services/invoiceApi'
-import { openProtectedUrl } from '../services/apiClient'
+import { isValidStoragePath, openProtectedDocumentPath } from '../services/apiClient'
 import { ModelFields } from './InvoicePage'
 import { EMPTY_INVOICE, INVOICE_MODEL_LABELS, INVOICE_MODELS, calculateInvoicePreview } from '../utils/invoiceModels'
 import '../styles/Shared.css'
@@ -74,7 +74,16 @@ export default function InvoiceEntityDetailPage() {
   const [opening, setOpening] = useState('')
   const load = useCallback(async () => { setError(''); try { setData((await fetchInvoiceEntity(entityId)).data) } catch (err) { setError(err.message) } finally { setLoading(false) } }, [entityId])
   useEffect(() => { Promise.resolve().then(load) }, [load])
-  const openInvoice = async invoice => { if (!invoice.invoice_open_url) return setError('Stored invoice PDF is missing.'); setOpening(invoice.id); await openProtectedUrl(invoice.invoice_open_url, { notFoundMessage: 'Invoice PDF not found.' }); setOpening('') }
+  const openInvoice = async invoice => {
+    const path = invoice.storage_path || invoice.pdf_storage_path
+    if (!isValidStoragePath(path)) return setError('Stored invoice PDF is missing.')
+    setOpening(invoice.id)
+    await openProtectedDocumentPath('invoice', path, {
+      missingMessage: 'Invoice PDF is missing or needs to be reuploaded',
+      notFoundMessage: 'Invoice PDF not found.'
+    })
+    setOpening('')
+  }
   const deleteVersion = async version => { if (!window.confirm('Delete this PDF version?')) return; try { await deleteInvoicePdfVersion(version.id); await load() } catch (err) { setError(err.message) } }
   if (loading) return <div className="invoice-access-card"><div className="invoice-loader"><LoaderCircle size={22} />Loading entity...</div></div>
   if (error && !data) return <div className="invoice-access-card"><div className="invoice-denied">{error}</div></div>

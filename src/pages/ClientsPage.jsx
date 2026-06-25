@@ -14,7 +14,7 @@ import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
-import { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'
+import { normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, isValidStoragePath } from '../services/apiClient'
 import { STORAGE_BUCKETS } from '../utils/storageBuckets'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { highlightText, keywordFilters } from '../utils/aiFilterUi'
@@ -229,7 +229,7 @@ function clientToForm(client) {
     terms_value: client.terms_value || '',
     billing_entity: client.billing_entity || '',
     contract_signed: client.contract_signed ? 'Yes' : 'No',
-    contract_document: client.contract_document || client.contract_pdf_url || '',
+    contract_document: client.contract_pdf_storage_path || client.contract_document || client.contract_pdf_url || '',
     gstin: client.gstin || '',
     pan: client.pan || '',
     address_on_invoice: client.address_on_invoice || ''
@@ -371,10 +371,13 @@ export default function ClientsPage() {
     fetchClientOptions()
   }, [clientAlreadyAdded, clientDuplicate, fetchClientOptions, fetchClients, followUpClient, isOpen])
 
-  const openDocument = useCallback(async (key, url) => {
+  const openDocument = useCallback(async (key, path) => {
     setOpeningDocument(key)
     try {
-      await openProtectedUrl(url)
+      await openProtectedDocumentPath('contract', path, {
+        missingMessage: 'Contract PDF is missing or needs to be reuploaded',
+        notFoundMessage: 'Contract PDF not found.'
+      })
     } finally {
       setOpeningDocument('')
     }
@@ -1345,9 +1348,9 @@ export default function ClientsPage() {
       case 'addressOnInvoice':
         return <td key={key}>{commercialDash(client, client.address_on_invoice)}</td>
       case 'contractPdf': {
-        const contractUrl = client.contract_document || client.contract_pdf_url
+        const contractPath = client.contract_pdf_storage_path || client.contract_document || client.contract_pdf_url
         const docKey = `contract-${client.id}`
-        return <td key={key}>{contractUrl ? <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" title="Open Contract PDF" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument(docKey, contractUrl) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
+        return <td key={key}>{isValidStoragePath(contractPath) ? <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" title="Open Contract PDF" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument(docKey, contractPath) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
       }
       case 'actions':
         return <td key={key}><div className="row-actions"><button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)} disabled={client.is_locked && !isAdmin}><Pencil size={13} strokeWidth={2} /></button>{isAdmin && <RecordLockButton tableName="clients" recordId={client.id} locked={client.is_locked} onChanged={updateClientLockState} />}</div></td>
@@ -1670,7 +1673,7 @@ export default function ClientsPage() {
                   <div className="form-group">
                     <label className="form-label">Contract PDF</label>
                     <input type="file" accept="application/pdf,.pdf" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving || contractUploading || isClientFieldDisabled('contract_document')} />
-                    {form.contract_document && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('contract-form', form.contract_document) }}>{openingDocument === 'contract-form' ? 'Opening...' : 'Current Contract'}</a>}
+                    {isValidStoragePath(form.contract_document) && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('contract-form', form.contract_document) }}>{openingDocument === 'contract-form' ? 'Opening...' : 'Current Contract'}</a>}
                     {contractUploading && <span className="form-error">Uploading contract...</span>}
                     {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
                   </div>

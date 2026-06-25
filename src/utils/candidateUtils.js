@@ -51,7 +51,7 @@ const LEGACY_CV_BUCKET_NAMES = ['resumes', 'resume', 'cvs', 'cv', 'candidate-cvs
 
 export const cleanCandidateCvPath = (value) => {
   const text = String(value || '').trim()
-  if (!text || text.startsWith('/tmp/')) return ''
+  if (!text || text === '-' || text.startsWith('/tmp/')) return ''
   let path = text
   if (/^https?:\/\//i.test(text)) {
     try {
@@ -81,13 +81,9 @@ export const cleanCandidateCvPath = (value) => {
 export const getCandidateCvOpenInfo = (candidate) => {
   const cvUrl = String(candidate?.cvLink || '').trim()
   const cvStoragePath = String(candidate?.cvStoragePath || '').trim()
-  const storagePath = cleanCandidateCvPath(cvStoragePath) || cleanCandidateCvPath(cvUrl)
+  const storagePath = cleanCandidateCvPath(cvStoragePath)
 
   if (storagePath) {
-    const params = new URLSearchParams({
-      path: storagePath,
-      candidate_id: String(candidate?.candidateId || candidate?.id || '')
-    })
     return {
       candidateId: candidate?.candidateId || candidate?.id || '',
       cvUrl,
@@ -95,7 +91,7 @@ export const getCandidateCvOpenInfo = (candidate) => {
       cleanPath: storagePath,
       bucketName: CV_BUCKET_NAME,
       sourceType: 'supabase-storage',
-      finalUrl: `/api/resumes/open?${params.toString()}`
+      finalUrl: ''
     }
   }
 
@@ -107,7 +103,7 @@ export const getCandidateCvOpenInfo = (candidate) => {
       cleanPath: '',
       bucketName: '',
       sourceType: 'external-link',
-      finalUrl: cvUrl
+      finalUrl: ''
     }
   }
 
@@ -123,11 +119,11 @@ export const getCandidateCvOpenInfo = (candidate) => {
 }
 
 export const resolveCandidateCvHref = (candidate) => {
-  return getCandidateCvOpenInfo(candidate).finalUrl
+  return getCandidateCvOpenInfo(candidate).cleanPath
 }
 
 export const logCandidateCvOpen = (candidate) => {
   if (import.meta.env?.DEV) console.log('[CV open]', { candidateId: candidate?.candidateId || candidate?.id || '' })
 }
 import { STORAGE_BUCKETS } from './storageBuckets'
-export { normalizeExternalUrl, openExternalUrl, openProtectedUrl } from '../services/apiClient'
+export { normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath } from '../services/apiClient'

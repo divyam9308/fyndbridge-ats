@@ -4,7 +4,7 @@ import { useLocation, useParams, Link } from 'react-router-dom'
 import { ChevronDown, ChevronLeft, AlertCircle, Loader2, Briefcase, FileText, Pencil, X } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientDetailPage.css'
-import { apiCandidateToUi, logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedUrl, resolveCandidateCvHref } from '../utils/candidateUtils'
+import { apiCandidateToUi, logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
@@ -164,10 +164,13 @@ export default function ClientDetailPage() {
     })
   }, [])
 
-  const openDocument = useCallback(async (key, url) => {
+  const openDocument = useCallback(async (key, path) => {
     setOpeningDocument(key)
     try {
-      await openProtectedUrl(url, { notFoundMessage: 'Document file not found. Please re-upload the CV.' })
+      await openProtectedDocumentPath('cv', path, {
+        missingMessage: 'CV is missing or needs to be reuploaded',
+        notFoundMessage: 'Document file not found. Please re-upload the CV.'
+      })
     } finally {
       setOpeningDocument('')
     }
