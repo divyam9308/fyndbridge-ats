@@ -728,7 +728,18 @@ export default function JobsPage() {
       case 'budget':
         return <td key={column.key}>{highlightText(dash(job.budget), aiFilters)}</td>
       case 'mandateStatus':
-        return <td key={column.key}><span className={`badge ${MANDATE_STATUS_BADGE_MAP[normalizeMandateStatus(job.mandate_status || job.status || job.priority)] || ''}`}>{highlightText(dash(normalizeMandateStatus(job.mandate_status || job.status || job.priority)), aiFilters)}</span></td>
+        {
+          const status = normalizeMandateStatus(job.mandate_status || job.status || job.priority)
+          return (
+            <td key={column.key}>
+              <div className="candidate-columns-control mandate-status-control">
+                <button className={`badge ${MANDATE_STATUS_BADGE_MAP[status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', job.id, event.currentTarget)} disabled={statusSaving[job.id]}>
+                  {highlightText(dash(status), aiFilters)}
+                </button>
+              </div>
+            </td>
+          )
+        }
       case 'sector':
         return <td key={column.key}>{highlightText(dash(job.vertical), aiFilters)}</td>
       case 'allocationDate':

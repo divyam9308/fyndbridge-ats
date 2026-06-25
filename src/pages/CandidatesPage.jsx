@@ -9,6 +9,7 @@ import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
+import TablePopover from '../components/TablePopover'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
 import '../styles/Shared.css'
@@ -373,6 +374,8 @@ export default function CandidatesPage() {
   const [visibleColumns, setVisibleColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const [pendingColumns, setPendingColumns] = useState(DEFAULT_CANDIDATE_COLUMN_KEYS)
   const [savedColumns, setSavedColumns] = useState(null)
+  const [tablePopover, setTablePopover] = useState(null)
+  const [statusSaving, setStatusSaving] = useState({})
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
 
@@ -661,6 +664,39 @@ export default function CandidatesPage() {
     }
 
     return apiCandidateToUi(payload)
+  }
+
+  const toggleTablePopover = (type, id, element) => {
+    if (!element || !id) return
+    const anchorRect = element.getBoundingClientRect()
+    setTablePopover(current => current?.type === type && current.id === id ? null : { type, id, anchorRect })
+  }
+
+  const updateCandidateStatus = async (candidate, status) => {
+    const associationId = candidate.associationId || candidate.id
+    if (!associationId) return
+    const previous = candidates
+    const nextStatus = status || '-'
+    setApiError('')
+    setCandidates(current => current.map(row => (row.associationId || row.id) === associationId ? { ...row, status: nextStatus } : row))
+    setStatusSaving(current => ({ ...current, [associationId]: true }))
+    setTablePopover(null)
+    try {
+      const response = await fetch(`/api/candidates/${associationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ association_id: associationId, status: nextStatus })
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || Object.values(payload.errors || {})[0] || 'Unable to update candidate status.')
+      const updated = apiCandidateToUi(payload)
+      setCandidates(current => current.map(row => (row.associationId || row.id) === associationId ? updated : row))
+    } catch (err) {
+      setCandidates(previous)
+      setApiError(err.message)
+    } finally {
+      setStatusSaving(current => ({ ...current, [associationId]: false }))
+    }
   }
 
   const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
@@ -1960,7 +1996,15 @@ export default function CandidatesPage() {
           )
         }
       case 'status':
-        return <td key={key}><span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span></td>
+        return (
+          <td key={key}>
+            <div className="candidate-columns-control mandate-status-control">
+              <button className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('candidate-status', c.associationId || c.id, event.currentTarget)} disabled={statusSaving[c.associationId || c.id]}>
+                {c.status || '-'}
+              </button>
+            </div>
+          </td>
+        )
       case 'offeredCtc':
         return <td key={key}>{c.status === 'Hired' && c.offeredCtc ? <span className="candidate-money-value">{formatCandidateCtc(c.offeredCtc)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'dateOfJoining':
@@ -2166,6 +2210,20 @@ export default function CandidatesPage() {
         onPageChange={setPage}
         onPageSizeChange={(value) => { setPageSize(value); setPage(1) }}
       />
+
+      {tablePopover?.type === 'candidate-status' && (() => {
+        const candidate = candidates.find(item => (item.associationId || item.id) === tablePopover.id)
+        if (!candidate) return null
+        return (
+          <TablePopover anchorRect={tablePopover.anchorRect} width={190} onClose={() => setTablePopover(null)}>
+            {STATUS_OPTIONS.map(status => (
+              <button className="candidate-columns-action" type="button" key={status || '-'} onClick={() => updateCandidateStatus(candidate, status)}>
+                {status || '-'}
+              </button>
+            ))}
+          </TablePopover>
+        )
+      })()}
 
       {selectedCandidate && createPortal((
         <div className="candidate-drawer-overlay" onClick={e => e.target === e.currentTarget && setSelectedCandidate(null)}>
