@@ -119,6 +119,14 @@ const getReadableClientId = (candidate, dbClients) => {
   }
   return 'Client not found'
 }
+const getCurrentUser = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    return JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
+  } catch {
+    return {}
+  }
+}
 const AI_FILTER_FIELDS = [
   'candidate_id',
   'name',
