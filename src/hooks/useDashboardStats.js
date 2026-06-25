@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../services/apiClient'
+import { supabase } from '../services/supabaseClient'
 
 export const DASHBOARD_PERIODS = [
   'This Month',
@@ -11,46 +12,141 @@ export const DASHBOARD_PERIODS = [
   'Till This Date'
 ]
 
-export function useDashboardStats({ consultant, period }) {
-  const [state, setState] = useState({
-    loading: true,
-    error: '',
-    data: null
+const DEFAULT_CONSULTANT = 'Overall (All Consultants)'
+const dashboardCache = new Map()
+const dashboardInFlight = new Map()
+const DEBUG_DASHBOARD = import.meta.env.DEV && import.meta.env.VITE_DEBUG_PERF === 'true'
+
+function debugDashboard(message, details) {
+  if (DEBUG_DASHBOARD) console.debug(`[dashboard] ${message}`, details || '')
+}
+
+function requestKey({ consultant, period }) {
+  return JSON.stringify({
+    consultant: consultant || DEFAULT_CONSULTANT,
+    period: period || DASHBOARD_PERIODS[0]
   })
+}
+
+function paramsFromKey(key) {
+  return JSON.parse(key)
+}
+
+async function fetchDashboardByKey(key, signal, reason) {
+  const cached = dashboardCache.get(key)
+  const existing = dashboardInFlight.get(key)
+  if (existing) {
+    if (!existing.signal.aborted) {
+      debugDashboard('dedupe fetch', { reason, params: paramsFromKey(key) })
+      return existing.promise
+    }
+    dashboardInFlight.delete(key)
+  }
+
+  const paramsObject = paramsFromKey(key)
+  const params = new URLSearchParams(paramsObject)
+  debugDashboard('analytics fetch start', { reason, params: paramsObject })
+  const request = apiFetch(`/api/dashboard?${params.toString()}`, {
+    cache: 'no-store',
+    signal
+  })
+    .then(async response => {
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'Unable to load dashboard stats.')
+      dashboardCache.set(key, payload)
+      return payload
+    })
+    .finally(() => {
+      if (dashboardInFlight.get(key)?.promise === request) dashboardInFlight.delete(key)
+    })
+
+  dashboardInFlight.set(key, { promise: request, signal })
+  return cached ? request.catch(() => cached) : request
+}
+
+export function useDashboardStats({ consultant, period }) {
+  const key = useMemo(() => requestKey({ consultant, period }), [consultant, period])
+  const [state, setState] = useState(() => ({
+    loading: !dashboardCache.has(key),
+    error: '',
+    data: dashboardCache.get(key) || null
+  }))
+  const abortRef = useRef(null)
+  const lastFetchedKeyRef = useRef('')
+  const realtimeTimerRef = useRef(null)
+
+  const loadDashboardStats = useCallback(async (reason = 'filter_change', { force = false } = {}) => {
+    if (!force && lastFetchedKeyRef.current === key && dashboardCache.has(key)) {
+      setState(current => current.data ? current : { loading: false, error: '', data: dashboardCache.get(key) })
+      return
+    }
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    lastFetchedKeyRef.current = key
+    const cached = dashboardCache.get(key)
+    setState(current => ({
+      loading: !current.data && !cached,
+      error: '',
+      data: current.data || cached || null
+    }))
+
+    try {
+      const payload = await fetchDashboardByKey(key, controller.signal, reason)
+      if (controller.signal.aborted) return
+      setState({ loading: false, error: '', data: payload })
+    } catch (err) {
+      if (err.name === 'AbortError') return
+      setState(current => ({
+        loading: false,
+        error: err.message || 'Unable to load dashboard stats.',
+        data: current.data || cached || null
+      }))
+    }
+  }, [key])
 
   useEffect(() => {
-    let activeController = null
+    loadDashboardStats(lastFetchedKeyRef.current ? 'filter_change' : 'initial_load')
+    return () => abortRef.current?.abort()
+  }, [loadDashboardStats])
 
-    async function loadDashboardStats() {
-      activeController?.abort()
-      const controller = new AbortController()
-      activeController = controller
-      setState(current => ({ ...current, loading: true, error: '' }))
-      try {
-        const params = new URLSearchParams({
-          consultant: consultant || 'Overall (All Consultants)',
-          period: period || DASHBOARD_PERIODS[0]
-        })
-        const response = await apiFetch(`/api/dashboard?${params.toString()}`, {
-          cache: 'no-store',
-          signal: controller.signal
-        })
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) throw new Error(payload.error || 'Unable to load dashboard stats.')
-        setState({ loading: false, error: '', data: payload })
-      } catch (err) {
-        if (err.name === 'AbortError') return
-        setState({ loading: false, error: err.message || 'Unable to load dashboard stats.', data: null })
-      }
+  useEffect(() => {
+    if (!supabase) return undefined
+
+    const scheduleInvalidation = (reason) => {
+      window.clearTimeout(realtimeTimerRef.current)
+      realtimeTimerRef.current = window.setTimeout(() => {
+        lastFetchedKeyRef.current = ''
+        loadDashboardStats(reason, { force: true })
+      }, 800)
     }
 
-    loadDashboardStats()
-    window.addEventListener('focus', loadDashboardStats)
+    const channel = ['clients', 'candidates', 'candidate_associations', 'jobs'].reduce((next, table) => (
+      next.on('postgres_changes', { event: '*', schema: 'public', table }, () => scheduleInvalidation('realtime_invalidation'))
+    ), supabase.channel('dashboard-analytics-invalidation'))
+
+    channel.subscribe(status => debugDashboard('realtime status', status))
+
+    const appInvalidation = () => scheduleInvalidation('app_invalidation')
+    window.addEventListener('ats:clients-updated', appInvalidation)
+    window.addEventListener('ats:candidates-updated', appInvalidation)
+    window.addEventListener('ats:jobs-updated', appInvalidation)
+
     return () => {
-      activeController?.abort()
-      window.removeEventListener('focus', loadDashboardStats)
+      window.clearTimeout(realtimeTimerRef.current)
+      window.removeEventListener('ats:clients-updated', appInvalidation)
+      window.removeEventListener('ats:candidates-updated', appInvalidation)
+      window.removeEventListener('ats:jobs-updated', appInvalidation)
+      supabase.removeChannel(channel)
     }
-  }, [consultant, period])
+  }, [loadDashboardStats])
 
-  return useMemo(() => state, [state])
+  return useMemo(() => ({
+    ...state,
+    refresh: () => {
+      lastFetchedKeyRef.current = ''
+      return loadDashboardStats('manual_refresh', { force: true })
+    }
+  }), [loadDashboardStats, state])
 }
