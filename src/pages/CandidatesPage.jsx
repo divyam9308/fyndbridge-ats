@@ -7,13 +7,13 @@ import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAd
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
+import { useStaffDirectory } from '../hooks/useStaffDirectory'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
 import TablePopover from '../components/TablePopover'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
 import '../styles/Shared.css'
-import { supabase } from '../services/supabaseClient'
 import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
@@ -337,7 +337,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
 }
 
 export default function CandidatesPage() {
-  const { loadProfile } = useAuth()
+  const { loadProfile, session } = useAuth()
   const { isAdmin, permissions } = useAdminAccess()
   const location = useLocation()
   const navigate = useNavigate()
@@ -389,25 +389,19 @@ export default function CandidatesPage() {
 
   const [dbClients, setDbClients] = useState([])
   const [dbJobs, setDbJobs] = useState([])
-  const [consultantOptions, setConsultantOptions] = useState([])
+  const { staff: consultantOptions } = useStaffDirectory()
   const [consultantSearch, setConsultantSearch] = useState('')
   const [consultantOpen, setConsultantOpen] = useState(false)
 
   const refreshOptionData = useCallback(async () => {
-    const [clientsRes, jobsRes, usersRes] = await Promise.all([
+    const [clientsRes, jobsRes] = await Promise.all([
       fetch('/api/clients?all=true'),
-      fetch('/api/jobs?all=true'),
-      fetch('/api/user-profiles/options')
+      fetch('/api/jobs?all=true')
     ])
     const clientsData = await clientsRes.json().catch(() => ({}))
     const jobsData = await jobsRes.json().catch(() => ({}))
-    const usersData = await usersRes.json().catch(() => ({}))
     if (clientsRes.ok) setDbClients(clientsData.data || [])
     if (jobsRes.ok) setDbJobs((jobsData.data || []).sort((a, b) => (a?.title || a?.role || '').localeCompare(b?.title || b?.role || '', undefined, { sensitivity: 'base' })))
-    if (usersRes.ok) setConsultantOptions((Array.isArray(usersData.data) ? usersData.data : [])
-      .map(user => ({ id: user.id || user.user_id || '', name: String(user.name || user.display_name || '').trim(), email: user.email || '' }))
-      .filter(user => user.name)
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })))
   }, [])
 
   useEffect(() => {
@@ -421,20 +415,8 @@ export default function CandidatesPage() {
     return consultantOptions.filter(user => !query || user.name.toLowerCase().includes(query))
   }, [consultantOptions, consultantSearch])
 
-  const fetchConsultantOptions = useCallback(async () => {
-    const res = await fetch('/api/user-profiles/options')
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) return []
-    const users = (Array.isArray(data.data) ? data.data : [])
-      .map(user => ({ id: user.id || user.user_id || '', name: String(user.name || user.display_name || '').trim(), email: user.email || '' }))
-      .filter(user => user.name)
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-    setConsultantOptions(users)
-    return users
-  }, [])
-
   const getFreshActiveConsultantName = useCallback(async () => {
-    const profile = await loadProfile({ force: true }).catch(() => null)
+    const profile = await loadProfile().catch(() => null)
     const nextName = String(profile?.name || profile?.display_name || '').trim()
     setActiveConsultantName(nextName || '-')
     return { name: nextName, userId: profile?.user_id || '' }
@@ -463,7 +445,6 @@ export default function CandidatesPage() {
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
-        const session = supabase ? (await supabase.auth.getSession()).data.session : null
         const userId = session?.user?.id || getCurrentUser()?.id || getCurrentUser()?.email || 'anonymous'
         const response = await fetch(`/api/user-preferences/${CANDIDATES_TABLE_COLUMNS_PREFERENCE_KEY}?user_id=${encodeURIComponent(userId)}`)
         const payload = await response.json().catch(() => ({}))
@@ -598,7 +579,7 @@ export default function CandidatesPage() {
     } finally {
       setOpeningDocument('')
     }
-  }, [])
+  }, [session?.user?.id])
 
   const scrollImportToTop = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -636,11 +617,8 @@ export default function CandidatesPage() {
 
   useRealtimeRefresh({
     channelName: 'realtime:candidates-page',
-    tables: ['candidates', 'candidate_associations', 'clients', 'jobs'],
-    onChange: () => {
-      refreshOptionData()
-      refreshCandidatesRealtime()
-    }
+    tables: ['candidates', 'candidate_associations'],
+    onChange: refreshCandidatesRealtime
   })
 
   const saveCandidateToApi = async (candidate, { update = false, duplicateAction = '' } = {}) => {
@@ -862,7 +840,6 @@ export default function CandidatesPage() {
 
   const saveColumnPreference = async () => {
     try {
-      const session = supabase ? (await supabase.auth.getSession()).data.session : null
       const currentUser = getCurrentUser()
       const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
       const allowed = allowedCandidateColumnKeys()
@@ -977,11 +954,8 @@ export default function CandidatesPage() {
     setSkillInput('')
     setAddOpen(true)
 
-    const [profile, users] = await Promise.all([
-      getFreshActiveConsultantName(),
-      fetchConsultantOptions().catch(() => [])
-    ])
-    const consultantUser = users.find(user => user.id && user.id === profile.userId) || users.find(user => user.name === profile.name)
+    const profile = await getFreshActiveConsultantName()
+    const consultantUser = consultantOptions.find(user => user.id && user.id === profile.userId) || consultantOptions.find(user => user.name === profile.name)
     setConsultantSearch(profile.name)
     setConsultantOpen(false)
     setForm(current => ({
@@ -995,7 +969,7 @@ export default function CandidatesPage() {
     } catch {
       setForm(current => current.candidateDisplayId === 'Loading...' ? { ...current, candidateDisplayId: '' } : current)
     }
-  }, [fetchConsultantOptions, fetchNextCandidateDisplayId, getFreshActiveConsultantName])
+  }, [consultantOptions, fetchNextCandidateDisplayId, getFreshActiveConsultantName])
 
   useEffect(() => {
     const action = location.state?.action
@@ -1032,7 +1006,6 @@ export default function CandidatesPage() {
     setForm(sourceForm)
     setConsultantSearch(candidate.consultantName || candidate.consultant || '')
     setConsultantOpen(false)
-    fetchConsultantOptions().catch(() => {})
     setEditing(true)
     setAssigningAnother(false)
     setErrors({})
@@ -1279,11 +1252,8 @@ export default function CandidatesPage() {
 
   const startResumeReview = async (rows) => {
     const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
-    const [profile, users] = await Promise.all([
-      getFreshActiveConsultantName(),
-      fetchConsultantOptions().catch(() => [])
-    ])
-    const consultantUser = users.find(user => user.id && user.id === profile.userId) || users.find(user => user.name === profile.name)
+    const profile = await getFreshActiveConsultantName()
+    const consultantUser = consultantOptions.find(user => user.id && user.id === profile.userId) || consultantOptions.find(user => user.name === profile.name)
     setConsultantSearch(profile.name)
     setImportQueue(rows)
     setCurrentImportIndex(0)
@@ -1361,11 +1331,8 @@ export default function CandidatesPage() {
       return
     }
     const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
-    const [profile, users] = await Promise.all([
-      getFreshActiveConsultantName(),
-      fetchConsultantOptions().catch(() => [])
-    ])
-    const consultantUser = users.find(user => user.id && user.id === profile.userId) || users.find(user => user.name === profile.name)
+    const profile = await getFreshActiveConsultantName()
+    const consultantUser = consultantOptions.find(user => user.id && user.id === profile.userId) || consultantOptions.find(user => user.name === profile.name)
     setConsultantSearch(profile.name)
     setCurrentImportIndex(nextIndex)
     setParsedForm({ ...mapBulkResumeRowToForm(importQueue[nextIndex], profile.name, consultantUser?.id || ''), candidateDisplayId })

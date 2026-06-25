@@ -1,7 +1,8 @@
 import { createContext, createElement, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../context/useAuth'
-import { fetchAdminMe } from '../services/adminAccessApi'
+import { useAdminAccess } from './useAdminAccess'
 import { supabase } from '../services/supabaseClient'
+import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
 
 const OnlineUsersContext = createContext([])
 
@@ -27,6 +28,7 @@ function uniqueUsers(state) {
 
 function usePresenceUsers() {
   const { user, session, profile, loadProfile } = useAuth()
+  const { isAdmin, isSuperAdmin } = useAdminAccess({ loadPermissions: false })
   const [onlineUsers, setOnlineUsers] = useState([])
   const loadProfileRef = useRef(loadProfile)
   const enabled = Boolean(supabase && session?.user && user?.id)
@@ -47,10 +49,7 @@ function usePresenceUsers() {
     const isActive = () => document.visibilityState === 'visible' && document.hasFocus()
 
     async function start() {
-      const [savedProfile, admin] = await Promise.all([
-        profileName ? Promise.resolve({ name: profileName, role: profileRole, designation: profileDesignation }) : loadProfileRef.current().catch(() => null),
-        fetchAdminMe().catch(() => null)
-      ])
+      const savedProfile = profileName ? { name: profileName, role: profileRole, designation: profileDesignation } : await loadProfileRef.current().catch(() => null)
       if (cancelled) return
 
       const name = String(savedProfile?.name || '').trim()
@@ -61,7 +60,7 @@ function usePresenceUsers() {
         id: user.id,
         name,
         email,
-        role: admin?.isSuperAdmin ? 'Super Admin' : admin?.isAdmin ? 'Admin' : String(savedProfile?.role || savedProfile?.designation || 'Consultant'),
+        role: isSuperAdmin ? 'Super Admin' : isAdmin ? 'Admin' : String(savedProfile?.role || savedProfile?.designation || 'Consultant'),
         initials: initials(name, email),
         online_at: new Date().toISOString(),
         status: 'online'
@@ -74,10 +73,12 @@ function usePresenceUsers() {
         if (current) {
           current.untrack().catch(() => {})
           supabase.removeChannel(current)
+          logRealtimeRemove('presence:online-users')
         }
       }
       const open = () => {
         if (cancelled || channel || !isActive()) return
+        logRealtimeSubscribe({ name: 'presence:online-users', scope: 'global', tables: ['presence'] })
         const current = supabase.channel('online-users', { config: { presence: { key: user.id } } })
         channel = current
         const sync = () => {
@@ -136,7 +137,7 @@ function usePresenceUsers() {
       cancelled = true
       cleanup?.()
     }
-  }, [enabled, profileDesignation, profileName, profileRole, session?.user?.email, user?.email, user?.id])
+  }, [enabled, isAdmin, isSuperAdmin, profileDesignation, profileName, profileRole, session?.user?.email, user?.email, user?.id])
 
   return enabled ? onlineUsers : []
 }

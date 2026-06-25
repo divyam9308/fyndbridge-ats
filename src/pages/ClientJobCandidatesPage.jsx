@@ -5,7 +5,7 @@ import '../styles/Shared.css'
 import './ClientJobCandidatesPage.css'
 import { apiCandidateToUi, logCandidateCvOpen, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUSES } from '../utils/candidateStatuses'
-import { supabase } from '../services/supabaseClient'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import { ConsultantPill } from '../components/ConsultantPill'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
@@ -91,15 +91,12 @@ export default function ClientJobCandidatesPage() {
     return () => { activeObj.active = false }
   }, [fetchData])
 
-  useEffect(() => {
-    if (!supabase) return
-    const channel = supabase
-      .channel(`realtime:client-job-candidates:${clientId}:${jobId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidates' }, () => fetchData({ active: true }))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidate_associations' }, () => fetchData({ active: true }))
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [clientId, jobId, fetchData])
+  useRealtimeRefresh({
+    channelName: `realtime:client-job-candidates:${clientId}:${jobId}`,
+    tables: ['candidates', 'candidate_associations'],
+    onChange: () => fetchData({ active: true }),
+    enabled: Boolean(clientId && jobId)
+  })
 
   if (loading) {
     return (

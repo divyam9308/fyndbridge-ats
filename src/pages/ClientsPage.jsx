@@ -5,6 +5,7 @@ import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
+import { useStaffDirectory } from '../hooks/useStaffDirectory'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
 import PaginationBar from '../components/PaginationBar'
@@ -237,7 +238,7 @@ function clientToForm(client) {
 }
 
 export default function ClientsPage() {
-  const { loadProfile } = useAuth()
+  const { loadProfile, session } = useAuth()
   const { isAdmin, permissions } = useAdminAccess()
   const location = useLocation()
   const navigate = useNavigate()
@@ -295,7 +296,7 @@ export default function ClientsPage() {
   const [addingContactPerson, setAddingContactPerson] = useState(false)
   const [sectorSearch, setSectorSearch] = useState('')
   const [sectorOpen, setSectorOpen] = useState(false)
-  const [consultantOptions, setConsultantOptions] = useState([])
+  const { staff: consultantOptions } = useStaffDirectory()
   const [consultantSearch, setConsultantSearch] = useState('')
   const [consultantOpen, setConsultantOpen] = useState(false)
   const columnsDropdownRef = useRef(null)
@@ -368,8 +369,7 @@ export default function ClientsPage() {
       return
     }
     fetchClients({ showLoading: false })
-    fetchClientOptions()
-  }, [clientAlreadyAdded, clientDuplicate, fetchClientOptions, fetchClients, followUpClient, isOpen])
+  }, [clientAlreadyAdded, clientDuplicate, fetchClients, followUpClient, isOpen])
 
   const openDocument = useCallback(async (key, path) => {
     setOpeningDocument(key)
@@ -392,8 +392,7 @@ export default function ClientsPage() {
     if (isOpen || followUpClient || clientDuplicate || clientAlreadyAdded || !pendingRealtimeRefreshRef.current) return
     pendingRealtimeRefreshRef.current = false
     fetchClients({ showLoading: false })
-    fetchClientOptions()
-  }, [clientAlreadyAdded, clientDuplicate, fetchClientOptions, fetchClients, followUpClient, isOpen])
+  }, [clientAlreadyAdded, clientDuplicate, fetchClients, followUpClient, isOpen])
 
   useRealtimeRefresh({
     channelName: 'realtime:clients-page',
@@ -409,7 +408,6 @@ export default function ClientsPage() {
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
-        const session = supabase ? (await supabase.auth.getSession()).data.session : null
         const currentUser = getCurrentUser()
         const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
         const response = await fetch(`/api/user-preferences/${CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY}?user_id=${encodeURIComponent(userId)}`)
@@ -430,7 +428,7 @@ export default function ClientsPage() {
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [session?.user?.id])
 
   useEffect(() => {
     if (!statusOpen) return
@@ -507,18 +505,6 @@ export default function ClientsPage() {
     await fetchClients({ showLoading: false })
     await fetchClientOptions()
   }
-
-  const fetchConsultantOptions = useCallback(async () => {
-    const res = await fetch('/api/user-profiles/options')
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) return []
-    const users = (Array.isArray(data.data) ? data.data : [])
-      .map(user => ({ id: user.id || user.user_id || '', name: String(user.name || user.display_name || '').trim(), email: user.email || '' }))
-      .filter(user => user.name)
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-    setConsultantOptions(users)
-    return users
-  }, [])
 
   const selectConsultant = (name) => {
     const user = consultantByName.get(name)
@@ -623,19 +609,16 @@ export default function ClientsPage() {
     setClientSuggestionsOpen(false)
     setIsOpen(true)
 
-    const [profile, users] = await Promise.all([
-      loadProfile({ force: true }).catch(() => null),
-      fetchConsultantOptions().catch(() => [])
-    ])
+    const profile = await loadProfile().catch(() => null)
     const consultantName = String(profile?.name || profile?.display_name || '').trim()
-    const consultantUser = users.find(user => user.id && user.id === profile?.user_id) || users.find(user => user.name === consultantName)
+    const consultantUser = consultantOptions.find(user => user.id && user.id === profile?.user_id) || consultantOptions.find(user => user.name === consultantName)
     setForm(current => ({
       ...current,
       consultant_name: consultantName,
       consultant_user_id: consultantUser?.id || ''
     }))
     setConsultantSearch(consultantName)
-  }, [fetchConsultantOptions, loadProfile])
+  }, [consultantOptions, loadProfile])
 
   useEffect(() => {
     const action = location.state?.action
@@ -651,7 +634,6 @@ export default function ClientsPage() {
     setForm({ ...clientToForm(client), follow_up_id: followUp?.id || '', follow_up_date: followUp?.follow_up_date || '' })
     setConsultantSearch(client.consultant_name || client.consultant || '')
     setConsultantOpen(false)
-    fetchConsultantOptions().catch(() => {})
     setErrors({})
     setContractFile(null)
     setEditingClient(client)
@@ -695,7 +677,6 @@ export default function ClientsPage() {
     })
     setConsultantSearch(client.consultant_name || client.consultant || '')
     setConsultantOpen(false)
-    fetchConsultantOptions().catch(() => {})
     setErrors({})
     setContractFile(null)
     setEditingClient(null)
@@ -1064,7 +1045,6 @@ export default function ClientsPage() {
 
   const saveColumnPreference = async () => {
     try {
-      const session = supabase ? (await supabase.auth.getSession()).data.session : null
       const currentUser = getCurrentUser()
       const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
       const allowed = availableColumns.map(column => column.key)

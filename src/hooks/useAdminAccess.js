@@ -1,97 +1,182 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchAdminMe, fetchColumnPermissions } from '../services/adminAccessApi'
-import { useRealtimeRefresh } from './useRealtimeRefresh'
+import { supabase } from '../services/supabaseClient'
+import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
 
 const EMPTY = { clients: {}, candidates: {}, jobs: {} }
 const PERMISSIONS_CHANGED_EVENT = 'fb:admin-permissions-changed'
-const PERMISSIONS_CHANGED_STORAGE_KEY = 'fb_admin_permissions_changed_at'
-const PERMISSIONS_POLL_MS = 5000
-let cachedColumns = {}
-let cachedPermissions = EMPTY
 
-export function useAdminAccess({ loadPermissions = true, realtime = true } = {}) {
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
-  const [role, setRole] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [columns, setColumns] = useState(cachedColumns)
-  const [permissions, setPermissions] = useState(cachedPermissions)
+const state = {
+  isAdmin: false,
+  isSuperAdmin: false,
+  role: null,
+  loadingAdmin: true,
+  loadingPermissions: true,
+  columns: {},
+  permissions: EMPTY,
+  adminRequest: null,
+  permissionRequest: null,
+  adminLoaded: false,
+  permissionsLoaded: false,
+  adminChannel: null,
+  permissionChannel: null,
+}
+const listeners = new Set()
 
-  const refreshPermissions = useCallback(async () => {
-    const data = await fetchColumnPermissions()
-    cachedColumns = data.columns || {}
-    cachedPermissions = data.permissions || EMPTY
-    setColumns(cachedColumns)
-    setPermissions(cachedPermissions)
-    return data
-  }, [])
+function emit() {
+  listeners.forEach(listener => listener())
+}
 
-  const refresh = useCallback(async () => {
+async function refreshAdminStatus() {
+  if (state.adminRequest) return state.adminRequest
+  state.loadingAdmin = true
+  emit()
+  state.adminRequest = (async () => {
     try {
       const me = await fetchAdminMe()
-      setIsSuperAdmin(Boolean(me.isSuperAdmin))
-      setIsAdmin(Boolean(me.isAdmin))
-      setRole(me.role || null)
-      if (!loadPermissions) return
-      try {
-        await refreshPermissions()
-      } catch {
-        setColumns({})
-        setPermissions(EMPTY)
-      }
+      state.isSuperAdmin = Boolean(me.isSuperAdmin)
+      state.isAdmin = Boolean(me.isAdmin)
+      state.role = me.role || null
+      state.adminLoaded = true
+      return me
     } catch {
-      setIsAdmin(false)
-      setIsSuperAdmin(false)
-      setRole(null)
+      state.isAdmin = false
+      state.isSuperAdmin = false
+      state.role = null
+      state.adminLoaded = true
+      return null
     } finally {
-      setLoading(false)
+      state.loadingAdmin = false
+      state.adminRequest = null
+      emit()
     }
-  }, [loadPermissions, refreshPermissions])
+  })()
+  return state.adminRequest
+}
+
+async function refreshPermissions() {
+  if (state.permissionRequest) return state.permissionRequest
+  state.loadingPermissions = true
+  emit()
+  state.permissionRequest = (async () => {
+    try {
+      const data = await fetchColumnPermissions()
+      state.columns = data.columns || {}
+      state.permissions = data.permissions || EMPTY
+      state.permissionsLoaded = true
+      return data
+    } catch {
+      state.columns = {}
+      state.permissions = EMPTY
+      state.permissionsLoaded = true
+      return { columns: {}, permissions: EMPTY }
+    } finally {
+      state.loadingPermissions = false
+      state.permissionRequest = null
+      emit()
+    }
+  })()
+  return state.permissionRequest
+}
+
+function ensureGlobalRealtime() {
+  if (!supabase) return
+  if (!state.adminChannel) {
+    const name = 'global:admin-status:admin_users'
+    logRealtimeSubscribe({ name, scope: 'global', tables: ['admin_users'] })
+    state.adminChannel = supabase
+      .channel(name)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_users' }, () => {
+        refreshAdminStatus().catch(() => null)
+      })
+      .subscribe()
+  }
+  if (!state.permissionChannel) {
+    const name = 'global:column-permissions'
+    logRealtimeSubscribe({ name, scope: 'global', tables: ['column_permissions'] })
+    state.permissionChannel = supabase
+      .channel(name)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'column_permissions' }, () => {
+        refreshPermissions().catch(() => null)
+      })
+      .subscribe()
+  }
+}
+
+export function stopAdminAccessRealtime() {
+  if (supabase && state.adminChannel) {
+    const current = state.adminChannel
+    state.adminChannel = null
+    supabase.removeChannel(current)
+    logRealtimeRemove('global:admin-status:admin_users')
+  }
+  if (supabase && state.permissionChannel) {
+    const current = state.permissionChannel
+    state.permissionChannel = null
+    supabase.removeChannel(current)
+    logRealtimeRemove('global:column-permissions')
+  }
+}
+
+export function useAdminAccess({ loadPermissions = true, realtime = true } = {}) {
+  const [, rerender] = useState(0)
+
+  const refresh = useCallback(async () => {
+    const admin = await refreshAdminStatus()
+    if (loadPermissions) await refreshPermissions()
+    return admin
+  }, [loadPermissions])
+
+  const refreshColumns = useCallback(() => refreshPermissions(), [])
 
   useEffect(() => {
-    let active = true
-    Promise.resolve().then(() => {
-      if (active) refresh()
-    })
-    return () => { active = false }
-  }, [refresh])
-
-  useRealtimeRefresh({
-    channelName: loadPermissions ? 'realtime:admin-access-permissions' : 'realtime:admin-access-me',
-    tables: loadPermissions ? ['admin_users', 'column_permissions'] : ['admin_users'],
-    onChange: loadPermissions ? refreshPermissions : refresh,
-    enabled: realtime
-  })
+    const listener = () => rerender(value => value + 1)
+    listeners.add(listener)
+    if (realtime) ensureGlobalRealtime()
+    if (!state.adminLoaded && !state.loadingAdmin) refreshAdminStatus().catch(() => null)
+    if (loadPermissions && !state.permissionsLoaded && !state.loadingPermissions) refreshPermissions().catch(() => null)
+    return () => listeners.delete(listener)
+  }, [loadPermissions, realtime])
 
   useEffect(() => {
     if (!loadPermissions) return undefined
-
     const syncPermissions = () => { refreshPermissions().catch(() => null) }
-    const syncStoragePermissions = (event) => {
-      if (event.key === PERMISSIONS_CHANGED_STORAGE_KEY) syncPermissions()
-    }
-    const poll = window.setInterval(syncPermissions, PERMISSIONS_POLL_MS)
-
     window.addEventListener(PERMISSIONS_CHANGED_EVENT, syncPermissions)
-    window.addEventListener('storage', syncStoragePermissions)
-    return () => {
-      window.clearInterval(poll)
-      window.removeEventListener(PERMISSIONS_CHANGED_EVENT, syncPermissions)
-      window.removeEventListener('storage', syncStoragePermissions)
-    }
-  }, [loadPermissions, refreshPermissions])
+    return () => window.removeEventListener(PERMISSIONS_CHANGED_EVENT, syncPermissions)
+  }, [loadPermissions])
+
+  const loading = state.loadingAdmin || (loadPermissions && state.loadingPermissions && !state.permissionsLoaded)
+  const isAdminSnapshot = state.isAdmin
+  const permissionsSnapshot = state.permissions
 
   const helpers = useMemo(() => {
-    const canViewColumn = (tableName, columnKey) => !isColumnHidden(permissions, tableName, columnKey, isAdmin)
-    const canEditColumn = (tableName, columnKey) => !isColumnDisabled(permissions, tableName, columnKey, isAdmin) && canViewColumn(tableName, columnKey)
-    const hidden = (tableName, columnKey) => isColumnHidden(permissions, tableName, columnKey, isAdmin)
-    const disabled = (tableName, columnKey) => isColumnDisabled(permissions, tableName, columnKey, isAdmin)
+    const canViewColumn = (tableName, columnKey) => !isColumnHidden(permissionsSnapshot, tableName, columnKey, isAdminSnapshot)
+    const canEditColumn = (tableName, columnKey) => !isColumnDisabled(permissionsSnapshot, tableName, columnKey, isAdminSnapshot) && canViewColumn(tableName, columnKey)
+    const hidden = (tableName, columnKey) => isColumnHidden(permissionsSnapshot, tableName, columnKey, isAdminSnapshot)
+    const disabled = (tableName, columnKey) => isColumnDisabled(permissionsSnapshot, tableName, columnKey, isAdminSnapshot)
     const getVisibleColumns = (tableName, columnList, keyMapper = column => column.key) => columnList.filter(column => canViewColumn(tableName, keyMapper(column)))
     const getEditableColumns = (tableName, columnList, keyMapper = column => column.key) => columnList.filter(column => canEditColumn(tableName, keyMapper(column)))
     return { canViewColumn, canEditColumn, isColumnHidden: hidden, isColumnDisabled: disabled, getVisibleColumns, getEditableColumns }
-  }, [isAdmin, permissions])
+  }, [isAdminSnapshot, permissionsSnapshot])
 
-  return useMemo(() => ({ isAdmin, isSuperAdmin, role, loading, columns, permissions, refresh, refreshPermissions, setPermissions, ...helpers }), [columns, helpers, isAdmin, isSuperAdmin, role, loading, permissions, refresh, refreshPermissions])
+  const setPermissions = useCallback((permissions) => {
+    state.permissions = permissions || EMPTY
+    state.permissionsLoaded = true
+    emit()
+  }, [])
+
+  return useMemo(() => ({
+    isAdmin: state.isAdmin,
+    isSuperAdmin: state.isSuperAdmin,
+    role: state.role,
+    loading,
+    columns: state.columns,
+    permissions: state.permissions,
+    refresh,
+    refreshPermissions: refreshColumns,
+    setPermissions,
+    ...helpers
+  }), [helpers, loading, refresh, refreshColumns, setPermissions])
 }
 
 export function isColumnHidden(permissions, tableName, columnKey, isAdmin) {
@@ -104,5 +189,5 @@ export function isColumnDisabled(permissions, tableName, columnKey, isAdmin) {
 
 export function notifyAdminPermissionsChanged() {
   window.dispatchEvent(new Event(PERMISSIONS_CHANGED_EVENT))
-  window.localStorage.setItem(PERMISSIONS_CHANGED_STORAGE_KEY, String(Date.now()))
+  refreshPermissions().catch(() => null)
 }

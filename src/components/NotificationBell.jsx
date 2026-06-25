@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bell, X } from 'lucide-react'
-import { supabase } from '../services/supabaseClient'
 import { useAuth } from '../context/useAuth'
+import { apiFetch } from '../services/apiClient'
+import { supabase } from '../services/supabaseClient'
+import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
 
 const formatDateTime = (value) => value ? new Date(value).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
 const todayIndia = () => {
@@ -22,11 +24,6 @@ const isVisibleNotification = (item) => (
   !String(item.title || '').startsWith('[cleared] ') &&
   (item.action_type !== 'client_follow_up_due' || String(item.follow_up_date || '') === todayIndia())
 )
-
-async function authHeaders() {
-  const session = supabase ? (await supabase.auth.getSession()).data.session : null
-  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
-}
 
 function playPing() {
   try {
@@ -68,7 +65,7 @@ export default function NotificationBell() {
 
   const loadNotifications = useCallback(async () => {
     if (!isAuthenticated) return
-    const res = await fetch('/api/notifications', { headers: await authHeaders() })
+    const res = await apiFetch('/api/notifications')
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
       const rows = data.data || []
@@ -86,8 +83,10 @@ export default function NotificationBell() {
 
   useEffect(() => {
     if (!supabase || !user?.id) return
+    const channelName = `notifications:${user.id}`
+    logRealtimeSubscribe({ name: channelName, scope: 'global', tables: ['notifications'] })
     const channel = supabase
-      .channel(`notifications:${user.id}`)
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `recipient_user_id=eq.${user.id}` }, payload => {
         if (payload.eventType === 'INSERT' && isVisibleNotification(payload.new)) {
           setNotifications(current => current.some(item => item.id === payload.new.id) ? current : [payload.new, ...current].slice(0, 30))
@@ -108,7 +107,10 @@ export default function NotificationBell() {
         }
       })
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      supabase.removeChannel(channel)
+      logRealtimeRemove(channelName)
+    }
   }, [showNotificationToast, user?.id])
 
   useEffect(() => {
@@ -140,10 +142,7 @@ export default function NotificationBell() {
     const optimistic = { ...notification, status: 'read', read_at: readAt }
     setNotifications(current => current.map(item => item.id === notification.id ? { ...item, ...optimistic } : item))
     if (toast?.id === notification.id) setToast(null)
-    const res = await fetch(`/api/notifications/${notification.id}/read`, {
-      method: 'PATCH',
-      headers: await authHeaders()
-    })
+    const res = await apiFetch(`/api/notifications/${notification.id}/read`, { method: 'PATCH' })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       setNotifications(previous)
@@ -160,10 +159,7 @@ export default function NotificationBell() {
     setNotifications([])
     setClearingRead(true)
     try {
-      const res = await fetch('/api/notifications/read', {
-        method: 'DELETE',
-        headers: await authHeaders()
-      })
+      const res = await apiFetch('/api/notifications/read', { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to clear notifications.')
       setOpen(false)

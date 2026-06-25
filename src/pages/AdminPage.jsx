@@ -226,13 +226,22 @@ export default function AdminPage() {
   }, [isAdmin, loading, navigate])
 
   useRealtimeRefresh({
-    channelName: 'realtime:admin-page-locks',
-    tables: ['admin_users', 'column_permissions', 'clients', 'candidates', 'jobs'],
+    channelName: 'realtime:admin-page-admin-users',
+    tables: ['admin_users'],
     onChange: () => {
       if (isAdmin) {
         loadAdminData().catch(err => setError(err.message))
         refresh()
       }
+    },
+    enabled: isAdmin
+  })
+
+  useRealtimeRefresh({
+    channelName: 'realtime:admin-page-locks',
+    tables: ['clients', 'candidates', 'jobs'],
+    onChange: () => {
+      if (isAdmin) loadAdminData().catch(err => setError(err.message))
     },
     enabled: isAdmin
   })

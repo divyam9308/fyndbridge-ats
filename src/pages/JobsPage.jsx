@@ -3,16 +3,17 @@ import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X, Lock } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
+import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
+import { useStaffDirectory } from '../hooks/useStaffDirectory'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import PaginationBar from '../components/PaginationBar'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
-import { supabase } from '../services/supabaseClient'
-import { isValidStoragePath, openProtectedDocumentPath } from '../services/apiClient'
+import { apiFetch, isValidStoragePath, openProtectedDocumentPath } from '../services/apiClient'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -136,11 +137,12 @@ export default function JobsPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const dashboardFilters = useMemo(() => parseDashboardFiltersFromUrl(location.search), [location.search])
+  const { loadProfile, session } = useAuth()
   const { isAdmin, permissions } = useAdminAccess()
   const [jobs, setJobs] = useState([])
   const [allJobs, setAllJobs] = useState([])
   const [dbClients, setDbClients] = useState([])
-  const [userOptions, setUserOptions] = useState([])
+  const { staff: userOptions } = useStaffDirectory()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -202,22 +204,19 @@ export default function JobsPage() {
         params.set('sortField', sortField)
         params.set('sortDirection', sortDirection)
       }
-      const [jobsRes, clientsRes, usersRes] = await Promise.all([
+      const [jobsRes, clientsRes] = await Promise.all([
         fetch(`/api/jobs?${params.toString()}`),
-        fetch('/api/clients?all=true'),
-        fetch('/api/jobs/users/options')
+        fetch('/api/clients?all=true')
       ])
       if (!jobsRes.ok) throw new Error('Failed to fetch mandates.')
       if (!clientsRes.ok) throw new Error('Failed to fetch clients.')
       const jobsData = await jobsRes.json()
       const clientsData = await clientsRes.json()
-      const usersData = usersRes.ok ? await usersRes.json() : { data: [] }
       setJobs(jobsData.data || [])
       setTotalJobs(Number(jobsData.total) || 0)
       setPage(Number(jobsData.page) || 1)
       if (import.meta.env.DEV && aiFilters) console.debug('Mandates AI filter', { filters: aiFilters, matched: Number(jobsData.total) || 0 })
       setDbClients(clientsData.data || [])
-      setUserOptions(usersData.data || [])
       setError(null)
     } catch (err) {
       setError(err.message)
@@ -260,19 +259,17 @@ export default function JobsPage() {
       return
     }
     fetchData()
-    refreshClientOptions()
-  }, [editingJob, fetchData, isOpen, refreshClientOptions])
+  }, [editingJob, fetchData, isOpen])
 
   useEffect(() => {
     if ((isOpen || editingJob) || !pendingRealtimeRefreshRef.current) return
     pendingRealtimeRefreshRef.current = false
     fetchData()
-    refreshClientOptions()
-  }, [editingJob, fetchData, isOpen, refreshClientOptions])
+  }, [editingJob, fetchData, isOpen])
 
   useRealtimeRefresh({
     channelName: 'realtime:jobs-page',
-    tables: ['jobs', 'clients'],
+    tables: ['jobs'],
     onChange: refreshJobsRealtime
   })
 
@@ -280,7 +277,7 @@ export default function JobsPage() {
     const timer = window.setTimeout(async () => {
       try {
         const currentUser = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
-        const userId = currentUser?.id || currentUser?.email || 'anonymous'
+        const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
         const response = await fetch(`/api/user-preferences/mandates_columns_preference?user_id=${encodeURIComponent(userId)}`)
         const payload = await response.json().catch(() => ({}))
         const value = Array.isArray(payload.data?.value)
@@ -297,7 +294,7 @@ export default function JobsPage() {
       }
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [session?.user?.id])
 
   useEffect(() => {
     const timer = window.setTimeout(refreshClientOptions, 0)
@@ -327,21 +324,10 @@ export default function JobsPage() {
   }, [isOpen])
 
   const getFreshActiveConsultantName = useCallback(async () => {
-    try {
-      const fbUser = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
-      if (fbUser.role === 'Consultant' && fbUser.full_name) {
-        return { name: fbUser.full_name, userId: fbUser.id }
-      }
-      const token = (await supabase?.auth?.getSession())?.data?.session?.access_token
-      if (!token) return { name: '', userId: '' }
-      const res = await fetch('/api/user/profile', { headers: { Authorization: `Bearer ${token}` } })
-      const payload = await res.json()
-      const nextName = payload?.data?.full_name || ''
-      return { name: nextName, userId: payload?.data?.id || '' }
-    } catch {
-      return { name: '', userId: '' }
-    }
-  }, [])
+    const profile = await loadProfile().catch(() => null)
+    const nextName = String(profile?.name || '').trim()
+    return { name: nextName, userId: profile?.user_id || '' }
+  }, [loadProfile])
 
   const fetchNextId = async () => {
     const res = await fetch('/api/jobs/next-display-id')
@@ -371,7 +357,6 @@ export default function JobsPage() {
         fetchNextId().catch(() => ''),
         getFreshActiveConsultantName().catch(() => ({ name: '' }))
       ])
-      await refreshClientOptions()
       const cName = profile?.name ? String(profile.name).trim() : ''
       setForm(current => ({
         ...current,
@@ -382,7 +367,7 @@ export default function JobsPage() {
     } catch {
       setForm(current => ({ ...current, job_display_id: '' }))
     }
-  }, [refreshClientOptions, getFreshActiveConsultantName])
+  }, [getFreshActiveConsultantName])
 
   useEffect(() => {
     const action = location.state?.action
@@ -559,10 +544,8 @@ export default function JobsPage() {
       const body = new FormData()
       Object.entries(payload).forEach(([key, value]) => body.append(key, Array.isArray(value) ? value.join(',') : value ?? ''))
       if (jdFile) body.append('jd_file', jdFile)
-      const session = supabase ? (await supabase.auth.getSession()).data.session : null
-      const res = await fetch(editingJob ? `/api/jobs/${editingJob.id}` : '/api/jobs', {
+      const res = await apiFetch(editingJob ? `/api/jobs/${editingJob.id}` : '/api/jobs', {
         method: editingJob ? 'PATCH' : 'POST',
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
         body
       })
       const data = await res.json().catch(() => ({}))

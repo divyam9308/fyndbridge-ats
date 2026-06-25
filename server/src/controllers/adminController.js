@@ -10,7 +10,8 @@ const {
   assertCanPromoteAdmin,
   assertCanDemoteSuperAdmin,
   serializeColumnDefs,
-  getAllColumnPermissions
+  getAllColumnPermissions,
+  invalidateColumnPermissionCache
 } = require('../services/adminAccess')
 const { getDashboardVisibility, setDashboardVisibility } = require('../services/dashboardAccess')
 
@@ -199,6 +200,7 @@ async function updateColumnPermission(req, res) {
       .select('*')
       .single()
     if (error) throw error
+    invalidateColumnPermissionCache()
     return res.json({ data })
   } catch (err) {
     return sendError(res, err)

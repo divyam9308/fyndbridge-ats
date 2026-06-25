@@ -4,11 +4,11 @@ import { useLocation, useParams, Link } from 'react-router-dom'
 import { ChevronDown, ChevronLeft, AlertCircle, Loader2, Briefcase, FileText, Pencil, X } from 'lucide-react'
 import '../styles/Shared.css'
 import './ClientDetailPage.css'
+import { useAuth } from '../context/useAuth'
 import { apiCandidateToUi, logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
-import { supabase } from '../services/supabaseClient'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
@@ -127,6 +127,7 @@ const candidateToEditForm = (candidate) => ({
 export default function ClientDetailPage() {
   const { clientId } = useParams()
   const location = useLocation()
+  const { session } = useAuth()
   const [client, setClient] = useState(null)
   const [clientJobs, setClientJobs] = useState([])
   const [candidates, setCandidates] = useState([])
@@ -258,7 +259,7 @@ export default function ClientDetailPage() {
 
   useRealtimeRefresh({
     channelName: `realtime:client-detail:${clientId}`,
-    tables: ['clients', 'jobs', 'candidates', 'candidate_associations'],
+    tables: ['clients', 'client_follow_ups'],
     onChange: refreshDetailRealtime,
     enabled: Boolean(clientId)
   })
@@ -266,7 +267,6 @@ export default function ClientDetailPage() {
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
-        const session = supabase ? (await supabase.auth.getSession()).data.session : null
         const currentUser = getCurrentUser()
         const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
         const response = await fetch(`/api/user-preferences/${CLIENT_DETAIL_COLUMNS_PREFERENCE_KEY}?user_id=${encodeURIComponent(userId)}`)
@@ -283,7 +283,7 @@ export default function ClientDetailPage() {
       }
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [session?.user?.id])
 
   useEffect(() => {
     if (!sortOpen) return
@@ -447,7 +447,6 @@ export default function ClientDetailPage() {
   }
   const saveColumnPreference = async () => {
     try {
-      const session = supabase ? (await supabase.auth.getSession()).data.session : null
       const currentUser = getCurrentUser()
       const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
       const value = pendingColumns.length ? pendingColumns : DEFAULT_CANDIDATE_COLUMN_KEYS

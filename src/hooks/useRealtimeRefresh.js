@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '../services/supabaseClient'
+import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
 
-export function useRealtimeRefresh({ channelName, tables, onChange, enabled = true, debounceMs = 400 }) {
+export function useRealtimeRefresh({ channelName, tables, onChange, enabled = true, debounceMs = 400, scope = 'page' }) {
   const onChangeRef = useRef(onChange)
   const timerRef = useRef(null)
   const tableKey = Array.isArray(tables) ? tables.join('|') : ''
@@ -34,6 +35,7 @@ export function useRealtimeRefresh({ channelName, tables, onChange, enabled = tr
 
     const tableList = tableKey.split('|').filter(Boolean)
     debug(`Realtime subscribing: ${debugName}`, tableList)
+    logRealtimeSubscribe({ name: channelName, scope, tables: tableList })
     const channel = tableList.reduce((nextChannel, table) => (
       nextChannel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRefresh)
     ), supabase.channel(channelName))
@@ -45,6 +47,7 @@ export function useRealtimeRefresh({ channelName, tables, onChange, enabled = tr
     return () => {
       window.clearTimeout(timerRef.current)
       supabase.removeChannel(channel)
+      logRealtimeRemove(channelName)
     }
-  }, [channelName, debounceMs, debugName, enabled, tableKey])
+  }, [channelName, debounceMs, debugName, enabled, scope, tableKey])
 }

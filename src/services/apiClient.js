@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient'
 
 const API_UNAUTHORIZED_EVENT = 'fb:api-unauthorized'
 const documentOpenLocks = new Map()
+const debugCallCounts = {}
 const DOCUMENT_OPEN_TYPES = {
   cv: { bucket: 'resumes', endpoint: '/api/resumes/open' },
   resume: { bucket: 'resumes', endpoint: '/api/resumes/open' },
@@ -62,9 +63,19 @@ export function installApiFetchInterceptor() {
     try {
       response = await nativeFetch(input, needsAuth ? { ...init, headers } : init)
     } finally {
-      if (trace) {
-        const path = new URL(url, window.location.origin).pathname
+      if (trace || import.meta.env.DEV) {
+        const parsedUrl = new URL(url || window.location.href, window.location.origin)
+        const path = parsedUrl.pathname
+        if (import.meta.env.DEV) {
+          const key = debugApiKey(path, parsedUrl.searchParams)
+          if (key) {
+            debugCallCounts[key] = (debugCallCounts[key] || 0) + 1
+            console.debug('[Supabase Debug] Call counts:', { ...debugCallCounts })
+          }
+        }
+        if (trace) {
         console.debug('[perf]', { request: path, method: init.method || 'GET', timestamp: new Date().toISOString(), durationMs: Number((performance.now() - startedAt).toFixed(1)) })
+        }
       }
     }
 
@@ -76,6 +87,18 @@ export function installApiFetchInterceptor() {
   }
 
   window.__fbApiFetchInstalled = true
+}
+
+function debugApiKey(path, params) {
+  if (path.includes('/column-permissions')) return 'column_permissions'
+  if (path.includes('/user-profiles')) return 'user_profiles'
+  if (path.includes('/admin/me')) return 'admin_users'
+  if (path.includes('/notifications')) return 'notifications'
+  if (path.includes('/candidates')) return 'candidates'
+  if (path.includes('/clients')) return params?.has('client_follow_ups') ? 'client_follow_ups' : 'clients'
+  if (path.includes('/jobs')) return 'jobs'
+  if (path.includes('/auth/v1/user')) return 'auth/v1/user'
+  return ''
 }
 
 export function normalizeExternalUrl(url) {

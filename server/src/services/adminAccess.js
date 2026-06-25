@@ -9,6 +9,9 @@ const ROLES = {
   ADMIN: 'admin',
   SUPER_ADMIN: 'super_admin'
 }
+const PERMISSION_CACHE_TTL_MS = 10 * 60 * 1000
+let permissionCache = null
+let permissionCacheExpiresAt = 0
 
 const COLUMN_DEFS = {
   clients: [
@@ -192,18 +195,36 @@ function assertCanDemoteSuperAdmin(targetAdmin, currentUser, admins) {
 
 async function getColumnPermissions(tableName) {
   const defs = COLUMN_DEFS[tableName] || []
-  const { data, error } = await supabase.from('column_permissions').select('column_key, access_mode').eq('table_name', tableName)
-  if (error && error.code !== '42P01') throw error
-  const map = new Map((data || []).map((row) => [row.column_key, row.access_mode]))
+  const all = await getAllColumnPermissions()
   return defs.reduce((acc, [, key]) => {
-    acc[key] = map.get(key) || ACCESS.EVERYONE
+    acc[key] = all?.[tableName]?.[key] || ACCESS.EVERYONE
     return acc
   }, {})
 }
 
 async function getAllColumnPermissions() {
-  const entries = await Promise.all(Object.keys(COLUMN_DEFS).map(async (table) => [table, await getColumnPermissions(table)]))
-  return Object.fromEntries(entries)
+  if (permissionCache && permissionCacheExpiresAt > Date.now()) return permissionCache
+  const { data, error } = await supabase.from('column_permissions').select('table_name, column_key, access_mode')
+  if (error && error.code !== '42P01') throw error
+  const byTable = (data || []).reduce((acc, row) => {
+    acc[row.table_name] = acc[row.table_name] || {}
+    acc[row.table_name][row.column_key] = row.access_mode
+    return acc
+  }, {})
+  permissionCache = Object.fromEntries(Object.entries(COLUMN_DEFS).map(([table, defs]) => [
+    table,
+    defs.reduce((acc, [, key]) => {
+      acc[key] = byTable?.[table]?.[key] || ACCESS.EVERYONE
+      return acc
+    }, {})
+  ]))
+  permissionCacheExpiresAt = Date.now() + PERMISSION_CACHE_TTL_MS
+  return permissionCache
+}
+
+function invalidateColumnPermissionCache() {
+  permissionCache = null
+  permissionCacheExpiresAt = 0
 }
 
 function hiddenColumnKeys(permissions) {
@@ -271,6 +292,7 @@ module.exports = {
   assertCanDemoteSuperAdmin,
   getColumnPermissions,
   getAllColumnPermissions,
+  invalidateColumnPermissionCache,
   stripHiddenFields,
   assertCanUpdateColumns,
   assertRowEditable
