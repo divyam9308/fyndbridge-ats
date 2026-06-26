@@ -15,6 +15,8 @@ dist-ssr
 .env.*
 server/.env
 server/.env.*
+!.env.example
+!server/.env.example
 
 # Editor directories and files
 .vscode/*
@@ -26,3 +28,5 @@ server/.env.*
 *.njsproj
 *.sln
 *.sw?
+.vercel
+.env*
