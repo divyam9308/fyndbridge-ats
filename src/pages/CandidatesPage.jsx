@@ -18,7 +18,7 @@ import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtecte
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
-import { highlightText, keywordFilters } from '../utils/aiFilterUi'
+import { highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 
@@ -1137,6 +1137,14 @@ export default function CandidatesPage() {
       clearAiFilter()
       return
     }
+    const visibleAiFields = CANDIDATE_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_AI_FIELD[field], isAdmin))
+    if (isSimpleKeywordSearch('candidates', prompt)) {
+      setAiFilters(keywordFilters('candidates', prompt, visibleAiFields))
+      setAiAppliedPrompt(prompt)
+      setAiFilterError('')
+      setPage(1)
+      return
+    }
     setAiFilterLoading(true)
     setAiFilterError('')
     try {
@@ -1159,7 +1167,7 @@ export default function CandidatesPage() {
       setPage(1)
     } catch (err) {
       notifyAiQuota(err.message)
-      setAiFilters(keywordFilters('candidates', prompt, CANDIDATE_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_AI_FIELD[field], isAdmin))))
+      setAiFilters(keywordFilters('candidates', prompt, visibleAiFields))
       setAiAppliedPrompt(prompt)
       setAiFilterError('')
       setPage(1)
@@ -1889,7 +1897,7 @@ export default function CandidatesPage() {
     )
   }
   const activeColumns = useMemo(() => (
-    CANDIDATE_TABLE_COLUMNS.filter(column => (visibleColumns.includes(column.key) || column.key === 'jobId') && !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+    CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) && !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
   ), [isAdmin, permissions, visibleColumns])
   const availableColumns = useMemo(() => (
     CANDIDATE_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))

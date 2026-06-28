@@ -508,18 +508,18 @@ export default function JobsPage() {
 
   const proceedColumns = () => {
     const allowed = availableColumns.map(column => column.key)
-    const next = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
-    setVisibleColumns(next.length ? next : allowed)
-    storeMandateColumns(next.length ? next : allowed)
+    const next = pendingColumns.filter(key => allowed.includes(key))
+    setVisibleColumns(next)
+    storeMandateColumns(next)
     setColumnsOpen(false)
   }
 
   const saveColumnPreference = async () => {
     try {
       const currentUser = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
-      const userId = currentUser?.id || currentUser?.email || 'anonymous'
+      const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
       const allowed = availableColumns.map(column => column.key)
-      const value = (pendingColumns.length ? pendingColumns : allowed).filter(key => allowed.includes(key))
+      const value = pendingColumns.filter(key => allowed.includes(key))
       const response = await fetch('/api/user-preferences/mandates_columns_preference', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -530,10 +530,21 @@ export default function JobsPage() {
         throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
       }
       setSavedColumns(value)
+      setVisibleColumns(value)
       storeMandateColumns(value)
+      setColumnsOpen(false)
     } catch (err) {
       setError(err.message)
     }
+  }
+
+  const resetColumnsToSaved = () => {
+    const allowedKeys = new Set(availableColumns.map(column => column.key))
+    const value = (savedColumns?.length ? savedColumns : DEFAULT_MANDATE_COLUMN_KEYS).filter(key => allowedKeys.has(key))
+    setPendingColumns(value)
+    setVisibleColumns(value)
+    storeMandateColumns(value)
+    setColumnsOpen(false)
   }
 
   const validate = () => {
@@ -799,7 +810,7 @@ export default function JobsPage() {
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(availableColumns.map(column => column.key))}>Select All</button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
-              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns((savedColumns?.length ? savedColumns : DEFAULT_MANDATE_COLUMN_KEYS).filter(key => availableColumns.some(column => column.key === key)))}>Reset to Saved Preference</button>
+              <button className="candidate-columns-action" type="button" onClick={resetColumnsToSaved}>Reset to Saved Preference</button>
               <div className="candidate-columns-divider" />
               {availableColumns.map(column => (
                 <label className="candidate-column-option" key={column.key}>
