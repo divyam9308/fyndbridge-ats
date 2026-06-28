@@ -9,8 +9,7 @@ const missingColumn = (error, column) => (
 )
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
 const preferredName = (profile, fallbackEmail) => clean(profile?.name || profile?.full_name) || displayNameFromEmail(profile?.email || fallbackEmail)
-const CLEANUP_RETENTION_DAYS = 14
-const CLEANUP_RULE = "cleared_at IS NOT NULL AND created_at < now() - interval '14 days'"
+const CLEANUP_RULE = "cleared_at IS NOT NULL AND status = 'read'"
 
 async function profileMap(userIds = []) {
   const ids = [...new Set(userIds.map(clean).filter(Boolean))]
@@ -227,7 +226,7 @@ async function countRows(tableName, applyFilters = (query) => query) {
 async function assertNotificationCleanupColumns() {
   const { error } = await supabase
     .from('notifications')
-    .select('id, cleared_at, created_at, status')
+    .select('id, cleared_at, status')
     .limit(1)
   if (!error) return
   if (missingColumn(error, 'cleared_at')) {
@@ -235,62 +234,42 @@ async function assertNotificationCleanupColumns() {
     err.statusCode = 400
     throw err
   }
-  if (missingColumn(error, 'created_at')) {
-    const err = new Error('Cleanup aborted: notifications.created_at column does not exist.')
-    err.statusCode = 400
-    throw err
-  }
   throw error
 }
 
-function cleanupCutoffIso(now = Date.now()) {
-  return new Date(now - CLEANUP_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString()
-}
-
-const applyCleanupEligibility = (cutoffIso) => (query) => query
+const applyCleanupEligibility = (query) => query
   .not('cleared_at', 'is', null)
-  .lt('created_at', cutoffIso)
+  .eq('status', 'read')
 
 async function cleanupOldNotifications(req, res) {
   try {
     if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' })
     const dryRun = String(req.query.dryRun || req.body?.dryRun || '').toLowerCase() === 'true'
-    const cutoffIso = cleanupCutoffIso()
 
     await assertNotificationCleanupColumns()
 
     const beforeCount = await countRows('notifications')
     const pendingUnreadBefore = await countRows('notifications', (query) => query.eq('status', 'pending'))
     const clientFollowUpsBefore = await countRows('client_follow_ups')
-    const eligibleCount = await countRows('notifications', applyCleanupEligibility(cutoffIso))
-    const eligiblePendingCount = await countRows('notifications', (query) => (
-      applyCleanupEligibility(cutoffIso)(query).eq('status', 'pending')
-    ))
+    const eligibleCount = await countRows('notifications', applyCleanupEligibility)
 
     let deletedCount = 0
-    let blockedReason = ''
     if (!dryRun) {
-      if (eligiblePendingCount > 0) {
-        blockedReason = 'Cleanup aborted: eligible rows include pending/unread notifications.'
-      } else {
-        const { data, error } = await applyCleanupEligibility(cutoffIso)(
-          supabase.from('notifications').delete()
-        ).select('id')
-        if (error) throw error
-        deletedCount = (data || []).length
-      }
+      const { data, error } = await applyCleanupEligibility(
+        supabase.from('notifications').delete()
+      ).select('id')
+      if (error) throw error
+      deletedCount = (data || []).length
     }
 
-    const afterCount = blockedReason ? beforeCount : await countRows('notifications')
-    const pendingUnreadAfter = blockedReason ? pendingUnreadBefore : await countRows('notifications', (query) => query.eq('status', 'pending'))
+    const afterCount = await countRows('notifications')
+    const pendingUnreadAfter = await countRows('notifications', (query) => query.eq('status', 'pending'))
     const clientFollowUpsAfter = await countRows('client_follow_ups')
     const payload = {
       dryRun,
       rule: CLEANUP_RULE,
-      cutoff: cutoffIso,
       before_count: beforeCount,
       eligible_count: eligibleCount,
-      eligible_pending_unread_count: eligiblePendingCount,
       deleted_count: deletedCount,
       after_count: afterCount,
       pending_unread_before: pendingUnreadBefore,
@@ -299,7 +278,6 @@ async function cleanupOldNotifications(req, res) {
       client_follow_ups_before: clientFollowUpsBefore,
       client_follow_ups_after: clientFollowUpsAfter
     }
-    if (blockedReason) return res.status(409).json({ ...payload, error: blockedReason })
     return res.json(payload)
   } catch (err) {
     console.error('cleanupOldNotifications error:', err.message || err)
