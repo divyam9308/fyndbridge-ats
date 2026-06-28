@@ -724,12 +724,15 @@ export default function DashboardHome() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="ats-dashboard-state"><Loader2 size={24} className="spin" /> Loading dashboard...</div>
-      ) : null}
-      {error ? (
-        <div className="ats-dashboard-state is-error">{error}</div>
-      ) : null}
+      <div className={`ats-dashboard-state-slot${loading || error ? ' is-visible' : ''}`} aria-hidden={!loading && !error}>
+        {loading ? (
+          <div className="ats-dashboard-state"><Loader2 size={24} className="spin" /> Loading dashboard...</div>
+        ) : error ? (
+          <div className="ats-dashboard-state is-error">{error}</div>
+        ) : (
+          <div className="ats-dashboard-state is-hidden"><Loader2 size={24} /> Loading dashboard...</div>
+        )}
+      </div>
 
       <OnlineUsersStrip users={onlineUsers} />
 

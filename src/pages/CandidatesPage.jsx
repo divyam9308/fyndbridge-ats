@@ -97,26 +97,17 @@ const formatLocationRegion = (location, region) => {
   return parts.join(', ')
 }
 
-const getReadableClientId = (candidate, dbClients) => {
+const getReadableClientId = (candidate, clientDisplayLookup) => {
   if (!candidate.client || candidate.client.trim() === '') {
     return 'Unassigned'
   }
-  // Try matching by UUID first
   if (candidate.clientId) {
-    const matchedByUuid = dbClients.find(client => client.id === candidate.clientId)
-    if (matchedByUuid?.client_display_id) {
-      return matchedByUuid.client_display_id
-    }
+    const matchedByUuid = clientDisplayLookup.byId.get(candidate.clientId)
+    if (matchedByUuid) return matchedByUuid
   }
-  // Fallback to name matching
   const normalizedCandidateClientName = String(candidate.client).replace(/\s+/g, ' ').trim().toLowerCase()
-  const matchedByName = dbClients.find(client => {
-    const name = client.name || client.client_name || ''
-    return name.replace(/\s+/g, ' ').trim().toLowerCase() === normalizedCandidateClientName
-  })
-  if (matchedByName?.client_display_id) {
-    return matchedByName.client_display_id
-  }
+  const matchedByName = clientDisplayLookup.byName.get(normalizedCandidateClientName)
+  if (matchedByName) return matchedByName
   return 'Client not found'
 }
 const getCurrentUser = () => {
@@ -730,14 +721,30 @@ export default function CandidatesPage() {
     }
   }
 
-  const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
-  const clientName = (client) => client?.name || client?.client_name || ''
-  const canonicalClients = getCanonicalClients(dbClients)
+  const normalizeText = useCallback((value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase(), [])
+  const clientName = useCallback((client) => client?.name || client?.client_name || '', [])
+  const canonicalClients = useMemo(() => getCanonicalClients(dbClients), [dbClients])
+  const clientDisplayLookup = useMemo(() => {
+    const byId = new Map()
+    const byName = new Map()
+    dbClients.forEach(client => {
+      if (client.id && client.client_display_id) byId.set(client.id, client.client_display_id)
+      const name = clientName(client)
+      if (name && client.client_display_id) byName.set(normalizeText(name), client.client_display_id)
+    })
+    return { byId, byName }
+  }, [clientName, dbClients, normalizeText])
+  const jobDisplayLookup = useMemo(() => {
+    const byId = new Map()
+    dbJobs.forEach(job => {
+      if (job.id && job.job_display_id) byId.set(job.id, job.job_display_id)
+    })
+    return byId
+  }, [dbJobs])
   const findClientByName = (name) => canonicalClients.find(c => normalizeText(clientName(c)) === normalizeText(name))
   const findClientByInput = (value) => canonicalClients.find(c => c.id === value)
   const clientDisplayIdForForm = (candidate) => {
-    const client = canonicalClients.find(c => c.id === candidate.clientId)
-    return client?.client_display_id || ''
+    return clientDisplayLookup.byId.get(candidate.clientId) || ''
   }
   const jobName = (job) => job?.title || job?.role || ''
   const uniqueJobFilterOptions = useMemo(() => {
@@ -749,65 +756,67 @@ export default function CandidatesPage() {
     return [...names].sort((a, b) => a.localeCompare(b))
   }, [dbJobs])
   const jobDisplayIdForForm = (candidate) => {
-    const job = dbJobs.find(j => j.id === candidate.jobId)
-    return job?.job_display_id || candidate.jobDisplayId || ''
+    return jobDisplayLookup.get(candidate.jobId) || candidate.jobDisplayId || ''
   }
 
   const ensureCandidateClient = async (candidate) => candidate
 
   const filtered = candidates
 
-  const mobileGroups = {}
-  const parents = filtered.map((_, index) => index)
-  const firstTokenIndex = new Map()
-  const find = (index) => {
-    let root = index
-    while (parents[root] !== root) root = parents[root]
-    while (parents[index] !== index) {
-      const next = parents[index]
-      parents[index] = root
-      index = next
+  const visibleCandidates = useMemo(() => {
+    const mobileGroups = {}
+    const parents = filtered.map((_, index) => index)
+    const firstTokenIndex = new Map()
+    const find = (index) => {
+      let root = index
+      while (parents[root] !== root) root = parents[root]
+      while (parents[index] !== index) {
+        const next = parents[index]
+        parents[index] = root
+        index = next
+      }
+      return root
     }
-    return root
-  }
-  const union = (a, b) => {
-    const rootA = find(a)
-    const rootB = find(b)
-    if (rootA !== rootB) parents[rootB] = rootA
-  }
+    const union = (a, b) => {
+      const rootA = find(a)
+      const rootB = find(b)
+      if (rootA !== rootB) parents[rootB] = rootA
+    }
 
-  filtered.forEach((candidate, index) => {
-    const tokens = duplicateIdentityTokens(candidate)
-    tokens.forEach((token) => {
-      if (firstTokenIndex.has(token)) union(index, firstTokenIndex.get(token))
-      else firstTokenIndex.set(token, index)
-    })
-  })
-
-  filtered.forEach((candidate, index) => {
-    const tokens = duplicateIdentityTokens(candidate)
-    const key = tokens.length ? `group-${find(index)}` : `single-${candidate.associationId || candidate.id || index}`
-    if (!mobileGroups[key]) mobileGroups[key] = []
-    mobileGroups[key].push(candidate)
-  })
-
-  const visibleCandidates = []
-  Object.entries(mobileGroups).forEach(([mobile, rows]) => {
-    const isGroup = rows.length >= 2
-    const isExpanded = Boolean(collapsed[mobile])
-    const visibleRows = isGroup && !isExpanded ? rows.slice(0, 1) : rows
-    visibleRows.forEach((candidate, index) => {
-      visibleCandidates.push({
-        candidate,
-        mobile,
-        isGroup,
-        isExpanded,
-        groupSize: rows.length,
-        groupIndex: index,
-        isLastInGroup: index === visibleRows.length - 1,
+    filtered.forEach((candidate, index) => {
+      const tokens = duplicateIdentityTokens(candidate)
+      tokens.forEach((token) => {
+        if (firstTokenIndex.has(token)) union(index, firstTokenIndex.get(token))
+        else firstTokenIndex.set(token, index)
       })
     })
-  })
+
+    filtered.forEach((candidate, index) => {
+      const tokens = duplicateIdentityTokens(candidate)
+      const key = tokens.length ? `group-${find(index)}` : `single-${candidate.associationId || candidate.id || index}`
+      if (!mobileGroups[key]) mobileGroups[key] = []
+      mobileGroups[key].push(candidate)
+    })
+
+    const rows = []
+    Object.entries(mobileGroups).forEach(([mobile, groupRows]) => {
+      const isGroup = groupRows.length >= 2
+      const isExpanded = Boolean(collapsed[mobile])
+      const visibleRows = isGroup && !isExpanded ? groupRows.slice(0, 1) : groupRows
+      visibleRows.forEach((candidate, index) => {
+        rows.push({
+          candidate,
+          mobile,
+          isGroup,
+          isExpanded,
+          groupSize: groupRows.length,
+          groupIndex: index,
+          isLastInGroup: index === visibleRows.length - 1,
+        })
+      })
+    })
+    return rows
+  }, [collapsed, filtered])
 
   const toggleCollapsed = (mobile) => {
     setCollapsed(prev => ({ ...prev, [mobile]: !prev[mobile] }))
@@ -1879,9 +1888,15 @@ export default function CandidatesPage() {
       </div>
     )
   }
-  const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => (visibleColumns.includes(column.key) || column.key === 'jobId') && !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
-  const availableColumns = CANDIDATE_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
-  const candidateTableMinWidth = activeColumns.reduce((sum, column) => sum + (column.width || 140), 0)
+  const activeColumns = useMemo(() => (
+    CANDIDATE_TABLE_COLUMNS.filter(column => (visibleColumns.includes(column.key) || column.key === 'jobId') && !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  ), [isAdmin, permissions, visibleColumns])
+  const availableColumns = useMemo(() => (
+    CANDIDATE_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  ), [isAdmin, permissions])
+  const candidateTableMinWidth = useMemo(() => (
+    activeColumns.reduce((sum, column) => sum + (column.width || 140), 0)
+  ), [activeColumns])
 
   const updateCandidateLockState = async (record) => {
     setCandidates(current => current.map(candidate => candidate.candidateId === record.id ? { ...candidate, isLocked: record.is_locked } : candidate))
@@ -1933,7 +1948,7 @@ export default function CandidatesPage() {
     const candidateAvatarStyle = avatarColorsFor(c.name)
     const consultantInitials = initials(c.consultant || '').slice(0, 2) || '-'
     const consultantAvatarStyle = avatarColorsFor(c.consultant || c.name)
-    const clientIdValue = c.clientDisplayId || getReadableClientId(c, dbClients)
+    const clientIdValue = c.clientDisplayId || getReadableClientId(c, clientDisplayLookup)
     const jobIdValue = c.jobDisplayId || jobDisplayIdForForm(c) || '-'
     const noticeMeta = getNoticeMeta(c.noticePeriod)
 
@@ -2551,4 +2566,3 @@ export default function CandidatesPage() {
     </div>
   )
 }
-
