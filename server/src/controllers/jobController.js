@@ -23,7 +23,6 @@ const nullable = (value) => {
   return text && text !== '-' ? text : null
 }
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
-const jobIdNumber = (value) => Number(String(value || '').match(/^JB(\d+)$/i)?.[1] || 0)
 const preferredUserName = (primaryName, secondaryName, email) => clean(primaryName) || clean(secondaryName) || displayNameFromEmail(email)
 const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clean(value))
 const compareDisplayIds = (a, b, prefix) => {
@@ -274,13 +273,14 @@ async function listJobs(req, res) {
     const aiFilters = parseJsonFilter(req.query.ai_filters)
     const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.rankingHints || []).length || (aiFilters?.conditions || []).some(condition => ['consultant', 'budget'].includes(condition.field))
     const localConsultantFilter = clean(req.query.consultant)
-    const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter && !localConsultantFilter
+    const sortField = clean(req.query.sortField)
+    const sortDirection = clean(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
+    const numericJobIdSort = sortField === 'job_id'
+    const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter && !localConsultantFilter && !numericJobIdSort
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
     const to = from + limit - 1
-    const sortField = clean(req.query.sortField)
-    const sortDirection = clean(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
     let query = supabase.from('jobs').select('*, clients(name, client_name, client_display_id)', { count: paginate ? 'exact' : undefined })
     if (req.query.client_id) query = query.eq('client_id', req.query.client_id)
     if (req.query.status) query = query.ilike('mandate_status', clean(req.query.status))
@@ -326,7 +326,7 @@ return res.json({ data: [], total: 0, page, totalPages: 1, limit })
       }
     })
     query = filtered.query
-    if (sortField === 'job_id') query = query.order('created_at', { ascending: sortDirection !== 'desc' })
+    if (sortField === 'job_id') query = query.order('job_display_id', { ascending: sortDirection !== 'desc' })
     else if (req.query.sortField === 'role') query = query.order('title', { ascending: req.query.sortDirection !== 'desc' })
     else query = query.order('created_at', { ascending: false })
     if (paginate) query = query.range(from, to)
@@ -340,7 +340,10 @@ return res.json({ data: [], total: 0, page, totalPages: 1, limit })
         .some(value => clean(value).toLowerCase() === expected))
     }
     const filteredTotal = rows.length
-    if (localAiFilter || localConsultantFilter) rows = rows.slice(from, to + 1)
+    if (numericJobIdSort) {
+      rows.sort((a, b) => compareDisplayIds(a.job_display_id, b.job_display_id, 'JB') * (sortDirection === 'desc' ? -1 : 1))
+    }
+    if (localAiFilter || localConsultantFilter || numericJobIdSort) rows = rows.slice(from, to + 1)
     const total = paginate ? count || 0 : filteredTotal
     const totalPages = Math.max(1, Math.ceil(total / limit))
 return res.json({ data: await stripHiddenFields('jobs', rows, await isAdmin(req.user)), total, page, totalPages, limit })
@@ -561,4 +564,3 @@ async function buildJobFilters(req, res) {
 }
 
 module.exports = { listJobs, getJob, createJob, updateJob, deleteJob, getNextJobDisplayId, listJobUsers, buildJobFilters }
-
