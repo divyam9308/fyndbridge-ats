@@ -530,9 +530,7 @@ export default function JobsPage() {
         throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
       }
       setSavedColumns(value)
-      setVisibleColumns(value)
       storeMandateColumns(value)
-      setColumnsOpen(false)
     } catch (err) {
       setError(err.message)
     }
@@ -806,7 +804,7 @@ export default function JobsPage() {
           </button>
           <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
           {columnsOpen && (
-            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
+            <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current || columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(availableColumns.map(column => column.key))}>Select All</button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
