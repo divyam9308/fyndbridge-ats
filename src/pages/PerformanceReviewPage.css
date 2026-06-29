@@ -16,15 +16,6 @@
   padding-bottom: 22px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .performance-page {
-    --perf-surface: oklch(18% 0.025 265);
-    --perf-muted: oklch(76% 0.025 265);
-    --perf-border: color-mix(in oklch, var(--perf-blue-soft-foreground) 24%, transparent);
-    color: var(--perf-navy-soft-foreground);
-  }
-}
-
 .performance-employee-card,
 .performance-summary-card,
 .performance-table-card {

@@ -100,40 +100,6 @@
   --perf-calculated-foreground: oklch(42% 0.075 260);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --perf-blue: oklch(70% 0.12 265);
-    --perf-blue-soft: oklch(30% 0.065 265);
-    --perf-blue-foreground: oklch(89% 0.035 265);
-    --perf-blue-soft-foreground: oklch(80% 0.06 265);
-    --perf-indigo: oklch(72% 0.105 285);
-    --perf-indigo-soft: oklch(31% 0.06 285);
-    --perf-indigo-foreground: oklch(89% 0.035 285);
-    --perf-teal: oklch(73% 0.09 205);
-    --perf-teal-soft: oklch(31% 0.05 205);
-    --perf-teal-foreground: oklch(89% 0.04 205);
-    --perf-gold-soft: oklch(33% 0.06 88);
-    --perf-gold-soft-foreground: oklch(86% 0.1 91);
-    --gold: oklch(80% 0.13 91);
-    --perf-amber: oklch(78% 0.115 76);
-    --perf-amber-soft: oklch(32% 0.055 78);
-    --perf-amber-foreground: oklch(88% 0.075 84);
-    --perf-orange: oklch(74% 0.12 55);
-    --perf-orange-soft: oklch(31% 0.06 55);
-    --perf-orange-foreground: oklch(88% 0.07 60);
-    --perf-rose: oklch(72% 0.12 24);
-    --perf-rose-soft: oklch(31% 0.06 24);
-    --perf-rose-foreground: oklch(88% 0.06 24);
-    --perf-green: oklch(75% 0.105 145);
-    --perf-green-soft: oklch(31% 0.05 145);
-    --perf-green-foreground: oklch(89% 0.055 145);
-    --perf-navy-soft: oklch(27% 0.045 265);
-    --perf-navy-soft-foreground: oklch(88% 0.035 265);
-    --perf-calculated: oklch(29% 0.025 260);
-    --perf-calculated-foreground: oklch(84% 0.035 260);
-  }
-}
-
 /* ===================== Reset ===================== */
 *, *::before, *::after {
   box-sizing: border-box;
