@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Briefcase, Building2, Eye, EyeOff, LoaderCircle, Lock, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, Building2, Eye, EyeOff, LoaderCircle, Lock, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
 import { notifyAdminPermissionsChanged, useAdminAccess } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import {
@@ -17,6 +17,13 @@ import {
   ,updateDashboardVisibility
 } from '../services/adminAccessApi'
 import AdminPermissionPicker from '../components/admin/AdminPermissionPicker'
+import {
+  PERFORMANCE_COLUMNS,
+  PERFORMANCE_PERMISSION_OPTIONS,
+  PERFORMANCE_TABLE_KEY,
+  DEFAULT_PERFORMANCE_PERMISSIONS
+} from '../utils/performanceReviewStorage'
+import { fetchPerformancePermissions, savePerformancePermissions } from '../services/performanceApi'
 import './AdminPage.css'
 
 const TABS = [
@@ -24,6 +31,8 @@ const TABS = [
   ['candidates', 'Candidates', Users],
   ['jobs', 'Mandates', Briefcase]
 ]
+
+const PERFORMANCE_TAB = [PERFORMANCE_TABLE_KEY, 'Performance', BarChart3]
 
 const TYPE_META = {
   Client: { key: 'clients', label: 'Clients', Icon: Building2 },
@@ -34,8 +43,15 @@ const TYPE_META = {
 const PERMISSION_TEXT = {
   everyone: 'Visible and editable by all users',
   admin_disabled: 'Visible but not editable by non-admins',
-  admin_hidden: 'Not visible to non-admins'
+  admin_hidden: 'Not visible to non-admins',
+  super_admin_disabled: 'Visible but editable only by Super Admins',
+  super_admin_hidden: 'Not visible to non-super-admins'
 }
+
+const PERFORMANCE_PICKER_OPTIONS = PERFORMANCE_PERMISSION_OPTIONS.map(option => ({
+  ...option,
+  Icon: option.value === 'everyone' ? Eye : option.value === 'super_admin_disabled' ? Lock : EyeOff
+}))
 
 function initials(value) {
   return String(value || '').split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase() || 'A'
@@ -67,6 +83,7 @@ function isSamePermissions(a, b) {
 function changedPermissions(saved, draft) {
   const changes = []
   Object.entries(draft || {}).forEach(([tableName, tablePermissions]) => {
+    if (tableName === PERFORMANCE_TABLE_KEY) return
     Object.entries(tablePermissions || {}).forEach(([columnKey, accessMode]) => {
       if ((saved?.[tableName]?.[columnKey] || 'everyone') !== accessMode) {
         changes.push({ tableName, columnKey, accessMode })
@@ -95,11 +112,12 @@ function Section({ title, description, icon: Icon, action, children }) {
 }
 
 function StateChip({ value }) {
-  const Icon = value === 'admin_hidden' ? EyeOff : value === 'admin_disabled' ? Lock : Eye
+  const Icon = value.includes('hidden') ? EyeOff : value.includes('disabled') ? Lock : Eye
+  const className = value === 'everyone' ? 'is-everyone' : value.includes('disabled') ? 'is-admin_disabled' : 'is-admin_hidden'
   return (
-    <span className={`admin-state-chip is-${value}`}>
+    <span className={`admin-state-chip ${className}`}>
       <Icon size={13} />
-      {value === 'admin_hidden' ? 'Hidden' : value === 'admin_disabled' ? 'Disabled' : 'Everyone'}
+      {value.includes('hidden') ? 'Hidden' : value.includes('disabled') ? 'Disabled' : 'Everyone'}
     </span>
   )
 }
@@ -170,6 +188,7 @@ export default function AdminPage() {
   const [lockModalType, setLockModalType] = useState('')
   const [dashboardRestricted, setDashboardRestricted] = useState(true)
   const [savedDashboardRestricted, setSavedDashboardRestricted] = useState(true)
+  const [performancePermissions, setPerformancePermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
   const profilePickerRef = useRef(null)
 
   const loadAdminData = useCallback(async () => {
@@ -187,12 +206,24 @@ export default function AdminPage() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setSavedPermissions(currentSaved => {
-        setDraftPermissions(currentDraft => isSamePermissions(currentDraft, currentSaved) || !Object.keys(currentDraft || {}).length ? (permissions || {}) : currentDraft)
-        return permissions || {}
+        const nextSaved = { ...(permissions || {}) }
+        if (isSuperAdmin) nextSaved[PERFORMANCE_TABLE_KEY] = performancePermissions
+        setDraftPermissions(currentDraft => isSamePermissions(currentDraft, currentSaved) || !Object.keys(currentDraft || {}).length ? nextSaved : currentDraft)
+        return nextSaved
       })
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [permissions])
+  }, [isSuperAdmin, performancePermissions, permissions])
+
+  useEffect(() => {
+    if (!isSuperAdmin) return undefined
+    let active = true
+    fetchPerformancePermissions().then(({ permissions: data }) => {
+      if (!active) return
+      setPerformancePermissions({ ...DEFAULT_PERFORMANCE_PERMISSIONS, ...(data || {}) })
+    }).catch(err => setError(err.message))
+    return () => { active = false }
+  }, [isSuperAdmin])
 
   useEffect(() => {
     let active = true
@@ -252,7 +283,9 @@ export default function AdminPage() {
 
   const dashboardVisibilityDirty = dashboardRestricted !== savedDashboardRestricted
   const dirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty
-  const filteredColumns = (columns[activeTab] || []).filter(column => {
+  const availableTabs = isSuperAdmin ? [...TABS, PERFORMANCE_TAB] : TABS
+  const columnSource = activeTab === PERFORMANCE_TABLE_KEY ? PERFORMANCE_COLUMNS : (columns[activeTab] || [])
+  const filteredColumns = columnSource.filter(column => {
     const query = columnSearch.trim().toLowerCase()
     return !query || column.label.toLowerCase().includes(query) || column.key.toLowerCase().includes(query)
   })
@@ -312,7 +345,8 @@ export default function AdminPage() {
 
   const savePermissionChanges = async () => {
     const changes = changedPermissions(savedPermissions, draftPermissions)
-    if (!changes.length && !dashboardVisibilityDirty) return
+    const performanceChanged = isSuperAdmin && !isSamePermissions(savedPermissions?.[PERFORMANCE_TABLE_KEY], draftPermissions?.[PERFORMANCE_TABLE_KEY])
+    if (!changes.length && !dashboardVisibilityDirty && !performanceChanged) return
     setSavingPermissions(true)
     setError('')
     try {
@@ -324,6 +358,11 @@ export default function AdminPage() {
         const value = data.restrictNonAdminToSelf !== false
         setDashboardRestricted(value)
         setSavedDashboardRestricted(value)
+      }
+      if (performanceChanged) {
+        const data = await savePerformancePermissions(draftPermissions?.[PERFORMANCE_TABLE_KEY])
+        setPerformancePermissions({ ...DEFAULT_PERFORMANCE_PERMISSIONS, ...(data.permissions || {}) })
+        window.dispatchEvent(new Event('fb:performance-permissions-changed'))
       }
       setSavedPermissions(draftPermissions)
       setPermissions(draftPermissions)
@@ -478,7 +517,7 @@ export default function AdminPage() {
       >
         <div className="admin-permission-toolbar">
           <div className="admin-tabs">
-            {TABS.map(([key, label, Icon]) => (
+            {availableTabs.map(([key, label, Icon]) => (
               <button key={key} className={`admin-tab${activeTab === key ? ' is-active' : ''}`} type="button" onClick={() => setActiveTab(key)}>
                 <Icon size={15} />{label}
               </button>
@@ -492,8 +531,8 @@ export default function AdminPage() {
 
         <div className="admin-legend">
           <span className="is-everyone"><i />Everyone</span>
-          <span className="is-disabled"><i />Disabled for non-admins</span>
-          <span className="is-hidden"><i />Hidden from non-admins</span>
+          <span className="is-disabled"><i />{activeTab === PERFORMANCE_TABLE_KEY ? 'Disabled for non-super-admins' : 'Disabled for non-admins'}</span>
+          <span className="is-hidden"><i />{activeTab === PERFORMANCE_TABLE_KEY ? 'Hidden from non-super-admins' : 'Hidden from non-admins'}</span>
         </div>
 
         <div className="admin-permission-table">
@@ -508,10 +547,10 @@ export default function AdminPage() {
               <div className="admin-permission-row" key={column.key}>
                 <div>
                   <div className="admin-permission-label">{column.label}</div>
-                  <div className="admin-permission-key">{PERMISSION_TEXT[value]}</div>
+                  <div className="admin-permission-key">{PERMISSION_TEXT[value]}{column.calculated ? ' · Calculated fields remain read-only.' : ''}</div>
                 </div>
                 <StateChip value={value} />
-                <AdminPermissionPicker value={value} onChange={(mode) => setDraftPermission(activeTab, column.key, mode)} />
+                <AdminPermissionPicker value={value} options={activeTab === PERFORMANCE_TABLE_KEY ? PERFORMANCE_PICKER_OPTIONS : undefined} onChange={(mode) => setDraftPermission(activeTab, column.key, mode)} />
               </div>
             )
           })}

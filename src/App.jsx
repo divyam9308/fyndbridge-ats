@@ -13,6 +13,7 @@ const CandidatesPage = lazy(() => import('./pages/CandidatesPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const ProfileSettingsPage = lazy(() => import('./pages/ProfileSettingsPage'))
+const PerformanceReviewPage = lazy(() => import('./pages/PerformanceReviewPage'))
 const InvoicePage = lazy(() => import('./pages/InvoicePage'))
 const InvoiceEntityDetailPage = lazy(() => import('./pages/InvoiceEntityDetailPage'))
 
@@ -52,6 +53,7 @@ function App() {
             <Route path="clients/:clientId" element={<ClientDetailPage />} />
             <Route path="clients/:clientId/jobs/:jobId/candidates" element={<ClientJobCandidatesPage />} />
             <Route path="candidates" element={<CandidatesPage />} />
+            <Route path="performance" element={<PerformanceReviewPage />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="cvs" element={<Navigate to="/dashboard/candidates" replace />} />
             <Route path="settings" element={<SettingsPage />} />

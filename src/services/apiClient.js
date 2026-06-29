@@ -91,6 +91,7 @@ export function installApiFetchInterceptor() {
 
 function debugApiKey(path, params) {
   if (path.includes('/column-permissions')) return 'column_permissions'
+  if (path.includes('/performance')) return 'performance'
   if (path.includes('/user-profiles')) return 'user_profiles'
   if (path.includes('/admin/me')) return 'admin_users'
   if (path.includes('/notifications')) return 'notifications'
