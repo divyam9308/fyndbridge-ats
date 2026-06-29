@@ -215,28 +215,40 @@
   line-height: 1.1;
 }
 
-.performance-summary-card.is-blue {
-  border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-blue-soft) 30%, var(--perf-surface));
-  color: var(--perf-blue-foreground);
+.performance-summary-card.is-exceptional {
+  border-color: color-mix(in oklch, var(--perf-green-foreground) 20%, var(--perf-gold-soft-foreground) 20%);
+  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-green-soft) 55%, var(--perf-surface)), color-mix(in oklch, var(--perf-gold-soft) 46%, var(--perf-surface)));
+  color: var(--perf-green-foreground);
 }
 
-.performance-summary-card.is-indigo {
-  border-color: color-mix(in oklch, var(--perf-indigo-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-indigo-soft) 30%, var(--perf-surface));
-  color: var(--perf-indigo-foreground);
-}
-
-.performance-summary-card.is-teal {
+.performance-summary-card.is-strong {
   border-color: color-mix(in oklch, var(--perf-teal-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-teal-soft) 30%, var(--perf-surface));
+  background: color-mix(in oklch, var(--perf-teal-soft) 52%, var(--perf-surface));
   color: var(--perf-teal-foreground);
 }
 
-.performance-summary-card.is-gold {
-  border-color: color-mix(in oklch, var(--perf-gold-soft-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-gold-soft) 30%, var(--perf-surface));
-  color: var(--perf-gold-soft-foreground);
+.performance-summary-card.is-good {
+  border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
+  background: color-mix(in oklch, var(--perf-blue-soft) 52%, var(--perf-surface));
+  color: var(--perf-blue-foreground);
+}
+
+.performance-summary-card.is-meets {
+  border-color: color-mix(in oklch, var(--perf-amber-foreground) 20%, transparent);
+  background: color-mix(in oklch, var(--perf-amber-soft) 52%, var(--perf-surface));
+  color: var(--perf-amber-foreground);
+}
+
+.performance-summary-card.is-partial {
+  border-color: color-mix(in oklch, var(--perf-orange-foreground) 20%, transparent);
+  background: color-mix(in oklch, var(--perf-orange-soft) 52%, var(--perf-surface));
+  color: var(--perf-orange-foreground);
+}
+
+.performance-summary-card.is-low {
+  border-color: color-mix(in oklch, var(--perf-rose-foreground) 20%, transparent);
+  background: color-mix(in oklch, var(--perf-rose-soft) 52%, var(--perf-surface));
+  color: var(--perf-rose-foreground);
 }
 
 .performance-standard-card {

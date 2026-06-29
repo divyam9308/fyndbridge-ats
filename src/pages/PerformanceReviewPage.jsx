@@ -58,9 +58,9 @@ function clonePerformanceRows(rows) {
   return rows.map(row => ({ ...row }))
 }
 
-function SummaryCard({ label, value, loading, tint = 'blue' }) {
+function SummaryCard({ label, value, loading, tone = 'low' }) {
   return (
-    <div className={`performance-summary-card is-${tint}`}>
+    <div className={`performance-summary-card is-${tone}`}>
       <span>{label}</span>
       {loading ? <i className="performance-skeleton-block is-summary" aria-hidden="true" /> : <strong>{value}</strong>}
     </div>
@@ -348,10 +348,10 @@ export default function PerformanceReviewPage() {
       </div>
 
       <section className="performance-summary-grid">
-        <SummaryCard label="Final Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} tint="gold" />
-        <SummaryCard label="Self Rating Total" value={formatRating(totals.selfRating)} loading={loadingReview} tint="blue" />
-        <SummaryCard label="SS/NS Rating Total" value={formatRating(totals.ssnsRating)} loading={loadingReview} tint="teal" />
-        <SummaryCard label="RA Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} tint="indigo" />
+        <SummaryCard label="Final Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} tone={performanceStandard(totals.finalRating).tone} />
+        <SummaryCard label="Self Rating Total" value={formatRating(totals.selfRating)} loading={loadingReview} tone={performanceStandard(totals.selfRating).tone} />
+        <SummaryCard label="SS/NS Rating Total" value={formatRating(totals.ssnsRating)} loading={loadingReview} tone={performanceStandard(totals.ssnsRating).tone} />
+        <SummaryCard label="RA Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} tone={performanceStandard(totals.finalRating).tone} />
       </section>
 
       <PerformanceStandardBanner rating={totals.finalRating} loading={loadingReview} />
@@ -369,7 +369,6 @@ export default function PerformanceReviewPage() {
         <div className="performance-table-title">
           <div>
             <h2>Review Categories</h2>
-            <p>Weighted ratings are calculated automatically from score and allocation.</p>
           </div>
         </div>
         <div className="performance-table-scroll">
