@@ -572,7 +572,8 @@ export default function JobsPage() {
     if (new Set(realConsultants).size !== realConsultants.length) next.consultants = 'Consultants cannot be duplicated'
     const invalidConsultant = Object.entries(consultantSearch).some(([index, value]) => {
       const text = String(value || '').trim()
-      return text && text !== selectedConsultants[Number(index)] && !userByNormalizedName.has(text.toLowerCase())
+      const selected = selectedConsultants[Number(index)]
+      return text && text !== '-' && selected && text !== selected && !userByNormalizedName.has(text.toLowerCase())
     })
     if (invalidConsultant) next.consultants = 'Please select a valid consultant from the dropdown.'
     if (teamLeadSearch.trim() && teamLeadSearch !== '-' && !resolveTeamLeadUser()) next.team_lead = 'Please select a valid team lead from the dropdown.'
@@ -682,8 +683,36 @@ export default function JobsPage() {
   }
 
   const updateConsultant = (index, value) => {
+    const label = displayUserLabel(value) || '-'
+    setConsultantSearch(current => {
+      const nextSearch = {}
+      Object.entries(current).forEach(([key, item]) => {
+        const numericKey = Number(key)
+        if (label === '-') {
+          if (numericKey < index) nextSearch[numericKey] = item
+          else if (numericKey > index) nextSearch[numericKey - 1] = item
+        } else if (numericKey === index) {
+          nextSearch[numericKey] = label
+        } else {
+          nextSearch[numericKey] = item
+        }
+      })
+      return nextSearch
+    })
+    setConsultantPickerOpen(current => {
+      const nextOpen = {}
+      Object.entries(current).forEach(([key, item]) => {
+        const numericKey = Number(key)
+        if (label === '-') {
+          if (numericKey < index) nextOpen[numericKey] = item
+          else if (numericKey > index) nextOpen[numericKey - 1] = item
+        } else if (numericKey !== index) {
+          nextOpen[numericKey] = item
+        }
+      })
+      return nextOpen
+    })
     setForm(current => {
-      const label = displayUserLabel(value) || '-'
       const currentFields = Array.isArray(current.consultants) && current.consultants.length
         ? current.consultants.map(item => displayUserLabel(item) || '-')
         : ['-']
@@ -710,7 +739,7 @@ export default function JobsPage() {
       return {
         ...current,
         consultants: normalized.length ? normalized : ['-'],
-        consultant_user_ids: [...new Set(real.map(name => userByName.get(name)?.id || '').filter(Boolean))]
+        consultant_user_ids: [...new Set(real.map(name => userByNormalizedName.get(name.toLowerCase())?.id || '').filter(Boolean))]
       }
     })
   }
