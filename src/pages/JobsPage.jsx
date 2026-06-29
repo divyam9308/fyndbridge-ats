@@ -450,6 +450,7 @@ export default function JobsPage() {
     .filter(Boolean), [userOptions])
   const sortedUsers = useMemo(() => ['-', ...userList.map(user => user.name)], [userList])
   const userByName = useMemo(() => new Map(userList.map(user => [user.name, user])), [userList])
+  const userByNormalizedName = useMemo(() => new Map(userList.map(user => [user.name.toLowerCase(), user])), [userList])
   const clientOptions = useMemo(() => canonicalClients(dbClients), [dbClients])
   const matchingClients = useMemo(() => clientOptions
     .filter(client => `${clientName(client)} ${client.client_display_id || ''}`.toLowerCase().includes(clientSearch.trim().toLowerCase())), [clientOptions, clientSearch])
@@ -474,6 +475,19 @@ export default function JobsPage() {
     ? form.consultants.map(item => displayUserLabel(item) || '-')
     : ['-']
   const selectedConsultants = normalizeConsultantFields(consultantFields)
+  const resolveConsultantName = (index, fallbackName) => {
+    const text = String(consultantSearch[index] ?? fallbackName ?? '').replace(/\s+/g, ' ').trim()
+    if (!text || text === '-') return '-'
+    return userByNormalizedName.get(text.toLowerCase())?.name || text
+  }
+  const resolvedSelectedConsultants = normalizeConsultantFields(
+    consultantFields.map((name, index) => resolveConsultantName(index, name))
+  )
+  const resolveTeamLeadUser = () => {
+    const text = String(teamLeadSearch || form.team_lead || '').replace(/\s+/g, ' ').trim()
+    if (!text || text === '-') return null
+    return userByNormalizedName.get(text.toLowerCase()) || null
+  }
   const availableColumns = MANDATE_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
   const activeColumns = isDashboardEmbed
     ? availableColumns
@@ -554,14 +568,14 @@ export default function JobsPage() {
     if (!form.client_id) next.client_id = clientSearch.trim() ? 'Please select a valid client from the dropdown.' : 'Client Name is required'
     if (!form.role.trim()) next.role = 'Role is required'
     if (!editingJob && form.role.trim() && !roleSelectionConfirmed) next.role = 'Select a role from the dropdown or choose Add New Role first.'
-    const realConsultants = selectedConsultants.filter(name => name !== '-')
+    const realConsultants = resolvedSelectedConsultants.filter(name => name !== '-')
     if (new Set(realConsultants).size !== realConsultants.length) next.consultants = 'Consultants cannot be duplicated'
     const invalidConsultant = Object.entries(consultantSearch).some(([index, value]) => {
       const text = String(value || '').trim()
-      return text && text !== selectedConsultants[Number(index)] && !userByName.has(text)
+      return text && text !== selectedConsultants[Number(index)] && !userByNormalizedName.has(text.toLowerCase())
     })
     if (invalidConsultant) next.consultants = 'Please select a valid consultant from the dropdown.'
-    if (teamLeadSearch.trim() && teamLeadSearch !== '-' && !form.team_lead) next.team_lead = 'Please select a valid team lead from the dropdown.'
+    if (teamLeadSearch.trim() && teamLeadSearch !== '-' && !resolveTeamLeadUser()) next.team_lead = 'Please select a valid team lead from the dropdown.'
     return next
   }
 
@@ -573,13 +587,15 @@ export default function JobsPage() {
     }
     setSaving(true)
     try {
-      const normalizedConsultants = normalizeConsultantFields(selectedConsultants).filter(name => name !== '-')
-      const normalizedConsultantIds = [...new Set(normalizedConsultants.map(name => userByName.get(name)?.id || '').filter(Boolean))]
+      const normalizedConsultants = normalizeConsultantFields(resolvedSelectedConsultants).filter(name => name !== '-')
+      const normalizedConsultantIds = [...new Set(normalizedConsultants.map(name => userByNormalizedName.get(name.toLowerCase())?.id || '').filter(Boolean))]
+      const teamLeadUser = resolveTeamLeadUser()
+      const teamLeadName = teamLeadUser?.name || (form.team_lead && form.team_lead !== '-' ? form.team_lead : '')
       const payload = {
         consultants: normalizedConsultants,
         consultant_user_ids: normalizedConsultantIds,
-        team_lead: form.team_lead && form.team_lead !== '-' ? form.team_lead : null,
-        team_lead_user_id: form.team_lead && form.team_lead !== '-' ? userByName.get(form.team_lead)?.id || '' : '',
+        team_lead: teamLeadName || null,
+        team_lead_user_id: teamLeadUser?.id || '',
         client_id: form.client_id,
         role: form.role,
         location: form.location,
