@@ -451,8 +451,21 @@ async function findContactDuplicate(payload) {
 
 async function validateConsultantReference(payload) {
   const name = clean(payload.consultant_name || payload.consultant)
-  const userId = clean(payload.consultant_user_id)
+  let userId = clean(payload.consultant_user_id)
   if (!name || name === '-') return
+  if (!userId) {
+    const { data: namedProfiles, error: namedProfilesError } = await supabase
+      .from('user_profiles')
+      .select('user_id, name')
+      .ilike('name', name)
+      .limit(10)
+    if (namedProfilesError) throw namedProfilesError
+    const match = (namedProfiles || []).find(profile => normalizeDuplicateText(profile.name) === normalizeDuplicateText(name))
+    if (match?.user_id) {
+      userId = match.user_id
+      payload.consultant_user_id = userId
+    }
+  }
   if (!userId) {
     const err = new Error('Please select a valid consultant from the dropdown.')
     err.statusCode = 400
@@ -1073,4 +1086,3 @@ module.exports = {
   deleteFollowUp,
   deleteClient
 }
-

@@ -1412,7 +1412,7 @@ async function updateCandidate(req, res) {
 
     const { data: existingAssoc, error: lookupError } = await supabase
       .from('candidate_associations')
-      .select('id, candidate_id, job_id, consultant_name')
+      .select('id, candidate_id, client_id, job_id, consultant_name')
       .eq('id', associationId)
       .maybeSingle()
 
@@ -1442,6 +1442,29 @@ async function updateCandidate(req, res) {
       return res.status(404).json({ error: 'Candidate or association not found' })
     }
     await assertRowEditable('candidates', existingCandidateId, admin)
+
+    const duplicateMatch = await findMatchingCandidates(candidatePayload.email, candidatePayload.mobile_number)
+    const duplicateAssociationPayload = {
+      client_id: Object.prototype.hasOwnProperty.call(associationPayload, 'client_id')
+        ? associationPayload.client_id
+        : existingAssociation?.client_id,
+      job_id: Object.prototype.hasOwnProperty.call(associationPayload, 'job_id')
+        ? associationPayload.job_id
+        : existingAssociation?.job_id
+    }
+    const exactAssociation = duplicateMatch.matches.find((match) => (
+      match.candidate_id !== existingCandidateId &&
+      hasSameConcreteAssociation(match, duplicateAssociationPayload)
+    ))
+    if (exactAssociation) {
+      return res.status(409).json({
+        duplicate: true,
+        exactAssociation: true,
+        allowAddDuplicate: false,
+        error: 'This candidate already exists for the same client and mandate.',
+        existing: exactAssociation
+      })
+    }
 
     const identityDuplicate = await findCandidateIdentityDuplicate(
       candidatePayload.email,

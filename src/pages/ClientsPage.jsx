@@ -521,6 +521,7 @@ export default function ClientsPage() {
   ), [canonicalClients, form.client_name])
   const matchingSectors = useMemo(() => SECTOR_OPTIONS.filter(value => value.toLowerCase().includes(sectorSearch.trim().toLowerCase())), [sectorSearch])
   const consultantByName = useMemo(() => new Map(consultantOptions.map(user => [String(user.name || '').trim(), user])), [consultantOptions])
+  const consultantByNormalizedName = useMemo(() => new Map(consultantOptions.map(user => [normalizeText(user.name), user])), [consultantOptions])
   const matchingConsultants = useMemo(() => {
     const query = consultantSearch.trim().toLowerCase()
     return consultantOptions.filter(user => !query || user.name.toLowerCase().includes(query))
@@ -538,6 +539,12 @@ export default function ClientsPage() {
     setConsultantSearch(name)
     setForm(current => ({ ...current, consultant_name: name, consultant_user_id: user?.id || '' }))
     setConsultantOpen(false)
+  }
+
+  const resolveTypedConsultant = () => {
+    const name = clean(form.consultant_name || consultantSearch)
+    if (!name || name === '-' || form.consultant_user_id) return null
+    return consultantByNormalizedName.get(normalizeText(name)) || null
   }
 
   const selectExistingClient = (client) => {
@@ -616,7 +623,7 @@ export default function ClientsPage() {
     if (addingNewClient && !form.client_display_id.trim()) next.client_display_id = 'Client ID is loading'
     if (!editingClient && !addingNewClient && !form.client_group_id && form.client_name.trim()) next.client_name = 'Typed text is not a selected record. Please choose an option from the list.'
     if (!form.client_name.trim()) next.client_name = 'Client Name is required'
-    if (form.consultant_name.trim() && form.consultant_name !== '-' && !form.consultant_user_id) next.consultant_name = 'Please select a valid consultant from the dropdown.'
+    if (form.consultant_name.trim() && form.consultant_name !== '-' && !form.consultant_user_id && !resolveTypedConsultant()) next.consultant_name = 'Please select a valid consultant from the dropdown.'
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
     if (form.client_group_id && !form.contact_person.trim()) next.contact_person = 'Contact Person is required'
     if (form.status && !STATUSES.includes(form.status)) next.status = 'Select a valid status'
@@ -767,7 +774,7 @@ export default function ClientsPage() {
     const next = {}
     if (!form.client_group_id) next.client_name = 'Please select a valid client from the dropdown.'
     if (!form.contact_person.trim()) next.contact_person = 'Contact Person is required'
-    if (form.consultant_name.trim() && form.consultant_name !== '-' && !form.consultant_user_id) next.consultant_name = 'Please select a valid consultant from the dropdown.'
+    if (form.consultant_name.trim() && form.consultant_name !== '-' && !form.consultant_user_id && !resolveTypedConsultant()) next.consultant_name = 'Please select a valid consultant from the dropdown.'
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
     if (!form.mobile.trim() && !form.email.trim()) next.mobile = 'Enter mobile or email'
     return next
@@ -806,7 +813,10 @@ export default function ClientsPage() {
   }
 
   const saveClientToApi = async (duplicateAction = '') => {
-    const payload = { ...form }
+    const matchedConsultant = resolveTypedConsultant()
+    const payload = matchedConsultant
+      ? { ...form, consultant_name: matchedConsultant.name, consultant_user_id: matchedConsultant.id || '' }
+      : { ...form }
     if (duplicateAction) payload.duplicate_action = duplicateAction
 
     if (editingClient) {
