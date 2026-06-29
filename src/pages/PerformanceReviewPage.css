@@ -15,7 +15,6 @@
   padding-bottom: 22px;
 }
 
-.performance-header,
 .performance-employee-card,
 .performance-summary-card,
 .performance-table-card {
@@ -24,25 +23,6 @@
   box-shadow: 0 14px 34px rgba(0, 18, 100, 0.08);
 }
 
-.performance-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
-  border-radius: 24px;
-  padding: 26px 30px;
-}
-
-.performance-header h1 {
-  margin: 0;
-  color: var(--perf-navy);
-  font-family: var(--font-display);
-  font-size: 29px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-.performance-header p,
 .performance-employee-card p,
 .performance-table-title p {
   margin: 6px 0 0;
@@ -66,6 +46,12 @@
   background: rgba(218, 177, 17, 0.16);
   color: var(--perf-navy);
   padding: 7px 12px;
+}
+
+.performance-unsaved-row {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 28px;
 }
 
 .performance-employee-card {
@@ -306,7 +292,13 @@
   box-shadow: 0 0 0 3px rgba(218, 177, 17, 0.14);
 }
 
-.performance-input:disabled,
+.performance-input:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+  background: #fff;
+  color: var(--perf-navy);
+}
+
 .performance-readonly-cell {
   background: #f2f5fa;
   color: #66738b;
@@ -501,15 +493,9 @@
 }
 
 @media (max-width: 640px) {
-  .performance-header,
   .performance-employee-card,
   .performance-table-title {
     padding: 18px;
-  }
-
-  .performance-header {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .performance-summary-grid {

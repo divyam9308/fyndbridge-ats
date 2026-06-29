@@ -59,7 +59,6 @@ function EmployeeSelector({ users, selectedUserId, onSelect, loading }) {
       <div>
         <span className="performance-kicker"><UserRound size={14} />Super Admin View</span>
         <h2>Employee Review</h2>
-        <p>Each employee review is stored against the selected Supabase user.</p>
       </div>
       <div className="performance-employee-select">
         {loading ? (
@@ -293,14 +292,7 @@ export default function PerformanceReviewPage() {
   return (
     <div className="performance-page">
       {toast && <div className="performance-toast" role="status">{toast}</div>}
-      <header className="performance-header">
-        <div>
-          <h1>Performance Review</h1>
-          <p>Track allocation, work done, feedback, and weighted ratings.</p>
-        </div>
-        {dirty && <span className="performance-unsaved">Unsaved changes</span>}
-      </header>
-
+      {dirty && <div className="performance-unsaved-row"><span className="performance-unsaved">Unsaved changes</span></div>}
       {isSuperAdmin && <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={loadingEmployees} />}
       <div className={`performance-message-slot${error ? ' is-visible' : ''}`}>
         {error && <div className="performance-warning"><AlertTriangle size={17} /><span>{error}</span></div>}
