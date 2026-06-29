@@ -159,13 +159,17 @@ function AdminLoadingShell() {
 
 function StateChip({ value }) {
   const Icon = value.includes('hidden') ? EyeOff : value.includes('disabled') ? Lock : Eye
-  const className = value === 'everyone' ? 'is-everyone' : value.includes('disabled') ? 'is-admin_disabled' : 'is-admin_hidden'
+  const className = value === 'everyone' ? 'is-everyone' : `is-${value}`
   return (
     <span className={`admin-state-chip ${className}`}>
       <Icon size={13} />
       {value.includes('hidden') ? 'Hidden' : value.includes('disabled') ? 'Disabled' : 'Everyone'}
     </span>
   )
+}
+
+function PerformancePermissionBadge({ value }) {
+  return <span className={`admin-performance-permission-badge is-${value}`}>{PERMISSION_TEXT[value] || value}</span>
 }
 
 function PerformanceCalculatedPermissionPicker({ value, onChange }) {
@@ -599,7 +603,7 @@ export default function AdminPage() {
               <div className="admin-permission-row" key={column.key}>
                 <div>
                   <div className="admin-permission-label">{column.label}</div>
-                  <div className="admin-permission-key">{column.calculated ? 'Calculated fields remain read-only.' : PERMISSION_TEXT[value]}</div>
+                  <div className="admin-permission-key">{activeTab === PERFORMANCE_TABLE_KEY && !column.calculated ? <PerformancePermissionBadge value={value} /> : column.calculated ? 'Calculated fields remain read-only.' : PERMISSION_TEXT[value]}</div>
                 </div>
                 <StateChip value={value} />
                 {isPerformanceCalculated ? (

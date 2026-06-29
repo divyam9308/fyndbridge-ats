@@ -58,9 +58,9 @@ function clonePerformanceRows(rows) {
   return rows.map(row => ({ ...row }))
 }
 
-function SummaryCard({ label, value, loading, accent }) {
+function SummaryCard({ label, value, loading, tint = 'blue' }) {
   return (
-    <div className={`performance-summary-card${accent ? ' is-accent' : ''}`}>
+    <div className={`performance-summary-card is-${tint}`}>
       <span>{label}</span>
       {loading ? <i className="performance-skeleton-block is-summary" aria-hidden="true" /> : <strong>{value}</strong>}
     </div>
@@ -182,7 +182,7 @@ function ReviewCell({ row, columnKey, disabled, onChange }) {
   if (columnKey === 'allocation') {
     return (
       <label className="performance-percent-field">
-        <input className="performance-input" type="number" min="0" max="100" step="1" value={row.allocation ?? ''} disabled={disabled} onChange={event => onChange({ allocation: event.target.value === '' ? '' : Number(event.target.value) })} />
+        <input className="performance-input is-allocation" type="number" min="0" max="100" step="1" value={row.allocation ?? ''} disabled={disabled} onChange={event => onChange({ allocation: event.target.value === '' ? '' : Number(event.target.value) })} />
         <span>%</span>
       </label>
     )
@@ -193,7 +193,7 @@ function ReviewCell({ row, columnKey, disabled, onChange }) {
   }
 
   if (['self_score', 'ss_ns_score', 'ra_score'].includes(columnKey)) {
-    return <input className="performance-input is-score" type="number" min="0" max="5" step="0.1" value={row[columnKey] ?? ''} disabled={disabled} onChange={event => { const next = normalizeScoreInput(event.target.value); if (next !== null) onChange({ [columnKey]: next }) }} />
+    return <input className={`performance-input is-score is-${columnKey}`} type="number" min="0" max="5" step="0.1" value={row[columnKey] ?? ''} disabled={disabled} onChange={event => { const next = normalizeScoreInput(event.target.value); if (next !== null) onChange({ [columnKey]: next }) }} />
   }
 
   return null
@@ -348,10 +348,10 @@ export default function PerformanceReviewPage() {
       </div>
 
       <section className="performance-summary-grid">
-        <SummaryCard label="Final Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} accent />
-        <SummaryCard label="Self Rating Total" value={formatRating(totals.selfRating)} loading={loadingReview} />
-        <SummaryCard label="SS/NS Rating Total" value={formatRating(totals.ssnsRating)} loading={loadingReview} />
-        <SummaryCard label="RA Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} accent />
+        <SummaryCard label="Final Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} tint="gold" />
+        <SummaryCard label="Self Rating Total" value={formatRating(totals.selfRating)} loading={loadingReview} tint="blue" />
+        <SummaryCard label="SS/NS Rating Total" value={formatRating(totals.ssnsRating)} loading={loadingReview} tint="teal" />
+        <SummaryCard label="RA Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} tint="indigo" />
       </section>
 
       <PerformanceStandardBanner rating={totals.finalRating} loading={loadingReview} />

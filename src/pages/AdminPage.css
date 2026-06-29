@@ -626,21 +626,53 @@
 }
 
 .admin-state-chip.is-everyone {
-  border: 1px solid rgba(37, 167, 104, 0.28);
-  background: rgba(37, 167, 104, 0.16);
-  color: #168154;
+  border: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
+  background: var(--perf-blue-soft);
+  color: var(--perf-blue-soft-foreground);
 }
 
-.admin-state-chip.is-admin_disabled {
-  border: 1px solid rgba(218, 177, 17, 0.42);
-  background: rgba(218, 177, 17, 0.22);
-  color: #806100;
+.admin-state-chip.is-admin_disabled,
+.admin-state-chip.is-super_admin_disabled {
+  border: 1px solid color-mix(in oklch, var(--perf-amber-foreground) 20%, transparent);
+  background: var(--perf-amber-soft);
+  color: var(--perf-amber-foreground);
 }
 
-.admin-state-chip.is-admin_hidden {
-  border: 1px solid rgba(0, 18, 100, 0.22);
-  background: rgba(0, 18, 100, 0.12);
-  color: var(--admin-navy);
+.admin-state-chip.is-admin_hidden,
+.admin-state-chip.is-super_admin_hidden {
+  border: 1px solid color-mix(in oklch, var(--perf-rose-foreground) 20%, transparent);
+  background: var(--perf-rose-soft);
+  color: var(--perf-rose-foreground);
+}
+
+.admin-performance-permission-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.admin-performance-permission-badge.is-everyone {
+  border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
+  background: var(--perf-blue-soft);
+  color: var(--perf-blue-soft-foreground);
+}
+
+.admin-performance-permission-badge.is-super_admin_disabled {
+  border-color: color-mix(in oklch, var(--perf-amber-foreground) 20%, transparent);
+  background: var(--perf-amber-soft);
+  color: var(--perf-amber-foreground);
+}
+
+.admin-performance-permission-badge.is-super_admin_hidden {
+  border-color: color-mix(in oklch, var(--perf-rose-foreground) 20%, transparent);
+  background: var(--perf-rose-soft);
+  color: var(--perf-rose-foreground);
 }
 
 .admin-permission-picker {
