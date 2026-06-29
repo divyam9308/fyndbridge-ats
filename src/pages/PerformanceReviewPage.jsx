@@ -79,6 +79,30 @@ function clonePerformanceRows(rows) {
   return rows.map(row => ({ ...row }))
 }
 
+function canonicalScore(value) {
+  if (value === '' || value === null || value === undefined) return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function canonicalText(value) {
+  return String(value ?? '')
+}
+
+function canonicalPerformanceRows(rows) {
+  return normalizePerformanceRows(rows).map(row => ({
+    row_order: Number(row.row_order) || 0,
+    category: canonicalText(row.category),
+    allocation: Number(row.allocation) || 0,
+    work_done: canonicalText(row.work_done),
+    self_score: canonicalScore(row.self_score),
+    ss_ns_feedback: canonicalText(row.ss_ns_feedback),
+    ss_ns_score: canonicalScore(row.ss_ns_score),
+    ra_feedback: canonicalText(row.ra_feedback),
+    ra_score: canonicalScore(row.ra_score)
+  }))
+}
+
 function SummaryCard({ label, value, loading, tone = 'low' }) {
   return (
     <div className={`performance-summary-card is-${tone}`}>
@@ -408,7 +432,7 @@ export default function PerformanceReviewPage() {
   }, { allocation: 0, selfRating: 0, ssnsRating: 0, finalRating: 0 }), [rows])
   const allocationValid = Math.round(totals.allocation * 100) === 10000
   const scoresValid = rows.every(row => ['self_score', 'ss_ns_score', 'ra_score'].every(key => row[key] === '' || row[key] === null || (Number(row[key]) >= 0 && Number(row[key]) <= 5)))
-  const dirty = JSON.stringify(rows) !== JSON.stringify(savedRows)
+  const dirty = useMemo(() => JSON.stringify(canonicalPerformanceRows(rows)) !== JSON.stringify(canonicalPerformanceRows(savedRows)), [rows, savedRows])
   const canSave = dirty && allocationValid && scoresValid && !savingReview && !loadingReview
   const showValidationWarning = !loadingReview && (!allocationValid || !scoresValid)
 
