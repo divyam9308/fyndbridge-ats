@@ -127,16 +127,16 @@ export default function ProfileSettingsPage() {
 
   return (
     <div className="table-card" style={{ maxWidth: 920 }}>
-      <div className={`profile-save-popup-slot${savedPopup ? ' is-visible' : ''}`} aria-live="polite">
-        {savedPopup && (
-          <div className="profile-save-popup" role="status">
-            <CheckCircle2 size={16} strokeWidth={2} />
-            <span>Profile saved</span>
-          </div>
-        )}
-      </div>
       <div className="modal-body">
         {error && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{error}</div>}
+        <div className={`profile-save-popup-slot${savedPopup ? ' is-visible' : ''}`} aria-live="polite">
+          {savedPopup && (
+            <div className="profile-save-popup" role="status">
+              <CheckCircle2 size={16} strokeWidth={2} />
+              <span>Profile saved</span>
+            </div>
+          )}
+        </div>
         <div className="form-grid-2">
           {[
             ['name', 'Name', 'text'],
