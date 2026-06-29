@@ -554,6 +554,24 @@ export default function ClientDetailPage() {
       </div>
     )
   }
+  const renderCommentsCell = (candidate) => {
+    const text = String(candidate.notes || '').trim()
+    if (!text) return '-'
+    const cellId = candidate.associationId || candidate.id
+    const cellKey = `${cellId}-comments`
+    const expanded = Boolean(expandedCells[cellKey])
+    const canExpand = text.length > 120
+    return (
+      <div className="table-comment-cell">
+        <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{text}</div>
+        {canExpand && (
+          <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(cellId, 'comments', event)}>
+            <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'Show less' : 'View more'}
+          </button>
+        )}
+      </div>
+    )
+  }
 
   const renderCandidateCell = ({ key }, c) => {
     const noticeMeta = getNoticeMeta(c.noticePeriod)
@@ -585,7 +603,7 @@ export default function ClientDetailPage() {
       case 'notice': return <td key={key}>{noticeMeta ? <span className={`candidate-notice-pill candidate-notice-pill-${noticeMeta.tone}`}>{noticeMeta.label}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'expectedSalary': return <td key={key}>{c.expectedSalary ? <span className="candidate-money-value">{formatClientDetailCtc(c.expectedSalary)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'relocate': return <td key={key}>{c.openToRelocate || '-'}</td>
-      case 'comments': return <td key={key} className="cell-ellipsis">{c.notes || '-'}</td>
+      case 'comments': return <td key={key} className="client-detail-comments-cell">{renderCommentsCell(c)}</td>
       case 'linkedin': {
         const linkedInUrl = normalizeExternalUrl(c.linkedinUrl)
         return <td key={key}>{linkedInUrl ? <a href={linkedInUrl} target="_blank" rel="noopener noreferrer" className="table-link" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openExternalUrl(linkedInUrl) }}>LinkedIn</a> : '-'}</td>

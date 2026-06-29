@@ -207,6 +207,16 @@
   text-overflow: clip;
 }
 
+.client-detail-candidates-table .client-detail-comments-cell {
+  overflow: hidden;
+  white-space: normal;
+  vertical-align: top;
+}
+
+.client-detail-candidates-table .client-detail-comments-cell .table-comment-cell {
+  max-width: 100%;
+}
+
 .loading-state {
   display: flex;
   flex-direction: column;
