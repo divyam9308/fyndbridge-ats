@@ -176,24 +176,24 @@ function ReviewCell({ row, columnKey, disabled, onChange }) {
   if (columnKey === 'final_rating') return <div className="performance-readonly-cell">{formatRating(calculateRating(row.ra_score, row.allocation))}</div>
 
   if (columnKey === 'category') {
-    return <textarea className="performance-input is-category" value={row.category} disabled={disabled} onChange={event => onChange({ category: event.target.value })} />
+    return <textarea className="performance-input is-category" value={row.category ?? ''} disabled={disabled} onChange={event => onChange({ category: event.target.value })} />
   }
 
   if (columnKey === 'allocation') {
     return (
       <label className="performance-percent-field">
-        <input className="performance-input" type="number" min="0" max="100" step="1" value={row.allocation} disabled={disabled} onChange={event => onChange({ allocation: event.target.value === '' ? '' : Number(event.target.value) })} />
+        <input className="performance-input" type="number" min="0" max="100" step="1" value={row.allocation ?? ''} disabled={disabled} onChange={event => onChange({ allocation: event.target.value === '' ? '' : Number(event.target.value) })} />
         <span>%</span>
       </label>
     )
   }
 
   if (['work_done', 'ss_ns_feedback', 'ra_feedback'].includes(columnKey)) {
-    return <textarea className="performance-input is-feedback" value={row[columnKey]} disabled={disabled} onChange={event => onChange({ [columnKey]: event.target.value })} />
+    return <textarea className="performance-input is-feedback" value={row[columnKey] ?? ''} disabled={disabled} onChange={event => onChange({ [columnKey]: event.target.value })} />
   }
 
   if (['self_score', 'ss_ns_score', 'ra_score'].includes(columnKey)) {
-    return <input className="performance-input is-score" type="number" min="0" max="5" step="0.1" value={row[columnKey]} disabled={disabled} onChange={event => { const next = normalizeScoreInput(event.target.value); if (next !== null) onChange({ [columnKey]: next }) }} />
+    return <input className="performance-input is-score" type="number" min="0" max="5" step="0.1" value={row[columnKey] ?? ''} disabled={disabled} onChange={event => { const next = normalizeScoreInput(event.target.value); if (next !== null) onChange({ [columnKey]: next }) }} />
   }
 
   return null
@@ -296,7 +296,10 @@ export default function PerformanceReviewPage() {
   const canSave = dirty && allocationValid && scoresValid && !savingReview && !loadingReview
   const showValidationWarning = !loadingReview && (!allocationValid || !scoresValid)
 
-  const updateRow = (rowId, patch) => setRows(current => current.map(row => row.id === rowId ? { ...row, ...patch } : row))
+  const updateRow = (targetRow, patch) => setRows(current => current.map(row => {
+    const sameRow = targetRow.id ? row.id === targetRow.id : row.row_order === targetRow.row_order
+    return sameRow ? { ...row, ...patch } : row
+  }))
 
   const canSubmitField = (field) => !isPerformanceColumnDisabled(permissions, field, isSuperAdmin) && !isPerformanceColumnHidden(permissions, field, isSuperAdmin)
   const saveRowsPayload = () => rows.map(row => {
@@ -382,7 +385,7 @@ export default function PerformanceReviewPage() {
                     const disabled = CALCULATED_PERFORMANCE_COLUMNS.has(column.key) || isPerformanceColumnDisabled(permissions, column.key, isSuperAdmin)
                     return (
                       <td key={column.key}>
-                        <ReviewCell row={row} columnKey={column.key} disabled={disabled} onChange={patch => updateRow(row.id, patch)} />
+                        <ReviewCell row={row} columnKey={column.key} disabled={disabled} onChange={patch => updateRow(row, patch)} />
                       </td>
                     )
                   })}
