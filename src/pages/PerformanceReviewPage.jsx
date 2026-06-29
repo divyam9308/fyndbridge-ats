@@ -54,6 +54,10 @@ function performanceStandard(finalRating) {
   return PERFORMANCE_STANDARDS.find(item => rating >= item.min) || PERFORMANCE_STANDARDS[PERFORMANCE_STANDARDS.length - 1]
 }
 
+function clonePerformanceRows(rows) {
+  return rows.map(row => ({ ...row }))
+}
+
 function SummaryCard({ label, value, loading, accent }) {
   return (
     <div className={`performance-summary-card${accent ? ' is-accent' : ''}`}>
@@ -209,7 +213,7 @@ export default function PerformanceReviewPage() {
   const [selectedUserId, setSelectedUserId] = useState(ownUserId)
   const effectiveUserId = isSuperAdmin ? selectedUserId : ownUserId
   const [rows, setRows] = useState(() => normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS))
-  const [savedRows, setSavedRows] = useState(rows)
+  const [savedRows, setSavedRows] = useState(() => normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS))
   const [permissions, setPermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
   const [loadingReview, setLoadingReview] = useState(true)
   const [loadingEmployees, setLoadingEmployees] = useState(false)
@@ -253,8 +257,8 @@ export default function PerformanceReviewPage() {
     request.then(({ data }) => {
       if (!active) return
       const loaded = normalizePerformanceRows(data?.rows || [])
-      setRows(loaded)
-      setSavedRows(loaded)
+      setRows(clonePerformanceRows(loaded))
+      setSavedRows(clonePerformanceRows(loaded))
     }).catch(err => {
       if (active) setError(err.message)
     }).finally(() => {
@@ -320,8 +324,8 @@ export default function PerformanceReviewPage() {
     try {
       const { data } = await savePerformanceReview(effectiveUserId, saveRowsPayload())
       const loaded = normalizePerformanceRows(data?.rows || rows)
-      setRows(loaded)
-      setSavedRows(loaded)
+      setRows(clonePerformanceRows(loaded))
+      setSavedRows(clonePerformanceRows(loaded))
       setToast('Performance review saved.')
     } catch (err) {
       setError(err.message)
@@ -331,7 +335,7 @@ export default function PerformanceReviewPage() {
   }
 
   const handleReset = () => {
-    setRows(savedRows)
+    setRows(clonePerformanceRows(savedRows))
     setError('')
     setToast('Changes discarded.')
   }
