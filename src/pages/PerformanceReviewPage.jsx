@@ -40,12 +40,57 @@ function normalizeScoreInput(value) {
   return value
 }
 
-function SummaryCard({ label, value, warning, loading }) {
+const PERFORMANCE_STANDARDS = [
+  { min: 4.5, label: 'Exceptional performance', range: '4.5 and above', tone: 'exceptional' },
+  { min: 4.0, label: 'Strong performance', range: '4.0 - 4.5', tone: 'strong' },
+  { min: 3.5, label: 'Good performance; scope of improvement in few areas', range: '3.5 - 4.0', tone: 'good' },
+  { min: 3.0, label: 'Meets defined expectations; improvement required', range: '3.0 - 3.5', tone: 'meets' },
+  { min: 2.0, label: 'Partially meets expectations; below average, significant improvement required', range: '2.0 - 3.0', tone: 'partial' },
+  { min: -Infinity, label: 'Does not meet expectations', range: 'Up to 2.0', tone: 'low' }
+]
+
+function performanceStandard(finalRating) {
+  const rating = Number(finalRating) || 0
+  return PERFORMANCE_STANDARDS.find(item => rating >= item.min) || PERFORMANCE_STANDARDS[PERFORMANCE_STANDARDS.length - 1]
+}
+
+function SummaryCard({ label, value, loading, accent }) {
   return (
-    <div className={`performance-summary-card${warning ? ' is-warning' : ''}`}>
+    <div className={`performance-summary-card${accent ? ' is-accent' : ''}`}>
       <span>{label}</span>
       {loading ? <i className="performance-skeleton-block is-summary" aria-hidden="true" /> : <strong>{value}</strong>}
     </div>
+  )
+}
+
+function PerformanceStandardBanner({ rating, loading }) {
+  const standard = performanceStandard(rating)
+  return (
+    <section className={`performance-standard-card is-${standard.tone}`}>
+      {loading ? (
+        <>
+          <div className="performance-standard-main">
+            <i className="performance-standard-dot" />
+            <div>
+              <span className="performance-skeleton-block is-standard-title" />
+              <span className="performance-skeleton-block is-standard-range" />
+            </div>
+          </div>
+          <span className="performance-skeleton-block is-standard-score" />
+        </>
+      ) : (
+        <>
+          <div className="performance-standard-main">
+            <i className="performance-standard-dot" />
+            <div>
+              <h2>{standard.label}</h2>
+              <p>Rating range: {standard.range}</p>
+            </div>
+          </div>
+          <strong>{formatRating(rating)} <span>/ 5</span></strong>
+        </>
+      )}
+    </section>
   )
 }
 
@@ -287,7 +332,8 @@ export default function PerformanceReviewPage() {
 
   const handleReset = () => {
     setRows(savedRows)
-    setToast('Performance review reset to last saved state.')
+    setError('')
+    setToast('Changes discarded.')
   }
 
   return (
@@ -300,11 +346,13 @@ export default function PerformanceReviewPage() {
       </div>
 
       <section className="performance-summary-grid">
-        <SummaryCard label="Allocation Total" value={`${formatRating(totals.allocation)}%`} warning={!allocationValid && !loadingReview} loading={loadingReview} />
+        <SummaryCard label="Final Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} accent />
         <SummaryCard label="Self Rating Total" value={formatRating(totals.selfRating)} loading={loadingReview} />
         <SummaryCard label="SS/NS Rating Total" value={formatRating(totals.ssnsRating)} loading={loadingReview} />
-        <SummaryCard label="Final Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} />
+        <SummaryCard label="RA Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} accent />
       </section>
+
+      <PerformanceStandardBanner rating={totals.finalRating} loading={loadingReview} />
 
       <div className={`performance-message-slot${showValidationWarning ? ' is-visible' : ''}`}>
         {showValidationWarning && (
