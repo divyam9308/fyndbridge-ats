@@ -185,6 +185,28 @@
   text-decoration: underline;
 }
 
+.client-detail-candidates-table {
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+}
+
+.client-detail-candidates-table th,
+.client-detail-candidates-table td {
+  height: auto;
+  max-height: none;
+  min-width: var(--client-detail-column-width, 120px);
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.client-detail-candidates-table .cell-ellipsis {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 .loading-state {
   display: flex;
   flex-direction: column;
@@ -212,4 +234,3 @@
     border-radius: 0 0 8px 8px;
   }
 }
-

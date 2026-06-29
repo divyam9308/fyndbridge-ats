@@ -368,6 +368,7 @@ export default function ClientDetailPage() {
 
   const pagedCandidates = sortedCandidates.slice((page - 1) * pageSize, page * pageSize)
   const activeColumns = CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) || column.key === 'jobId')
+  const candidateTableMinWidth = activeColumns.reduce((total, column) => total + (column.width || 120), 0)
 
   const openGroup = (groupKey, jobTitle, status = '') => {
     setSelectedGroup({ groupKey, jobTitle, status })
@@ -748,7 +749,10 @@ export default function ClientDetailPage() {
           </div>
           <div className="table-card">
             <div className="table-wrapper">
-              <table className="data-table fb-theme-table candidates-master-table" aria-label="Client Mandate Candidates">
+              <table className="data-table fb-theme-table candidates-master-table client-detail-candidates-table" aria-label="Client Mandate Candidates" style={{ minWidth: candidateTableMinWidth }}>
+                <colgroup>
+                  {activeColumns.map(column => <col key={column.key} style={{ width: `${column.width}px` }} />)}
+                </colgroup>
                 <thead><tr>{activeColumns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead>
                 <tbody>{pagedCandidates.map((candidate, index) => <tr key={candidate.associationId || candidate.id}>{activeColumns.map(column => renderCandidateCell(column, candidate, index))}</tr>)}</tbody>
               </table>
