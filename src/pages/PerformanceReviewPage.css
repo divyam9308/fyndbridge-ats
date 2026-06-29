@@ -427,13 +427,6 @@
   }
 }
 
-.performance-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
 .performance-reset-btn,
 .performance-save-btn {
   display: inline-flex;
@@ -465,6 +458,59 @@
   opacity: 0.58;
 }
 
+.performance-unsaved-dock {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 900;
+  display: flex;
+  justify-content: center;
+  width: min(880px, calc(100vw - 32px));
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(-50%, calc(100% + 48px), 0) scale(0.96);
+  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+}
+
+.performance-unsaved-dock.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate3d(-50%, 0, 0) scale(1);
+}
+
+.performance-unsaved-dock-inner {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(0, 18, 100, 0.18);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 22px 52px rgba(0, 18, 100, 0.22);
+  padding: 14px 16px;
+}
+
+.performance-unsaved-dock-inner > span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(218, 177, 17, 0.22);
+  color: var(--perf-navy);
+}
+
+.performance-unsaved-dock strong {
+  color: var(--perf-navy);
+}
+
+.performance-unsaved-dock p {
+  margin: 3px 0 0;
+  color: var(--perf-muted);
+  font-size: 13px;
+}
+
 .performance-toast {
   position: fixed;
   right: 22px;
@@ -485,14 +531,27 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .performance-employee-card,
-  .performance-header {
+  .performance-employee-card {
     grid-template-columns: 1fr;
     align-items: stretch;
   }
 }
 
 @media (max-width: 640px) {
+  .performance-unsaved-dock {
+    bottom: 14px;
+    width: calc(100vw - 24px);
+  }
+
+  .performance-unsaved-dock-inner {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .performance-unsaved-dock-inner .performance-reset-btn,
+  .performance-unsaved-dock-inner .performance-save-btn {
+    width: 100%;
+  }
+
   .performance-employee-card,
   .performance-table-title {
     padding: 18px;

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle, ChevronDown, RotateCcw, Save, Search, UserRound } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
@@ -357,10 +358,19 @@ export default function PerformanceReviewPage() {
         </div>
       </section>
 
-      <div className="performance-actions">
-        <button className="performance-reset-btn" type="button" onClick={handleReset} disabled={!dirty}><RotateCcw size={16} />Reset</button>
-        <button className="performance-save-btn" type="button" onClick={handleSave} disabled={!canSave}><Save size={16} />{savingReview ? 'Saving...' : 'Save Changes'}</button>
-      </div>
+      {createPortal((
+        <div className={`performance-unsaved-dock${dirty ? ' is-visible' : ''}${savingReview ? ' is-saving' : ''}`} aria-hidden={!dirty}>
+          <div className="performance-unsaved-dock-inner">
+            <span><AlertTriangle size={18} /></span>
+            <div>
+              <strong>Unsaved performance changes</strong>
+              <p>Review your edits before saving the performance review.</p>
+            </div>
+            <button className="performance-reset-btn" type="button" onClick={handleReset} disabled={savingReview || !dirty}><RotateCcw size={16} />Cancel</button>
+            <button className="performance-save-btn" type="button" onClick={handleSave} disabled={!canSave}><Save size={16} />{savingReview ? 'Saving...' : 'Save Changes'}</button>
+          </div>
+        </div>
+      ), document.body)}
     </div>
   )
 }
