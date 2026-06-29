@@ -21,11 +21,17 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  min-height: 40px;
 }
 
 .invoice-page .header-actions button {
   min-height: 40px;
   gap: 8px;
+}
+
+.invoice-page .header-actions.is-pending-access {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .invoice-table-card,

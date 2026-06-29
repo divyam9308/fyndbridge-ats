@@ -169,7 +169,10 @@ export default function InvoicePage() {
   const remove = async entity => { if (!window.confirm(`Delete ${entity.entity_display_id || entity.invoice_id}?`)) return; try { await deleteInvoiceEntity(entity.id); await load() } catch (err) { setError(err.message) } }
   const canUseInvoice = !adminLoading && isAdmin
   return <div className="invoice-page">
-    {canUseInvoice && <div className="header-actions"><button className="btn-secondary" onClick={() => setCreating(true)}><FileText size={15} />Create Invoice</button><button className="btn-primary" onClick={() => setAdding(true)}><Plus size={15} />Add Entity</button></div>}
+    <div className={`header-actions${!canUseInvoice ? ' is-pending-access' : ''}`} aria-hidden={!canUseInvoice}>
+      <button className="btn-secondary" onClick={() => setCreating(true)} disabled={!canUseInvoice}><FileText size={15} />Create Invoice</button>
+      <button className="btn-primary" onClick={() => setAdding(true)} disabled={!canUseInvoice}><Plus size={15} />Add Entity</button>
+    </div>
     <div className="table-card invoice-table-card"><div className="invoice-card-toolbar"><div className="invoice-search"><Search size={17} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search billing entities..." disabled={!canUseInvoice} /></div><span>{canUseInvoice ? `${filtered.length} ${filtered.length === 1 ? 'entity' : 'entities'}` : 'Access check'}</span></div>
       {error && canUseInvoice && <div className="invoice-table-error">{error}</div>}
       {adminLoading ? <InvoiceTableSkeleton label="Checking invoice access..." /> : !isAdmin ? <div className="invoice-access-panel"><div className="invoice-denied">Admin access required.</div></div> : loading ? <InvoiceTableSkeleton label="Loading entities..." /> : <div className="table-scroll"><table className="data-table invoice-table"><thead><tr>{INVOICE_TABLE_HEADERS.map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>
