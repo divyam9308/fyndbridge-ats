@@ -70,6 +70,7 @@ const mutedDash = <span className="table-muted-dash">-</span>
 const termsLabel = (client) => client.terms_signed_type === 'Any Other' ? client.terms_signed_custom : client.terms_signed_type
 const showCommercialFields = (client) => client.contract_signed === true || client.contract_signed === 'Yes'
 const commercialDash = (client, value) => showCommercialFields(client) ? dash(value) : '-'
+const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
 const contactNameFor = (client) => String(client?.contact_person || client?.contact || '').replace(/\s+/g, ' ').trim()
 const isRealContact = (client) => {
