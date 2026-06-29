@@ -171,17 +171,21 @@ function EmployeeSelector({ users, selectedUserId, onSelect, loading, disabled }
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') closeMenu()
     }
+    const handleScrollAway = (event) => {
+      if (selectRef.current?.contains(event.target)) return
+      closeMenu()
+    }
     document.addEventListener('pointerdown', handlePointerDown, true)
     document.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('scroll', closeMenu, true)
-    window.addEventListener('wheel', closeMenu, { passive: true, capture: true })
-    window.addEventListener('touchmove', closeMenu, { passive: true, capture: true })
+    window.addEventListener('scroll', handleScrollAway, true)
+    window.addEventListener('wheel', handleScrollAway, { passive: true, capture: true })
+    window.addEventListener('touchmove', handleScrollAway, { passive: true, capture: true })
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown, true)
       document.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('scroll', closeMenu, true)
-      window.removeEventListener('wheel', closeMenu, { capture: true })
-      window.removeEventListener('touchmove', closeMenu, { capture: true })
+      window.removeEventListener('scroll', handleScrollAway, true)
+      window.removeEventListener('wheel', handleScrollAway, { capture: true })
+      window.removeEventListener('touchmove', handleScrollAway, { capture: true })
     }
   }, [open])
 
