@@ -10,19 +10,23 @@ async function json(response) {
   return payload
 }
 
-export async function fetchMyPerformanceReview() {
-  return cachedApiJson('/api/performance/me', {}, { ttlMs: 30000 })
+function periodQuery(period) {
+  return period ? `?period=${encodeURIComponent(period)}` : ''
 }
 
-export async function fetchPerformanceReview(employeeUserId) {
-  return cachedApiJson(`/api/performance/${encodeURIComponent(employeeUserId)}`, {}, { ttlMs: 30000 })
+export async function fetchMyPerformanceReview(period) {
+  return cachedApiJson(`/api/performance/me${periodQuery(period)}`, {}, { ttlMs: 30000 })
 }
 
-export async function savePerformanceReview(employeeUserId, rows) {
+export async function fetchPerformanceReview(employeeUserId, period) {
+  return cachedApiJson(`/api/performance/${encodeURIComponent(employeeUserId)}${periodQuery(period)}`, {}, { ttlMs: 30000 })
+}
+
+export async function savePerformanceReview(employeeUserId, rows, period) {
   const result = await json(await apiFetch(`/api/performance/${encodeURIComponent(employeeUserId)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rows })
+    body: JSON.stringify({ rows, period })
   }))
   invalidateApiJsonCache('/api/performance')
   return result

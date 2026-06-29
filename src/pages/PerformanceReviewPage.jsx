@@ -48,6 +48,7 @@ const PERFORMANCE_STANDARDS = [
   { min: 2.0, label: 'Partially meets expectations; below average, significant improvement required', range: '2.0 - 3.0', tone: 'partial' },
   { min: -Infinity, label: 'Does not meet expectations', range: 'Up to 2.0', tone: 'low' }
 ]
+const PERFORMANCE_PERIODS = ['Q1', 'Q2', 'Q3', 'Q4']
 
 function performanceStandard(finalRating) {
   const rating = Number(finalRating) || 0
@@ -98,25 +99,29 @@ function PerformanceStandardBanner({ rating, loading }) {
   )
 }
 
-function EmployeeSelector({ users, selectedUserId, onSelect, loading }) {
+function EmployeeReviewCard({ isSuperAdmin }) {
+  return (
+    <section className="performance-employee-card">
+      <span className="performance-kicker"><UserRound size={14} />{isSuperAdmin ? 'Super Admin View' : 'Performance Review'}</span>
+      <h2>Employee Review</h2>
+    </section>
+  )
+}
+
+function EmployeeSelector({ users, selectedUserId, onSelect, loading, disabled }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const selected = users.find(user => user.id === selectedUserId) || users[0]
   const matches = users.filter(user => user.name.toLowerCase().includes(query.trim().toLowerCase()))
 
   return (
-    <section className="performance-employee-card">
-      <div>
-        <span className="performance-kicker"><UserRound size={14} />Super Admin View</span>
-        <h2>Employee Review</h2>
-      </div>
-      <div className="performance-employee-select">
+    <div className="performance-employee-select">
         {loading ? (
           <div className="performance-employee-placeholder" aria-hidden="true">
             <i className="performance-skeleton-block" />
           </div>
         ) : (
-          <button type="button" onClick={() => setOpen(current => !current)} aria-expanded={open}>
+          <button type="button" onClick={() => { if (!disabled) setOpen(current => !current) }} aria-expanded={open} disabled={disabled}>
             <span>{selected?.name || 'Select employee'}</span>
             <ChevronDown size={16} />
           </button>
@@ -137,7 +142,18 @@ function EmployeeSelector({ users, selectedUserId, onSelect, loading }) {
           </div>
         )}
       </div>
-    </section>
+  )
+}
+
+function PeriodSelector({ period, onChange }) {
+  return (
+    <div className="performance-periods" aria-label="Performance review quarter">
+      {PERFORMANCE_PERIODS.map(item => (
+        <button key={item} type="button" className={item === period ? 'is-active' : ''} onClick={() => onChange(item)}>
+          {item}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -206,6 +222,7 @@ export default function PerformanceReviewPage() {
   const ownName = displayName(user)
   const [selectorUsers, setSelectorUsers] = useState([{ id: ownUserId, name: ownName, email: user?.email || '' }])
   const [selectedUserId, setSelectedUserId] = useState(ownUserId)
+  const [period, setPeriod] = useState(PERFORMANCE_PERIODS[0])
   const effectiveUserId = isSuperAdmin ? selectedUserId : ownUserId
   const [rows, setRows] = useState(() => normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS))
   const [savedRows, setSavedRows] = useState(() => normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS))
@@ -248,7 +265,7 @@ export default function PerformanceReviewPage() {
       setLoadingReview(true)
       setError('')
     }, 0)
-    const request = isSuperAdmin ? fetchPerformanceReview(effectiveUserId) : fetchMyPerformanceReview()
+    const request = isSuperAdmin ? fetchPerformanceReview(effectiveUserId, period) : fetchMyPerformanceReview(period)
     request.then(({ data }) => {
       if (!active) return
       const loaded = normalizePerformanceRows(data?.rows || [])
@@ -260,7 +277,7 @@ export default function PerformanceReviewPage() {
       if (active) setLoadingReview(false)
     })
     return () => { active = false; window.clearTimeout(loadingTimer) }
-  }, [effectiveUserId, isSuperAdmin])
+  }, [effectiveUserId, isSuperAdmin, period])
 
   useEffect(() => {
     const sync = () => fetchPerformancePermissions().then(({ permissions: next }) => setPermissions({ ...DEFAULT_PERFORMANCE_PERMISSIONS, ...(next || {}) })).catch(err => setError(err.message))
@@ -320,7 +337,7 @@ export default function PerformanceReviewPage() {
     setSavingReview(true)
     setError('')
     try {
-      const { data } = await savePerformanceReview(effectiveUserId, saveRowsPayload())
+      const { data } = await savePerformanceReview(effectiveUserId, saveRowsPayload(), period)
       const loaded = normalizePerformanceRows(data?.rows || rows)
       setRows(clonePerformanceRows(loaded))
       setSavedRows(clonePerformanceRows(loaded))
@@ -342,7 +359,11 @@ export default function PerformanceReviewPage() {
     <div className="performance-page">
       {toast && <div className="performance-toast" role="status">{toast}</div>}
       {dirty && <div className="performance-unsaved-row"><span className="performance-unsaved">Unsaved changes</span></div>}
-      {isSuperAdmin && <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={loadingEmployees} />}
+      <EmployeeReviewCard isSuperAdmin={isSuperAdmin} />
+      <div className="performance-control-row">
+        <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={loadingEmployees} disabled={!isSuperAdmin} />
+        <PeriodSelector period={period} onChange={setPeriod} />
+      </div>
       <div className={`performance-message-slot${error ? ' is-visible' : ''}`}>
         {error && <div className="performance-warning"><AlertTriangle size={17} /><span>{error}</span></div>}
       </div>

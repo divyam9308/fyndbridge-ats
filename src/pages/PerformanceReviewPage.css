@@ -58,10 +58,7 @@
 .performance-employee-card {
   position: relative;
   z-index: 3;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
-  align-items: center;
-  gap: 18px;
+  display: block;
   border-radius: 22px;
   border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
   background: linear-gradient(135deg, color-mix(in oklch, var(--perf-blue-soft) 40%, transparent), color-mix(in oklch, var(--perf-surface) 50%, transparent), color-mix(in oklch, var(--perf-gold-soft) 30%, transparent));
@@ -82,11 +79,20 @@
 
 .performance-employee-select {
   position: relative;
+  width: min(360px, 100%);
 }
 
-.performance-employee-select > button {
+.performance-control-row {
   display: flex;
-  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.performance-employee-select > button,
+.performance-periods button {
+  display: flex;
   min-height: 46px;
   align-items: center;
   justify-content: space-between;
@@ -97,6 +103,49 @@
   color: var(--perf-navy);
   padding: 0 14px;
   font-weight: 800;
+}
+
+.performance-employee-select > button {
+  width: 100%;
+}
+
+.performance-employee-select > button:disabled {
+  cursor: default;
+}
+
+.performance-employee-select > button:disabled svg {
+  opacity: 0.38;
+}
+
+.performance-periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 16%, transparent);
+  border-radius: 15px;
+  background: color-mix(in oklch, var(--perf-surface) 76%, var(--perf-blue-soft));
+}
+
+.performance-periods button {
+  min-height: 38px;
+  min-width: 48px;
+  justify-content: center;
+  border-radius: 11px;
+  padding: 0 12px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.performance-periods button:hover {
+  border-color: color-mix(in oklch, var(--perf-gold-soft-foreground) 42%, transparent);
+  box-shadow: 0 5px 14px rgba(0, 18, 100, 0.08);
+}
+
+.performance-periods button.is-active {
+  border-color: color-mix(in oklch, var(--perf-gold-soft-foreground) 32%, transparent);
+  background: linear-gradient(135deg, var(--perf-blue), var(--gold));
+  color: var(--white);
+  box-shadow: 0 9px 20px rgba(0, 18, 100, 0.16);
 }
 
 .performance-employee-placeholder {

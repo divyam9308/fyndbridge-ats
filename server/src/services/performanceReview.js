@@ -1,7 +1,8 @@
 const supabase = require('./supabaseAdmin')
 const { isSuperAdmin } = require('./adminAccess')
 
-const REVIEW_PERIOD = 'current'
+const REVIEW_PERIOD = 'Q1'
+const REVIEW_PERIODS = ['Q1', 'Q2', 'Q3', 'Q4']
 
 const BASE_FIELDS = [
   'category',
@@ -53,6 +54,12 @@ function assertUuid(value, label = 'User id') {
     throw httpError(`${label} is invalid`, 400)
   }
   return text
+}
+
+function normalizeReviewPeriod(value) {
+  const period = String(value || REVIEW_PERIOD).trim().toUpperCase()
+  if (!REVIEW_PERIODS.includes(period)) throw httpError('Performance review period is invalid', 400)
+  return period
 }
 
 function numeric(value, field, { nullable = false, min = -Infinity, max = Infinity } = {}) {
@@ -148,13 +155,14 @@ async function insertDefaultRows(reviewId) {
   if (error) throw error
 }
 
-async function ensureReview(employeeUserId, actorId) {
+async function ensureReview(employeeUserId, actorId, period = REVIEW_PERIOD) {
   const targetUserId = assertUuid(employeeUserId, 'Employee user id')
+  const reviewPeriod = normalizeReviewPeriod(period)
   let { data: review, error } = await supabase
     .from('performance_reviews')
     .select('*')
     .eq('employee_user_id', targetUserId)
-    .eq('review_period', REVIEW_PERIOD)
+    .eq('review_period', reviewPeriod)
     .maybeSingle()
   if (error) throw error
 
@@ -164,7 +172,7 @@ async function ensureReview(employeeUserId, actorId) {
       .from('performance_reviews')
       .insert({
         employee_user_id: targetUserId,
-        review_period: REVIEW_PERIOD,
+        review_period: reviewPeriod,
         created_by: actorId || null,
         updated_by: actorId || null,
         created_at: now,
@@ -177,7 +185,7 @@ async function ensureReview(employeeUserId, actorId) {
         .from('performance_reviews')
         .select('*')
         .eq('employee_user_id', targetUserId)
-        .eq('review_period', REVIEW_PERIOD)
+        .eq('review_period', reviewPeriod)
         .single()
       if (refetched.error) throw refetched.error
       review = refetched.data
@@ -196,9 +204,9 @@ async function ensureReview(employeeUserId, actorId) {
   return { review, rows }
 }
 
-async function getReview(actor, employeeUserId) {
+async function getReview(actor, employeeUserId, period = REVIEW_PERIOD) {
   const { targetUserId } = await assertCanAccessEmployee(actor, employeeUserId)
-  const { review, rows } = await ensureReview(targetUserId, actor.id)
+  const { review, rows } = await ensureReview(targetUserId, actor.id, period)
   return serializeReview(review, rows)
 }
 
@@ -264,10 +272,10 @@ function normalizeRowsPayload(rows, permissions, superAdmin, existingRows = []) 
   return normalized.sort((a, b) => a.row_order - b.row_order)
 }
 
-async function updateReview(actor, employeeUserId, rowsPayload) {
+async function updateReview(actor, employeeUserId, rowsPayload, period = REVIEW_PERIOD) {
   const { targetUserId, superAdmin } = await assertCanAccessEmployee(actor, employeeUserId)
   const [existing, permissions] = await Promise.all([
-    ensureReview(targetUserId, actor.id),
+    ensureReview(targetUserId, actor.id, period),
     getPermissions()
   ])
   const canManageAllColumns = superAdmin || (actor.id === targetUserId && await isSuperAdmin(actor))
@@ -289,7 +297,7 @@ async function updateReview(actor, employeeUserId, rowsPayload) {
     .select('*')
     .single()
   if (reviewUpdate.error) throw reviewUpdate.error
-  return getReview(actor, targetUserId)
+  return getReview(actor, targetUserId, period)
 }
 
 async function updatePermissions(actor, payload) {
@@ -325,6 +333,7 @@ module.exports = {
   COLUMN_KEYS,
   DEFAULT_ROWS,
   DEFAULT_PERMISSIONS,
+  REVIEW_PERIODS,
   getReview,
   updateReview,
   getPermissions,
