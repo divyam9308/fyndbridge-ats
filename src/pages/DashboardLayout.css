@@ -23,6 +23,19 @@
   overflow: auto;
 }
 
+.dashboard-embed .candidates-page {
+  overflow-x: visible;
+}
+
+.dashboard-embed .table-card-popovers .table-wrapper.candidates-table-scroll,
+.dashboard-embed .candidates-table-scroll {
+  overflow-x: auto;
+}
+
+.dashboard-embed .candidates-table-card {
+  overflow: visible;
+}
+
 .dashboard-embed .candidate-page-header,
 .dashboard-embed .ai-filter-chips,
 .dashboard-embed .filter-bar {

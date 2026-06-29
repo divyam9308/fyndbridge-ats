@@ -127,10 +127,6 @@ function normalizeAssociationValue(value) {
   return isDuplicateValue(text) ? text : ''
 }
 
-function sameAssociationValue(a, b) {
-  return normalizeAssociationValue(a) === normalizeAssociationValue(b)
-}
-
 function hasSameConcreteAssociation(match, payload) {
   const matchClientId = normalizeAssociationValue(match?.client_id)
   const payloadClientId = normalizeAssociationValue(payload?.client_id)
@@ -576,12 +572,7 @@ async function enrichCandidateRows(rows) {
 
 async function findExactAssociationDuplicate({ email, mobileNumber, clientId, jobId }) {
   const { matches } = await findMatchingCandidates(email, mobileNumber)
-  const incomingClientId = normalizeAssociationValue(clientId)
-  const incomingJobId = normalizeAssociationValue(jobId)
-  return matches.find((match) => (
-    sameAssociationValue(match.client_id, incomingClientId) &&
-    sameAssociationValue(match.job_id, incomingJobId)
-  )) || null
+  return matches.find((match) => hasSameConcreteAssociation(match, { client_id: clientId, job_id: jobId })) || null
 }
 
 async function validateMandateReference(payload) {
@@ -1255,12 +1246,6 @@ async function createCandidate(req, res) {
         error: 'This candidate already exists for the same client and mandate.',
         existing: exactAssociation
       })
-    }
-
-    const identityDuplicate = await findCandidateIdentityDuplicate(candidatePayload.email, candidatePayload.mobile_number)
-    const identityError = candidateDuplicateError(identityDuplicate, candidatePayload.email, candidatePayload.mobile_number)
-    if (identityError && !['add_duplicate', 'update_current'].includes(duplicateAction)) {
-      return res.status(409).json({ error: identityError, duplicate: true, existing: identityDuplicate })
     }
 
     if (duplicateMatch.matches.length && !['add_duplicate', 'update_current'].includes(duplicateAction)) {

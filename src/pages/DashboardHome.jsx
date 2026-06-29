@@ -555,6 +555,7 @@ function DashboardCardModal({ card, context, onClose }) {
 }
 
 function DashboardDrilldownModal({ drilldown, onClose, onOpenFullPage }) {
+  const frameRef = useRef(null)
   useEffect(() => {
     const onKeyDown = (event) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKeyDown)
@@ -565,15 +566,19 @@ function DashboardDrilldownModal({ drilldown, onClose, onOpenFullPage }) {
   const entityLabel = drilldown.type === 'mandates' ? 'Mandates' : drilldown.type[0].toUpperCase() + drilldown.type.slice(1)
   const consultantLabel = drilldown.consultant === OVERALL ? '' : drilldown.consultant
   const source = `${buildDashboardDrilldownUrl(drilldown.type, { consultant: drilldown.consultant, status: drilldown.status, period: drilldown.period })}&embed=dashboard`
+  const openFullPage = () => {
+    const currentLocation = frameRef.current?.contentWindow?.location
+    onOpenFullPage(currentLocation ? `${currentLocation.pathname}${currentLocation.search}` : '')
+  }
   const modal = (
     <div className="ats-dashboard-drilldown-layer" role="dialog" aria-modal="true" aria-label={`${entityLabel} drilldown`}>
       <div className="ats-dashboard-drilldown-backdrop" onClick={onClose} />
       <section className="ats-dashboard-drilldown-card">
         <header className="ats-dashboard-drilldown-head">
           <div><h3>{[entityLabel, drilldown.status, consultantLabel].filter(Boolean).join(' · ')}</h3><div className="ats-dashboard-drilldown-chips">{consultantLabel ? <span>Consultant = {consultantLabel}</span> : null}<span>Status = {drilldown.status}</span></div></div>
-          <div><button type="button" className="ats-dashboard-drilldown-open" onClick={onOpenFullPage}>Open full page</button><button type="button" className="ats-dashboard-modal-close" onClick={onClose} aria-label="Close drilldown"><X size={18} /></button></div>
+          <div><button type="button" className="ats-dashboard-drilldown-open" onClick={openFullPage}>Open full page</button><button type="button" className="ats-dashboard-modal-close" onClick={onClose} aria-label="Close drilldown"><X size={18} /></button></div>
         </header>
-        <iframe className="ats-dashboard-drilldown-frame" title={`${entityLabel} filtered table`} src={source} />
+        <iframe ref={frameRef} className="ats-dashboard-drilldown-frame" title={`${entityLabel} filtered table`} src={source} />
       </section>
     </div>
   )
@@ -876,9 +881,16 @@ export default function DashboardHome() {
       <DashboardDrilldownModal
         drilldown={selectedDrilldown}
         onClose={() => setSelectedDrilldown(null)}
-        onOpenFullPage={() => {
+        onOpenFullPage={(currentFramePath = '') => {
           if (!selectedDrilldown) return
-          navigate(buildDashboardDrilldownUrl(selectedDrilldown.type, selectedDrilldown))
+          const fallbackPath = buildDashboardDrilldownUrl(selectedDrilldown.type, selectedDrilldown)
+          const targetPath = currentFramePath && currentFramePath !== window.location.pathname
+            ? currentFramePath
+            : fallbackPath
+          const [pathname, search = ''] = targetPath.split('?')
+          const params = new URLSearchParams(search)
+          params.delete('embed')
+          navigate(`${pathname}${params.toString() ? `?${params.toString()}` : ''}`)
           setSelectedDrilldown(null)
         }}
       />

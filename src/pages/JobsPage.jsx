@@ -160,6 +160,7 @@ const normalizeConsultantFields = (values) => {
 export default function JobsPage() {
   const location = useLocation()
   const navigate = useNavigate()
+  const isDashboardEmbed = useMemo(() => new URLSearchParams(location.search).get('embed') === 'dashboard', [location.search])
   const dashboardFilters = useMemo(() => parseDashboardFiltersFromUrl(location.search), [location.search])
   const { loadProfile, session } = useAuth()
   const { isAdmin, permissions } = useAdminAccess()
@@ -473,8 +474,10 @@ export default function JobsPage() {
     ? form.consultants.map(item => displayUserLabel(item) || '-')
     : ['-']
   const selectedConsultants = normalizeConsultantFields(consultantFields)
-  const activeColumns = MANDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) && !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
   const availableColumns = MANDATE_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  const activeColumns = isDashboardEmbed
+    ? availableColumns
+    : availableColumns.filter(column => visibleColumns.includes(column.key))
   const mandateTableMinWidth = activeColumns.reduce((sum, column) => sum + (column.width || 140), 0)
   const visibleAiFields = MANDATE_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_AI_FIELD[field], isAdmin))
   const jobFieldPermission = {
