@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, ChevronDown, RotateCcw, Save, Search, UserRound } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
@@ -60,6 +60,7 @@ const PERFORMANCE_PERIODS = [
   { value: 'Q3', label: 'Q3', range: 'Oct-Dec' },
   { value: 'Q4', label: 'Q4', range: 'Jan-Mar' }
 ]
+const PERFORMANCE_PERIOD_VALUES = PERFORMANCE_PERIODS.map(period => period.value)
 
 function currentPerformancePeriod() {
   const month = new Date().getMonth()
@@ -279,6 +280,22 @@ export default function PerformanceReviewPage() {
   const [savingReview, setSavingReview] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
+  const reviewCacheRef = useRef(new Map())
+  const loadedReviewKeyRef = useRef('')
+  const requestSeqRef = useRef(0)
+
+  const reviewCacheKey = useCallback((targetUserId, reviewPeriod) => `${isSuperAdmin ? 'employee' : 'self'}:${targetUserId}:${reviewPeriod}`, [isSuperAdmin])
+  const readReview = useCallback((targetUserId, reviewPeriod) => (
+    isSuperAdmin ? fetchPerformanceReview(targetUserId, reviewPeriod) : fetchMyPerformanceReview(reviewPeriod)
+  ), [isSuperAdmin])
+  const cacheReview = useCallback((key, nextRows) => {
+    const normalized = normalizePerformanceRows(nextRows || [])
+    reviewCacheRef.current.set(key, {
+      rows: clonePerformanceRows(normalized),
+      savedRows: clonePerformanceRows(normalized)
+    })
+    return normalized
+  }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -307,24 +324,59 @@ export default function PerformanceReviewPage() {
 
   useEffect(() => {
     let active = true
-    const loadingTimer = window.setTimeout(() => {
-      if (!active) return
-      setLoadingReview(true)
+    const requestId = requestSeqRef.current + 1
+    requestSeqRef.current = requestId
+    const key = reviewCacheKey(effectiveUserId, period)
+    const cached = reviewCacheRef.current.get(key)
+    const viewTimer = window.setTimeout(() => {
+      if (!active || requestSeqRef.current !== requestId) return
       setError('')
+
+      if (cached) {
+        setRows(clonePerformanceRows(cached.rows))
+        setSavedRows(clonePerformanceRows(cached.savedRows))
+        setLoadingReview(false)
+      } else if (loadedReviewKeyRef.current) {
+        const blankRows = normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS)
+        setRows(clonePerformanceRows(blankRows))
+        setSavedRows(clonePerformanceRows(blankRows))
+        setLoadingReview(false)
+      } else {
+        setLoadingReview(true)
+      }
     }, 0)
-    const request = isSuperAdmin ? fetchPerformanceReview(effectiveUserId, period) : fetchMyPerformanceReview(period)
+
+    const request = readReview(effectiveUserId, period)
     request.then(({ data }) => {
-      if (!active) return
-      const loaded = normalizePerformanceRows(data?.rows || [])
+      if (!active || requestSeqRef.current !== requestId) return
+      const loaded = cacheReview(key, data?.rows)
       setRows(clonePerformanceRows(loaded))
       setSavedRows(clonePerformanceRows(loaded))
+      loadedReviewKeyRef.current = key
     }).catch(err => {
       if (active) setError(err.message)
     }).finally(() => {
-      if (active) setLoadingReview(false)
+      if (active && requestSeqRef.current === requestId) setLoadingReview(false)
     })
-    return () => { active = false; window.clearTimeout(loadingTimer) }
-  }, [effectiveUserId, isSuperAdmin, period])
+    return () => {
+      active = false
+      window.clearTimeout(viewTimer)
+    }
+  }, [cacheReview, effectiveUserId, period, readReview, reviewCacheKey])
+
+  useEffect(() => {
+    if (!effectiveUserId) return undefined
+    let active = true
+    const prefetchPeriods = PERFORMANCE_PERIOD_VALUES.filter(item => item !== period)
+    prefetchPeriods.forEach((reviewPeriod) => {
+      const key = reviewCacheKey(effectiveUserId, reviewPeriod)
+      if (reviewCacheRef.current.has(key)) return
+      readReview(effectiveUserId, reviewPeriod).then(({ data }) => {
+        if (active) cacheReview(key, data?.rows)
+      }).catch(() => {})
+    })
+    return () => { active = false }
+  }, [cacheReview, effectiveUserId, period, readReview, reviewCacheKey])
 
   useEffect(() => {
     const sync = () => fetchPerformancePermissions().then(({ permissions: next }) => setPermissions({ ...DEFAULT_PERFORMANCE_PERMISSIONS, ...(next || {}) })).catch(err => setError(err.message))
@@ -385,9 +437,11 @@ export default function PerformanceReviewPage() {
     setError('')
     try {
       const { data } = await savePerformanceReview(effectiveUserId, saveRowsPayload(), period)
-      const loaded = normalizePerformanceRows(data?.rows || rows)
+      const key = reviewCacheKey(effectiveUserId, period)
+      const loaded = cacheReview(key, data?.rows || rows)
       setRows(clonePerformanceRows(loaded))
       setSavedRows(clonePerformanceRows(loaded))
+      loadedReviewKeyRef.current = key
       setToast('Performance review saved.')
     } catch (err) {
       setError(err.message)
