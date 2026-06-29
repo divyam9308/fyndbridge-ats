@@ -778,10 +778,14 @@
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 14px;
-  border: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 18%, transparent);
+  border: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 28%, var(--perf-surface));
   border-radius: 24px;
-  background: color-mix(in oklch, var(--perf-surface) 96%, transparent);
-  box-shadow: 0 22px 52px rgba(0, 18, 100, 0.22);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--perf-surface) 90%, var(--perf-blue-soft)), color-mix(in oklch, var(--perf-surface) 88%, var(--perf-gold-soft))),
+    color-mix(in oklch, var(--perf-surface) 94%, transparent);
+  box-shadow: 0 22px 52px rgba(0, 18, 100, 0.24), inset 0 1px 0 color-mix(in oklch, var(--perf-surface) 80%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.45);
+  backdrop-filter: blur(22px) saturate(1.45);
   padding: 14px 16px;
 }
 
