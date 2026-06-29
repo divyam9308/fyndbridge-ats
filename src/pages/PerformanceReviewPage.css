@@ -5,6 +5,9 @@
   --perf-soft: var(--perf-navy-soft);
   --perf-muted: color-mix(in oklch, var(--perf-navy-soft-foreground) 62%, var(--perf-surface));
   --perf-surface: var(--white);
+  --perf-control: oklch(93% 0.035 315);
+  --perf-control-strong: oklch(52% 0.12 315);
+  --perf-control-foreground: oklch(31% 0.08 315);
   position: relative;
   display: flex;
   width: 100%;
@@ -60,8 +63,10 @@
   z-index: 3;
   display: block;
   border-radius: 22px;
-  border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
-  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-blue-soft) 68%, var(--perf-surface)), color-mix(in oklch, var(--perf-surface) 62%, var(--perf-teal-soft)), color-mix(in oklch, var(--perf-gold-soft) 58%, var(--perf-surface)));
+  border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 16%, transparent);
+  background: color-mix(in oklch, var(--perf-surface) 94%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+  backdrop-filter: blur(18px) saturate(1.08);
   padding: 22px 24px;
 }
 
@@ -97,10 +102,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
+  border: 1px solid color-mix(in oklch, var(--perf-control-strong) 18%, transparent);
   border-radius: 15px;
-  background: color-mix(in oklch, var(--perf-blue-soft) 52%, var(--perf-surface));
-  color: var(--perf-navy);
+  background: color-mix(in oklch, var(--perf-control) 66%, var(--perf-surface));
+  color: var(--perf-control-foreground);
   padding: 0 14px;
   font-weight: 800;
 }
@@ -122,9 +127,9 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 4px;
-  border: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 16%, transparent);
+  border: 1px solid color-mix(in oklch, var(--perf-control-strong) 16%, transparent);
   border-radius: 15px;
-  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-blue-soft) 60%, var(--perf-surface)), color-mix(in oklch, var(--perf-gold-soft) 42%, var(--perf-surface)));
+  background: color-mix(in oklch, var(--perf-control) 58%, var(--perf-surface));
 }
 
 .performance-periods button {
@@ -151,13 +156,13 @@
 }
 
 .performance-periods button:hover {
-  border-color: color-mix(in oklch, var(--perf-gold-soft-foreground) 42%, transparent);
+  border-color: color-mix(in oklch, var(--perf-control-strong) 34%, transparent);
   box-shadow: 0 5px 14px rgba(0, 18, 100, 0.08);
 }
 
 .performance-periods button.is-active {
-  border-color: color-mix(in oklch, var(--gold) 64%, var(--perf-blue));
-  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-blue) 92%, var(--perf-surface)), color-mix(in oklch, var(--perf-teal) 60%, var(--gold)), var(--gold));
+  border-color: color-mix(in oklch, var(--perf-control-strong) 52%, transparent);
+  background: color-mix(in oklch, var(--perf-control-strong) 88%, var(--perf-surface));
   color: var(--white);
   box-shadow: 0 9px 20px rgba(0, 18, 100, 0.16);
 }
@@ -171,9 +176,9 @@
   width: 100%;
   min-height: 46px;
   align-items: center;
-  border: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
+  border: 1px solid color-mix(in oklch, var(--perf-control-strong) 18%, transparent);
   border-radius: 15px;
-  background: color-mix(in oklch, var(--perf-surface) 88%, var(--perf-blue-soft));
+  background: color-mix(in oklch, var(--perf-control) 66%, var(--perf-surface));
   padding: 0 14px;
 }
 
@@ -185,10 +190,12 @@
   left: 0;
   max-height: 280px;
   overflow-y: auto;
-  border: 1px solid var(--perf-border);
+  border: 1px solid color-mix(in oklch, var(--perf-control-strong) 18%, transparent);
   border-radius: 16px;
-  background: var(--perf-surface);
+  background: color-mix(in oklch, var(--perf-surface) 94%, var(--perf-control));
   box-shadow: 0 18px 32px rgba(0, 18, 100, 0.16);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  backdrop-filter: blur(18px) saturate(1.12);
   padding: 8px;
 }
 
@@ -196,7 +203,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
+  border: 1px solid color-mix(in oklch, var(--perf-control-strong) 18%, transparent);
   border-radius: 12px;
   margin-bottom: 6px;
   padding: 0 10px;
@@ -232,7 +239,7 @@
 
 .performance-employee-menu button:hover,
 .performance-employee-menu button.is-selected {
-  background: color-mix(in oklch, var(--perf-gold-soft) 58%, transparent);
+  background: color-mix(in oklch, var(--perf-control) 72%, transparent);
 }
 
 .performance-employee-menu > span {
