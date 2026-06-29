@@ -61,7 +61,7 @@
   display: block;
   border-radius: 22px;
   border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
-  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-blue-soft) 40%, transparent), color-mix(in oklch, var(--perf-surface) 50%, transparent), color-mix(in oklch, var(--perf-gold-soft) 30%, transparent));
+  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-blue-soft) 68%, var(--perf-surface)), color-mix(in oklch, var(--perf-surface) 62%, var(--perf-teal-soft)), color-mix(in oklch, var(--perf-gold-soft) 58%, var(--perf-surface)));
   padding: 22px 24px;
 }
 
@@ -99,7 +99,7 @@
   gap: 12px;
   border: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
   border-radius: 15px;
-  background: color-mix(in oklch, var(--perf-surface) 88%, var(--perf-blue-soft));
+  background: color-mix(in oklch, var(--perf-blue-soft) 52%, var(--perf-surface));
   color: var(--perf-navy);
   padding: 0 14px;
   font-weight: 800;
@@ -124,16 +124,30 @@
   padding: 4px;
   border: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 16%, transparent);
   border-radius: 15px;
-  background: color-mix(in oklch, var(--perf-surface) 76%, var(--perf-blue-soft));
+  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-blue-soft) 60%, var(--perf-surface)), color-mix(in oklch, var(--perf-gold-soft) 42%, var(--perf-surface)));
 }
 
 .performance-periods button {
   min-height: 38px;
-  min-width: 48px;
+  min-width: 64px;
+  flex-direction: column;
   justify-content: center;
+  gap: 0;
   border-radius: 11px;
-  padding: 0 12px;
+  padding: 5px 12px;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.performance-periods button strong {
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.performance-periods button span {
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.15;
+  opacity: 0.72;
 }
 
 .performance-periods button:hover {
@@ -142,10 +156,14 @@
 }
 
 .performance-periods button.is-active {
-  border-color: color-mix(in oklch, var(--perf-gold-soft-foreground) 32%, transparent);
-  background: linear-gradient(135deg, var(--perf-blue), var(--gold));
+  border-color: color-mix(in oklch, var(--gold) 64%, var(--perf-blue));
+  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-blue) 92%, var(--perf-surface)), color-mix(in oklch, var(--perf-teal) 60%, var(--gold)), var(--gold));
   color: var(--white);
   box-shadow: 0 9px 20px rgba(0, 18, 100, 0.16);
+}
+
+.performance-periods button.is-active span {
+  opacity: 0.88;
 }
 
 .performance-employee-placeholder {
@@ -265,38 +283,38 @@
 }
 
 .performance-summary-card.is-exceptional {
-  border-color: color-mix(in oklch, var(--perf-green-foreground) 20%, var(--perf-gold-soft-foreground) 20%);
-  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-green-soft) 55%, var(--perf-surface)), color-mix(in oklch, var(--perf-gold-soft) 46%, var(--perf-surface)));
+  border-color: color-mix(in oklch, var(--perf-green-foreground) 30%, var(--perf-gold-soft-foreground) 24%);
+  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-green-soft) 78%, var(--perf-surface)), color-mix(in oklch, var(--perf-gold-soft) 70%, var(--perf-surface)));
   color: var(--perf-green-foreground);
 }
 
 .performance-summary-card.is-strong {
-  border-color: color-mix(in oklch, var(--perf-teal-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-teal-soft) 52%, var(--perf-surface));
+  border-color: color-mix(in oklch, var(--perf-teal-foreground) 30%, transparent);
+  background: color-mix(in oklch, var(--perf-teal-soft) 78%, var(--perf-surface));
   color: var(--perf-teal-foreground);
 }
 
 .performance-summary-card.is-good {
-  border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-blue-soft) 52%, var(--perf-surface));
+  border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 30%, transparent);
+  background: color-mix(in oklch, var(--perf-blue-soft) 78%, var(--perf-surface));
   color: var(--perf-blue-foreground);
 }
 
 .performance-summary-card.is-meets {
-  border-color: color-mix(in oklch, var(--perf-amber-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-amber-soft) 52%, var(--perf-surface));
+  border-color: color-mix(in oklch, var(--perf-amber-foreground) 30%, transparent);
+  background: color-mix(in oklch, var(--perf-amber-soft) 78%, var(--perf-surface));
   color: var(--perf-amber-foreground);
 }
 
 .performance-summary-card.is-partial {
-  border-color: color-mix(in oklch, var(--perf-orange-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-orange-soft) 52%, var(--perf-surface));
+  border-color: color-mix(in oklch, var(--perf-orange-foreground) 30%, transparent);
+  background: color-mix(in oklch, var(--perf-orange-soft) 78%, var(--perf-surface));
   color: var(--perf-orange-foreground);
 }
 
 .performance-summary-card.is-low {
-  border-color: color-mix(in oklch, var(--perf-rose-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-rose-soft) 52%, var(--perf-surface));
+  border-color: color-mix(in oklch, var(--perf-rose-foreground) 30%, transparent);
+  background: color-mix(in oklch, var(--perf-rose-soft) 78%, var(--perf-surface));
   color: var(--perf-rose-foreground);
 }
 
@@ -365,8 +383,8 @@
 }
 
 .performance-standard-card.is-exceptional {
-  border-color: color-mix(in oklch, var(--perf-green-foreground) 20%, var(--perf-gold-soft-foreground) 20%);
-  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-green-soft) 55%, var(--perf-surface)), color-mix(in oklch, var(--perf-gold-soft) 46%, var(--perf-surface)));
+  border-color: color-mix(in oklch, var(--perf-green-foreground) 30%, var(--perf-gold-soft-foreground) 24%);
+  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-green-soft) 78%, var(--perf-surface)), color-mix(in oklch, var(--perf-gold-soft) 70%, var(--perf-surface)));
   color: var(--perf-green-foreground);
 }
 
@@ -375,8 +393,8 @@
 }
 
 .performance-standard-card.is-strong {
-  border-color: color-mix(in oklch, var(--perf-teal-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-teal-soft) 52%, var(--perf-surface));
+  border-color: color-mix(in oklch, var(--perf-teal-foreground) 30%, transparent);
+  background: color-mix(in oklch, var(--perf-teal-soft) 78%, var(--perf-surface));
   color: var(--perf-teal-foreground);
 }
 
@@ -385,8 +403,8 @@
 }
 
 .performance-standard-card.is-good {
-  border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-blue-soft) 52%, var(--perf-surface));
+  border-color: color-mix(in oklch, var(--perf-blue-soft-foreground) 30%, transparent);
+  background: color-mix(in oklch, var(--perf-blue-soft) 78%, var(--perf-surface));
   color: var(--perf-blue-foreground);
 }
 
@@ -395,8 +413,8 @@
 }
 
 .performance-standard-card.is-meets {
-  border-color: color-mix(in oklch, var(--perf-amber-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-amber-soft) 52%, var(--perf-surface));
+  border-color: color-mix(in oklch, var(--perf-amber-foreground) 30%, transparent);
+  background: color-mix(in oklch, var(--perf-amber-soft) 78%, var(--perf-surface));
   color: var(--perf-amber-foreground);
 }
 
@@ -405,8 +423,8 @@
 }
 
 .performance-standard-card.is-partial {
-  border-color: color-mix(in oklch, var(--perf-orange-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-orange-soft) 52%, var(--perf-surface));
+  border-color: color-mix(in oklch, var(--perf-orange-foreground) 30%, transparent);
+  background: color-mix(in oklch, var(--perf-orange-soft) 78%, var(--perf-surface));
   color: var(--perf-orange-foreground);
 }
 
@@ -415,8 +433,8 @@
 }
 
 .performance-standard-card.is-low {
-  border-color: color-mix(in oklch, var(--perf-rose-foreground) 20%, transparent);
-  background: color-mix(in oklch, var(--perf-rose-soft) 52%, var(--perf-surface));
+  border-color: color-mix(in oklch, var(--perf-rose-foreground) 30%, transparent);
+  background: color-mix(in oklch, var(--perf-rose-soft) 78%, var(--perf-surface));
   color: var(--perf-rose-foreground);
 }
 
@@ -459,7 +477,7 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid color-mix(in oklch, var(--perf-blue-soft-foreground) 20%, transparent);
-  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-blue-soft) 40%, transparent), color-mix(in oklch, var(--perf-surface) 50%, transparent), color-mix(in oklch, var(--perf-gold-soft) 30%, transparent));
+  background: linear-gradient(135deg, color-mix(in oklch, var(--perf-blue-soft) 68%, var(--perf-surface)), color-mix(in oklch, var(--perf-surface) 62%, var(--perf-teal-soft)), color-mix(in oklch, var(--perf-gold-soft) 58%, var(--perf-surface)));
   padding: 22px 24px;
 }
 

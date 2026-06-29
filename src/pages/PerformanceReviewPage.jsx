@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, ChevronDown, RotateCcw, Save, Search, UserRound } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
@@ -54,7 +54,20 @@ const PERFORMANCE_STANDARDS = [
   { min: 2.0, label: 'Partially meets expectations; below average, significant improvement required', range: '2.0 - 3.0', tone: 'partial' },
   { min: -Infinity, label: 'Does not meet expectations', range: 'Up to 2.0', tone: 'low' }
 ]
-const PERFORMANCE_PERIODS = ['Q1', 'Q2', 'Q3', 'Q4']
+const PERFORMANCE_PERIODS = [
+  { value: 'Q1', label: 'Q1', range: 'Apr-Jun' },
+  { value: 'Q2', label: 'Q2', range: 'Jul-Sep' },
+  { value: 'Q3', label: 'Q3', range: 'Oct-Dec' },
+  { value: 'Q4', label: 'Q4', range: 'Jan-Mar' }
+]
+
+function currentPerformancePeriod() {
+  const month = new Date().getMonth()
+  if (month >= 3 && month <= 5) return 'Q1'
+  if (month >= 6 && month <= 8) return 'Q2'
+  if (month >= 9 && month <= 11) return 'Q3'
+  return 'Q4'
+}
 
 function performanceStandard(finalRating) {
   const rating = Number(finalRating) || 0
@@ -117,11 +130,38 @@ function EmployeeReviewCard({ isSuperAdmin }) {
 function EmployeeSelector({ users, selectedUserId, onSelect, loading, disabled }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const selectRef = useRef(null)
   const selected = users.find(user => user.id === selectedUserId) || users[0]
   const matches = users.filter(user => user.name.toLowerCase().includes(query.trim().toLowerCase()))
 
+  useEffect(() => {
+    if (!open) return undefined
+    const closeMenu = () => {
+      setOpen(false)
+      setQuery('')
+    }
+    const handlePointerDown = (event) => {
+      if (!selectRef.current?.contains(event.target)) closeMenu()
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') closeMenu()
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    document.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('scroll', closeMenu, true)
+    window.addEventListener('wheel', closeMenu, { passive: true, capture: true })
+    window.addEventListener('touchmove', closeMenu, { passive: true, capture: true })
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true)
+      document.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('scroll', closeMenu, true)
+      window.removeEventListener('wheel', closeMenu, { capture: true })
+      window.removeEventListener('touchmove', closeMenu, { capture: true })
+    }
+  }, [open])
+
   return (
-    <div className="performance-employee-select">
+    <div ref={selectRef} className="performance-employee-select">
         {loading ? (
           <div className="performance-employee-placeholder" aria-hidden="true">
             <i className="performance-skeleton-block" />
@@ -155,8 +195,9 @@ function PeriodSelector({ period, onChange }) {
   return (
     <div className="performance-periods" aria-label="Performance review quarter">
       {PERFORMANCE_PERIODS.map(item => (
-        <button key={item} type="button" className={item === period ? 'is-active' : ''} onClick={() => onChange(item)}>
-          {item}
+        <button key={item.value} type="button" className={item.value === period ? 'is-active' : ''} onClick={() => onChange(item.value)}>
+          <strong>{item.label}</strong>
+          <span>{item.range}</span>
         </button>
       ))}
     </div>
@@ -228,7 +269,7 @@ export default function PerformanceReviewPage() {
   const ownName = displayName(user)
   const [selectorUsers, setSelectorUsers] = useState([{ id: ownUserId, name: ownName, email: user?.email || '' }])
   const [selectedUserId, setSelectedUserId] = useState(ownUserId)
-  const [period, setPeriod] = useState(PERFORMANCE_PERIODS[0])
+  const [period, setPeriod] = useState(() => currentPerformancePeriod())
   const effectiveUserId = isSuperAdmin ? selectedUserId : ownUserId
   const [rows, setRows] = useState(() => normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS))
   const [savedRows, setSavedRows] = useState(() => normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS))
