@@ -189,12 +189,7 @@ function ReviewCell({ row, columnKey, disabled, onChange }) {
   }
 
   if (['work_done', 'ss_ns_feedback', 'ra_feedback'].includes(columnKey)) {
-    const placeholders = {
-      work_done: 'Describe key work done',
-      ss_ns_feedback: 'SS/NS feedback',
-      ra_feedback: 'RA feedback'
-    }
-    return <textarea className="performance-input is-feedback" value={row[columnKey]} disabled={disabled} placeholder={placeholders[columnKey]} onChange={event => onChange({ [columnKey]: event.target.value })} />
+    return <textarea className="performance-input is-feedback" value={row[columnKey]} disabled={disabled} onChange={event => onChange({ [columnKey]: event.target.value })} />
   }
 
   if (['self_score', 'ss_ns_score', 'ra_score'].includes(columnKey)) {
