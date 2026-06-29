@@ -122,6 +122,22 @@ function StateChip({ value }) {
   )
 }
 
+function PerformanceCalculatedPermissionPicker({ value, onChange }) {
+  const hidden = value === 'super_admin_hidden'
+  return (
+    <div className="admin-calculated-permission-picker">
+      <button className="admin-calculated-option is-active" type="button" disabled>
+        <Lock size={13} />
+        <span>Calculated · always read-only</span>
+      </button>
+      <button className={`admin-calculated-option${hidden ? ' is-hidden-active' : ''}`} type="button" onClick={() => onChange(hidden ? 'everyone' : 'super_admin_hidden')}>
+        <EyeOff size={13} />
+        <span>Super Admin Hidden</span>
+      </button>
+    </div>
+  )
+}
+
 function LockedRecordsTable({ records, onUnlock, emptyText = 'No records are currently locked.' }) {
   return (
     <div className="admin-lock-table-scroll">
@@ -543,14 +559,19 @@ export default function AdminPage() {
           </div>
           {filteredColumns.map(column => {
             const value = draftPermissions?.[activeTab]?.[column.key] || 'everyone'
+            const isPerformanceCalculated = activeTab === PERFORMANCE_TABLE_KEY && column.calculated
             return (
               <div className="admin-permission-row" key={column.key}>
                 <div>
                   <div className="admin-permission-label">{column.label}</div>
-                  <div className="admin-permission-key">{PERMISSION_TEXT[value]}{column.calculated ? ' · Calculated fields remain read-only.' : ''}</div>
+                  <div className="admin-permission-key">{column.calculated ? 'Calculated fields remain read-only.' : PERMISSION_TEXT[value]}</div>
                 </div>
                 <StateChip value={value} />
-                <AdminPermissionPicker value={value} options={activeTab === PERFORMANCE_TABLE_KEY ? PERFORMANCE_PICKER_OPTIONS : undefined} onChange={(mode) => setDraftPermission(activeTab, column.key, mode)} />
+                {isPerformanceCalculated ? (
+                  <PerformanceCalculatedPermissionPicker value={value} onChange={(mode) => setDraftPermission(activeTab, column.key, mode)} />
+                ) : (
+                  <AdminPermissionPicker value={value} options={activeTab === PERFORMANCE_TABLE_KEY ? PERFORMANCE_PICKER_OPTIONS : undefined} onChange={(mode) => setDraftPermission(activeTab, column.key, mode)} />
+                )}
               </div>
             )
           })}

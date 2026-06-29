@@ -659,6 +659,62 @@
   font-weight: 800;
 }
 
+.admin-permission-option svg {
+  flex: 0 0 auto;
+}
+
+.admin-permission-option span {
+  display: inline-block;
+  width: min-content;
+  min-width: 72px;
+  text-align: left;
+  line-height: 1.12;
+}
+
+.admin-calculated-permission-picker {
+  display: grid;
+  min-width: 420px;
+  grid-template-columns: minmax(210px, 1fr) minmax(170px, 0.82fr);
+  gap: 8px;
+  border: 1px solid var(--admin-border);
+  border-radius: 22px;
+  background: #f2f5fa;
+  padding: 5px;
+}
+
+.admin-calculated-option {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 17px;
+  background: transparent;
+  color: #526079;
+  font-weight: 850;
+}
+
+.admin-calculated-option svg {
+  flex: 0 0 auto;
+}
+
+.admin-calculated-option.is-active {
+  background: #e9eff7;
+  color: #0d233d;
+}
+
+.admin-calculated-option.is-hidden-active {
+  background: var(--admin-navy);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(0, 18, 100, 0.16);
+}
+
+.admin-calculated-option:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
 .admin-permission-option.is-active {
   color: #fff;
 }
