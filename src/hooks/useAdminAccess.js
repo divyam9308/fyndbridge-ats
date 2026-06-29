@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchAdminMe, fetchColumnPermissions } from '../services/adminAccessApi'
+import { invalidateApiJsonCache } from '../services/apiClient'
 import { supabase } from '../services/supabaseClient'
 import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
 
@@ -87,6 +88,7 @@ function ensureGlobalRealtime() {
     state.adminChannel = supabase
       .channel(name)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_users' }, () => {
+        invalidateApiJsonCache('/api/admin')
         refreshAdminStatus().catch(() => null)
       })
       .subscribe()
@@ -97,6 +99,7 @@ function ensureGlobalRealtime() {
     state.permissionChannel = supabase
       .channel(name)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'column_permissions' }, () => {
+        invalidateApiJsonCache('/api/admin/column-permissions')
         refreshPermissions().catch(() => null)
       })
       .subscribe()
@@ -188,6 +191,7 @@ export function isColumnDisabled(permissions, tableName, columnKey, isAdmin) {
 }
 
 export function notifyAdminPermissionsChanged() {
+  invalidateApiJsonCache('/api/admin/column-permissions')
   window.dispatchEvent(new Event(PERMISSIONS_CHANGED_EVENT))
   refreshPermissions().catch(() => null)
 }

@@ -1,4 +1,4 @@
-import { apiFetch } from './apiClient'
+import { apiFetch, cachedApiJson, invalidateApiJsonCache } from './apiClient'
 
 async function json(response) {
   const payload = await response.json().catch(() => ({}))
@@ -6,19 +6,31 @@ async function json(response) {
   return payload
 }
 
-export const fetchInvoiceEntities = async () => json(await apiFetch('/api/invoice/entities', { cache: 'no-store' }))
-export const fetchInvoiceEntity = async (id) => json(await apiFetch(`/api/invoice/entities/${id}`, { cache: 'no-store' }))
-export const createInvoiceEntity = async (payload) => json(await apiFetch('/api/invoice/entities', {
+export const fetchInvoiceEntities = async () => cachedApiJson('/api/invoice/entities', {}, { ttlMs: 30000 })
+export const fetchInvoiceEntity = async (id) => cachedApiJson(`/api/invoice/entities/${id}`, {}, { ttlMs: 30000 })
+export const createInvoiceEntity = async (payload) => {
+  const result = await json(await apiFetch('/api/invoice/entities', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
-}))
-export const updateInvoiceEntity = async (id, payload) => json(await apiFetch(`/api/invoice/entities/${id}`, {
+  }))
+  invalidateApiJsonCache('/api/invoice/entities')
+  return result
+}
+export const updateInvoiceEntity = async (id, payload) => {
+  const result = await json(await apiFetch(`/api/invoice/entities/${id}`, {
   method: 'PUT',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
-}))
-export const deleteInvoiceEntity = async (id) => json(await apiFetch(`/api/invoice/entities/${id}`, { method: 'DELETE' }))
+  }))
+  invalidateApiJsonCache('/api/invoice/entities')
+  return result
+}
+export const deleteInvoiceEntity = async (id) => {
+  const result = await json(await apiFetch(`/api/invoice/entities/${id}`, { method: 'DELETE' }))
+  invalidateApiJsonCache('/api/invoice/entities')
+  return result
+}
 export const lookupGstin = async (gstin) => {
   const response = await apiFetch('/api/gst/lookup', {
   method: 'POST',
@@ -44,19 +56,31 @@ export const previewInvoicePdf = async (payload) => json(await apiFetch('/api/in
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
 }))
-export const commitInvoicePreview = async (payload) => json(await apiFetch('/api/invoice/commit-preview', {
+export const commitInvoicePreview = async (payload) => {
+  const result = await json(await apiFetch('/api/invoice/commit-preview', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
-}))
-export const regenerateInvoice = async (id, payload) => json(await apiFetch(`/api/invoice/invoices/${id}/regenerate`, {
+  }))
+  invalidateApiJsonCache('/api/invoice/entities')
+  return result
+}
+export const regenerateInvoice = async (id, payload) => {
+  const result = await json(await apiFetch(`/api/invoice/invoices/${id}/regenerate`, {
   method: 'PUT',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
-}))
+  }))
+  invalidateApiJsonCache('/api/invoice/entities')
+  return result
+}
 export const previewRegeneratedInvoice = async (id, payload) => json(await apiFetch(`/api/invoice/invoices/${id}/regeneration-preview`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
 }))
-export const deleteInvoicePdfVersion = async (id) => json(await apiFetch(`/api/invoice/invoice-pdf-versions/${id}`, { method: 'DELETE' }))
+export const deleteInvoicePdfVersion = async (id) => {
+  const result = await json(await apiFetch(`/api/invoice/invoice-pdf-versions/${id}`, { method: 'DELETE' }))
+  invalidateApiJsonCache('/api/invoice/entities')
+  return result
+}

@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient'
 const API_UNAUTHORIZED_EVENT = 'fb:api-unauthorized'
 const documentOpenLocks = new Map()
 const debugCallCounts = {}
+const apiJsonCache = new Map()
 const DOCUMENT_OPEN_TYPES = {
   cv: { bucket: 'resumes', endpoint: '/api/resumes/open' },
   resume: { bucket: 'resumes', endpoint: '/api/resumes/open' },
@@ -43,6 +44,39 @@ export async function apiFetch(input, init = {}) {
   }
 
   return response
+}
+
+function clonePayload(payload) {
+  if (payload === undefined || payload === null) return payload
+  return JSON.parse(JSON.stringify(payload))
+}
+
+export async function cachedApiJson(input, init = {}, { ttlMs = 30000, key } = {}) {
+  const method = String(init.method || 'GET').toUpperCase()
+  const cacheKey = key || `${method}:${typeof input === 'string' ? input : input?.url || ''}`
+  const now = Date.now()
+  const cached = apiJsonCache.get(cacheKey)
+
+  if (cached && cached.expiresAt > now) {
+    return clonePayload(cached.payload)
+  }
+
+  const response = await apiFetch(input, init)
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || 'Request failed')
+  apiJsonCache.set(cacheKey, { payload, expiresAt: now + ttlMs })
+  return clonePayload(payload)
+}
+
+export function invalidateApiJsonCache(prefix = '') {
+  const text = String(prefix || '')
+  if (!text) {
+    apiJsonCache.clear()
+    return
+  }
+  Array.from(apiJsonCache.keys()).forEach((key) => {
+    if (key.includes(text)) apiJsonCache.delete(key)
+  })
 }
 
 export function installApiFetchInterceptor() {

@@ -134,6 +134,13 @@
   margin: 14px 18px 0;
 }
 
+.invoice-access-panel {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  padding: 30px 18px;
+}
+
 .invoice-table-card .table-scroll {
   width: 100%;
   max-width: 100%;

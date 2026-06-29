@@ -48,6 +48,39 @@
   font-weight: 700;
 }
 
+.admin-skeleton-block {
+  display: block;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f0f3f8 20%, #e1e7f1 45%, #f0f3f8 70%);
+  background-size: 220% 100%;
+  animation: admin-skeleton-shimmer 1.25s infinite linear;
+}
+
+.admin-skeleton-block.is-title { width: 210px; height: 24px; border-radius: 8px; }
+.admin-skeleton-block.is-copy { width: min(360px, 52vw); margin-top: 10px; }
+.admin-skeleton-block.is-copy-wide { width: min(520px, 72vw); }
+.admin-skeleton-block.is-pill { width: 118px; height: 32px; }
+.admin-skeleton-block.is-input { height: 54px; border-radius: 18px; }
+.admin-skeleton-block.is-button { width: 158px; height: 54px; border-radius: 18px; }
+.admin-skeleton-block.is-heading { width: 180px; height: 18px; border-radius: 8px; }
+.admin-skeleton-block.is-control { width: min(420px, 100%); height: 44px; border-radius: 14px; justify-self: end; }
+.admin-skeleton-block.is-avatar { width: 58px; height: 58px; border-radius: 50%; }
+.admin-skeleton-block.is-footer { width: 100%; height: 36px; border-radius: 12px; margin-top: 22px; }
+
+.admin-loading-card {
+  align-items: center;
+}
+
+.admin-loading-user {
+  display: grid;
+  gap: 12px;
+}
+
+@keyframes admin-skeleton-shimmer {
+  to { background-position: -220% 0; }
+}
+
 .admin-section {
   overflow: hidden;
   border: 1px solid var(--admin-border);

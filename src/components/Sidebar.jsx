@@ -1,9 +1,11 @@
 import { NavLink } from 'react-router-dom'
+import { useEffect } from 'react'
 import {
   LayoutDashboard, Briefcase, Building2, ClipboardList, Users, LogOut, ShieldCheck, FileText
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
+import { preloadRoute } from '../utils/routePreload'
 import './Sidebar.css'
 
 const navItems = [
@@ -21,6 +23,18 @@ export default function Sidebar() {
   const initials = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 
   const handleLogout = () => signOut()
+
+  useEffect(() => {
+    preloadRoute('/dashboard/performance')
+    if (isAdmin) {
+      preloadRoute('/invoice')
+      preloadRoute('/dashboard/admin')
+    }
+  }, [isAdmin])
+
+  const preload = (to) => {
+    preloadRoute(to)
+  }
 
   return (
     <aside className="sidebar" role="navigation" aria-label="Main navigation">
@@ -55,6 +69,8 @@ export default function Sidebar() {
               `sidebar-nav-link${isActive ? ' active' : ''}`
             }
             id={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}
+            onPointerEnter={() => preload(to)}
+            onFocus={() => preload(to)}
           >
             <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
             <span className="sidebar-nav-label">{label}</span>
@@ -68,6 +84,8 @@ export default function Sidebar() {
               `sidebar-nav-link${isActive ? ' active' : ''}`
             }
             id="nav-invoice"
+            onPointerEnter={() => preload('/invoice')}
+            onFocus={() => preload('/invoice')}
           >
             <span className="nav-icon"><FileText size={17} strokeWidth={1.8} /></span>
             <span className="sidebar-nav-label">Invoice</span>
@@ -78,6 +96,8 @@ export default function Sidebar() {
               `sidebar-nav-link${isActive ? ' active' : ''}`
             }
             id="nav-admin-panel"
+            onPointerEnter={() => preload('/dashboard/admin')}
+            onFocus={() => preload('/dashboard/admin')}
           >
             <span className="nav-icon"><ShieldCheck size={17} strokeWidth={1.8} /></span>
             <span className="sidebar-nav-label">Admin Panel</span>

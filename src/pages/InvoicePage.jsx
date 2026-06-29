@@ -17,6 +17,7 @@ const EMPTY_ENTITY = {
 }
 const ENTITY_FIELDS = Object.keys(EMPTY_ENTITY)
 const SEARCH_FIELDS = ['entity_display_id', 'invoice_id', 'legal_entity_name', 'optional_name', 'gstin', 'pan', 'contact_person', 'email', 'billing_entity']
+const INVOICE_TABLE_HEADERS = ['Entity ID', 'Default Billing Entity', 'Legal Entity Name', 'Optional Name', 'Address', 'GSTIN', 'PAN', 'Place of Supply', 'State', 'State Code', 'Contact Person', 'Contact Email', 'SAC', 'GST Component', 'Rate', 'Actions']
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const number = value => Number(String(value ?? '').replace(/₹|â‚¹|Rs\.?|,/gi, '').trim() || 0)
 const money = value => `₹${number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -40,6 +41,19 @@ export function ModelFields({ form, update }) {
   return <Field label="Amount (₹)"><Input name="others_amount" value={form.others_amount} update={update} inputMode="decimal" /></Field>
 }
 function Loader({ label }) { return <div className="invoice-loader"><LoaderCircle size={22} /><span>{label}</span></div> }
+
+function InvoiceTableSkeleton({ label }) {
+  return (
+    <div className="invoice-table-loading">
+      <Loader label={label} />
+      <div className="invoice-skeleton" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  )
+}
 
 function EntityModal({ initial, onClose, onSave }) {
   const [form, setForm] = useState(() => ({ ...EMPTY_ENTITY, ...initial, optional_name: initial?.optional_name || '-' }))
@@ -153,13 +167,12 @@ export default function InvoicePage() {
   const filtered = useMemo(() => { const term = query.toLowerCase().trim(); return entities.filter(entity => !term || SEARCH_FIELDS.some(field => String(entity[field] || '').toLowerCase().includes(term))) }, [entities, query])
   const save = async form => { if (editing) await updateInvoiceEntity(editing.id, form); else await createInvoiceEntity(form); await load() }
   const remove = async entity => { if (!window.confirm(`Delete ${entity.entity_display_id || entity.invoice_id}?`)) return; try { await deleteInvoiceEntity(entity.id); await load() } catch (err) { setError(err.message) } }
-  if (adminLoading) return <div className="invoice-access-card"><Loader label="Checking invoice access..." /></div>
-  if (!isAdmin) return <div className="invoice-access-card"><div className="invoice-denied">Admin access required.</div></div>
+  const canUseInvoice = !adminLoading && isAdmin
   return <div className="invoice-page">
-    <div className="header-actions"><button className="btn-secondary" onClick={() => setCreating(true)}><FileText size={15} />Create Invoice</button><button className="btn-primary" onClick={() => setAdding(true)}><Plus size={15} />Add Entity</button></div>
-    <div className="table-card invoice-table-card"><div className="invoice-card-toolbar"><div className="invoice-search"><Search size={17} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search billing entities..." /></div><span>{filtered.length} {filtered.length === 1 ? 'entity' : 'entities'}</span></div>
-      {error && <div className="invoice-table-error">{error}</div>}
-      {loading ? <div className="invoice-table-loading"><Loader label="Loading entities..." /></div> : <div className="table-scroll"><table className="data-table invoice-table"><thead><tr>{['Entity ID', 'Default Billing Entity', 'Legal Entity Name', 'Optional Name', 'Address', 'GSTIN', 'PAN', 'Place of Supply', 'State', 'State Code', 'Contact Person', 'Contact Email', 'SAC', 'GST Component', 'Rate', 'Actions'].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>
+    {canUseInvoice && <div className="header-actions"><button className="btn-secondary" onClick={() => setCreating(true)}><FileText size={15} />Create Invoice</button><button className="btn-primary" onClick={() => setAdding(true)}><Plus size={15} />Add Entity</button></div>}
+    <div className="table-card invoice-table-card"><div className="invoice-card-toolbar"><div className="invoice-search"><Search size={17} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search billing entities..." disabled={!canUseInvoice} /></div><span>{canUseInvoice ? `${filtered.length} ${filtered.length === 1 ? 'entity' : 'entities'}` : 'Access check'}</span></div>
+      {error && canUseInvoice && <div className="invoice-table-error">{error}</div>}
+      {adminLoading ? <InvoiceTableSkeleton label="Checking invoice access..." /> : !isAdmin ? <div className="invoice-access-panel"><div className="invoice-denied">Admin access required.</div></div> : loading ? <InvoiceTableSkeleton label="Loading entities..." /> : <div className="table-scroll"><table className="data-table invoice-table"><thead><tr>{INVOICE_TABLE_HEADERS.map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>
         {filtered.map(entity => <tr key={entity.id}><td><span className="invoice-id">{entity.entity_display_id || entity.invoice_id}</span></td><td><span className="invoice-badge is-navy">{display(entity.billing_entity)}</span></td><td><Link className="invoice-name-link" to={`/invoice/entities/${entity.id}`}><b>{display(entity.legal_entity_name)}</b></Link></td><td>{display(entity.optional_name)}</td><td><span className="invoice-address" title={entity.address || ''}>{display(entity.address)}</span></td><td>{display(entity.gstin)}</td><td>{display(entity.pan)}</td><td>{display(entity.place_of_supply)}</td><td>{display(entity.state)}</td><td>{display(entity.state_code)}</td><td>{display(entity.contact_person)}</td><td>{display(entity.email)}</td><td>{display(entity.sac)}</td><td><span className="invoice-badge">{display(entity.gst_component === 'CGST_SGST' ? 'CGST + SGST' : entity.gst_component)}</span></td><td>{rate(entity)}</td><td><div className="row-actions"><button className="row-action-btn" onClick={() => setEditing(entity)} aria-label="Edit entity"><Pencil size={13} /></button><button className="row-action-btn" onClick={() => remove(entity)} aria-label="Delete entity"><Trash2 size={13} /></button></div></td></tr>)}
         {!filtered.length && <tr><td className="invoice-empty-cell" colSpan={16}>No billing entities found.</td></tr>}
       </tbody></table></div>}

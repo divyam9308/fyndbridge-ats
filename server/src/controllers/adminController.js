@@ -14,6 +14,7 @@ const {
   invalidateColumnPermissionCache
 } = require('../services/adminAccess')
 const { getDashboardVisibility, setDashboardVisibility } = require('../services/dashboardAccess')
+const { getPermissions: getPerformancePermissions } = require('../services/performanceReview')
 
 function sendError(res, err) {
   return res.status(err.statusCode || 500).json({ error: err.message || 'Internal server error' })
@@ -91,6 +92,57 @@ async function users(req, res) {
       const profile = profilesById.get(admin.user_id) || profilesByEmail.get(normalizeEmail(admin.email))
       return serializeAdminUser({ ...admin, user_id: admin.user_id || profile?.user_id || null, name: profile?.name || admin.name }, req.user)
     }) })
+  } catch (err) {
+    return sendError(res, err)
+  }
+}
+
+async function serializedUsers(req) {
+  const [admins, profiles] = await Promise.all([listAdminUsers(), profileOptions()])
+  const profilesByEmail = new Map(profiles.map((profile) => [profile.email, profile]))
+  const profilesById = new Map(profiles.map((profile) => [profile.user_id, profile]))
+  return {
+    admins: admins.map((admin) => {
+      const profile = profilesById.get(admin.user_id) || profilesByEmail.get(normalizeEmail(admin.email))
+      return serializeAdminUser({ ...admin, user_id: admin.user_id || profile?.user_id || null, name: profile?.name || admin.name }, req.user)
+    }),
+    profiles
+  }
+}
+
+async function lockedRecordList() {
+  const [clients, candidates, jobs] = await Promise.all([
+    supabase.from('clients').select('id, client_display_id, client_name, name, is_locked, locked_by, locked_at').eq('is_locked', true),
+    supabase.from('candidates').select('id, candidate_display_id, full_name, is_locked, locked_by, locked_at').eq('is_locked', true),
+    supabase.from('jobs').select('id, job_display_id, title, is_locked, locked_by, locked_at').eq('is_locked', true)
+  ])
+  for (const result of [clients, candidates, jobs]) if (result.error) throw result.error
+  const rows = [...(clients.data || []), ...(candidates.data || []), ...(jobs.data || [])]
+  const profileNames = await lockedByNameMap(rows)
+  return [
+    ...(clients.data || []).map((row) => lockedRecord('Client', row, profileNames)),
+    ...(candidates.data || []).map((row) => lockedRecord('Candidate', row, profileNames)),
+    ...(jobs.data || []).map((row) => lockedRecord('Mandate', row, profileNames))
+  ]
+}
+
+async function bootstrap(req, res) {
+  try {
+    const [{ admins, profiles }, locks, visibility, performancePermissions] = await Promise.all([
+      serializedUsers(req),
+      lockedRecordList(),
+      getDashboardVisibility(),
+      getPerformancePermissions()
+    ])
+    return res.json({
+      data: {
+        admins,
+        lockedRecords: locks,
+        profileOptions: profiles,
+        dashboardVisibility: visibility,
+        performancePermissions
+      }
+    })
   } catch (err) {
     return sendError(res, err)
   }
@@ -209,21 +261,7 @@ async function updateColumnPermission(req, res) {
 
 async function lockedRecords(req, res) {
   try {
-    const [clients, candidates, jobs] = await Promise.all([
-      supabase.from('clients').select('id, client_display_id, client_name, name, is_locked, locked_by, locked_at').eq('is_locked', true),
-      supabase.from('candidates').select('id, candidate_display_id, full_name, is_locked, locked_by, locked_at').eq('is_locked', true),
-      supabase.from('jobs').select('id, job_display_id, title, is_locked, locked_by, locked_at').eq('is_locked', true)
-    ])
-    for (const result of [clients, candidates, jobs]) if (result.error) throw result.error
-    const rows = [...(clients.data || []), ...(candidates.data || []), ...(jobs.data || [])]
-    const profileNames = await lockedByNameMap(rows)
-    return res.json({
-      data: [
-        ...(clients.data || []).map((row) => lockedRecord('Client', row, profileNames)),
-        ...(candidates.data || []).map((row) => lockedRecord('Candidate', row, profileNames)),
-        ...(jobs.data || []).map((row) => lockedRecord('Mandate', row, profileNames))
-      ]
-    })
+    return res.json({ data: await lockedRecordList() })
   } catch (err) {
     return sendError(res, err)
   }
@@ -254,6 +292,7 @@ async function setLock(req, res) {
 
 module.exports = {
   me,
+  bootstrap,
   users,
   userProfiles,
   addUser,

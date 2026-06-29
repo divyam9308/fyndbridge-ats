@@ -1,4 +1,4 @@
-import { apiFetch } from './apiClient'
+import { apiFetch, cachedApiJson, invalidateApiJsonCache } from './apiClient'
 
 async function json(response) {
   const payload = await response.json().catch(() => ({}))
@@ -7,62 +7,78 @@ async function json(response) {
 }
 
 export async function fetchAdminMe() {
-  return json(await apiFetch('/api/admin/me', { cache: 'no-store' }))
+  return cachedApiJson('/api/admin/me', {}, { ttlMs: 15000 })
 }
 
-export async function fetchDashboardVisibility() { return json(await apiFetch('/api/admin/dashboard-visibility', { cache: 'no-store' })) }
+export async function fetchDashboardVisibility() { return cachedApiJson('/api/admin/dashboard-visibility', {}, { ttlMs: 30000 }) }
 export async function updateDashboardVisibility(restrictNonAdminToSelf) {
-  return json(await apiFetch('/api/admin/dashboard-visibility', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restrictNonAdminToSelf }) }))
+  const result = await json(await apiFetch('/api/admin/dashboard-visibility', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restrictNonAdminToSelf }) }))
+  invalidateApiJsonCache('/api/admin')
+  return result
 }
 
 export async function fetchAdminUsers() {
-  return json(await apiFetch('/api/admin/users', { cache: 'no-store' }))
+  return cachedApiJson('/api/admin/users', {}, { ttlMs: 30000 })
+}
+
+export async function fetchAdminBootstrap() {
+  return cachedApiJson('/api/admin/bootstrap', {}, { ttlMs: 15000 })
 }
 
 export async function fetchAdminProfileOptions() {
-  return json(await apiFetch('/api/admin/user-profiles', { cache: 'no-store' }))
+  return cachedApiJson('/api/admin/user-profiles', {}, { ttlMs: 60000 })
 }
 
 export async function addAdminUser(userId, role = 'admin') {
-  return json(await apiFetch('/api/admin/users', {
+  const result = await json(await apiFetch('/api/admin/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: userId, role })
   }))
+  invalidateApiJsonCache('/api/admin')
+  return result
 }
 
 export async function removeAdminUser(email) {
-  return json(await apiFetch(`/api/admin/users/${encodeURIComponent(email)}`, { method: 'DELETE' }))
+  const result = await json(await apiFetch(`/api/admin/users/${encodeURIComponent(email)}`, { method: 'DELETE' }))
+  invalidateApiJsonCache('/api/admin')
+  return result
 }
 
 export async function updateAdminUserRole(email, role) {
-  return json(await apiFetch(`/api/admin/users/${encodeURIComponent(email)}/role`, {
+  const result = await json(await apiFetch(`/api/admin/users/${encodeURIComponent(email)}/role`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ role })
   }))
+  invalidateApiJsonCache('/api/admin')
+  return result
 }
 
 export async function fetchColumnPermissions() {
-  return json(await apiFetch('/api/admin/column-permissions', { cache: 'no-store' }))
+  return cachedApiJson('/api/admin/column-permissions', {}, { ttlMs: 30000 })
 }
 
 export async function updateColumnPermission(tableName, columnKey, accessMode) {
-  return json(await apiFetch('/api/admin/column-permissions', {
+  const result = await json(await apiFetch('/api/admin/column-permissions', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tableName, columnKey, accessMode })
   }))
+  invalidateApiJsonCache('/api/admin/column-permissions')
+  return result
 }
 
 export async function fetchLockedRecords() {
-  return json(await apiFetch('/api/admin/locked-records', { cache: 'no-store' }))
+  return cachedApiJson('/api/admin/locked-records', {}, { ttlMs: 15000 })
 }
 
 export async function setRecordLock(tableName, id, locked) {
-  return json(await apiFetch(`/api/admin/locks/${tableName}/${id}`, {
+  const result = await json(await apiFetch(`/api/admin/locks/${tableName}/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ locked })
   }))
+  invalidateApiJsonCache('/api/admin')
+  return result
 }

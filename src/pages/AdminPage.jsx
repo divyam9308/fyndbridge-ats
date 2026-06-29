@@ -1,19 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, BarChart3, Briefcase, Building2, Eye, EyeOff, LoaderCircle, Lock, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, Building2, Eye, EyeOff, Lock, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
 import { notifyAdminPermissionsChanged, useAdminAccess } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import {
   addAdminUser,
-  fetchAdminProfileOptions,
-  fetchAdminUsers,
+  fetchAdminBootstrap,
   fetchLockedRecords,
   removeAdminUser,
   updateAdminUserRole,
   updateColumnPermission,
   setRecordLock
-  ,fetchDashboardVisibility
   ,updateDashboardVisibility
 } from '../services/adminAccessApi'
 import AdminPermissionPicker from '../components/admin/AdminPermissionPicker'
@@ -23,7 +21,7 @@ import {
   PERFORMANCE_TABLE_KEY,
   DEFAULT_PERFORMANCE_PERMISSIONS
 } from '../utils/performanceReviewStorage'
-import { fetchPerformancePermissions, savePerformancePermissions } from '../services/performanceApi'
+import { savePerformancePermissions } from '../services/performanceApi'
 import './AdminPage.css'
 
 const TABS = [
@@ -108,6 +106,54 @@ function Section({ title, description, icon: Icon, action, children }) {
       </div>
       <div className="admin-section-body">{children}</div>
     </section>
+  )
+}
+
+function AdminSkeletonBlock({ className = '' }) {
+  return <span className={`admin-skeleton-block ${className}`} aria-hidden="true" />
+}
+
+function AdminLoadingShell() {
+  return (
+    <div className="admin-page">
+      <section className="admin-section admin-section-skeleton">
+        <div className="admin-section-header">
+          <div className="admin-section-title-wrap">
+            <div className="admin-section-icon"><ShieldCheck size={21} /></div>
+            <div>
+              <AdminSkeletonBlock className="is-title" />
+              <AdminSkeletonBlock className="is-copy" />
+            </div>
+          </div>
+          <AdminSkeletonBlock className="is-pill" />
+        </div>
+        <div className="admin-section-body">
+          <div className="admin-invite-card admin-loading-card">
+            <AdminSkeletonBlock className="is-input" />
+            <AdminSkeletonBlock className="is-button" />
+            <AdminSkeletonBlock className="is-copy-wide" />
+          </div>
+          <div className="admin-advanced-card">
+            <div>
+              <AdminSkeletonBlock className="is-heading" />
+              <AdminSkeletonBlock className="is-copy" />
+            </div>
+            <AdminSkeletonBlock className="is-control" />
+            <AdminSkeletonBlock className="is-copy-wide" />
+          </div>
+          <div className="admin-user-grid">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div className="admin-user-card admin-loading-user" key={index}>
+                <AdminSkeletonBlock className="is-avatar" />
+                <AdminSkeletonBlock className="is-heading" />
+                <AdminSkeletonBlock className="is-copy" />
+                <AdminSkeletonBlock className="is-footer" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -208,10 +254,17 @@ export default function AdminPage() {
   const profilePickerRef = useRef(null)
 
   const loadAdminData = useCallback(async () => {
-    const [users, locks, profileOptions] = await Promise.all([fetchAdminUsers(), fetchLockedRecords(), fetchAdminProfileOptions()])
-    setAdmins(users.data || [])
-    setLockedRecords(locks.data || [])
-    setProfiles(profileOptions.data || [])
+    const bootstrap = await fetchAdminBootstrap()
+    const data = bootstrap.data || {}
+    setAdmins(data.admins || [])
+    setLockedRecords(data.lockedRecords || [])
+    setProfiles(data.profileOptions || [])
+    const value = data.dashboardVisibility?.restrictNonAdminToSelf !== false
+    setDashboardRestricted(value)
+    setSavedDashboardRestricted(value)
+    if (data.performancePermissions) {
+      setPerformancePermissions({ ...DEFAULT_PERFORMANCE_PERMISSIONS, ...data.performancePermissions })
+    }
   }, [])
 
   const loadLockedRecords = useCallback(async () => {
@@ -232,16 +285,6 @@ export default function AdminPage() {
   }, [isSuperAdmin, performancePermissions, permissions])
 
   useEffect(() => {
-    if (!isSuperAdmin) return undefined
-    let active = true
-    fetchPerformancePermissions().then(({ permissions: data }) => {
-      if (!active) return
-      setPerformancePermissions({ ...DEFAULT_PERFORMANCE_PERMISSIONS, ...(data || {}) })
-    }).catch(err => setError(err.message))
-    return () => { active = false }
-  }, [isSuperAdmin])
-
-  useEffect(() => {
     let active = true
     if (isAdmin) {
       Promise.resolve().then(() => {
@@ -250,14 +293,6 @@ export default function AdminPage() {
     }
     return () => { active = false }
   }, [isAdmin, loadAdminData])
-
-  useEffect(() => {
-    if (isAdmin) fetchDashboardVisibility().then(data => {
-      const value = data.restrictNonAdminToSelf !== false
-      setDashboardRestricted(value)
-      setSavedDashboardRestricted(value)
-    }).catch(err => setError(err.message))
-  }, [isAdmin])
 
   useEffect(() => {
     if (!profileOpen) return undefined
@@ -323,7 +358,7 @@ export default function AdminPage() {
   }).filter((profile) => !admins.some((admin) => admin.email === profile.email))
 
   if (loading) {
-    return <div className="admin-access-loading" role="status"><LoaderCircle size={24} /><span>Checking admin access...</span></div>
+    return <AdminLoadingShell />
   }
   if (!isAdmin) {
     return (

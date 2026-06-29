@@ -1,4 +1,4 @@
-import { apiFetch } from './apiClient'
+import { apiFetch, cachedApiJson, invalidateApiJsonCache } from './apiClient'
 
 async function json(response) {
   const payload = await response.json().catch(() => ({}))
@@ -11,29 +11,34 @@ async function json(response) {
 }
 
 export async function fetchMyPerformanceReview() {
-  return json(await apiFetch('/api/performance/me', { cache: 'no-store' }))
+  return cachedApiJson('/api/performance/me', {}, { ttlMs: 30000 })
 }
 
 export async function fetchPerformanceReview(employeeUserId) {
-  return json(await apiFetch(`/api/performance/${encodeURIComponent(employeeUserId)}`, { cache: 'no-store' }))
+  return cachedApiJson(`/api/performance/${encodeURIComponent(employeeUserId)}`, {}, { ttlMs: 30000 })
 }
 
 export async function savePerformanceReview(employeeUserId, rows) {
-  return json(await apiFetch(`/api/performance/${encodeURIComponent(employeeUserId)}`, {
+  const result = await json(await apiFetch(`/api/performance/${encodeURIComponent(employeeUserId)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rows })
   }))
+  invalidateApiJsonCache('/api/performance')
+  return result
 }
 
 export async function fetchPerformancePermissions() {
-  return json(await apiFetch('/api/performance/permissions', { cache: 'no-store' }))
+  return cachedApiJson('/api/performance/permissions', {}, { ttlMs: 30000 })
 }
 
 export async function savePerformancePermissions(permissions) {
-  return json(await apiFetch('/api/performance/permissions', {
+  const result = await json(await apiFetch('/api/performance/permissions', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ permissions })
   }))
+  invalidateApiJsonCache('/api/performance')
+  invalidateApiJsonCache('/api/admin/bootstrap')
+  return result
 }
