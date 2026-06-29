@@ -1,3 +1,4 @@
+import { CheckCircle2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/useAuth'
 import { apiFetch } from '../services/apiClient'
@@ -20,7 +21,7 @@ export default function ProfileSettingsPage() {
   const [originalProfile, setOriginalProfile] = useState(EMPTY_PROFILE)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [message, setMessage] = useState('')
+  const [savedPopup, setSavedPopup] = useState(false)
   const [error, setError] = useState('')
 
   const baseProfile = useMemo(() => ({
@@ -74,16 +75,22 @@ export default function ProfileSettingsPage() {
     return () => { cancelled = true }
   }, [authLoading, baseProfile, loadProfile, profile, session, user])
 
+  useEffect(() => {
+    if (!savedPopup) return undefined
+    const timer = window.setTimeout(() => setSavedPopup(false), 2400)
+    return () => window.clearTimeout(timer)
+  }, [savedPopup])
+
   const update = (event) => {
     const { name, value } = event.target
     setForm(current => ({ ...current, [name]: value }))
-    setMessage('')
+    setSavedPopup(false)
     setError('')
   }
 
   const save = async () => {
     setSaving(true)
-    setMessage('')
+    setSavedPopup(false)
     setError('')
     try {
       const payload = { ...form, user_id: user?.id || form.user_id, email: user?.email || form.email }
@@ -107,7 +114,7 @@ export default function ProfileSettingsPage() {
         // Session storage sync is best-effort.
       }
       window.dispatchEvent(new CustomEvent('fb:profile-name-updated', { detail: savedName }))
-      setMessage('Profile saved.')
+      setSavedPopup(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -120,9 +127,16 @@ export default function ProfileSettingsPage() {
 
   return (
     <div className="table-card" style={{ maxWidth: 920 }}>
+      <div className={`profile-save-popup-slot${savedPopup ? ' is-visible' : ''}`} aria-live="polite">
+        {savedPopup && (
+          <div className="profile-save-popup" role="status">
+            <CheckCircle2 size={16} strokeWidth={2} />
+            <span>Profile saved</span>
+          </div>
+        )}
+      </div>
       <div className="modal-body">
         {error && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{error}</div>}
-        {message && <div className="sub-text" style={{ marginBottom: 12 }}>{message}</div>}
         <div className="form-grid-2">
           {[
             ['name', 'Name', 'text'],

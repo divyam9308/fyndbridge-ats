@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Briefcase, Building2, Users, Settings, LogOut, ShieldCheck, FileText
+  LayoutDashboard, Briefcase, Building2, Users, LogOut, ShieldCheck, FileText
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
@@ -83,19 +83,6 @@ export default function Sidebar() {
           </NavLink>
           </>
         )}
-
-        <div className="sidebar-divider" />
-
-        <NavLink
-          to="/dashboard/settings"
-          className={({ isActive }) =>
-            `sidebar-nav-link${isActive ? ' active' : ''}`
-          }
-          id="nav-settings"
-        >
-          <span className="nav-icon"><Settings size={17} strokeWidth={1.8} /></span>
-          <span className="sidebar-nav-label">Settings</span>
-        </NavLink>
       </nav>
 
       {/* Bottom user + logout */}
