@@ -40,6 +40,12 @@ function normalizeScoreInput(value) {
   return value
 }
 
+function preventNumberWheel(event) {
+  if (document.activeElement === event.currentTarget) {
+    event.preventDefault()
+  }
+}
+
 const PERFORMANCE_STANDARDS = [
   { min: 4.5, label: 'Exceptional performance', range: '4.5 and above', tone: 'exceptional' },
   { min: 4.0, label: 'Strong performance', range: '4.0 - 4.5', tone: 'strong' },
@@ -198,7 +204,7 @@ function ReviewCell({ row, columnKey, disabled, onChange }) {
   if (columnKey === 'allocation') {
     return (
       <label className="performance-percent-field">
-        <input className="performance-input is-allocation" type="number" min="0" max="100" step="1" value={row.allocation ?? ''} disabled={disabled} onChange={event => onChange({ allocation: event.target.value === '' ? '' : Number(event.target.value) })} />
+        <input className="performance-input is-allocation" type="number" min="0" max="100" step="1" value={row.allocation ?? ''} disabled={disabled} onWheel={preventNumberWheel} onChange={event => onChange({ allocation: event.target.value === '' ? '' : Number(event.target.value) })} />
         <span>%</span>
       </label>
     )
@@ -209,7 +215,7 @@ function ReviewCell({ row, columnKey, disabled, onChange }) {
   }
 
   if (['self_score', 'ss_ns_score', 'ra_score'].includes(columnKey)) {
-    return <input className={`performance-input is-score is-${columnKey}`} type="number" min="0" max="5" step="0.1" value={row[columnKey] ?? ''} disabled={disabled} onChange={event => { const next = normalizeScoreInput(event.target.value); if (next !== null) onChange({ [columnKey]: next }) }} />
+    return <input className={`performance-input is-score is-${columnKey}`} type="number" min="0" max="5" step="0.1" value={row[columnKey] ?? ''} disabled={disabled} onWheel={preventNumberWheel} onChange={event => { const next = normalizeScoreInput(event.target.value); if (next !== null) onChange({ [columnKey]: next }) }} />
   }
 
   return null
