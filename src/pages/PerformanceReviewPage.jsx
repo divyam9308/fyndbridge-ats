@@ -39,16 +39,16 @@ function normalizeScoreInput(value) {
   return value
 }
 
-function SummaryCard({ label, value, warning }) {
+function SummaryCard({ label, value, warning, loading }) {
   return (
     <div className={`performance-summary-card${warning ? ' is-warning' : ''}`}>
       <span>{label}</span>
-      <strong>{value}</strong>
+      {loading ? <i className="performance-skeleton-block is-summary" aria-hidden="true" /> : <strong>{value}</strong>}
     </div>
   )
 }
 
-function EmployeeSelector({ users, selectedUserId, onSelect }) {
+function EmployeeSelector({ users, selectedUserId, onSelect, loading }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const selected = users.find(user => user.id === selectedUserId) || users[0]
@@ -62,10 +62,16 @@ function EmployeeSelector({ users, selectedUserId, onSelect }) {
         <p>Each employee review is stored against the selected Supabase user.</p>
       </div>
       <div className="performance-employee-select">
-        <button type="button" onClick={() => setOpen(current => !current)} aria-expanded={open}>
-          <span>{selected?.name || 'Select employee'}</span>
-          <ChevronDown size={16} />
-        </button>
+        {loading ? (
+          <div className="performance-employee-placeholder" aria-hidden="true">
+            <i className="performance-skeleton-block" />
+          </div>
+        ) : (
+          <button type="button" onClick={() => setOpen(current => !current)} aria-expanded={open}>
+            <span>{selected?.name || 'Select employee'}</span>
+            <ChevronDown size={16} />
+          </button>
+        )}
         {open && (
           <div className="performance-employee-menu">
             <label>
@@ -83,6 +89,35 @@ function EmployeeSelector({ users, selectedUserId, onSelect }) {
         )}
       </div>
     </section>
+  )
+}
+
+function PerformanceTableSkeleton({ columns }) {
+  return (
+    <table className="performance-table performance-table-skeleton" aria-label="Loading performance review">
+      <colgroup>{columns.map(column => <col key={column.key} style={{ width: `${column.width}px` }} />)}</colgroup>
+      <thead>
+        <tr>{columns.map(column => <th key={column.key}>{column.label}</th>)}</tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: 5 }).map((_, rowIndex) => (
+          <tr key={rowIndex}>
+            {columns.map(column => (
+              <td key={column.key}>
+                <span className={`performance-skeleton-cell is-${column.key}`} />
+              </td>
+            ))}
+          </tr>
+        ))}
+        <tr className="performance-total-row">
+          {columns.map(column => (
+            <td key={column.key}>
+              <span className={`performance-skeleton-cell is-total is-${column.key}`} />
+            </td>
+          ))}
+        </tr>
+      </tbody>
+    </table>
   )
 }
 
@@ -132,6 +167,7 @@ export default function PerformanceReviewPage() {
   const [savedRows, setSavedRows] = useState(rows)
   const [permissions, setPermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
   const [loadingReview, setLoadingReview] = useState(true)
+  const [loadingEmployees, setLoadingEmployees] = useState(false)
   const [savingReview, setSavingReview] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
@@ -147,6 +183,9 @@ export default function PerformanceReviewPage() {
   useEffect(() => {
     if (!isSuperAdmin) return undefined
     let active = true
+    const employeeTimer = window.setTimeout(() => {
+      if (active) setLoadingEmployees(true)
+    }, 0)
     fetchAdminProfileOptions().then(({ data }) => {
       if (!active) return
       const profiles = (data || []).map(profile => ({ id: profile.user_id, name: profile.name, email: profile.email })).filter(profile => profile.id)
@@ -154,7 +193,8 @@ export default function PerformanceReviewPage() {
       profiles.forEach(profile => byId.set(profile.id, profile))
       setSelectorUsers([...byId.values()])
     }).catch(err => setError(err.message))
-    return () => { active = false }
+      .finally(() => { if (active) setLoadingEmployees(false) })
+    return () => { active = false; window.clearTimeout(employeeTimer) }
   }, [isSuperAdmin, ownName, ownUserId, user?.email])
 
   useEffect(() => {
@@ -210,6 +250,7 @@ export default function PerformanceReviewPage() {
   const scoresValid = rows.every(row => ['self_score', 'ss_ns_score', 'ra_score'].every(key => row[key] === '' || row[key] === null || (Number(row[key]) >= 0 && Number(row[key]) <= 5)))
   const dirty = JSON.stringify(rows) !== JSON.stringify(savedRows)
   const canSave = dirty && allocationValid && scoresValid && !savingReview && !loadingReview
+  const showValidationWarning = !loadingReview && (!allocationValid || !scoresValid)
 
   const updateRow = (rowId, patch) => setRows(current => current.map(row => row.id === rowId ? { ...row, ...patch } : row))
 
@@ -260,22 +301,26 @@ export default function PerformanceReviewPage() {
         {dirty && <span className="performance-unsaved">Unsaved changes</span>}
       </header>
 
-      {isSuperAdmin && <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} />}
-      {error && <div className="performance-warning"><AlertTriangle size={17} /><span>{error}</span></div>}
+      {isSuperAdmin && <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={loadingEmployees} />}
+      <div className={`performance-message-slot${error ? ' is-visible' : ''}`}>
+        {error && <div className="performance-warning"><AlertTriangle size={17} /><span>{error}</span></div>}
+      </div>
 
       <section className="performance-summary-grid">
-        <SummaryCard label="Allocation Total" value={`${formatRating(totals.allocation)}%`} warning={!allocationValid} />
-        <SummaryCard label="Self Rating Total" value={formatRating(totals.selfRating)} />
-        <SummaryCard label="SS/NS Rating Total" value={formatRating(totals.ssnsRating)} />
-        <SummaryCard label="Final Rating Total" value={formatRating(totals.finalRating)} />
+        <SummaryCard label="Allocation Total" value={`${formatRating(totals.allocation)}%`} warning={!allocationValid && !loadingReview} loading={loadingReview} />
+        <SummaryCard label="Self Rating Total" value={formatRating(totals.selfRating)} loading={loadingReview} />
+        <SummaryCard label="SS/NS Rating Total" value={formatRating(totals.ssnsRating)} loading={loadingReview} />
+        <SummaryCard label="Final Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} />
       </section>
 
-      {(!allocationValid || !scoresValid) && (
-        <div className="performance-warning">
-          <AlertTriangle size={17} />
-          <span>{!allocationValid ? 'Allocation total must equal 100%.' : 'Scores must be numbers from 0 to 5.'}</span>
-        </div>
-      )}
+      <div className={`performance-message-slot${showValidationWarning ? ' is-visible' : ''}`}>
+        {showValidationWarning && (
+          <div className="performance-warning">
+            <AlertTriangle size={17} />
+            <span>{!allocationValid ? 'Allocation total must equal 100%.' : 'Scores must be numbers from 0 to 5.'}</span>
+          </div>
+        )}
+      </div>
 
       <section className="performance-table-card">
         <div className="performance-table-title">
@@ -285,7 +330,7 @@ export default function PerformanceReviewPage() {
           </div>
         </div>
         <div className="performance-table-scroll">
-          {loadingReview ? <div className="performance-loading">Loading performance review...</div> : <table className="performance-table">
+          {loadingReview ? <PerformanceTableSkeleton columns={visibleColumns} /> : <table className="performance-table">
             <colgroup>{visibleColumns.map(column => <col key={column.key} style={{ width: `${column.width}px` }} />)}</colgroup>
             <thead>
               <tr>{visibleColumns.map(column => <th key={column.key}>{column.label}</th>)}</tr>
