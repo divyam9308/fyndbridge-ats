@@ -231,19 +231,13 @@ export default function JobsPage() {
         params.set('sortField', sortField)
         params.set('sortDirection', sortDirection)
       }
-      const [jobsRes, clientsRes] = await Promise.all([
-        fetch(`/api/jobs?${params.toString()}`),
-        fetch('/api/clients?all=true')
-      ])
+      const jobsRes = await fetch(`/api/jobs?${params.toString()}`)
       if (!jobsRes.ok) throw new Error('Failed to fetch mandates.')
-      if (!clientsRes.ok) throw new Error('Failed to fetch clients.')
       const jobsData = await jobsRes.json()
-      const clientsData = await clientsRes.json()
       setJobs(jobsData.data || [])
       setTotalJobs(Number(jobsData.total) || 0)
       setPage(Number(jobsData.page) || 1)
       if (import.meta.env.DEV && aiFilters) console.debug('Mandates AI filter', { filters: aiFilters, matched: Number(jobsData.total) || 0 })
-      setDbClients(clientsData.data || [])
       setError(null)
     } catch (err) {
       setError(err.message)
@@ -271,8 +265,8 @@ export default function JobsPage() {
 
   const refreshClientOptions = useCallback(async () => {
     const [clientsRes, jobsRes] = await Promise.all([
-      fetch('/api/clients?all=true'),
-      fetch('/api/jobs?all=true')
+      fetch('/api/clients?options=true'),
+      fetch('/api/jobs?options=true')
     ])
     const clientsData = await clientsRes.json().catch(() => ({}))
     const jobsData = await jobsRes.json().catch(() => ({}))

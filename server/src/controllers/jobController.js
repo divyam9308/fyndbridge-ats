@@ -270,6 +270,15 @@ function parseJsonFilter(value) {
 
 async function listJobs(req, res) {
   try {
+    if (String(req.query.options || '').toLowerCase() === 'true') {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('id, job_display_id, title, client_id')
+        .order('title', { ascending: true })
+      if (error) throw error
+      return res.json({ data: await stripHiddenFields('jobs', data || [], await isAdmin(req.user)) })
+    }
+
     const aiFilters = parseJsonFilter(req.query.ai_filters)
     const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.rankingHints || []).length || (aiFilters?.conditions || []).some(condition => ['consultant', 'budget'].includes(condition.field))
     const localConsultantFilter = clean(req.query.consultant)

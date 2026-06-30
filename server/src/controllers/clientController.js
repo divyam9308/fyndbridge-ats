@@ -700,6 +700,16 @@ async function createClientFollowUp(clientId, followUpDate, followUpComments = '
 
 async function listClients(req, res) {
   try {
+    if (String(req.query.options || '').toLowerCase() === 'true') {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, client_group_id, client_display_id, client_name, name, contact_person, contact, mobile, phone, email, linkedin, designation')
+        .order('client_name', { ascending: true })
+        .order('name', { ascending: true })
+      if (error) throw error
+      return res.json({ data: await stripHiddenFields('clients', data || [], await isAdmin(req.user)) })
+    }
+
     const sort = normalizeSort(req.query)
     const aiFilters = parseJsonFilter(req.query.ai_filters)
     const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.rankingHints || []).length || (aiFilters?.conditions || []).some(condition => ['consultant', 'value', 'follow_up_date'].includes(condition.field))

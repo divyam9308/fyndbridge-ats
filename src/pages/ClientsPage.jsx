@@ -363,7 +363,7 @@ export default function ClientsPage() {
   }, [isOpen, followUpClient, deletingFollowUp, clientDuplicate, clientAlreadyAdded])
 
   const fetchClientOptions = useCallback(async () => {
-    const res = await fetch('/api/clients?all=true')
+    const res = await fetch('/api/clients?options=true')
     const data = await res.json().catch(() => ({}))
     if (res.ok) setAllClients(data.data || [])
   }, [])

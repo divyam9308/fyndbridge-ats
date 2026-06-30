@@ -436,8 +436,8 @@ export default function CandidatesPage() {
 
   const refreshOptionData = useCallback(async () => {
     const [clientsRes, jobsRes] = await Promise.all([
-      fetch('/api/clients?all=true'),
-      fetch('/api/jobs?all=true')
+      fetch('/api/clients?options=true'),
+      fetch('/api/jobs?options=true')
     ])
     const clientsData = await clientsRes.json().catch(() => ({}))
     const jobsData = await jobsRes.json().catch(() => ({}))
