@@ -360,8 +360,8 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     education: f.education,
     client_name: f.client,
     job_title: f.job,
-    client_id: matchingClient?.id || '',
-    job_id: matchingJob?.id || '',
+    client_id: f.clientId || matchingClient?.id || '',
+    job_id: f.jobId || matchingJob?.id || '',
     status: f.status,
     current_salary: cleanNumberForApi(f.salary),
     expected_salary: cleanNumberForApi(f.expectedSalary),
@@ -990,13 +990,12 @@ export default function CandidatesPage() {
     const e = {}
     if (!f.name.trim()) e.name = 'Full Name is required'
     if (!f.mobile.trim()) e.mobile = 'Mobile is required'
+    if (!f.clientId) e.client = 'Client is required'
+    if (!f.jobId) e.job = 'Mandate is required'
     if (f.client?.trim() && !f.clientId) e.client = 'Please select a valid client from the dropdown.'
     if (f.job?.trim() && !f.jobId) e.job = 'Please select a valid mandate from the dropdown.'
+    if (e.client || e.job) e.form = 'Client and mandate assignment is required.'
     if (f.consultantName?.trim() && f.consultantName !== '-' && !f.consultantUserId) e.consultantName = 'Please select a valid consultant from the dropdown.'
-    if (assigningAnother) {
-      if (!f.clientId) e.client = 'Client is required'
-      if (!f.jobId) e.job = 'Mandate is required'
-    }
     return e
   }
 

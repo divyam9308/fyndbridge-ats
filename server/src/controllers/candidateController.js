@@ -1236,6 +1236,14 @@ async function createCandidate(req, res) {
       typeof associationPayload.status === "string" && associationPayload.status.trim()
         ? associationPayload.status.trim()
         : "-";
+    if (!associationPayload.client_id || !associationPayload.job_id) {
+      return res.status(400).json({
+        errors: {
+          ...(!associationPayload.client_id ? { client_id: 'Client is required' } : {}),
+          ...(!associationPayload.job_id ? { job_id: 'Mandate is required' } : {})
+        }
+      })
+    }
     await validateMandateReference(associationPayload)
     await validateConsultantReference(associationPayload)
 
@@ -1333,15 +1341,6 @@ async function createCandidate(req, res) {
       }
 
       candidate = data
-    }
-
-    const hasClient = (associationPayload.client_name && associationPayload.client_name !== '-') || associationPayload.client_id;
-    const hasJob = (associationPayload.job_title && associationPayload.job_title !== '-') || associationPayload.job_id;
-    const hasAssociation = hasClient || hasJob;
-
-    if (!hasAssociation) {
-      await notifyCandidateConsultantAssignment(req, candidate, { consultant_name: associationPayload.consultant_name }, undefined)
-      return res.status(201).json({ ...flattenCandidateOnly(candidate), cv_duplicate: Boolean(cvResult?.duplicate) })
     }
 
     const assocInsert = {
