@@ -3,7 +3,8 @@ const STORAGE_BUCKETS = {
   JD: 'jds',
   CONTRACT: 'contract-pdfs',
   INVOICE: 'invoice',
-  EMPLOYEE_HANDBOOK: 'employee-handbook'
+  EMPLOYEE_HANDBOOK: 'employee-handbook',
+  USER_MANUAL: 'user-manual'
 }
 
 const STORAGE_BUCKET_TYPES = {
@@ -14,7 +15,9 @@ const STORAGE_BUCKET_TYPES = {
   'contract-pdf': STORAGE_BUCKETS.CONTRACT,
   invoice: STORAGE_BUCKETS.INVOICE,
   handbook: STORAGE_BUCKETS.EMPLOYEE_HANDBOOK,
-  'employee-handbook': STORAGE_BUCKETS.EMPLOYEE_HANDBOOK
+  'employee-handbook': STORAGE_BUCKETS.EMPLOYEE_HANDBOOK,
+  manual: STORAGE_BUCKETS.USER_MANUAL,
+  'user-manual': STORAGE_BUCKETS.USER_MANUAL
 }
 
 const LEGACY_BUCKET_NAMES = [
@@ -23,6 +26,7 @@ const LEGACY_BUCKET_NAMES = [
   STORAGE_BUCKETS.CONTRACT,
   STORAGE_BUCKETS.INVOICE,
   STORAGE_BUCKETS.EMPLOYEE_HANDBOOK,
+  STORAGE_BUCKETS.USER_MANUAL,
   'resume',
   'cvs',
   'cv',

@@ -4,6 +4,7 @@ const preloaders = {
   '/dashboard/clients': () => import('../pages/ClientsPage'),
   '/dashboard/candidates': () => import('../pages/CandidatesPage'),
   '/dashboard/performance': () => import('../pages/PerformanceReviewPage'),
+  '/dashboard/user-manual': () => import('../pages/UserManualPage'),
   '/dashboard/admin': () => import('../pages/AdminPage'),
   '/invoice': () => import('../pages/InvoicePage')
 }

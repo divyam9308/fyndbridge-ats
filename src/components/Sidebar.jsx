@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
 import {
-  LayoutDashboard, Briefcase, Building2, ClipboardList, Users, LogOut, ShieldCheck, FileText
+  LayoutDashboard, Briefcase, Building2, ClipboardList, Users, LogOut, ShieldCheck, FileText, BookOpenText
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
@@ -14,6 +14,7 @@ const navItems = [
   { to: '/dashboard/clients',    label: 'Clients',    Icon: Building2 },
   { to: '/dashboard/candidates', label: 'Candidates', Icon: Users },
   { to: '/dashboard/performance', label: 'PMS', Icon: ClipboardList },
+  { to: '/dashboard/user-manual', label: 'User Manual', Icon: BookOpenText },
 ]
 
 export default function Sidebar() {
@@ -26,6 +27,7 @@ export default function Sidebar() {
 
   useEffect(() => {
     preloadRoute('/dashboard/performance')
+    preloadRoute('/dashboard/user-manual')
     if (isAdmin) {
       preloadRoute('/invoice')
       preloadRoute('/dashboard/admin')
