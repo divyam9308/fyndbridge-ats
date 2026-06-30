@@ -83,7 +83,13 @@ function rating(score, allocation) {
   return (Number(score) || 0) * (Number(allocation) || 0) / 100
 }
 
+function finalRating(ssNsScore, raScore, allocation) {
+  return (rating(ssNsScore, allocation) + rating(raScore, allocation)) / 2
+}
+
 function serializeRow(row) {
+  const ssNsRating = rating(row.ss_ns_score, row.allocation)
+  const raRating = rating(row.ra_score, row.allocation)
   return {
     id: row.id,
     row_order: row.row_order,
@@ -94,10 +100,11 @@ function serializeRow(row) {
     self_rating: rating(row.self_score, row.allocation),
     ss_ns_feedback: row.ss_ns_feedback || '',
     ss_ns_score: row.ss_ns_score === null || row.ss_ns_score === undefined ? null : Number(row.ss_ns_score),
-    ss_ns_rating: rating(row.ss_ns_score, row.allocation),
+    ss_ns_rating: ssNsRating,
     ra_feedback: row.ra_feedback || '',
     ra_score: row.ra_score === null || row.ra_score === undefined ? null : Number(row.ra_score),
-    final_rating: rating(row.ra_score, row.allocation)
+    ra_rating: raRating,
+    final_rating: finalRating(row.ss_ns_score, row.ra_score, row.allocation)
   }
 }
 
@@ -107,8 +114,9 @@ function serializeReview(review, rows) {
     allocation_total: acc.allocation_total + row.allocation,
     self_rating_total: acc.self_rating_total + row.self_rating,
     ss_ns_rating_total: acc.ss_ns_rating_total + row.ss_ns_rating,
+    ra_rating_total: acc.ra_rating_total + row.ra_rating,
     final_rating_total: acc.final_rating_total + row.final_rating
-  }), { allocation_total: 0, self_rating_total: 0, ss_ns_rating_total: 0, final_rating_total: 0 })
+  }), { allocation_total: 0, self_rating_total: 0, ss_ns_rating_total: 0, ra_rating_total: 0, final_rating_total: 0 })
   return {
     id: review.id,
     employee_user_id: review.employee_user_id,

@@ -620,6 +620,7 @@ async function validateConsultantReference(payload) {
 const CANDIDATE_FILTER_MAPPING = {
   candidate_id: [{ column: 'candidate_display_id', kind: 'text' }],
   candidate_name: [{ column: 'full_name', kind: 'text' }],
+  job_id: [{ column: 'candidate_associations.job_id', kind: 'text' }],
   email: [{ column: 'email', kind: 'text' }],
   mobile: [{ column: 'mobile_number', kind: 'text' }],
   designation: [{ column: 'current_designation', kind: 'text' }],
@@ -638,16 +639,19 @@ const CANDIDATE_FILTER_MAPPING = {
   role: [{ column: 'candidate_associations.job_title', kind: 'text' }],
   current_ctc: [{ column: 'candidate_associations.current_salary', kind: 'number' }],
   expected_ctc: [{ column: 'candidate_associations.expected_salary', kind: 'number' }],
+  offered_ctc: [{ column: 'candidate_associations.offered_ctc', kind: 'number' }],
+  date_of_joining: [{ column: 'candidate_associations.date_of_joining', kind: 'date' }],
   comments: [{ column: 'candidate_associations.notes', kind: 'text' }],
   status: [{ column: 'candidate_associations.status', kind: 'text' }]
 }
-const ASSOCIATION_FILTER_FIELDS = new Set(['consultant', 'client_name', 'role', 'current_ctc', 'expected_ctc', 'comments', 'status'])
+const ASSOCIATION_FILTER_FIELDS = new Set(['job_id', 'consultant', 'client_name', 'role', 'current_ctc', 'expected_ctc', 'offered_ctc', 'date_of_joining', 'comments', 'status'])
 
 function candidateFilterValue(row, field) {
   return {
     candidate_id: row.candidate_display_id,
     candidate_name: row.full_name,
     consultant: row.consultant_name,
+    job_id: row.job_display_id || row.job_id,
     email: row.email,
     mobile: row.mobile_number,
     designation: row.current_designation,
@@ -660,6 +664,8 @@ function candidateFilterValue(row, field) {
     date: row.created_at,
     current_ctc: row.current_salary,
     expected_ctc: row.expected_salary,
+    offered_ctc: row.offered_ctc,
+    date_of_joining: row.date_of_joining,
     current_location: row.location || row.city,
     notice_period: row.notice_period,
     open_to_relocate: row.open_to_relocate,
@@ -996,7 +1002,7 @@ async function listCandidates(req, res) {
     const sortField = cleanText(req.query.sortField)
     const sortDirection = cleanText(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
     const aiFilters = parseJsonFilter(req.query.ai_filters)
-    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.rankingHints || []).length || (aiFilters?.conditions || []).some((condition) => ['client_id', 'month', ...ASSOCIATION_FILTER_FIELDS].includes(String(condition.field || '').toLowerCase()))
+    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.rankingHints || []).length || (aiFilters?.conditions || []).some((condition) => ['skills', 'client_id', 'month', ...ASSOCIATION_FILTER_FIELDS].includes(String(condition.field || '').toLowerCase()))
     const skillCandidateIds = await resolveSkillCandidateIds(aiFilters)
     const associationCandidateIds = await resolveAssociationCandidateIds(aiFilters)
     const aiAssociationFilter = aiFilters?.mode !== 'any' && (aiFilters?.conditions || []).some((condition) => ASSOCIATION_FILTER_FIELDS.has(String(condition.field || '').toLowerCase()))

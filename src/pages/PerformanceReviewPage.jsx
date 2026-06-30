@@ -9,6 +9,7 @@ import {
   DEFAULT_PERFORMANCE_ROWS,
   PERFORMANCE_COLUMNS,
   PERFORMANCE_PERMISSION_EVENT,
+  calculateFinalRating,
   calculateRating,
   formatRating,
   isPerformanceColumnDisabled,
@@ -265,7 +266,7 @@ function PerformanceTableSkeleton({ columns }) {
 function ReviewCell({ row, columnKey, disabled, onChange }) {
   if (columnKey === 'self_rating') return <div className="performance-readonly-cell">{formatRating(calculateRating(row.self_score, row.allocation))}</div>
   if (columnKey === 'ss_ns_rating') return <div className="performance-readonly-cell">{formatRating(calculateRating(row.ss_ns_score, row.allocation))}</div>
-  if (columnKey === 'final_rating') return <div className="performance-readonly-cell">{formatRating(calculateRating(row.ra_score, row.allocation))}</div>
+  if (columnKey === 'final_rating') return <div className="performance-readonly-cell">{formatRating(calculateFinalRating(row.ss_ns_score, row.ra_score, row.allocation))}</div>
 
   if (columnKey === 'category') {
     return <textarea className="performance-input is-category" value={row.category ?? ''} disabled={disabled} onChange={event => onChange({ category: event.target.value })} />
@@ -431,9 +432,10 @@ export default function PerformanceReviewPage() {
       allocation: acc.allocation + allocation,
       selfRating: acc.selfRating + calculateRating(row.self_score, allocation),
       ssnsRating: acc.ssnsRating + calculateRating(row.ss_ns_score, allocation),
-      finalRating: acc.finalRating + calculateRating(row.ra_score, allocation)
+      raRating: acc.raRating + calculateRating(row.ra_score, allocation),
+      finalRating: acc.finalRating + calculateFinalRating(row.ss_ns_score, row.ra_score, allocation)
     }
-  }, { allocation: 0, selfRating: 0, ssnsRating: 0, finalRating: 0 }), [rows])
+  }, { allocation: 0, selfRating: 0, ssnsRating: 0, raRating: 0, finalRating: 0 }), [rows])
   const allocationValid = Math.round(totals.allocation * 100) === 10000
   const scoresValid = rows.every(row => ['self_score', 'ss_ns_score', 'ra_score'].every(key => row[key] === '' || row[key] === null || (Number(row[key]) >= 0 && Number(row[key]) <= 5)))
   const dirty = useMemo(() => JSON.stringify(canonicalPerformanceRows(rows)) !== JSON.stringify(canonicalPerformanceRows(savedRows)), [rows, savedRows])
@@ -501,7 +503,7 @@ export default function PerformanceReviewPage() {
         <SummaryCard label="Final Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} tone={performanceStandard(totals.finalRating).tone} />
         <SummaryCard label="Self Rating Total" value={formatRating(totals.selfRating)} loading={loadingReview} tone={performanceStandard(totals.selfRating).tone} />
         <SummaryCard label="SS/NS Rating Total" value={formatRating(totals.ssnsRating)} loading={loadingReview} tone={performanceStandard(totals.ssnsRating).tone} />
-        <SummaryCard label="RA Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} tone={performanceStandard(totals.finalRating).tone} />
+        <SummaryCard label="RA Rating Total" value={formatRating(totals.raRating)} loading={loadingReview} tone={performanceStandard(totals.raRating).tone} />
       </section>
 
       <PerformanceStandardBanner rating={totals.finalRating} loading={loadingReview} />

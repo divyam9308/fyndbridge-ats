@@ -54,6 +54,10 @@ export function calculateRating(score, allocation) {
   return (Number(score) || 0) * (Number(allocation) || 0) / 100
 }
 
+export function calculateFinalRating(ssNsScore, raScore, allocation) {
+  return (calculateRating(ssNsScore, allocation) + calculateRating(raScore, allocation)) / 2
+}
+
 export function normalizePerformanceRows(rows) {
   return normalizeRows(rows)
 }

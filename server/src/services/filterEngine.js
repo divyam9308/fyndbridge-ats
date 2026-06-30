@@ -147,13 +147,14 @@ function normalizeFieldValue(meta, value) {
   if (meta.type === 'boolean') {
     next = next.replace(/\b(?:signed|done|available|present)\b/i, 'yes').replace(/\b(?:not signed|missing|not available|absent)\b/i, 'no')
   }
-  return clean(next.replace(/^(?:is|are|equals?|equal to|contains?|include|includes|has|having|with|matching)\s+/i, ''))
+  return clean(next.replace(/^(?:is|are|being|equals?|equal to|contains?|include|includes|has|having|with|matching)\s+/i, ''))
 }
 
 const candidateFields = {
   candidate_id: { aliases: ['candidate id', 'ca id', 'ca'], type: 'id', operators: ['contains', 'equals'] },
   candidate_name: { aliases: ['candidate', 'name', 'candidate name'], type: 'text' },
   consultant: { aliases: ['consultant', 'consultant name', 'recruiter', 'owner', 'assigned consultant'], type: 'text' },
+  job_id: { aliases: ['job id', 'mandate id', 'jb id', 'jb'], type: 'id' },
   email: { aliases: ['email', 'mail', 'email id'], type: 'text' },
   mobile: { aliases: ['phone', 'mobile', 'number', 'contact number'], type: 'text' },
   designation: { aliases: ['designation', 'current designation', 'title', 'role title'], type: 'text' },
@@ -165,6 +166,8 @@ const candidateFields = {
   date: { aliases: ['date', 'created date', 'added date', 'submission date'], type: 'date' },
   skills: { aliases: ['skill', 'skills', 'technology', 'tech stack', 'technologies'], type: 'text' },
   current_ctc: { aliases: ['salary', 'current ctc', 'current salary', 'current package', 'current compensation'], type: 'money' },
+  offered_ctc: { aliases: ['offered ctc', 'offered salary', 'offered package', 'offer ctc', 'offer salary'], type: 'money' },
+  date_of_joining: { aliases: ['date of joining', 'joining date', 'doj'], type: 'date' },
   current_location: { aliases: ['location', 'current location', 'city'], type: 'text' },
   notice_period: { aliases: ['notice', 'notice period', 'joining time', 'availability'], type: 'number' },
   expected_ctc: { aliases: ['expected salary', 'expected ctc', 'expected package', 'expected compensation'], type: 'money' },
@@ -227,10 +230,11 @@ const configs = {
 }
 
 const mandateSearchFields = ['job_id', 'consultant', 'team_lead', 'client_id', 'client_name', 'role', 'location', 'budget', 'experience', 'vertical', 'date_of_allocation', 'mandate_status', 'comments', 'jd']
-const candidateSearchFields = ['candidate_id', 'candidate_name', 'consultant', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'date', 'current_ctc', 'expected_ctc', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin']
+const candidateSearchFields = ['candidate_id', 'candidate_name', 'consultant', 'job_id', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'date', 'current_ctc', 'expected_ctc', 'offered_ctc', 'date_of_joining', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin', 'cv']
 const clientSearchFields = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'billing_entity', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
-const candidateContainsFields = new Set(candidateSearchFields)
-const clientContainsFields = new Set(clientSearchFields)
+const candidateContainsFields = new Set(['candidate_id', 'candidate_name', 'consultant', 'job_id', 'email', 'mobile', 'designation', 'organisation', 'skills', 'client_id', 'client_name', 'role', 'current_location', 'comments', 'status', 'month', 'linkedin', 'cv'])
+const mandateContainsFields = new Set(['job_id', 'consultant', 'team_lead', 'client_id', 'client_name', 'role', 'location', 'mandate_status', 'vertical', 'comments', 'jd'])
+const clientContainsFields = new Set(['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'comments', 'status', 'terms_signed', 'billing_entity', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_document'])
 
 Object.values(configs).forEach(config => {
   Object.entries(config.fields).forEach(([field, meta]) => {
@@ -301,11 +305,29 @@ function parseLogicalPrompt(page, prompt) {
   const config = configs[page]
   const text = clean(prompt)
   if (!config || !text) return null
-  const connector = /\s+or\s+/i.test(text) ? 'or' : (/\s+and\s+/i.test(text) && !/\bbetween\s+\d+(?:\.\d+)?\s+and\s+\d+(?:\.\d+)?\b/i.test(text)) ? 'and' : ''
-  const parts = connector ? text.split(new RegExp(`\\s+${connector}\\s+`, 'i')).map(clean).filter(Boolean) : [text]
+  const map = aliasMap(config)
+  const aliases = [...map.keys()].sort((a, b) => b.length - a.length)
+  const aliasPattern = aliases.map(escapeRegExp).join('|')
+  const connectorPattern = new RegExp(`\\s+(and|or|with|plus)\\s+(?=(?:${aliasPattern})\\b)`, 'ig')
+  const connectors = []
+  const parts = []
+  let start = 0
+  let match
+  while ((match = connectorPattern.exec(text))) {
+    const before = text.slice(0, match.index)
+    if (/\bbetween\s+\d+(?:\.\d+)?\s*$/i.test(before)) continue
+    parts.push(clean(text.slice(start, match.index)))
+    connectors.push(lower(match[1]) === 'or' ? 'or' : 'and')
+    start = match.index + match[0].length
+  }
+  parts.push(clean(text.slice(start)))
+  if (parts.length === 1) {
+    const condition = parseFieldSegment(config, text)
+    return condition ? { conditions: [condition] } : null
+  }
   const conditions = parts.map(part => parseFieldSegment(config, part))
   if (conditions.some(condition => !condition)) return null
-  return { ...(connector === 'or' && conditions.length > 1 ? { mode: 'any' } : {}), conditions }
+  return { ...(connectors.includes('or') && conditions.length > 1 ? { mode: 'any' } : {}), conditions }
 }
 
 function normalizeCondition(config, condition) {
@@ -546,7 +568,7 @@ function validateAiFilters(page, data, prompt = '') {
       const next = { ...condition }
       if (page === 'mandates') {
         const field = aliasMap(config).get(lower(next.field)) || next.field
-        if (mandateSearchFields.includes(field) && !isExactPrompt(prompt)) next.operator = 'contains'
+        if (mandateContainsFields.has(field) && !isExactPrompt(prompt)) next.operator = 'contains'
       }
       if (page === 'candidates') {
         const field = aliasMap(config).get(lower(next.field)) || next.field
@@ -628,7 +650,7 @@ function parsePrompt(page, prompt) {
     const field = map.get(alias)
     const meta = config.fields[field]
     if (!meta) return
-    const pattern = new RegExp(`\\b${escapeRegExp(alias)}\\b\\s*(?:column|field)?\\s*((?:is\\s+not|not\\s+equal|not\\s+equals|not\\s+more\\s+than|not\\s+less\\s+than|less\\s+than\\s+or\\s+equal\\s+to|greater\\s+than\\s+or\\s+equal\\s+to|at\\s+least|at\\s+most|more\\s+than|greater\\s+than|less\\s+than|higher\\s+than|lower\\s+than|fewer\\s+than|same\\s+as|equal\\s+to|starts\\s+with|ends\\s+with|contains|includes|include|having|matching|with|is|are|has|>=|<=|!=|>|<|=)?\\s*[^,]+?)(?=\\s+(?:and|or|with|plus)\\s+\\b(?:${aliases.map(escapeRegExp).join('|')})\\b|$)`, 'i')
+    const pattern = new RegExp(`\\b${escapeRegExp(alias)}\\b\\s*(?:column|field)?\\s*((?:is\\s+not|not\\s+equal|not\\s+equals|not\\s+more\\s+than|not\\s+less\\s+than|less\\s+than\\s+or\\s+equal\\s+to|greater\\s+than\\s+or\\s+equal\\s+to|at\\s+least|at\\s+most|more\\s+than|greater\\s+than|less\\s+than|higher\\s+than|lower\\s+than|fewer\\s+than|same\\s+as|equal\\s+to|starts\\s+with|ends\\s+with|contains|includes|include|having|matching|being|with|is|are|has|>=|<=|!=|>|<|=)?\\s*[^,]+?)(?=\\s+(?:and|or|with|plus)\\s+\\b(?:${aliases.map(escapeRegExp).join('|')})\\b|$)`, 'i')
     const match = text.match(pattern)
     if (match) addParsedSegment(`${alias} ${match[1]}`)
   })
@@ -860,4 +882,3 @@ function applyFilters(page, rows, filters, valueGetter) {
 }
 
 module.exports = { configs, parsePrompt, applyFilters, normalizeCondition, buildAiFilterPrompt, buildSemanticAiFilterPrompt, validateAiFilters, aiFilterSchema, semanticAiFilterSchema, withSemanticMetadata, OPERATORS, isSimpleKeywordPrompt, buildKeywordFilters }
-

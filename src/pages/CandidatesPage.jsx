@@ -191,7 +191,7 @@ const SORT_OPTIONS = [
   { field: 'candidate_name', label: 'Alphabetic Order', toggle: true },
   { field: 'consultant', label: 'Consultant', toggle: false }
 ]
-const CANDIDATE_AI_SEARCH_FIELDS = ['candidate_id', 'candidate_name', 'consultant', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'date', 'current_ctc', 'expected_ctc', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin']
+const CANDIDATE_AI_SEARCH_FIELDS = ['candidate_id', 'candidate_name', 'consultant', 'job_id', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'date', 'current_ctc', 'expected_ctc', 'offered_ctc', 'date_of_joining', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin', 'cv']
 const CANDIDATE_PERMISSION_BY_COLUMN = {
   candidateDisplayId: 'candidate_display_id',
   date: 'created_at',
@@ -223,6 +223,7 @@ const CANDIDATE_PERMISSION_BY_AI_FIELD = {
   candidate_id: 'candidate_display_id',
   candidate_name: 'full_name',
   consultant: 'consultant_name',
+  job_id: 'job_id',
   email: 'email',
   mobile: 'mobile_number',
   designation: 'current_designation',
@@ -235,13 +236,16 @@ const CANDIDATE_PERMISSION_BY_AI_FIELD = {
   date: 'created_at',
   current_ctc: 'current_salary',
   expected_ctc: 'expected_salary',
+  offered_ctc: 'current_salary',
+  date_of_joining: 'created_at',
   current_location: 'location',
   notice_period: 'notice_period',
   open_to_relocate: 'open_to_relocate',
   comments: 'notes',
   status: 'status',
   month: 'created_at_month',
-  linkedin: 'linkedin_url'
+  linkedin: 'linkedin_url',
+  cv: 'cv_link'
 }
 
 /* ====== Empty forms ====== */
