@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -54,6 +54,9 @@ const chartColors = [
 const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Rejected by Recruiter', 'Client Submission', 'Interview', 'Rejected by Client', 'Offered', 'Offer Declined', 'Dropout', 'Hired']
 const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
+const MAIN_CHART_ANIMATION_MS = 1500
+const DEFERRED_SECTION_DELAY_MS = 180
+const EMPTY_ARRAY = []
 
 const seriesColor = (index) => chartColors[index % chartColors.length]
 const TOOLTIP_GAP = 6
@@ -204,10 +207,7 @@ function CountUpValue({ value, ready, animationKey }) {
   ), [])
 
   useEffect(() => {
-    if (!ready || reduceMotion) {
-      setDisplay(target)
-      return undefined
-    }
+    if (!ready || reduceMotion) return undefined
 
     let frame = 0
     const start = performance.now()
@@ -219,12 +219,11 @@ function CountUpValue({ value, ready, animationKey }) {
       if (progress < 1) frame = window.requestAnimationFrame(tick)
     }
 
-    setDisplay(0)
     frame = window.requestAnimationFrame(tick)
     return () => window.cancelAnimationFrame(frame)
   }, [animationKey, ready, reduceMotion, target])
 
-  return ready ? Number(display || 0).toLocaleString('en-IN') : '--'
+  return ready ? Number(reduceMotion ? target : display || 0).toLocaleString('en-IN') : '--'
 }
 
 function StatCard({ icon: Icon, label, value, accent, sparkline, isReady, animationKey }) {
@@ -430,7 +429,7 @@ const StatusTrendLines = memo(function StatusTrendLines({ data, statuses, modalM
             activeDot={{ r: 5, stroke: 'var(--white)', strokeWidth: 2 }}
             isAnimationActive
             animationBegin={modalMode ? 100 : 0}
-            animationDuration={modalMode ? 1400 : 2000}
+            animationDuration={modalMode ? 1400 : MAIN_CHART_ANIMATION_MS}
             animationEasing="ease-out"
           />
         ))}
@@ -592,41 +591,56 @@ export default function DashboardHome() {
   const [consultantOpen, setConsultantOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState(null)
   const [selectedDrilldown, setSelectedDrilldown] = useState(null)
+  const [deferredRenderKey, setDeferredRenderKey] = useState('')
   const modalOpenCounter = useRef(0)
   const consultantSelectRef = useRef(null)
   const { loading, error, data } = useDashboardStats({ consultant, period })
   const onlineUsers = useOnlineUsers()
 
-  const names = Array.isArray(data?.consultantOptions) ? data.consultantOptions : []
-  const consultantOptions = [OVERALL, ...names.filter(Boolean)]
+  const consultantOptionSource = data?.consultantOptions || EMPTY_ARRAY
+  const consultantOptions = useMemo(() => {
+    const names = Array.isArray(consultantOptionSource) ? consultantOptionSource : EMPTY_ARRAY
+    return [OVERALL, ...names.filter(Boolean)]
+  }, [consultantOptionSource])
   const dashboardAccess = data?.dashboardAccess
   const consultantLocked = Boolean(dashboardAccess?.restrictedToSelf && dashboardAccess?.consultantName)
 
   useEffect(() => {
-    if (consultantLocked && consultant !== dashboardAccess.consultantName) setConsultant(dashboardAccess.consultantName)
+    if (!consultantLocked || consultant === dashboardAccess.consultantName) return undefined
+    const timer = window.setTimeout(() => setConsultant(dashboardAccess.consultantName), 0)
+    return () => window.clearTimeout(timer)
   }, [consultant, consultantLocked, dashboardAccess?.consultantName])
 
-  const clientStatusData = (data?.clientStatusData || []).map(item => ({
+  const clientStatusSource = data?.clientStatusData || EMPTY_ARRAY
+  const candidateStatusSource = data?.candidateStatusData || EMPTY_ARRAY
+  const mandateStatusSource = data?.mandateStatusData || EMPTY_ARRAY
+  const billingEntitySource = data?.billingEntityData || EMPTY_ARRAY
+  const clientTrendSource = data?.clientTrend || EMPTY_ARRAY
+  const candidateTrendSource = data?.candidateTrend || EMPTY_ARRAY
+  const mandateTrendSource = data?.mandateTrend || EMPTY_ARRAY
+  const recentActivitySource = data?.recentActivity || EMPTY_ARRAY
+  const clientStatusData = useMemo(() => clientStatusSource.map(item => ({
     ...item,
     color: getClientStatusColor(item.name)
-  }))
-  const candidateStatusData = (data?.candidateStatusData || []).map(item => ({
+  })), [clientStatusSource])
+  const candidateStatusData = useMemo(() => candidateStatusSource.map(item => ({
     ...item,
     color: getCandidateStatusColor(item.name)
-  }))
-  const mandateStatusData = (data?.mandateStatusData || []).map(item => ({
+  })), [candidateStatusSource])
+  const mandateStatusData = useMemo(() => mandateStatusSource.map(item => ({
     ...item,
     color: getMandateStatusColor(item.name)
-  }))
-  const billingEntityData = data?.billingEntityData || []
-  const clientTrend = data?.clientTrend || []
-  const candidateTrend = data?.candidateTrend || []
-  const mandateTrend = data?.mandateTrend || []
-  const recentActivity = data?.recentActivity || []
+  })), [mandateStatusSource])
+  const billingEntityData = useMemo(() => billingEntitySource, [billingEntitySource])
+  const clientTrend = useMemo(() => clientTrendSource, [clientTrendSource])
+  const candidateTrend = useMemo(() => candidateTrendSource, [candidateTrendSource])
+  const mandateTrend = useMemo(() => mandateTrendSource, [mandateTrendSource])
+  const recentActivity = useMemo(() => recentActivitySource, [recentActivitySource])
+  const recentActivityPreview = useMemo(() => recentActivity.slice(0, 7), [recentActivity])
   const dashboardDataReady = !loading && Boolean(data)
-  const billingTotal = billingEntityData.reduce((sum, item) => sum + Number(item.value || 0), 0)
+  const billingTotal = useMemo(() => billingEntityData.reduce((sum, item) => sum + Number(item.value || 0), 0), [billingEntityData])
   const mandateTotal = Number(data?.kpis?.totalMandates || 0)
-  const drilldown = (entityType) => (item) => {
+  const drilldown = useCallback((entityType, item) => {
     if (!Number(item?.value || 0)) return
     setSelectedDrilldown({
       type: entityType,
@@ -634,15 +648,40 @@ export default function DashboardHome() {
       status: item.name,
       period
     })
-  }
-  const clientDrilldown = drilldown('clients')
-  const candidateDrilldown = drilldown('candidates')
-  const mandateDrilldown = drilldown('mandates')
-  const kpis = [
-    { label: 'Total Clients', value: data?.kpis?.totalClients, icon: Building2, accent: 'gradient-primary', sparkline: sparklineValues(clientTrend, CLIENT_STATUSES), breakdown: clientStatusData, onDrilldown: clientDrilldown },
-    { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info', sparkline: sparklineValues(candidateTrend, CANDIDATE_STATUSES), breakdown: candidateStatusData, onDrilldown: candidateDrilldown },
-    { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning', sparkline: sparklineValues(mandateTrend, MANDATE_STATUSES), breakdown: mandateStatusData, onDrilldown: mandateDrilldown }
-  ]
+  }, [consultant, period])
+  const clientDrilldown = useCallback(item => drilldown('clients', item), [drilldown])
+  const candidateDrilldown = useCallback(item => drilldown('candidates', item), [drilldown])
+  const mandateDrilldown = useCallback(item => drilldown('mandates', item), [drilldown])
+  const clientSparkline = useMemo(() => sparklineValues(clientTrend, CLIENT_STATUSES), [clientTrend])
+  const candidateSparkline = useMemo(() => sparklineValues(candidateTrend, CANDIDATE_STATUSES), [candidateTrend])
+  const mandateSparkline = useMemo(() => sparklineValues(mandateTrend, MANDATE_STATUSES), [mandateTrend])
+  const kpis = useMemo(() => [
+    { label: 'Total Clients', value: data?.kpis?.totalClients, icon: Building2, accent: 'gradient-primary', sparkline: clientSparkline, breakdown: clientStatusData, onDrilldown: clientDrilldown },
+    { label: 'Total Candidates', value: data?.kpis?.totalCandidates, icon: Users, accent: 'gradient-info', sparkline: candidateSparkline, breakdown: candidateStatusData, onDrilldown: candidateDrilldown },
+    { label: 'Total Mandates', value: data?.kpis?.totalMandates, icon: Briefcase, accent: 'gradient-warning', sparkline: mandateSparkline, breakdown: mandateStatusData, onDrilldown: mandateDrilldown }
+  ], [candidateDrilldown, candidateSparkline, candidateStatusData, clientDrilldown, clientSparkline, clientStatusData, data?.kpis?.totalCandidates, data?.kpis?.totalClients, data?.kpis?.totalMandates, mandateDrilldown, mandateSparkline, mandateStatusData])
+  const deferredSectionKey = `${consultant}::${period}::${dashboardDataReady ? 'ready' : 'loading'}::${error ? 'error' : 'ok'}`
+  const renderDeferredSections = (dashboardDataReady || error) && deferredRenderKey === deferredSectionKey
+
+  useEffect(() => {
+    if (!dashboardDataReady && !error) return undefined
+
+    let idleId = 0
+    let timer = 0
+    const showDeferredSections = () => setDeferredRenderKey(deferredSectionKey)
+
+    if (typeof window.requestIdleCallback === 'function') {
+      idleId = window.requestIdleCallback(showDeferredSections, { timeout: 600 })
+    } else {
+      timer = window.setTimeout(showDeferredSections, DEFERRED_SECTION_DELAY_MS)
+    }
+
+    return () => {
+      if (idleId && typeof window.cancelIdleCallback === 'function') window.cancelIdleCallback(idleId)
+      window.clearTimeout(timer)
+    }
+  }, [dashboardDataReady, deferredSectionKey, error])
+
   useEffect(() => {
     if (!selectedCard && !selectedDrilldown) return undefined
     const previousOverflow = document.body.style.overflow
@@ -669,18 +708,19 @@ export default function DashboardHome() {
     return () => document.removeEventListener('pointerdown', close)
   }, [consultantOpen])
 
-  const openCard = (event, card) => {
+  const openCard = useCallback((event, card) => {
     const rect = event?.currentTarget?.getBoundingClientRect?.()
     modalOpenCounter.current += 1
     setSelectedCard({ ...card, rect, openKey: modalOpenCounter.current })
-  }
-  const openRecentActivity = (event) => openCard(event, {
+  }, [])
+  const openRecentActivity = useCallback((event) => openCard(event, {
     type: 'activity',
     title: 'Recent Activity',
     subtitle: 'Latest 50 client, candidate, and mandate changes',
     icon: Clock,
     activities: recentActivity
-  })
+  }), [openCard, recentActivity])
+  const modalContext = useMemo(() => ({ consultant, period }), [consultant, period])
 
   return (
     <div className="ats-dashboard-page modern-dashboard" id="page-dashboard">
@@ -777,6 +817,7 @@ export default function DashboardHome() {
       </div>
       </section>
 
+      {renderDeferredSections ? <>
       <section className="ats-dashboard-module" aria-label="Candidates analytics">
       <div className="ats-dashboard-entity-layout">
         <ExpandableCard onOpen={(event) => openCard(event, { type: 'breakdown', id: 'candidates-analytics', chart: 'donut', title: 'Candidates Analytics', subtitle: 'Candidates by Status', icon: Users, value: data?.kpis?.totalCandidates, centerLabel: 'Candidates', centerValue: data?.kpis?.totalCandidates, breakdown: candidateStatusData, onDrilldown: candidateDrilldown })}>
@@ -861,7 +902,7 @@ export default function DashboardHome() {
           <div className="ats-dashboard-activity-state is-error">Could not load recent activity.</div>
         ) : recentActivity.length ? (
           <div className="ats-dashboard-activity">
-            {recentActivity.slice(0, 7).map((item, index) => (
+            {recentActivityPreview.map((item, index) => (
               <div className="ats-dashboard-activity-row" key={item.id}>
                 <span style={{ background: seriesColor(index) }}><UserCheck size={15} /></span>
                 <div>
@@ -877,7 +918,8 @@ export default function DashboardHome() {
         )}
       </section>
       </ExpandableCard>
-      <DashboardCardModal card={selectedCard} context={{ consultant, period }} onClose={() => setSelectedCard(null)} />
+      </> : null}
+      <DashboardCardModal card={selectedCard} context={modalContext} onClose={() => setSelectedCard(null)} />
       <DashboardDrilldownModal
         drilldown={selectedDrilldown}
         onClose={() => setSelectedDrilldown(null)}
