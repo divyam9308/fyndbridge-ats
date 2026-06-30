@@ -47,14 +47,15 @@ function preventNumberWheel(event) {
   }
 }
 
-const PERFORMANCE_STANDARDS = [
-  { min: 4.5, label: 'Exceptional performance', range: '4.5 and above', tone: 'exceptional' },
-  { min: 4.0, label: 'Strong performance', range: '4.0 - 4.5', tone: 'strong' },
-  { min: 3.5, label: 'Good performance; scope of improvement in few areas', range: '3.5 - 4.0', tone: 'good' },
-  { min: 3.0, label: 'Meets defined expectations; improvement required', range: '3.0 - 3.5', tone: 'meets' },
-  { min: 2.0, label: 'Partially meets expectations; below average, significant improvement required', range: '2.0 - 3.0', tone: 'partial' },
-  { min: -Infinity, label: 'Does not meet expectations', range: 'Up to 2.0', tone: 'low' }
+const PERFORMANCE_STANDARD_SEGMENTS = [
+  { label: 'Up to 2.0', className: 'is-red', width: 40 },
+  { label: '2.0 - 3.0', className: 'is-orange', width: 20 },
+  { label: '3.0 - 3.5', className: 'is-gold', width: 10 },
+  { label: '3.5 - 4.0', className: 'is-blue', width: 10 },
+  { label: '4.0 - 4.5', className: 'is-green', width: 10 },
+  { label: '4.5 and above', className: 'is-purple', width: 10 }
 ]
+
 const PERFORMANCE_PERIODS = [
   { value: 'Q1', label: 'Q1', range: 'Apr-Jun' },
   { value: 'Q2', label: 'Q2', range: 'Jul-Sep' },
@@ -71,9 +72,35 @@ function currentPerformancePeriod() {
   return 'Q4'
 }
 
-function performanceStandard(finalRating) {
-  const rating = Number(finalRating) || 0
-  return PERFORMANCE_STANDARDS.find(item => rating >= item.min) || PERFORMANCE_STANDARDS[PERFORMANCE_STANDARDS.length - 1]
+function clampRating(score) {
+  const rating = Number(score) || 0
+  return Math.min(5, Math.max(0, rating))
+}
+
+function getPerformanceStandard(score) {
+  const rating = Number(score) || 0
+
+  if (rating >= 4.5) {
+    return { label: 'Exceptional performance', range: '4.5 and above', color: 'purple', tone: 'exceptional', min: 4.5, max: 5 }
+  }
+
+  if (rating >= 4.0) {
+    return { label: 'Strong performance', range: '4.0 - 4.5', color: 'green', tone: 'strong', min: 4.0, max: 4.5 }
+  }
+
+  if (rating >= 3.5) {
+    return { label: 'Good performance; scope of improvement in few areas', range: '3.5 - 4.0', color: 'blue', tone: 'good', min: 3.5, max: 4.0 }
+  }
+
+  if (rating >= 3.0) {
+    return { label: 'Meets defined expectations; improvement required', range: '3.0 - 3.5', color: 'gold', tone: 'meets', min: 3.0, max: 3.5 }
+  }
+
+  if (rating > 2.0) {
+    return { label: 'Partially meets expectations; below average, significant improvement required', range: '2.0 - 3.0', color: 'orange', tone: 'partial', min: 2.0, max: 3.0 }
+  }
+
+  return { label: 'Does not meet expectations', range: 'Up to 2.0', color: 'red', tone: 'low', min: 0, max: 2.0 }
 }
 
 function clonePerformanceRows(rows) {
@@ -104,23 +131,31 @@ function canonicalPerformanceRows(rows) {
   }))
 }
 
-function SummaryCard({ label, value, loading, tone = 'low' }) {
+function SummaryCard({ label, value, loading, tone, icon }) {
   return (
     <div className={`performance-summary-card is-${tone}`}>
-      <span>{label}</span>
-      {loading ? <i className="performance-skeleton-block is-summary" aria-hidden="true" /> : <strong>{value}</strong>}
+      <div className="performance-summary-content">
+        <span>{label}</span>
+        {loading ? <i className="performance-skeleton-block is-summary" aria-hidden="true" /> : <strong>{value}<small> /5</small></strong>}
+      </div>
+      <i className="performance-summary-icon" aria-hidden="true">{icon}</i>
     </div>
   )
 }
 
 function PerformanceStandardBanner({ rating, loading }) {
-  const standard = performanceStandard(rating)
+  const standard = getPerformanceStandard(rating)
+  const safeRating = clampRating(rating)
+  const markerPosition = `${safeRating * 20}%`
+  const ringProgress = `${safeRating * 20}%`
   return (
-    <section className={`performance-standard-card is-${standard.tone}`}>
+    <section className={`performance-standard-card is-${standard.tone}`} style={{ '--rating-position': markerPosition, '--ring-progress': ringProgress }}>
       {loading ? (
         <>
+          <div className="performance-score-ring is-loading">
+            <i className="performance-skeleton-block is-ring-score" />
+          </div>
           <div className="performance-standard-main">
-            <i className="performance-standard-dot" />
             <div>
               <span className="performance-skeleton-block is-standard-title" />
               <span className="performance-skeleton-block is-standard-range" />
@@ -130,11 +165,24 @@ function PerformanceStandardBanner({ rating, loading }) {
         </>
       ) : (
         <>
+          <div className="performance-score-ring" aria-label={`Final rating ${formatRating(rating)} out of 5`}>
+            <strong>{formatRating(rating)}</strong>
+            <span>/5</span>
+          </div>
           <div className="performance-standard-main">
-            <i className="performance-standard-dot" />
             <div>
+              <span className="performance-standard-eyebrow"><i className="performance-standard-dot" /> Performance standard</span>
               <h2>{standard.label}</h2>
               <p>Rating range: {standard.range}</p>
+              <div className="performance-standard-bar" aria-hidden="true">
+                {PERFORMANCE_STANDARD_SEGMENTS.map(segment => (
+                  <i key={segment.label} className={segment.className} style={{ width: `${segment.width}%` }} />
+                ))}
+                <b />
+              </div>
+              <div className="performance-standard-scale" aria-hidden="true">
+                {PERFORMANCE_STANDARD_SEGMENTS.map(segment => <span key={segment.label}>{segment.label}</span>)}
+              </div>
             </div>
           </div>
           <strong>{formatRating(rating)} <span>/ 5</span></strong>
@@ -264,9 +312,9 @@ function PerformanceTableSkeleton({ columns }) {
 }
 
 function ReviewCell({ row, columnKey, disabled, onChange }) {
-  if (columnKey === 'self_rating') return <div className="performance-readonly-cell">{formatRating(calculateRating(row.self_score, row.allocation))}</div>
-  if (columnKey === 'ss_ns_rating') return <div className="performance-readonly-cell">{formatRating(calculateRating(row.ss_ns_score, row.allocation))}</div>
-  if (columnKey === 'final_rating') return <div className="performance-readonly-cell">{formatRating(calculateFinalRating(row.ss_ns_score, row.ra_score, row.allocation))}</div>
+  if (columnKey === 'self_rating') return <div className="performance-readonly-cell is-self_rating">{formatRating(calculateRating(row.self_score, row.allocation))}</div>
+  if (columnKey === 'ss_ns_rating') return <div className="performance-readonly-cell is-ss_ns_rating">{formatRating(calculateRating(row.ss_ns_score, row.allocation))}</div>
+  if (columnKey === 'final_rating') return <div className="performance-readonly-cell is-final_rating">{formatRating(calculateFinalRating(row.ss_ns_score, row.ra_score, row.allocation))}</div>
 
   if (columnKey === 'category') {
     return <textarea className="performance-input is-category" value={row.category ?? ''} disabled={disabled} onChange={event => onChange({ category: event.target.value })} />
@@ -282,7 +330,7 @@ function ReviewCell({ row, columnKey, disabled, onChange }) {
   }
 
   if (['work_done', 'ss_ns_feedback', 'ra_feedback'].includes(columnKey)) {
-    return <textarea className="performance-input is-feedback" value={row[columnKey] ?? ''} disabled={disabled} onChange={event => onChange({ [columnKey]: event.target.value })} />
+    return <textarea className={`performance-input is-feedback is-${columnKey}`} value={row[columnKey] ?? ''} disabled={disabled} onChange={event => onChange({ [columnKey]: event.target.value })} />
   }
 
   if (['self_score', 'ss_ns_score', 'ra_score'].includes(columnKey)) {
@@ -500,10 +548,10 @@ export default function PerformanceReviewPage() {
       </div>
 
       <section className="performance-summary-grid">
-        <SummaryCard label="Final Rating Total" value={formatRating(totals.finalRating)} loading={loadingReview} tone={performanceStandard(totals.finalRating).tone} />
-        <SummaryCard label="Self Rating Total" value={formatRating(totals.selfRating)} loading={loadingReview} tone={performanceStandard(totals.selfRating).tone} />
-        <SummaryCard label="SS/NS Rating Total" value={formatRating(totals.ssnsRating)} loading={loadingReview} tone={performanceStandard(totals.ssnsRating).tone} />
-        <SummaryCard label="RA Rating Total" value={formatRating(totals.raRating)} loading={loadingReview} tone={performanceStandard(totals.raRating).tone} />
+        <SummaryCard label="Final Rating" value={formatRating(totals.finalRating)} loading={loadingReview} tone="final" icon="FR" />
+        <SummaryCard label="Self Rating" value={formatRating(totals.selfRating)} loading={loadingReview} tone="self" icon="SR" />
+        <SummaryCard label="SS/NS Rating" value={formatRating(totals.ssnsRating)} loading={loadingReview} tone="ssns" icon="SS" />
+        <SummaryCard label="RA Rating" value={formatRating(totals.raRating)} loading={loadingReview} tone="ra" icon="RA" />
       </section>
 
       <PerformanceStandardBanner rating={totals.finalRating} loading={loadingReview} />
