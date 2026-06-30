@@ -1930,7 +1930,7 @@ export default function CandidatesPage() {
     const expanded = Boolean(expandedCells[cellKey])
     const visibleSkills = expanded ? skills : skills.slice(0, 2)
     return (
-      <div className="table-chip-cell">
+      <div className={`table-chip-cell${expanded ? ' is-expanded' : ''}`}>
         <div className="table-chip-list">
           {visibleSkills.map(skill => <span className="table-skill-chip" key={skill}>{highlightText(skill, aiFilters)}</span>)}
         </div>

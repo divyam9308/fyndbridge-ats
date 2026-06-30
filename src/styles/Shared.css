@@ -95,6 +95,23 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+.table-chip-cell.is-expanded {
+  max-width: 100%;
+  overflow: visible;
+  white-space: normal;
+}
+.table-chip-cell.is-expanded .table-chip-list {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.table-chip-cell.is-expanded .table-skill-chip {
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
 .table-skill-chip {
   display: inline-flex;
   align-items: center;
@@ -1310,6 +1327,15 @@
 .candidates-master-table .table-chip-list {
   flex-wrap: nowrap;
   overflow: hidden;
+}
+
+.candidates-master-table .table-chip-cell.is-expanded,
+.candidates-master-table .table-chip-cell.is-expanded .table-chip-list {
+  overflow: visible;
+}
+
+.candidates-master-table .table-chip-cell.is-expanded .table-chip-list {
+  flex-wrap: wrap;
 }
 
 .candidates-table-skeleton td,
