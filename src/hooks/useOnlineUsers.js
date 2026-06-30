@@ -5,6 +5,7 @@ import { supabase } from '../services/supabaseClient'
 import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
 
 const OnlineUsersContext = createContext([])
+const PRESENCE_REFRESH_MS = 25000
 
 function initials(name, email) {
   const value = String(name || email || '').trim()
@@ -17,13 +18,23 @@ function uniqueUsers(state) {
   Object.entries(state || {}).forEach(([key, presences]) => {
     for (const presence of presences || []) {
       const userId = presence.user_id || key
+      if (!userId) continue
+      const status = presence.status === 'away' ? 'away' : 'online'
       const previous = users.get(userId)
-      if (userId && (!previous || String(presence.online_at || '') > String(previous.online_at || ''))) {
-        users.set(userId, { ...presence, id: userId, user_id: userId, status: presence.status === 'away' ? 'away' : 'online' })
+      const latest = !previous || String(presence.online_at || '') > String(previous.online_at || '')
+      if (!previous || latest) {
+        users.set(userId, { ...presence, id: userId, user_id: userId, status, hasOnlinePresence: previous?.hasOnlinePresence || status === 'online' })
+      }
+      if (status === 'online') {
+        const current = users.get(userId) || {}
+        users.set(userId, { ...current, status: 'online', hasOnlinePresence: true })
       }
     }
   })
-  return [...users.values()].sort((a, b) => {
+  return [...users.values()].map(({ hasOnlinePresence, ...user }) => ({
+    ...user,
+    status: hasOnlinePresence ? 'online' : user.status
+  })).sort((a, b) => {
     if (a.status !== b.status) return a.status === 'online' ? -1 : 1
     return String(a.name || a.email || '').localeCompare(String(b.name || b.email || ''))
   })
@@ -49,6 +60,9 @@ function usePresenceUsers() {
     let cancelled = false
     let channel
     let openTimer
+    let refreshTimer
+    let lastTrackedStatus = ''
+    let lastTrackedAt = 0
     const isActive = () => document.visibilityState === 'visible' && document.hasFocus()
 
     async function start() {
@@ -71,6 +85,7 @@ function usePresenceUsers() {
       const stop = () => {
         const current = channel
         channel = undefined
+        window.clearInterval(refreshTimer)
         setOnlineUsers([])
         if (current) {
           current.untrack().catch(() => {})
@@ -81,6 +96,10 @@ function usePresenceUsers() {
       const trackStatus = (status) => {
         const current = channel
         if (!current) return
+        const now = Date.now()
+        if (status === lastTrackedStatus && now - lastTrackedAt < 10000) return
+        lastTrackedStatus = status
+        lastTrackedAt = now
         current.track(presence(status)).then(result => {
           if (result === 'ok' && !cancelled && channel === current) setOnlineUsers(uniqueUsers(current.presenceState()))
         }).catch(stop)
@@ -104,6 +123,10 @@ function usePresenceUsers() {
                 if (result === 'ok') sync()
                 else stop()
               }).catch(stop)
+              window.clearInterval(refreshTimer)
+              refreshTimer = window.setInterval(() => {
+                if (!cancelled && channel === current) trackStatus(isActive() ? 'online' : 'away')
+              }, PRESENCE_REFRESH_MS)
             } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
               stop()
             }
@@ -124,17 +147,26 @@ function usePresenceUsers() {
       document.addEventListener('visibilitychange', updateActivity)
       window.addEventListener('focus', updateActivity)
       window.addEventListener('blur', updateActivity)
+      window.addEventListener('pageshow', updateActivity)
       window.addEventListener('pagehide', stop)
       window.addEventListener('beforeunload', stop)
+      window.addEventListener('mousemove', updateActivity, { passive: true })
+      window.addEventListener('keydown', updateActivity)
+      window.addEventListener('pointerdown', updateActivity, { passive: true })
       open()
 
       return () => {
         window.clearTimeout(openTimer)
+        window.clearInterval(refreshTimer)
         document.removeEventListener('visibilitychange', updateActivity)
         window.removeEventListener('focus', updateActivity)
         window.removeEventListener('blur', updateActivity)
+        window.removeEventListener('pageshow', updateActivity)
         window.removeEventListener('pagehide', stop)
         window.removeEventListener('beforeunload', stop)
+        window.removeEventListener('mousemove', updateActivity)
+        window.removeEventListener('keydown', updateActivity)
+        window.removeEventListener('pointerdown', updateActivity)
         stop()
       }
     }
