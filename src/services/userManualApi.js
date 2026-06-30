@@ -1,4 +1,4 @@
-import { apiFetch, cachedApiJson, invalidateApiJsonCache } from './apiClient'
+import { apiFetch, cachedApiJson, documentOpenUrl, invalidateApiJsonCache } from './apiClient'
 
 async function json(response) {
   const payload = await response.json().catch(() => ({}))
@@ -23,4 +23,12 @@ export async function uploadUserManual(file) {
   }))
   invalidateApiJsonCache('/api/user-manual')
   return result
+}
+
+export async function fetchUserManualPreviewUrl(path) {
+  const url = documentOpenUrl('user-manual', path)
+  if (!url) throw new Error('User manual file is missing.')
+  const payload = await json(await apiFetch(url))
+  if (!payload.url) throw new Error('User manual preview is unavailable.')
+  return payload.url
 }

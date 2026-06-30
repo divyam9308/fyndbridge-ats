@@ -1,34 +1,35 @@
 import { useEffect, useRef, useState } from 'react'
 import { BookOpenText, Upload, AlertTriangle } from 'lucide-react'
 import { useAdminAccess } from '../hooks/useAdminAccess'
-import { fetchUserManual, uploadUserManual } from '../services/userManualApi'
+import { fetchUserManual, fetchUserManualPreviewUrl, uploadUserManual } from '../services/userManualApi'
 import './UserManualPage.css'
-
-function ManualSection({ section }) {
-  if (!section?.content) return null
-  if (section.type === 'title') return <h1 className="user-manual-title">{section.content}</h1>
-  if (section.type === 'heading') return <h2 className="user-manual-heading">{section.content}</h2>
-  if (section.type === 'subheading') return <h3 className="user-manual-subheading">{section.content}</h3>
-  if (section.type === 'bullet') {
-    return <div className="user-manual-bullet"><span>•</span><p>{section.content}</p></div>
-  }
-  return <p className="user-manual-paragraph">{section.content}</p>
-}
 
 export default function UserManualPage() {
   const { isSuperAdmin } = useAdminAccess({ loadPermissions: false })
   const inputRef = useRef(null)
   const [manual, setManual] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => () => {
+    if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl)
+  }, [previewUrl])
 
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
         const { data } = await fetchUserManual()
-        if (active) setManual(data || null)
+        if (!active) return
+        setManual(data || null)
+        if (data?.path) {
+          const url = await fetchUserManualPreviewUrl(data.path)
+          if (active) setPreviewUrl(url)
+        } else {
+          setPreviewUrl('')
+        }
       } catch (err) {
         if (active) setError(err.message)
       } finally {
@@ -49,6 +50,7 @@ export default function UserManualPage() {
     try {
       const { data } = await uploadUserManual(file)
       setManual(data || null)
+      setPreviewUrl(data?.path ? await fetchUserManualPreviewUrl(data.path) : '')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -56,7 +58,7 @@ export default function UserManualPage() {
     }
   }
 
-  const hasSections = Array.isArray(manual?.sections) && manual.sections.length > 0
+  const hasPreview = Boolean(previewUrl)
 
   return (
     <div className="user-manual-page">
@@ -64,7 +66,7 @@ export default function UserManualPage() {
         <div>
           <span className="user-manual-kicker"><BookOpenText size={15} />User Manual</span>
           <h1>Reference guide for the ATS</h1>
-          <p>{manual?.fileName ? `Showing ${manual.fileName}` : 'Upload a PDF manual and it will be rendered here as a readable, scrollable page.'}</p>
+          <p>{manual?.fileName ? `Showing ${manual.fileName}` : 'Upload a PDF manual and it will appear here as a full-page preview.'}</p>
         </div>
         {isSuperAdmin && (
           <div className="user-manual-actions">
@@ -87,12 +89,8 @@ export default function UserManualPage() {
 
       <section className="user-manual-viewer">
         {loading ? <div className="user-manual-empty">Loading user manual...</div> : null}
-        {!loading && !hasSections ? <div className="user-manual-empty">{isSuperAdmin ? 'Upload a user manual PDF to populate this page.' : 'User manual has not been uploaded yet.'}</div> : null}
-        {hasSections ? (
-          <div className="user-manual-document">
-            {manual.sections.map((section, index) => <ManualSection key={`${section.type}-${index}`} section={section} />)}
-          </div>
-        ) : null}
+        {!loading && !hasPreview ? <div className="user-manual-empty">{isSuperAdmin ? 'Upload a user manual PDF to populate this page.' : 'User manual has not been uploaded yet.'}</div> : null}
+        {hasPreview ? <iframe className="user-manual-frame" title={manual?.fileName || 'User manual preview'} src={previewUrl} /> : null}
       </section>
     </div>
   )

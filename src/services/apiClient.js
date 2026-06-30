@@ -10,7 +10,8 @@ const DOCUMENT_OPEN_TYPES = {
   contract: { bucket: 'contract-pdfs', endpoint: '/api/documents/open/contract' },
   jd: { bucket: 'jds', endpoint: '/api/documents/open/jd' },
   invoice: { bucket: 'invoice', endpoint: '/api/documents/open/invoice' },
-  'employee-handbook': { bucket: 'employee-handbook', endpoint: '/api/documents/open/employee-handbook' }
+  'employee-handbook': { bucket: 'employee-handbook', endpoint: '/api/documents/open/employee-handbook' },
+  'user-manual': { bucket: 'user-manual', endpoint: '/api/documents/open/user-manual' }
 }
 
 const isPrivateApiUrl = (value) => {
