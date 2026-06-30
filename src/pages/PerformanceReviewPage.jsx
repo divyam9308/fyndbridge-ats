@@ -138,7 +138,6 @@ function SummaryCard({ label, value, loading, tone }) {
         <span>{label}</span>
         {loading ? <i className="performance-skeleton-block is-summary" aria-hidden="true" /> : <strong>{value}<small> /5</small></strong>}
       </div>
-      <i className="performance-summary-icon" aria-hidden="true" />
     </div>
   )
 }
