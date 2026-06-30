@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { AlertTriangle, ChevronDown, RotateCcw, Save, Search, UserRound } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
+import { useStaffDirectory } from '../hooks/useStaffDirectory'
 import {
   CALCULATED_PERFORMANCE_COLUMNS,
   DEFAULT_PERFORMANCE_PERMISSIONS,
@@ -16,7 +17,6 @@ import {
   isPerformanceColumnHidden,
   normalizePerformanceRows
 } from '../utils/performanceReviewStorage'
-import { fetchAdminProfileOptions } from '../services/adminAccessApi'
 import {
   fetchMyPerformanceReview,
   fetchPerformancePermissions,
@@ -239,29 +239,24 @@ function EmployeeSelector({ users, selectedUserId, onSelect, loading, disabled }
 
   return (
     <div ref={selectRef} className="performance-employee-select">
-        {loading ? (
-          <div className="performance-employee-placeholder" aria-hidden="true">
-            <i className="performance-skeleton-block" />
-          </div>
-        ) : (
-          <button type="button" onClick={() => { if (!disabled) setOpen(current => !current) }} aria-expanded={open} disabled={disabled}>
-            <span>{selected?.name || 'Select employee'}</span>
-            <ChevronDown size={16} />
-          </button>
-        )}
+        <button type="button" onClick={() => { if (!disabled) setOpen(current => !current) }} aria-expanded={open} disabled={disabled}>
+          <span>{selected?.name || 'Select employee'}</span>
+          <ChevronDown size={16} />
+        </button>
         {open && (
           <div className="performance-employee-menu">
             <label>
               <Search size={15} />
               <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search employee" autoFocus />
             </label>
+            {loading && <span>Loading employees...</span>}
             {matches.map(user => (
               <button key={user.id} type="button" className={user.id === selectedUserId ? 'is-selected' : ''} onClick={() => { onSelect(user.id); setOpen(false); setQuery('') }}>
                 <strong>{user.name}</strong>
                 {user.email ? <small>{user.email}</small> : null}
               </button>
             ))}
-            {!matches.length && <span>No employees found.</span>}
+            {!loading && !matches.length && <span>No employees found.</span>}
           </div>
         )}
       </div>
@@ -342,6 +337,7 @@ function ReviewCell({ row, columnKey, disabled, onChange }) {
 export default function PerformanceReviewPage() {
   const { user } = useAuth()
   const { isSuperAdmin } = useAdminAccess({ loadPermissions: false })
+  const { staff: staffUsers, loading: loadingStaff } = useStaffDirectory({ enabled: isSuperAdmin })
   const ownUserId = currentUserId(user)
   const ownName = displayName(user)
   const [selectorUsers, setSelectorUsers] = useState([{ id: ownUserId, name: ownName, email: user?.email || '' }])
@@ -352,7 +348,6 @@ export default function PerformanceReviewPage() {
   const [savedRows, setSavedRows] = useState(() => normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS))
   const [permissions, setPermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
   const [loadingReview, setLoadingReview] = useState(true)
-  const [loadingEmployees, setLoadingEmployees] = useState(false)
   const [savingReview, setSavingReview] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
@@ -383,20 +378,16 @@ export default function PerformanceReviewPage() {
 
   useEffect(() => {
     if (!isSuperAdmin) return undefined
-    let active = true
-    const employeeTimer = window.setTimeout(() => {
-      if (active) setLoadingEmployees(true)
-    }, 0)
-    fetchAdminProfileOptions().then(({ data }) => {
-      if (!active) return
-      const profiles = (data || []).map(profile => ({ id: profile.user_id, name: profile.name, email: profile.email })).filter(profile => profile.id)
+    const timer = window.setTimeout(() => {
       const byId = new Map([[ownUserId, { id: ownUserId, name: ownName, email: user?.email || '' }]])
-      profiles.forEach(profile => byId.set(profile.id, profile))
+      staffUsers.forEach(profile => {
+        const id = profile.id || profile.user_id
+        if (id) byId.set(id, { id, name: profile.name, email: profile.email || '' })
+      })
       setSelectorUsers([...byId.values()])
-    }).catch(err => setError(err.message))
-      .finally(() => { if (active) setLoadingEmployees(false) })
-    return () => { active = false; window.clearTimeout(employeeTimer) }
-  }, [isSuperAdmin, ownName, ownUserId, user?.email])
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [isSuperAdmin, ownName, ownUserId, staffUsers, user?.email])
 
   useEffect(() => {
     let active = true
@@ -539,7 +530,7 @@ export default function PerformanceReviewPage() {
       {dirty && <div className="performance-unsaved-row"><span className="performance-unsaved">Unsaved changes</span></div>}
       <EmployeeReviewCard isSuperAdmin={isSuperAdmin} />
       <div className="performance-control-row">
-        <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={loadingEmployees} disabled={!isSuperAdmin} />
+        <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={isSuperAdmin && loadingStaff} disabled={!isSuperAdmin} />
         <PeriodSelector period={period} onChange={setPeriod} />
       </div>
       <div className={`performance-message-slot${error ? ' is-visible' : ''}`}>
