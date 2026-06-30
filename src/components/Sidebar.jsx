@@ -13,7 +13,7 @@ const navItems = [
   { to: '/dashboard/jobs',       label: 'Mandates', Icon: Briefcase },
   { to: '/dashboard/clients',    label: 'Clients',    Icon: Building2 },
   { to: '/dashboard/candidates', label: 'Candidates', Icon: Users },
-  { to: '/dashboard/performance', label: 'Performance Review', Icon: ClipboardList },
+  { to: '/dashboard/performance', label: 'PMS', Icon: ClipboardList },
 ]
 
 export default function Sidebar() {

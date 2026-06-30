@@ -147,7 +147,7 @@ function PerformanceStandardBanner({ rating, loading }) {
 function EmployeeReviewCard({ isSuperAdmin }) {
   return (
     <section className="performance-employee-card">
-      <span className="performance-kicker"><UserRound size={14} />{isSuperAdmin ? 'Super Admin View' : 'Performance Review'}</span>
+      <span className="performance-kicker"><UserRound size={14} />{isSuperAdmin ? 'Super Admin View' : 'PMS'}</span>
       <h2>Employee Review</h2>
     </section>
   )
@@ -223,7 +223,7 @@ function EmployeeSelector({ users, selectedUserId, onSelect, loading, disabled }
 
 function PeriodSelector({ period, onChange }) {
   return (
-    <div className="performance-periods" aria-label="Performance review quarter">
+    <div className="performance-periods" aria-label="PMS quarter">
       {PERFORMANCE_PERIODS.map(item => (
         <button key={item.value} type="button" className={item.value === period ? 'is-active' : ''} onClick={() => onChange(item.value)}>
           <strong>{item.label}</strong>
@@ -236,7 +236,7 @@ function PeriodSelector({ period, onChange }) {
 
 function PerformanceTableSkeleton({ columns }) {
   return (
-    <table className="performance-table performance-table-skeleton" aria-label="Loading performance review">
+    <table className="performance-table performance-table-skeleton" aria-label="Loading PMS">
       <colgroup>{columns.map(column => <col key={column.key} style={{ width: `${column.width}px` }} />)}</colgroup>
       <thead>
         <tr>{columns.map(column => <th key={column.key}>{column.label}</th>)}</tr>
@@ -472,7 +472,7 @@ export default function PerformanceReviewPage() {
       setRows(clonePerformanceRows(loaded))
       setSavedRows(clonePerformanceRows(loaded))
       loadedReviewKeyRef.current = key
-      setToast('Performance review saved.')
+      setToast('PMS saved.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -565,7 +565,7 @@ export default function PerformanceReviewPage() {
             <span><AlertTriangle size={18} /></span>
             <div>
               <strong>Unsaved performance changes</strong>
-              <p>Review your edits before saving the performance review.</p>
+              <p>Review your edits before saving PMS.</p>
             </div>
             <button className="performance-reset-btn" type="button" onClick={handleReset} disabled={savingReview || !dirty}><RotateCcw size={16} />Cancel</button>
             <button className="performance-save-btn" type="button" onClick={handleSave} disabled={!canSave}><Save size={16} />{savingReview ? 'Saving...' : 'Save Changes'}</button>
