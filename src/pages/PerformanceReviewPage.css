@@ -94,15 +94,11 @@
   width: min(360px, 100%);
 }
 
-.performance-employee-control-stack {
+.performance-control-panel {
   display: flex;
-  width: min(360px, 100%);
   flex-direction: column;
-  gap: 8px;
-}
-
-.performance-employee-control-stack .performance-employee-select {
-  width: 100%;
+  align-items: flex-start;
+  gap: 10px;
 }
 
 .performance-control-row {
@@ -135,7 +131,7 @@
 
 .performance-handbook-row {
   display: flex;
-  min-width: 0;
+  width: min(560px, 100%);
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;

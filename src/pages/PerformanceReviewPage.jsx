@@ -603,12 +603,12 @@ export default function PerformanceReviewPage() {
       {toast && <div className="performance-toast" role="status">{toast}</div>}
       {dirty && <div className="performance-unsaved-row"><span className="performance-unsaved">Unsaved changes</span></div>}
       <EmployeeReviewCard isSuperAdmin={isSuperAdmin} />
-      <div className="performance-control-row">
-        <div className="performance-employee-control-stack">
+      <div className="performance-control-panel">
+        <div className="performance-control-row">
           <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={isSuperAdmin && loadingStaff} disabled={!isSuperAdmin} />
-          <EmployeeHandbook handbook={handbook} canUpload={isSuperAdmin} uploading={uploadingHandbook} onOpen={handleOpenHandbook} onUpload={handleHandbookUpload} />
+          <PeriodSelector period={period} onChange={setPeriod} />
         </div>
-        <PeriodSelector period={period} onChange={setPeriod} />
+        <EmployeeHandbook handbook={handbook} canUpload={isSuperAdmin} uploading={uploadingHandbook} onOpen={handleOpenHandbook} onUpload={handleHandbookUpload} />
       </div>
       <div className={`performance-message-slot${error ? ' is-visible' : ''}`}>
         {error && <div className="performance-warning"><AlertTriangle size={17} /><span>{error}</span></div>}
