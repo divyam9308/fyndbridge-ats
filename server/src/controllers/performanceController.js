@@ -4,6 +4,7 @@ const {
   getPermissions,
   updatePermissions
 } = require('../services/performanceReview')
+const { getHandbook, updateHandbook } = require('../services/performanceHandbook')
 
 function sendError(res, err) {
   return res.status(err.statusCode || 500).json({
@@ -51,9 +52,21 @@ async function permissions(req, res) {
   }
 }
 
+async function handbook(req, res) {
+  try {
+    if (req.method === 'POST') {
+      return res.json({ data: await updateHandbook(req.user, req.file) })
+    }
+    return res.json({ data: await getHandbook() })
+  } catch (err) {
+    return sendError(res, err)
+  }
+}
+
 module.exports = {
   me,
   byEmployee,
   save,
-  permissions
+  permissions,
+  handbook
 }

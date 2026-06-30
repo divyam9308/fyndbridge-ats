@@ -94,6 +94,17 @@
   width: min(360px, 100%);
 }
 
+.performance-employee-control-stack {
+  display: flex;
+  width: min(360px, 100%);
+  flex-direction: column;
+  gap: 8px;
+}
+
+.performance-employee-control-stack .performance-employee-select {
+  width: 100%;
+}
+
 .performance-control-row {
   display: flex;
   align-items: center;
@@ -120,6 +131,59 @@
 
 .performance-employee-select > button {
   width: 100%;
+}
+
+.performance-handbook-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.performance-handbook-link,
+.performance-handbook-upload {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(0, 18, 100, 0.14);
+  border-radius: 12px;
+  background: var(--perf-surface);
+  color: var(--perf-navy);
+  box-shadow: 0 4px 12px rgba(0, 18, 100, 0.06);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.performance-handbook-link {
+  flex: 1 1 180px;
+  justify-content: flex-start;
+  padding: 0 12px;
+}
+
+.performance-handbook-link svg {
+  color: var(--perf-blue);
+}
+
+.performance-handbook-upload {
+  flex: 0 0 auto;
+  border-color: rgba(37, 99, 235, 0.2);
+  background: #f5f8ff;
+  color: var(--perf-blue-deep);
+  padding: 0 11px;
+}
+
+.performance-handbook-upload:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.performance-handbook-input {
+  display: none;
 }
 
 .performance-employee-select > button:disabled {

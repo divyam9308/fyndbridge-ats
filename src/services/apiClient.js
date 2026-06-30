@@ -9,7 +9,8 @@ const DOCUMENT_OPEN_TYPES = {
   resume: { bucket: 'resumes', endpoint: '/api/resumes/open' },
   contract: { bucket: 'contract-pdfs', endpoint: '/api/documents/open/contract' },
   jd: { bucket: 'jds', endpoint: '/api/documents/open/jd' },
-  invoice: { bucket: 'invoice', endpoint: '/api/documents/open/invoice' }
+  invoice: { bucket: 'invoice', endpoint: '/api/documents/open/invoice' },
+  'employee-handbook': { bucket: 'employee-handbook', endpoint: '/api/documents/open/employee-handbook' }
 }
 
 const isPrivateApiUrl = (value) => {

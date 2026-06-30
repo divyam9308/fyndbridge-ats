@@ -46,3 +46,18 @@ export async function savePerformancePermissions(permissions) {
   invalidateApiJsonCache('/api/admin/bootstrap')
   return result
 }
+
+export async function fetchEmployeeHandbook() {
+  return cachedApiJson('/api/performance/handbook', {}, { ttlMs: 30000 })
+}
+
+export async function uploadEmployeeHandbook(file) {
+  const body = new FormData()
+  body.append('handbook', file)
+  const result = await json(await apiFetch('/api/performance/handbook', {
+    method: 'POST',
+    body
+  }))
+  invalidateApiJsonCache('/api/performance/handbook')
+  return result
+}

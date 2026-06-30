@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, ChevronDown, RotateCcw, Save, Search, UserRound } from 'lucide-react'
+import { AlertTriangle, ChevronDown, FileText, RotateCcw, Save, Search, Upload, UserRound } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import { useStaffDirectory } from '../hooks/useStaffDirectory'
@@ -19,10 +19,13 @@ import {
 } from '../utils/performanceReviewStorage'
 import {
   fetchMyPerformanceReview,
+  fetchEmployeeHandbook,
   fetchPerformancePermissions,
   fetchPerformanceReview,
-  savePerformanceReview
+  savePerformanceReview,
+  uploadEmployeeHandbook
 } from '../services/performanceApi'
+import { openProtectedDocumentPath } from '../services/apiClient'
 import './PerformanceReviewPage.css'
 
 function currentUserId(user) {
@@ -276,6 +279,37 @@ function PeriodSelector({ period, onChange }) {
   )
 }
 
+function EmployeeHandbook({ handbook, canUpload, uploading, onOpen, onUpload }) {
+  const inputRef = useRef(null)
+  return (
+    <div className="performance-handbook-row">
+      <button type="button" className="performance-handbook-link" onClick={onOpen}>
+        <FileText size={18} />
+        <span>Employee Handbook</span>
+      </button>
+      {canUpload ? (
+        <>
+          <input
+            ref={inputRef}
+            className="performance-handbook-input"
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) onUpload(file)
+              event.target.value = ''
+            }}
+          />
+          <button type="button" className="performance-handbook-upload" onClick={() => inputRef.current?.click()} disabled={uploading}>
+            <Upload size={15} />
+            {uploading ? 'Uploading...' : handbook?.path ? 'Change file' : 'Choose file'}
+          </button>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
 function PerformanceTableSkeleton({ columns }) {
   return (
     <table className="performance-table performance-table-skeleton" aria-label="Loading PMS">
@@ -349,6 +383,8 @@ export default function PerformanceReviewPage() {
   const [permissions, setPermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
   const [loadingReview, setLoadingReview] = useState(true)
   const [savingReview, setSavingReview] = useState(false)
+  const [handbook, setHandbook] = useState(null)
+  const [uploadingHandbook, setUploadingHandbook] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const reviewCacheRef = useRef(new Map())
@@ -455,6 +491,14 @@ export default function PerformanceReviewPage() {
   }, [])
 
   useEffect(() => {
+    let active = true
+    fetchEmployeeHandbook().then(({ data }) => {
+      if (active) setHandbook(data || null)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
     if (!toast) return undefined
     const timer = window.setTimeout(() => setToast(''), 3200)
     return () => window.clearTimeout(timer)
@@ -524,13 +568,46 @@ export default function PerformanceReviewPage() {
     setToast('Changes discarded.')
   }
 
+  const handleOpenHandbook = async () => {
+    if (!handbook?.path) {
+      setToast(isSuperAdmin ? 'Upload the employee handbook PDF first.' : 'Employee handbook is not uploaded yet.')
+      return
+    }
+    await openProtectedDocumentPath('employee-handbook', handbook.path, {
+      missingMessage: 'Employee handbook is not uploaded yet.',
+      notFoundMessage: 'Employee handbook file was not found. Please ask a Super Admin to upload it again.'
+    })
+  }
+
+  const handleHandbookUpload = async (file) => {
+    if (!file) return
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+      setError('Only PDF files are accepted for the employee handbook.')
+      return
+    }
+    setUploadingHandbook(true)
+    setError('')
+    try {
+      const { data } = await uploadEmployeeHandbook(file)
+      setHandbook(data || null)
+      setToast('Employee handbook uploaded.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploadingHandbook(false)
+    }
+  }
+
   return (
     <div className="performance-page">
       {toast && <div className="performance-toast" role="status">{toast}</div>}
       {dirty && <div className="performance-unsaved-row"><span className="performance-unsaved">Unsaved changes</span></div>}
       <EmployeeReviewCard isSuperAdmin={isSuperAdmin} />
       <div className="performance-control-row">
-        <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={isSuperAdmin && loadingStaff} disabled={!isSuperAdmin} />
+        <div className="performance-employee-control-stack">
+          <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={isSuperAdmin && loadingStaff} disabled={!isSuperAdmin} />
+          <EmployeeHandbook handbook={handbook} canUpload={isSuperAdmin} uploading={uploadingHandbook} onOpen={handleOpenHandbook} onUpload={handleHandbookUpload} />
+        </div>
         <PeriodSelector period={period} onChange={setPeriod} />
       </div>
       <div className={`performance-message-slot${error ? ' is-visible' : ''}`}>

@@ -2,7 +2,8 @@ const STORAGE_BUCKETS = {
   CV: 'resumes',
   JD: 'jds',
   CONTRACT: 'contract-pdfs',
-  INVOICE: 'invoice'
+  INVOICE: 'invoice',
+  EMPLOYEE_HANDBOOK: 'employee-handbook'
 }
 
 const STORAGE_BUCKET_TYPES = {
@@ -11,7 +12,9 @@ const STORAGE_BUCKET_TYPES = {
   jd: STORAGE_BUCKETS.JD,
   contract: STORAGE_BUCKETS.CONTRACT,
   'contract-pdf': STORAGE_BUCKETS.CONTRACT,
-  invoice: STORAGE_BUCKETS.INVOICE
+  invoice: STORAGE_BUCKETS.INVOICE,
+  handbook: STORAGE_BUCKETS.EMPLOYEE_HANDBOOK,
+  'employee-handbook': STORAGE_BUCKETS.EMPLOYEE_HANDBOOK
 }
 
 const LEGACY_BUCKET_NAMES = [
@@ -19,6 +22,7 @@ const LEGACY_BUCKET_NAMES = [
   STORAGE_BUCKETS.JD,
   STORAGE_BUCKETS.CONTRACT,
   STORAGE_BUCKETS.INVOICE,
+  STORAGE_BUCKETS.EMPLOYEE_HANDBOOK,
   'resume',
   'cvs',
   'cv',
@@ -95,4 +99,3 @@ module.exports = {
   documentOpenUrl,
   normalizeStoragePath
 }
-
