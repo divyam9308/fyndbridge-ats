@@ -428,7 +428,7 @@
 
 .performance-standard-card.is-exceptional { --standard-accent: var(--perf-purple); }
 .performance-standard-card.is-strong { --standard-accent: var(--perf-teal); }
-.performance-standard-card.is-good { --standard-accent: var(--perf-blue); }
+.performance-standard-card.is-good { --standard-accent: #0ea5e9; }
 .performance-standard-card.is-meets { --standard-accent: var(--perf-gold); }
 .performance-standard-card.is-partial { --standard-accent: var(--perf-orange); }
 .performance-standard-card.is-low { --standard-accent: var(--perf-red); }
@@ -468,17 +468,20 @@
 .performance-standard-bar {
   position: relative;
   display: flex;
+  gap: 4px;
   width: 100%;
-  height: 15px;
+  height: 9px;
   overflow: visible;
   border-radius: 999px;
-  background: #edf1f8;
-  box-shadow: inset 0 0 0 1px rgba(0, 18, 100, 0.08);
+  background: transparent;
 }
 
 .performance-standard-bar i {
   display: block;
+  min-width: 0;
   height: 100%;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 18, 100, 0.1);
 }
 
 .performance-standard-bar i:first-child {
@@ -494,7 +497,7 @@
 .performance-standard-bar .is-red { background: #ef4444; }
 .performance-standard-bar .is-orange { background: #f97316; }
 .performance-standard-bar .is-gold { background: #DAB111; }
-.performance-standard-bar .is-blue { background: #2563eb; }
+.performance-standard-bar .is-blue { background: #0ea5e9; }
 .performance-standard-bar .is-green { background: #14b8a6; }
 .performance-standard-bar .is-purple { background: linear-gradient(90deg, #7c3aed, #1d4ed8); }
 
@@ -502,8 +505,8 @@
   position: absolute;
   top: 50%;
   left: var(--rating-position, 0%);
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border: 4px solid #fff;
   border-radius: 50%;
   background: var(--perf-blue-deep);

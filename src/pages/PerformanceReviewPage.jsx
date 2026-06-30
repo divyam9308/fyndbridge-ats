@@ -131,14 +131,14 @@ function canonicalPerformanceRows(rows) {
   }))
 }
 
-function SummaryCard({ label, value, loading, tone, icon }) {
+function SummaryCard({ label, value, loading, tone }) {
   return (
     <div className={`performance-summary-card is-${tone}`}>
       <div className="performance-summary-content">
         <span>{label}</span>
         {loading ? <i className="performance-skeleton-block is-summary" aria-hidden="true" /> : <strong>{value}<small> /5</small></strong>}
       </div>
-      <i className="performance-summary-icon" aria-hidden="true">{icon}</i>
+      <i className="performance-summary-icon" aria-hidden="true" />
     </div>
   )
 }
@@ -176,7 +176,7 @@ function PerformanceStandardBanner({ rating, loading }) {
               <p>Rating range: {standard.range}</p>
               <div className="performance-standard-bar" aria-hidden="true">
                 {PERFORMANCE_STANDARD_SEGMENTS.map(segment => (
-                  <i key={segment.label} className={segment.className} style={{ width: `${segment.width}%` }} />
+                  <i key={segment.label} className={segment.className} style={{ flex: `${segment.width} ${segment.width} 0` }} />
                 ))}
                 <b />
               </div>
@@ -548,10 +548,10 @@ export default function PerformanceReviewPage() {
       </div>
 
       <section className="performance-summary-grid">
-        <SummaryCard label="Final Rating" value={formatRating(totals.finalRating)} loading={loadingReview} tone="final" icon="FR" />
-        <SummaryCard label="Self Rating" value={formatRating(totals.selfRating)} loading={loadingReview} tone="self" icon="SR" />
-        <SummaryCard label="SS/NS Rating" value={formatRating(totals.ssnsRating)} loading={loadingReview} tone="ssns" icon="SS" />
-        <SummaryCard label="RA Rating" value={formatRating(totals.raRating)} loading={loadingReview} tone="ra" icon="RA" />
+        <SummaryCard label="Final Rating" value={formatRating(totals.finalRating)} loading={loadingReview} tone="final" />
+        <SummaryCard label="Self Rating" value={formatRating(totals.selfRating)} loading={loadingReview} tone="self" />
+        <SummaryCard label="SS/NS Rating" value={formatRating(totals.ssnsRating)} loading={loadingReview} tone="ssns" />
+        <SummaryCard label="RA Rating" value={formatRating(totals.raRating)} loading={loadingReview} tone="ra" />
       </section>
 
       <PerformanceStandardBanner rating={totals.finalRating} loading={loadingReview} />
