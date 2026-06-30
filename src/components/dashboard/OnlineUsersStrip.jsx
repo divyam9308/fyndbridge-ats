@@ -37,13 +37,25 @@ function statusLabel(status) {
   return status === 'away' ? 'Away' : 'Online'
 }
 
+function relativeTime(value) {
+  const date = new Date(value || 0)
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000))
+  if (!Number.isFinite(diffSeconds)) return 'just now'
+  if (diffSeconds < 10) return 'just now'
+  if (diffSeconds < 60) return `${diffSeconds}s ago`
+  const minutes = Math.floor(diffSeconds / 60)
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  return `${hours} hr ago`
+}
+
 function UserDetails({ user }) {
-  return <><div className={`online-users-tooltip-status is-${user.status || 'online'}`}><i />{statusLabel(user.status)}</div><strong>{user.name || user.email || 'User'}</strong>{user.role ? <span>{user.role}</span> : null}{user.email ? <small>{user.email}</small> : null}</>
+  return <><div className={`online-users-tooltip-status is-${user.status || 'online'}`}><i />{statusLabel(user.status)}</div><strong>{user.name || user.email || 'User'}</strong><span>Last active: {relativeTime(user.last_seen_at)}</span>{user.current_path ? <span>Page: {user.current_path}</span> : null}{user.email ? <small>{user.email}</small> : null}</>
 }
 
 function OnlineUserAvatar({ user, index, onShow, onHide, firstAway }) {
   const show = event => onShow({ user, rect: event.currentTarget.getBoundingClientRect() })
-  return <button type="button" className={`online-users-avatar is-${user.status || 'online'}${firstAway ? ' is-first-away' : ''}`} style={{ '--avatar-gradient': AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }} aria-label={`${user.name || user.email || 'User'} is ${statusLabel(user.status).toLowerCase()}`} onMouseEnter={show} onMouseLeave={onHide} onFocus={show} onBlur={onHide}>{userInitials(user)}</button>
+  return <button type="button" className={`online-users-avatar is-${user.status || 'online'}${firstAway ? ' is-first-away' : ''}`} style={{ '--avatar-gradient': user.avatar_color || AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }} aria-label={`${user.name || user.email || 'User'} is ${statusLabel(user.status).toLowerCase()}`} onMouseEnter={show} onMouseLeave={onHide} onFocus={show} onBlur={onHide}>{userInitials(user)}</button>
 }
 
 export default function OnlineUsersStrip({ users = [] }) {

@@ -1,11 +1,13 @@
-import { createContext, createElement, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from './useAdminAccess'
-import { supabase } from '../services/supabaseClient'
-import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
+import { apiFetch } from '../services/apiClient'
 
 const OnlineUsersContext = createContext([])
-const PRESENCE_REFRESH_MS = 25000
+const HEARTBEAT_MS = 25000
+const PRESENCE_POLL_MS = 15000
+const MIN_WRITE_MS = 2000
 
 function createPresenceTabId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
@@ -14,193 +16,138 @@ function createPresenceTabId() {
 
 function initials(name, email) {
   const value = String(name || email || '').trim()
-  const parts = value.includes('@') ? value.split('@')[0].replace(/[._-]+/g, ' ').split(/\s+/) : value.split(/\s+/)
+  const source = value.includes('@') ? value.split('@')[0].replace(/[._-]+/g, ' ') : value
+  const parts = source.split(/\s+/).filter(Boolean)
   return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)[0]}` : parts[0]?.slice(0, 2) || 'U').toUpperCase()
 }
 
-function uniqueUsers(state) {
-  const tabsByUser = new Map()
-  const users = new Map()
-  Object.entries(state || {}).forEach(([key, presences]) => {
-    for (const presence of presences || []) {
-      const userId = presence.user_id || key
-      if (!userId) continue
-      const status = presence.status === 'away' ? 'away' : 'online'
-      const tabId = presence.tab_id || presence.phx_ref || presence.presence_ref || `${userId}:${presence.online_at || ''}`
-      const userTabs = tabsByUser.get(userId) || new Map()
-      const previousTab = userTabs.get(tabId)
-      if (!previousTab || String(presence.online_at || '') >= String(previousTab.online_at || '')) {
-        userTabs.set(tabId, { ...presence, id: userId, user_id: userId, status })
-        tabsByUser.set(userId, userTabs)
-      }
-    }
-  })
-
-  tabsByUser.forEach((tabs, userId) => {
-    const tabPresences = [...tabs.values()]
-    const latest = tabPresences.reduce((best, presence) => (
-      !best || String(presence.online_at || '') > String(best.online_at || '') ? presence : best
-    ), null)
-    if (!latest) return
-    users.set(userId, {
-      ...latest,
-      id: userId,
-      user_id: userId,
-      status: tabPresences.some(presence => presence.status === 'online') ? 'online' : 'away'
-    })
-  })
-
-  return [...users.values()].sort((a, b) => {
-    if (a.status !== b.status) return a.status === 'online' ? -1 : 1
-    return String(a.name || a.email || '').localeCompare(String(b.name || b.email || ''))
-  })
+function activeStatus() {
+  return document.visibilityState === 'visible' && document.hasFocus() ? 'online' : 'away'
 }
 
 function usePresenceUsers() {
   const { user, session, profile, loadProfile } = useAuth()
   const { isAdmin, isSuperAdmin } = useAdminAccess({ loadPermissions: false })
-  const [onlineUsers, setOnlineUsers] = useState([])
+  const location = useLocation()
+  const [presenceUsers, setPresenceUsers] = useState([])
   const loadProfileRef = useRef(loadProfile)
+  const metadataRef = useRef(null)
+  const lastWriteRef = useRef({ status: '', path: '', at: 0 })
   const tabIdRef = useRef(createPresenceTabId())
-  const enabled = Boolean(supabase && session?.user && user?.id)
-  const profileName = String(profile?.name || '').trim()
-  const profileRole = profile?.role
-  const profileDesignation = profile?.designation
+  const accessToken = session?.access_token || ''
+  const enabled = Boolean(session?.user && user?.id)
 
   useEffect(() => {
     loadProfileRef.current = loadProfile
   }, [loadProfile])
 
+  const loadPresence = useCallback(async () => {
+    if (!enabled) {
+      setPresenceUsers([])
+      return
+    }
+    try {
+      const payload = await apiFetch('/api/presence', { cache: 'no-store' }).then(response => response.json().catch(() => ({})))
+      setPresenceUsers(Array.isArray(payload.data) ? payload.data : [])
+    } catch {
+      // Presence should never interrupt app usage.
+    }
+  }, [enabled])
+
+  const ensureMetadata = useCallback(async () => {
+    if (metadataRef.current) return metadataRef.current
+    const savedProfile = profile?.name ? profile : await loadProfileRef.current().catch(() => null)
+    const name = String(savedProfile?.name || user?.name || user?.email || '').trim()
+    const email = String(user?.email || session?.user?.email || '').trim()
+    metadataRef.current = {
+      tab_id: tabIdRef.current,
+      display_name: name,
+      email,
+      initials: initials(name, email),
+      role: isSuperAdmin ? 'Super Admin' : isAdmin ? 'Admin' : String(savedProfile?.role || savedProfile?.designation || 'Consultant')
+    }
+    return metadataRef.current
+  }, [isAdmin, isSuperAdmin, profile, session?.user?.email, user?.email, user?.name])
+
+  const heartbeat = useCallback(async ({ force = false } = {}) => {
+    if (!enabled) return
+    const status = activeStatus()
+    const path = `${location.pathname}${location.search || ''}`
+    const now = Date.now()
+    const previous = lastWriteRef.current
+    if (!force && status === previous.status && path === previous.path && now - previous.at < MIN_WRITE_MS) return
+    lastWriteRef.current = { status, path, at: now }
+
+    try {
+      const metadata = await ensureMetadata()
+      await apiFetch('/api/presence/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...metadata, tab_id: tabIdRef.current, status, current_path: path })
+      })
+      loadPresence()
+    } catch {
+      // Presence updates are best effort.
+    }
+  }, [enabled, ensureMetadata, loadPresence, location.pathname, location.search])
+
+  const markCurrentTabOffline = useCallback(() => {
+    if (!enabled || !accessToken) return
+    window.fetch('/api/presence/offline', {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ tab_id: tabIdRef.current })
+    }).catch(() => {})
+  }, [accessToken, enabled])
+
+  useEffect(() => {
+    if (!enabled) {
+      const resetTimer = window.setTimeout(() => setPresenceUsers([]), 0)
+      return () => window.clearTimeout(resetTimer)
+    }
+
+    const initialTimer = window.setTimeout(() => {
+      heartbeat({ force: true })
+      loadPresence()
+    }, 0)
+
+    const writeStatus = () => heartbeat({ force: true })
+    const heartbeatTimer = window.setInterval(() => heartbeat({ force: true }), HEARTBEAT_MS)
+    const pollTimer = window.setInterval(loadPresence, PRESENCE_POLL_MS)
+
+    document.addEventListener('visibilitychange', writeStatus)
+    window.addEventListener('focus', writeStatus)
+    window.addEventListener('blur', writeStatus)
+    window.addEventListener('pageshow', writeStatus)
+    window.addEventListener('online', writeStatus)
+    window.addEventListener('pagehide', markCurrentTabOffline)
+    window.addEventListener('beforeunload', markCurrentTabOffline)
+
+    return () => {
+      window.clearTimeout(initialTimer)
+      window.clearInterval(heartbeatTimer)
+      window.clearInterval(pollTimer)
+      document.removeEventListener('visibilitychange', writeStatus)
+      window.removeEventListener('focus', writeStatus)
+      window.removeEventListener('blur', writeStatus)
+      window.removeEventListener('pageshow', writeStatus)
+      window.removeEventListener('online', writeStatus)
+      window.removeEventListener('pagehide', markCurrentTabOffline)
+      window.removeEventListener('beforeunload', markCurrentTabOffline)
+    }
+  }, [enabled, heartbeat, loadPresence, markCurrentTabOffline])
+
   useEffect(() => {
     if (!enabled) return undefined
+    const routeTimer = window.setTimeout(() => heartbeat({ force: true }), 0)
+    return () => window.clearTimeout(routeTimer)
+  }, [enabled, heartbeat])
 
-    let cancelled = false
-    let channel
-    let openTimer
-    let refreshTimer
-    let lastTrackedStatus = ''
-    let lastTrackedAt = 0
-    const isActive = () => document.visibilityState === 'visible' && document.hasFocus()
-
-    async function start() {
-      const savedProfile = profileName ? { name: profileName, role: profileRole, designation: profileDesignation } : await loadProfileRef.current().catch(() => null)
-      if (cancelled) return
-
-      const name = String(savedProfile?.name || '').trim()
-      if (!name) return
-      const email = String(user.email || session.user.email || '').trim()
-      const presenceBase = {
-        user_id: user.id,
-        id: user.id,
-        tab_id: tabIdRef.current,
-        name,
-        email,
-        role: isSuperAdmin ? 'Super Admin' : isAdmin ? 'Admin' : String(savedProfile?.role || savedProfile?.designation || 'Consultant'),
-        initials: initials(name, email)
-      }
-      const presence = (status = 'online') => ({ ...presenceBase, online_at: new Date().toISOString(), status })
-
-      const stop = () => {
-        const current = channel
-        channel = undefined
-        window.clearInterval(refreshTimer)
-        setOnlineUsers([])
-        if (current) {
-          current.untrack().catch(() => {})
-          supabase.removeChannel(current)
-          logRealtimeRemove('presence:online-users')
-        }
-      }
-      const trackStatus = (status) => {
-        const current = channel
-        if (!current) return
-        const now = Date.now()
-        if (status === lastTrackedStatus && now - lastTrackedAt < 10000) return
-        lastTrackedStatus = status
-        lastTrackedAt = now
-        current.track(presence(status)).then(result => {
-          if (result === 'ok' && !cancelled && channel === current) setOnlineUsers(uniqueUsers(current.presenceState()))
-        }).catch(stop)
-      }
-      const open = () => {
-        if (cancelled || channel) return
-        logRealtimeSubscribe({ name: 'presence:online-users', scope: 'global', tables: ['presence'] })
-        const current = supabase.channel('online-users', { config: { presence: { key: tabIdRef.current } } })
-        channel = current
-        const sync = () => {
-          if (!cancelled && channel === current) setOnlineUsers(uniqueUsers(current.presenceState()))
-        }
-        current
-          .on('presence', { event: 'sync' }, sync)
-          .on('presence', { event: 'join' }, sync)
-          .on('presence', { event: 'leave' }, sync)
-          .subscribe(status => {
-            if (cancelled || channel !== current) return
-            if (status === 'SUBSCRIBED') {
-              current.track(presence(isActive() ? 'online' : 'away')).then(result => {
-                if (result === 'ok') sync()
-                else stop()
-              }).catch(stop)
-              window.clearInterval(refreshTimer)
-              refreshTimer = window.setInterval(() => {
-                if (!cancelled && channel === current) trackStatus(isActive() ? 'online' : 'away')
-              }, PRESENCE_REFRESH_MS)
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-              stop()
-            }
-          })
-      }
-      const ensureOpen = () => {
-        window.clearTimeout(openTimer)
-        openTimer = window.setTimeout(open, 0)
-      }
-      const updateActivity = () => {
-        if (!channel) {
-          ensureOpen()
-          return
-        }
-        trackStatus(isActive() ? 'online' : 'away')
-      }
-
-      document.addEventListener('visibilitychange', updateActivity)
-      window.addEventListener('focus', updateActivity)
-      window.addEventListener('blur', updateActivity)
-      window.addEventListener('pageshow', updateActivity)
-      window.addEventListener('pagehide', stop)
-      window.addEventListener('beforeunload', stop)
-      window.addEventListener('mousemove', updateActivity, { passive: true })
-      window.addEventListener('keydown', updateActivity)
-      window.addEventListener('pointerdown', updateActivity, { passive: true })
-      open()
-
-      return () => {
-        window.clearTimeout(openTimer)
-        window.clearInterval(refreshTimer)
-        document.removeEventListener('visibilitychange', updateActivity)
-        window.removeEventListener('focus', updateActivity)
-        window.removeEventListener('blur', updateActivity)
-        window.removeEventListener('pageshow', updateActivity)
-        window.removeEventListener('pagehide', stop)
-        window.removeEventListener('beforeunload', stop)
-        window.removeEventListener('mousemove', updateActivity)
-        window.removeEventListener('keydown', updateActivity)
-        window.removeEventListener('pointerdown', updateActivity)
-        stop()
-      }
-    }
-
-    let cleanup
-    start().then(result => {
-      cleanup = result
-      if (cancelled) cleanup?.()
-    })
-    return () => {
-      cancelled = true
-      cleanup?.()
-    }
-  }, [enabled, isAdmin, isSuperAdmin, profileDesignation, profileName, profileRole, session?.user?.email, user?.email, user?.id])
-
-  return enabled ? onlineUsers : []
+  return enabled ? presenceUsers : []
 }
 
 export function OnlineUsersProvider({ children }) {
