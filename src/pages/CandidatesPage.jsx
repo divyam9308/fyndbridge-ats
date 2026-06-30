@@ -96,6 +96,14 @@ const formatLocationRegion = (location, region) => {
   const parts = [location, region].map(value => String(value || '').trim()).filter(Boolean)
   return parts.join(', ')
 }
+const previewWords = (value, count = 3) => {
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean)
+  return {
+    words,
+    isLong: words.length > count,
+    preview: words.slice(0, count).join(' ')
+  }
+}
 
 const getReadableClientId = (candidate, clientDisplayLookup) => {
   if (!candidate.client || candidate.client.trim() === '') {
@@ -1920,15 +1928,15 @@ export default function CandidatesPage() {
     if (!skills.length) return '-'
     const cellKey = `${candidate.associationId || candidate.id}-skills`
     const expanded = Boolean(expandedCells[cellKey])
-    const visibleSkills = expanded ? skills : skills.slice(0, 3)
+    const visibleSkills = expanded ? skills : skills.slice(0, 2)
     return (
       <div className="table-chip-cell">
         <div className="table-chip-list">
           {visibleSkills.map(skill => <span className="table-skill-chip" key={skill}>{highlightText(skill, aiFilters)}</span>)}
         </div>
-        {skills.length > 3 && (
+        {skills.length > 2 && (
           <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(candidate.associationId || candidate.id, 'skills', event)}>
-            <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'Show less' : `+ ${skills.length - 3} more skills`}
+            <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'View less' : 'View more'}
           </button>
         )}
       </div>
@@ -1939,13 +1947,14 @@ export default function CandidatesPage() {
     if (!text) return '-'
     const cellKey = `${candidate.associationId || candidate.id}-comments`
     const expanded = Boolean(expandedCells[cellKey])
-    const isLong = text.length > 24
+    const { isLong, preview } = previewWords(text, 3)
+    const displayText = expanded || !isLong ? text : preview
     return (
       <div className="table-comment-cell">
-        <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{highlightText(text, aiFilters)}</div>
+        <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{highlightText(displayText, aiFilters)}</div>
         {isLong && (
           <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(candidate.associationId || candidate.id, 'comments', event)}>
-            <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'Show less' : 'View full comment'}
+            <ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'View less' : 'View more'}
           </button>
         )}
       </div>

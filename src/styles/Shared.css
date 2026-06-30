@@ -1312,10 +1312,6 @@
   overflow: hidden;
 }
 
-.candidates-master-table .table-view-more {
-  display: none;
-}
-
 .candidates-table-skeleton td,
 .candidates-table-skeleton th {
   background: inherit;

@@ -72,6 +72,14 @@ const showCommercialFields = (client) => client.contract_signed === true || clie
 const commercialDash = (client, value) => showCommercialFields(client) ? dash(value) : '-'
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
+const previewWords = (value, count = 3) => {
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean)
+  return {
+    words,
+    isLong: words.length > count,
+    preview: words.slice(0, count).join(' ')
+  }
+}
 const contactNameFor = (client) => String(client?.contact_person || client?.contact || '').replace(/\s+/g, ' ').trim()
 const isRealContact = (client) => {
   const name = contactNameFor(client)
@@ -1231,16 +1239,15 @@ export default function ClientsPage() {
     if (!value) return mutedDash
     const cellKey = `${client.id}-comments`
     const expanded = Boolean(expandedCells[cellKey])
-    const words = value.split(/\s+/)
-    const isLong = words.length > 4
-    const displayText = expanded || !isLong ? value : words.slice(0, 4).join(' ')
+    const { isLong, preview } = previewWords(value, 3)
+    const displayText = expanded || !isLong ? value : preview
     return (
       <div className="table-comment-cell">
         <div className={`table-comment-text${expanded ? ' is-expanded' : ''}`}>{highlightText(displayText, aiFilters)}</div>
         {isLong && (
           <button type="button" className="table-view-more" onClick={(event) => toggleExpandedCell(client.id, 'comments', event)}>
             <ChevronDown size={12} className={expanded ? 'is-open' : ''} />
-            {expanded ? <span>Show less</span> : <span><span>View full</span><span>comment</span></span>}
+            <span>{expanded ? 'View less' : 'View more'}</span>
           </button>
         )}
       </div>
