@@ -91,11 +91,12 @@
 
 .performance-employee-select {
   position: relative;
-  width: min(360px, 100%);
+  width: clamp(320px, 42vw, 560px);
 }
 
 .performance-control-panel {
   display: flex;
+  width: 100%;
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
@@ -106,7 +107,8 @@
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  width: 100%;
 }
 
 .performance-employee-select > button,
@@ -192,12 +194,23 @@
 
 .performance-periods {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   gap: 6px;
   padding: 4px;
   border: 1px solid var(--perf-border);
   border-radius: 15px;
   background: var(--perf-soft);
+}
+
+@media (max-width: 900px) {
+  .performance-control-row {
+    flex-wrap: wrap;
+  }
+
+  .performance-employee-select {
+    width: min(560px, 100%);
+  }
 }
 
 .performance-periods button {
