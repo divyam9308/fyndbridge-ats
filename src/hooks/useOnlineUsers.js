@@ -6,7 +6,7 @@ import { apiFetch } from '../services/apiClient'
 
 const OnlineUsersContext = createContext([])
 const HEARTBEAT_MS = 25000
-const PRESENCE_POLL_MS = 15000
+const PRESENCE_POLL_MS = 5000
 const MIN_WRITE_MS = 2000
 
 function createPresenceTabId() {
