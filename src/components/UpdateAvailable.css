@@ -1,0 +1,71 @@
+.update-available-toast {
+  position: fixed;
+  right: 22px;
+  bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  z-index: 95000;
+  display: grid;
+  width: min(360px, calc(100vw - 32px));
+  gap: 14px;
+  border: 1px solid rgba(0, 18, 100, 0.18);
+  border-left: 4px solid var(--brand-blue);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 44px rgba(0, 18, 100, 0.18);
+  color: var(--brand-blue);
+  padding: 15px 16px;
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+}
+
+.update-available-toast strong,
+.update-available-toast span {
+  display: block;
+}
+
+.update-available-toast strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.update-available-toast span {
+  margin-top: 3px;
+  color: #526079;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.update-available-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.update-available-actions button {
+  min-height: 34px;
+  border-radius: 10px;
+  padding: 0 13px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.update-available-later {
+  border: 1px solid rgba(0, 18, 100, 0.14);
+  background: #fff;
+  color: var(--brand-blue);
+}
+
+.update-available-reload {
+  border: 0;
+  background: linear-gradient(135deg, #001264, #2563eb);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(0, 18, 100, 0.18);
+}
+
+@media (max-width: 640px) {
+  .update-available-toast {
+    right: 14px;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    left: 14px;
+    width: auto;
+  }
+}

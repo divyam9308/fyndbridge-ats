@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import { AuthProvider, RequireAuth } from './context/AuthContext'
+import UpdateAvailable from './components/UpdateAvailable'
 
 const AuthenticatedShell = lazy(() => import('./pages/AuthenticatedShell'))
 const DashboardHome = lazy(() => import('./pages/DashboardHome'))
@@ -43,6 +44,7 @@ function App() {
             <button type="button" onClick={() => setAiQuotaNotice('')} aria-label="Close notification">×</button>
           </div>
         )}
+        <UpdateAvailable />
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />
