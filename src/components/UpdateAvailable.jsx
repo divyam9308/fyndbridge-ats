@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import './UpdateAvailable.css'
 
 const VERSION_URL = '/version.json'
-const CHECK_INTERVAL_MS = 3 * 60 * 1000
+const DEFAULT_CHECK_INTERVAL_MS = 3 * 60 * 1000
+
+function checkIntervalMs() {
+  const value = Number(import.meta.env.VITE_VERSION_CHECK_INTERVAL_MS)
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_CHECK_INTERVAL_MS
+}
 
 function readVersion(payload) {
   return String(payload?.version || payload?.generatedAt || '').trim()
@@ -41,11 +46,21 @@ export default function UpdateAvailable() {
       }
     }
 
+    const checkOnVisible = () => {
+      if (document.visibilityState === 'visible') check()
+    }
+
     check()
-    const interval = window.setInterval(check, CHECK_INTERVAL_MS)
+    const interval = window.setInterval(check, checkIntervalMs())
+    window.addEventListener('focus', check)
+    window.addEventListener('online', check)
+    document.addEventListener('visibilitychange', checkOnVisible)
     return () => {
       cancelled = true
       window.clearInterval(interval)
+      window.removeEventListener('focus', check)
+      window.removeEventListener('online', check)
+      document.removeEventListener('visibilitychange', checkOnVisible)
     }
   }, [visible])
 
