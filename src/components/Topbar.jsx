@@ -9,6 +9,7 @@ const pageTitles = {
   '/dashboard/clients':    { title: 'Clients',     crumb: 'Home / Clients' },
   '/dashboard/candidates': { title: 'Candidates',  crumb: 'Home / Candidates' },
   '/dashboard/performance': { title: 'PMS', crumb: 'Home / PMS' },
+  '/dashboard/user-manual': { title: 'User Manual', crumb: 'Home / User Manual' },
   '/dashboard/admin':      { title: 'Admin Panel', crumb: 'Home / Admin Panel' },
   '/dashboard/settings':   { title: 'Settings',    crumb: 'Home / Settings' },
   '/dashboard/profile':    { title: 'Profile Settings', crumb: 'Home / Profile Settings' },

@@ -30,5 +30,5 @@ export async function fetchUserManualPreviewUrl(path) {
   if (!url) throw new Error('User manual file is missing.')
   const payload = await json(await apiFetch(url))
   if (!payload.url) throw new Error('User manual preview is unavailable.')
-  return payload.url
+  return `${payload.url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
 }

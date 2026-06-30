@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpenText, Upload, AlertTriangle } from 'lucide-react'
+import { Upload, AlertTriangle } from 'lucide-react'
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import { fetchUserManual, fetchUserManualPreviewUrl, uploadUserManual } from '../services/userManualApi'
 import './UserManualPage.css'
@@ -62,30 +62,23 @@ export default function UserManualPage() {
 
   return (
     <div className="user-manual-page">
-      <section className="user-manual-hero">
-        <div>
-          <span className="user-manual-kicker"><BookOpenText size={15} />User Manual</span>
-          <h1>Reference guide for the ATS</h1>
-          <p>{manual?.fileName ? `Showing ${manual.fileName}` : 'Upload a PDF manual and it will appear here as a full-page preview.'}</p>
-        </div>
-        {isSuperAdmin && (
-          <div className="user-manual-actions">
-            <input
-              ref={inputRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              className="user-manual-file-input"
-              onChange={event => handleUpload(event.target.files?.[0] || null)}
-            />
-            <button type="button" className="user-manual-upload-btn" onClick={() => inputRef.current?.click()} disabled={uploading}>
-              <Upload size={16} />
-              {uploading ? 'Saving...' : manual?.path ? 'Add User Manual' : 'Add User Manual'}
-            </button>
-          </div>
-        )}
-      </section>
-
       {error && <div className="user-manual-error" role="alert"><AlertTriangle size={16} /><span>{error}</span></div>}
+
+      {isSuperAdmin && (
+        <div className="user-manual-toolbar">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            className="user-manual-file-input"
+            onChange={event => handleUpload(event.target.files?.[0] || null)}
+          />
+          <button type="button" className="user-manual-upload-btn" onClick={() => inputRef.current?.click()} disabled={uploading}>
+            <Upload size={16} />
+            {uploading ? 'Saving...' : manual?.path ? 'Change User Manual' : 'Add User Manual'}
+          </button>
+        </div>
+      )}
 
       <section className="user-manual-viewer">
         {loading ? <div className="user-manual-empty">Loading user manual...</div> : null}
