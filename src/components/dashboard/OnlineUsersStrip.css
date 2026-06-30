@@ -14,15 +14,21 @@
 }
 
 .ats-online-users-summary {
-  display: inline-flex;
-  align-items: center;
+  display: grid;
   flex: 0 0 auto;
-  gap: 8px;
+  gap: 5px;
   color: var(--navy-darkest);
   font-size: 13px;
 }
 
-.ats-online-users-summary > i,
+.ats-online-users-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.ats-online-users-summary i,
 .online-users-tooltip-status i,
 .online-users-tooltip-heading i {
   width: 8px;
@@ -33,17 +39,30 @@
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.14);
 }
 
+.ats-online-users-summary .is-away {
+  color: #9a6a05;
+}
+
+.ats-online-users-summary .is-away i,
+.online-users-tooltip-status.is-away i {
+  border: 2px solid #facc15;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.16);
+}
+
 .ats-online-users-list {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 10px;
   min-width: 0;
   overflow-x: auto;
-  padding: 3px 4px;
+  padding: 5px 4px;
   scrollbar-width: thin;
 }
 
 .online-users-avatar {
+  --presence-ring: #22c55e;
+  position: relative;
   display: inline-grid;
   width: 40px;
   height: 40px;
@@ -55,7 +74,7 @@
   outline: 0;
   background: var(--avatar-gradient);
   color: #fff;
-  box-shadow: 0 3px 10px rgba(0, 18, 100, 0.16);
+  box-shadow: 0 0 0 2px var(--presence-ring), 0 3px 10px rgba(0, 18, 100, 0.16);
   font: inherit;
   font-size: 11px;
   font-weight: 800;
@@ -64,17 +83,29 @@
   transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
+.online-users-avatar.is-away {
+  --presence-ring: #facc15;
+}
+
+.online-users-avatar.is-first-away {
+  margin-left: 12px;
+}
+
+.online-users-avatar.is-first-away::before {
+  content: '';
+  position: absolute;
+  left: -13px;
+  width: 1px;
+  height: 34px;
+  border-radius: 999px;
+  background: #e4e8f1;
+}
+
 .online-users-avatar:hover,
 .online-users-avatar:focus-visible {
   z-index: 2;
   transform: translateY(-2px);
-  box-shadow: 0 7px 16px rgba(0, 18, 100, 0.22);
-}
-
-.online-users-avatar.is-more {
-  background: #eef1f8;
-  color: #001264;
-  cursor: default;
+  box-shadow: 0 0 0 2px var(--presence-ring), 0 7px 16px rgba(0, 18, 100, 0.22);
 }
 
 .online-users-tooltip {
@@ -101,6 +132,10 @@
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.online-users-tooltip-status.is-away {
+  color: #9a6a05;
 }
 
 .online-users-tooltip > strong {

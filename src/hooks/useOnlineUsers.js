@@ -19,11 +19,14 @@ function uniqueUsers(state) {
       const userId = presence.user_id || key
       const previous = users.get(userId)
       if (userId && (!previous || String(presence.online_at || '') > String(previous.online_at || ''))) {
-        users.set(userId, { ...presence, id: userId, user_id: userId, status: 'online' })
+        users.set(userId, { ...presence, id: userId, user_id: userId, status: presence.status === 'away' ? 'away' : 'online' })
       }
     }
   })
-  return [...users.values()].sort((a, b) => String(a.name || a.email || '').localeCompare(String(b.name || b.email || '')))
+  return [...users.values()].sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'online' ? -1 : 1
+    return String(a.name || a.email || '').localeCompare(String(b.name || b.email || ''))
+  })
 }
 
 function usePresenceUsers() {
@@ -45,7 +48,7 @@ function usePresenceUsers() {
 
     let cancelled = false
     let channel
-    let restoreTimer
+    let openTimer
     const isActive = () => document.visibilityState === 'visible' && document.hasFocus()
 
     async function start() {
@@ -55,16 +58,15 @@ function usePresenceUsers() {
       const name = String(savedProfile?.name || '').trim()
       if (!name) return
       const email = String(user.email || session.user.email || '').trim()
-      const presence = {
+      const presenceBase = {
         user_id: user.id,
         id: user.id,
         name,
         email,
         role: isSuperAdmin ? 'Super Admin' : isAdmin ? 'Admin' : String(savedProfile?.role || savedProfile?.designation || 'Consultant'),
-        initials: initials(name, email),
-        online_at: new Date().toISOString(),
-        status: 'online'
+        initials: initials(name, email)
       }
+      const presence = (status = 'online') => ({ ...presenceBase, online_at: new Date().toISOString(), status })
 
       const stop = () => {
         const current = channel
@@ -76,8 +78,15 @@ function usePresenceUsers() {
           logRealtimeRemove('presence:online-users')
         }
       }
+      const trackStatus = (status) => {
+        const current = channel
+        if (!current) return
+        current.track(presence(status)).then(result => {
+          if (result === 'ok' && !cancelled && channel === current) setOnlineUsers(uniqueUsers(current.presenceState()))
+        }).catch(stop)
+      }
       const open = () => {
-        if (cancelled || channel || !isActive()) return
+        if (cancelled || channel) return
         logRealtimeSubscribe({ name: 'presence:online-users', scope: 'global', tables: ['presence'] })
         const current = supabase.channel('online-users', { config: { presence: { key: user.id } } })
         channel = current
@@ -91,7 +100,7 @@ function usePresenceUsers() {
           .subscribe(status => {
             if (cancelled || channel !== current) return
             if (status === 'SUBSCRIBED') {
-              current.track({ ...presence, online_at: new Date().toISOString() }).then(result => {
+              current.track(presence(isActive() ? 'online' : 'away')).then(result => {
                 if (result === 'ok') sync()
                 else stop()
               }).catch(stop)
@@ -100,30 +109,32 @@ function usePresenceUsers() {
             }
           })
       }
-      const restore = () => {
-        window.clearTimeout(restoreTimer)
-        restoreTimer = window.setTimeout(open, 0)
+      const ensureOpen = () => {
+        window.clearTimeout(openTimer)
+        openTimer = window.setTimeout(open, 0)
       }
-      const hide = () => {
-        window.clearTimeout(restoreTimer)
-        stop()
+      const updateActivity = () => {
+        if (!channel) {
+          ensureOpen()
+          return
+        }
+        trackStatus(isActive() ? 'online' : 'away')
       }
-      const visibility = () => document.visibilityState === 'visible' ? restore() : hide()
 
-      document.addEventListener('visibilitychange', visibility)
-      window.addEventListener('focus', restore)
-      window.addEventListener('blur', hide)
-      window.addEventListener('pagehide', hide)
-      window.addEventListener('beforeunload', hide)
+      document.addEventListener('visibilitychange', updateActivity)
+      window.addEventListener('focus', updateActivity)
+      window.addEventListener('blur', updateActivity)
+      window.addEventListener('pagehide', stop)
+      window.addEventListener('beforeunload', stop)
       open()
 
       return () => {
-        window.clearTimeout(restoreTimer)
-        document.removeEventListener('visibilitychange', visibility)
-        window.removeEventListener('focus', restore)
-        window.removeEventListener('blur', hide)
-        window.removeEventListener('pagehide', hide)
-        window.removeEventListener('beforeunload', hide)
+        window.clearTimeout(openTimer)
+        document.removeEventListener('visibilitychange', updateActivity)
+        window.removeEventListener('focus', updateActivity)
+        window.removeEventListener('blur', updateActivity)
+        window.removeEventListener('pagehide', stop)
+        window.removeEventListener('beforeunload', stop)
         stop()
       }
     }

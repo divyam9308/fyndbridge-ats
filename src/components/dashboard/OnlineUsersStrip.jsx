@@ -33,19 +33,24 @@ function tooltipPosition(rect, itemCount = 1) {
   return { left, top, width }
 }
 
-function UserDetails({ user }) {
-  return <><div className="online-users-tooltip-status"><i />Online</div><strong>{user.name || user.email || 'User'}</strong>{user.role ? <span>{user.role}</span> : null}{user.email ? <small>{user.email}</small> : null}</>
+function statusLabel(status) {
+  return status === 'away' ? 'Away' : 'Online'
 }
 
-function OnlineUserAvatar({ user, index, onShow, onHide }) {
+function UserDetails({ user }) {
+  return <><div className={`online-users-tooltip-status is-${user.status || 'online'}`}><i />{statusLabel(user.status)}</div><strong>{user.name || user.email || 'User'}</strong>{user.role ? <span>{user.role}</span> : null}{user.email ? <small>{user.email}</small> : null}</>
+}
+
+function OnlineUserAvatar({ user, index, onShow, onHide, firstAway }) {
   const show = event => onShow({ user, rect: event.currentTarget.getBoundingClientRect() })
-  return <button type="button" className="online-users-avatar" style={{ '--avatar-gradient': AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }} aria-label={`${user.name || user.email || 'User'} is online`} onMouseEnter={show} onMouseLeave={onHide} onFocus={show} onBlur={onHide}>{userInitials(user)}</button>
+  return <button type="button" className={`online-users-avatar is-${user.status || 'online'}${firstAway ? ' is-first-away' : ''}`} style={{ '--avatar-gradient': AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }} aria-label={`${user.name || user.email || 'User'} is ${statusLabel(user.status).toLowerCase()}`} onMouseEnter={show} onMouseLeave={onHide} onFocus={show} onBlur={onHide}>{userInitials(user)}</button>
 }
 
 export default function OnlineUsersStrip({ users = [] }) {
-  const onlineUsers = users.filter(user => user.status === 'online')
-  const visible = onlineUsers.slice(0, 8)
-  const remaining = onlineUsers.slice(8)
+  const visibleUsers = users.filter(user => user.status === 'online' || user.status === 'away')
+  const onlineUsers = visibleUsers.filter(user => user.status === 'online')
+  const awayUsers = visibleUsers.filter(user => user.status === 'away')
+  const orderedUsers = [...onlineUsers, ...awayUsers]
   const [active, setActive] = useState(null)
 
   useEffect(() => {
@@ -59,13 +64,14 @@ export default function OnlineUsersStrip({ users = [] }) {
     }
   }, [active])
 
-  const showRemaining = event => setActive({ users: remaining, rect: event.currentTarget.getBoundingClientRect() })
-  return <section className="ats-online-users-strip" aria-label={`${onlineUsers.length} users online`}>
-    <div className="ats-online-users-summary"><i /><strong>{onlineUsers.length} Online</strong></div>
-    <div className="ats-online-users-list">
-      {visible.map((user, index) => <OnlineUserAvatar key={user.id || user.email} user={user} index={index} onShow={setActive} onHide={() => setActive(null)} />)}
-      {remaining.length ? <button type="button" className="online-users-avatar is-more" aria-label={`${remaining.length} more online users`} onMouseEnter={showRemaining} onMouseLeave={() => setActive(null)} onFocus={showRemaining} onBlur={() => setActive(null)}>+{remaining.length}</button> : null}
+  return <section className="ats-online-users-strip" aria-label={`${onlineUsers.length} online, ${awayUsers.length} away`}>
+    <div className="ats-online-users-summary">
+      <span className="is-online"><i /><strong>{onlineUsers.length} Online</strong></span>
+      <span className="is-away"><i /><strong>{awayUsers.length} Away</strong></span>
     </div>
-    {active ? createPortal(<div className={`online-users-tooltip${active.users ? ' is-list' : ''}`} style={tooltipPosition(active.rect, active.users?.length || 1)} role="tooltip">{active.users ? <><div className="online-users-tooltip-heading"><i />{active.users.length} more online</div><div className="online-users-tooltip-list">{active.users.map(user => <div key={user.id || user.email} className="online-users-tooltip-user"><span>{userInitials(user)}</span><div><strong>{user.name || user.email || 'User'}</strong>{user.role ? <small>{user.role}</small> : null}</div></div>)}</div></> : <UserDetails user={active.user} />}</div>, document.body) : null}
+    <div className="ats-online-users-list">
+      {orderedUsers.map((user, index) => <OnlineUserAvatar key={user.id || user.email} user={user} index={index} firstAway={onlineUsers.length > 0 && user.status === 'away' && index === onlineUsers.length} onShow={setActive} onHide={() => setActive(null)} />)}
+    </div>
+    {active ? createPortal(<div className="online-users-tooltip" style={tooltipPosition(active.rect)} role="tooltip"><UserDetails user={active.user} /></div>, document.body) : null}
   </section>
 }
