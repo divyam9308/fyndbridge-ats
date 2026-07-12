@@ -1,7 +1,4 @@
-import { useState } from 'react'
 import { Eye, EyeOff, Lock } from 'lucide-react'
-import { updatePageViewPermission } from '../../services/adminAccessApi'
-import { setPageViewPermissions, usePageViewPermissions } from '../../hooks/usePageViewPermissions'
 import { PAGE_VIEW_ITEMS } from '../../utils/pageViewPermissions'
 import AdminPermissionPicker from './AdminPermissionPicker'
 import './PageViewPermissions.css'
@@ -15,27 +12,7 @@ const OPTIONS = [
 const toneForPermission = (value) => value === 'everyone' ? 'is-everyone' : value === 'admin_only' ? 'is-disabled' : 'is-hidden'
 const stateClass = (value) => value === 'everyone' ? 'is-everyone' : value === 'admin_only' ? 'is-admin_disabled' : 'is-admin_hidden'
 
-export default function PageViewPermissions({ isSuperAdmin }) {
-  const { permissions, loading } = usePageViewPermissions()
-  const [saving, setSaving] = useState('')
-  const [error, setError] = useState('')
-
-  const change = async (pageKey, viewPermission) => {
-    if (!isSuperAdmin || saving || permissions[pageKey] === viewPermission) return
-    setSaving(pageKey)
-    setError('')
-    try {
-      const result = await updatePageViewPermission(pageKey, viewPermission)
-      setPageViewPermissions(result.permissions)
-    } catch (err) {
-      const message = err.message || 'Unable to save page view permission.'
-      setError(/page_view_permissions|relation/i.test(message)
-        ? 'Page view settings are not available yet. Apply the page_view_permissions Supabase migration, then try again.'
-        : message)
-    } finally {
-      setSaving('')
-    }
-  }
+export default function PageViewPermissions({ isSuperAdmin, permissions, loading, disabled, onChange }) {
 
   return (
     <section className="admin-section page-view-permissions">
@@ -49,16 +26,15 @@ export default function PageViewPermissions({ isSuperAdmin }) {
         </div>
       </div>
       <div className="admin-section-body">
-        {error && <div className="admin-error">{error}</div>}
         <div className="admin-permission-table page-view-permission-table" aria-busy={loading}>
           <div className="admin-permission-head">
             <span>Page</span><span>Current State</span><span>View Access</span>
           </div>
           {PAGE_VIEW_ITEMS.map(([pageKey, label]) => (
-            <div className="page-view-permission-row" key={pageKey}>
-              <div><div className="admin-permission-label">{label}</div><div className="admin-permission-key">{saving === pageKey ? 'Saving change…' : loading ? 'Loading permission…' : 'Controls who can see this page.'}</div></div>
+            <div className="admin-permission-row page-view-permission-row" key={pageKey}>
+              <div><div className="admin-permission-label">{label}</div><div className="admin-permission-key">{loading ? 'Loading permission…' : 'Controls who can see this page.'}</div></div>
               <span className={`admin-state-chip ${stateClass(permissions[pageKey])}`}>{OPTIONS.find(option => option.value === permissions[pageKey])?.label || 'Everyone'}</span>
-              <AdminPermissionPicker value={permissions[pageKey] || 'everyone'} options={OPTIONS} toneForValue={toneForPermission} disabled={!isSuperAdmin || loading || Boolean(saving)} onChange={(value) => change(pageKey, value)} />
+              <AdminPermissionPicker value={permissions[pageKey] || 'everyone'} options={OPTIONS} toneForValue={toneForPermission} disabled={!isSuperAdmin || loading || disabled} onChange={(value) => onChange(pageKey, value)} />
             </div>
           ))}
         </div>

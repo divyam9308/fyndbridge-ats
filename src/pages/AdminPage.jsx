@@ -11,7 +11,8 @@ import {
   removeAdminUser,
   updateAdminUserRole,
   updateColumnPermission,
-  setRecordLock
+  setRecordLock,
+  updatePageViewPermission
   ,updateDashboardVisibility
 } from '../services/adminAccessApi'
 import AdminPermissionPicker from '../components/admin/AdminPermissionPicker'
@@ -23,6 +24,7 @@ import {
   DEFAULT_PERFORMANCE_PERMISSIONS
 } from '../utils/performanceReviewStorage'
 import { savePerformancePermissions } from '../services/performanceApi'
+import { setPageViewPermissions, usePageViewPermissions } from '../hooks/usePageViewPermissions'
 import './AdminPage.css'
 import AttendancePermissionSettings from '../features/attendance/AttendancePermissionSettings'
 
@@ -257,6 +259,9 @@ export default function AdminPage() {
   const [dashboardRestricted, setDashboardRestricted] = useState(true)
   const [savedDashboardRestricted, setSavedDashboardRestricted] = useState(true)
   const [performancePermissions, setPerformancePermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
+  const { permissions: pageViewPermissions, loading: pageViewPermissionsLoading } = usePageViewPermissions()
+  const [savedPageViewPermissions, setSavedPageViewPermissions] = useState({})
+  const [draftPageViewPermissions, setDraftPageViewPermissions] = useState({})
   const profilePickerRef = useRef(null)
 
   const loadAdminData = useCallback(async () => {
@@ -289,6 +294,18 @@ export default function AdminPage() {
     }, 0)
     return () => window.clearTimeout(timer)
   }, [isSuperAdmin, performancePermissions, permissions])
+
+  useEffect(() => {
+    if (pageViewPermissionsLoading) return
+    const timer = window.setTimeout(() => {
+      setSavedPageViewPermissions(currentSaved => {
+        const nextSaved = { ...(pageViewPermissions || {}) }
+        setDraftPageViewPermissions(currentDraft => isSamePermissions(currentDraft, currentSaved) || !Object.keys(currentDraft || {}).length ? nextSaved : currentDraft)
+        return nextSaved
+      })
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [pageViewPermissions, pageViewPermissionsLoading])
 
   useEffect(() => {
     let active = true
@@ -339,7 +356,8 @@ export default function AdminPage() {
   })
 
   const dashboardVisibilityDirty = dashboardRestricted !== savedDashboardRestricted
-  const dirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty
+  const pageViewPermissionsDirty = !isSamePermissions(savedPageViewPermissions, draftPageViewPermissions)
+  const dirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty || pageViewPermissionsDirty
   const availableTabs = isSuperAdmin ? [...TABS, PERFORMANCE_TAB] : TABS
   const columnSource = activeTab === PERFORMANCE_TABLE_KEY ? PERFORMANCE_COLUMNS : (columns[activeTab] || [])
   const filteredColumns = columnSource.filter(column => {
@@ -396,6 +414,7 @@ export default function AdminPage() {
 
   const cancelPermissionChanges = () => {
     setDraftPermissions(savedPermissions)
+    setDraftPageViewPermissions(savedPageViewPermissions)
     setDashboardRestricted(savedDashboardRestricted)
     setError('')
   }
@@ -403,7 +422,8 @@ export default function AdminPage() {
   const savePermissionChanges = async () => {
     const changes = changedPermissions(savedPermissions, draftPermissions)
     const performanceChanged = isSuperAdmin && !isSamePermissions(savedPermissions?.[PERFORMANCE_TABLE_KEY], draftPermissions?.[PERFORMANCE_TABLE_KEY])
-    if (!changes.length && !dashboardVisibilityDirty && !performanceChanged) return
+    const pageViewChanges = Object.entries(draftPageViewPermissions).filter(([pageKey, viewPermission]) => savedPageViewPermissions?.[pageKey] !== viewPermission)
+    if (!changes.length && !dashboardVisibilityDirty && !performanceChanged && !pageViewChanges.length) return
     setSavingPermissions(true)
     setError('')
     try {
@@ -420,6 +440,16 @@ export default function AdminPage() {
         const data = await savePerformancePermissions(draftPermissions?.[PERFORMANCE_TABLE_KEY])
         setPerformancePermissions({ ...DEFAULT_PERFORMANCE_PERMISSIONS, ...(data.permissions || {}) })
         window.dispatchEvent(new Event('fb:performance-permissions-changed'))
+      }
+      let nextPageViewPermissions = null
+      for (const [pageKey, viewPermission] of pageViewChanges) {
+        const result = await updatePageViewPermission(pageKey, viewPermission)
+        nextPageViewPermissions = result.permissions || nextPageViewPermissions
+      }
+      if (nextPageViewPermissions) {
+        setPageViewPermissions(nextPageViewPermissions)
+        setSavedPageViewPermissions(nextPageViewPermissions)
+        setDraftPageViewPermissions(nextPageViewPermissions)
       }
       setSavedPermissions(draftPermissions)
       setPermissions(draftPermissions)
@@ -569,7 +599,13 @@ export default function AdminPage() {
         </div>
       </Section>
 
-      <PageViewPermissions isSuperAdmin={isSuperAdmin} />
+      <PageViewPermissions
+        isSuperAdmin={isSuperAdmin}
+        permissions={draftPageViewPermissions}
+        loading={pageViewPermissionsLoading}
+        disabled={savingPermissions}
+        onChange={(pageKey, viewPermission) => setDraftPageViewPermissions(current => ({ ...current, [pageKey]: viewPermission }))}
+      />
 
       <Section
         title="Column Permissions"
