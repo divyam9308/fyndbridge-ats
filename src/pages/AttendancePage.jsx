@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Search, Users } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { useAdminAccess } from '../hooks/useAdminAccess'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import { AttendanceCalendar, CorrectionModal, DetailsModal, Modal, StatusPill, Toast, TodayAttendanceCard } from '../features/attendance/AttendanceComponents'
 import { HOLIDAY_TYPES, MONTHS, dateLabel, durationLabel, initials, iso } from '../features/attendance/attendanceData'
 import AttendancePermissionSettings from '../features/attendance/AttendancePermissionSettings'
@@ -39,6 +40,7 @@ export default function AttendancePage(){
   } catch(err) { tell(err.message,'error') }
  }
  useEffect(()=>{if(!admin||attendancePermissions)Promise.resolve().then(refresh)},[year,month,financialYear,attendancePermissions,admin]) // eslint-disable-line react-hooks/exhaustive-deps
+ useRealtimeRefresh({channelName:'realtime:attendance-leave-refresh',tables:['leave_requests','leave_ledger','attendance_records','attendance_correction_requests','company_holidays'],onChange:()=>{Promise.resolve().then(refresh)},enabled:true,debounceMs:350})
  useEffect(()=>{if(!clock.in||clock.out)return;const id=setInterval(()=>setTick(x=>x+1),30000);return()=>clearInterval(id)},[clock])
  useEffect(()=>{if(!toast)return;const id=setTimeout(()=>setToast(null),3000);return()=>clearTimeout(id)},[toast])
  const todayKey=iso(now),todayHoliday=holidays.find(h=>h.date===todayKey),disabledReason=now.getDay()===0?'Weekly Off':todayHoliday?.name
@@ -79,6 +81,7 @@ function LeaveBalancesLegacy({financialYear}) {
  const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[selected,setSelected]=useState(null),[amount,setAmount]=useState(''),[description,setDescription]=useState(''),[saving,setSaving]=useState(false),[error,setError]=useState('')
  const load=()=>{setLoading(true);attendanceApi.getLeaveBalances(financialYear).then(setRows).catch(err=>setError(err.message)).finally(()=>setLoading(false))}
  useEffect(()=>{Promise.resolve().then(load)},[financialYear]) // eslint-disable-line react-hooks/exhaustive-deps
+ useRealtimeRefresh({channelName:'realtime:attendance-leave-balance-page',tables:['leave_requests','leave_ledger'],onChange:load,enabled:true,debounceMs:350})
  const save=async()=>{if(!selected||!amount)return;setSaving(true);setError('');try{await attendanceApi.adjustLeaveBalance(selected.user.user_id,amount,description,financialYear);setSelected(null);setAmount('');setDescription('');load()}catch(err){setError(err.message)}finally{setSaving(false)}}
  return <section className="att-card att-holidays"><div className="att-section-head"><div><h2>Leave Balance</h2></div></div>{error&&<div className="att-toast is-error">{error}</div>}{loading?<div className="att-empty"><p>Loading leave balances…</p></div>:<div className="att-table-card"><table><thead><tr><th>Employee</th><th>Available Balance</th><th>Used</th><th>Pending</th><th>LOP Exposure</th><th>Action</th></tr></thead><tbody>{rows.map(row=><tr key={row.user.user_id}><td><b>{row.user.name||row.user.email}</b><small>{row.user.email}</small></td><td>{row.balance.available_balance} days</td><td>{row.balance.used_leave} days</td><td>{row.balance.pending_leave} days</td><td>{row.balance.loss_of_pay_exposure} days</td><td><button className="att-link" type="button" onClick={()=>setSelected(row)}>Adjust</button></td></tr>)}</tbody></table></div>}{selected&&<Modal title={`Adjust Leave Balance · ${selected.user.name||selected.user.email}`} subtitle={financialYear} onClose={()=>setSelected(null)}><div className="att-form"><label>Adjustment (+/- days)<input type="number" step="0.5" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="e.g. 1.5 or -0.5"/></label><label>Description<textarea rows="3" value={description} onChange={e=>setDescription(e.target.value)} placeholder="Reason for adjustment"/></label></div><footer><button className="att-secondary" onClick={()=>setSelected(null)}>Cancel</button><button className="att-primary" disabled={saving||!amount||Number(amount)===0} onClick={save}>{saving?'Saving…':'Save Adjustment'}</button></footer></Modal>}</section>
 }
@@ -107,6 +110,7 @@ function Team({year,month,setYear,setMonth}) {
  const [query,setQuery]=useState(''),[employee,setEmployee]=useState('all'),[status,setStatus]=useState('all'),[teamRows,setTeamRows]=useState([]),[loading,setLoading]=useState(true),[detail,setDetail]=useState(null)
  const fy=financialYearForDate(new Date(year,month,1))
  useEffect(()=>{let active=true;Promise.resolve().then(()=>{if(active)setLoading(true)});attendanceApi.getTeamAttendanceSummary(year,month+1,fy).then(data=>{if(active)setTeamRows(data||[])}).catch(()=>{if(active)setTeamRows([])}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[year,month,fy])
+ useRealtimeRefresh({channelName:'realtime:attendance-team-page',tables:['leave_requests','leave_ledger','attendance_records'],onChange:()=>attendanceApi.getTeamAttendanceSummary(year,month+1,fy).then(setTeamRows),enabled:true,debounceMs:350})
  const employees=teamRows.map(row=>{const s=row.summary||{},b=row.leave_balance||{};return{id:row.user.user_id,name:row.user.name||row.user.email||'Employee',role:row.user.email||'',working:s.working_days||0,present:s.present||0,leave:s.leave||0,corrections:s.corrections||0,unmarked:s.unmarked||0,hours:durationLabel(s.total_minutes||0),balance:b.available_balance??0}})
  const rows=employees.filter(e=>(employee==='all'||e.id===employee)&&(!query||e.name.toLowerCase().includes(query.toLowerCase()))).filter(e=>status==='all'||(status==='low'?(e.working?e.present/e.working:0)<.8:(e.working?e.present/e.working:0)>=.8))
  const openEmployee=async person=>{setDetail({person,loading:true});try{const data=await attendanceApi.getMonthlyAttendance(year,month+1,person.id);setDetail({person,data})}catch(error){setDetail({person,error})}}
