@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { fetchPageViewPermissions } from '../services/adminAccessApi'
+import { supabase } from '../services/supabaseClient'
 import { PAGE_VIEW_DEFAULTS, canViewPage, firstPermittedPageRoute } from '../utils/pageViewPermissions'
 
 const EVENT = 'fb:page-view-permissions-changed'
@@ -12,8 +12,17 @@ async function refreshPageViewPermissions() {
   if (state.request) return state.request
   state.loading = true
   emit()
-  state.request = fetchPageViewPermissions()
-    .then(({ permissions }) => { state.permissions = { ...PAGE_VIEW_DEFAULTS, ...(permissions || {}) }; state.loaded = true; return state.permissions })
+  const request = supabase
+    ? supabase.from('page_view_permissions').select('page_key, view_permission')
+    : Promise.resolve({ data: [], error: null })
+  state.request = Promise.resolve(request)
+    .then(({ data, error }) => {
+      if (error) throw error
+      const permissions = Object.fromEntries((data || []).map(row => [row.page_key, row.view_permission]))
+      state.permissions = { ...PAGE_VIEW_DEFAULTS, ...permissions }
+      state.loaded = true
+      return state.permissions
+    })
     .catch(() => { state.permissions = PAGE_VIEW_DEFAULTS; state.loaded = true; return state.permissions })
     .finally(() => { state.loading = false; state.request = null; emit() })
   return state.request
