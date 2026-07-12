@@ -5,3 +5,4 @@
 @media(max-width:1100px){.att-leave-summary-grid{grid-template-columns:repeat(2,1fr)}.att-balance.att-balance-detailed{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:720px){.att-leave-summary>div:first-child{align-items:flex-start;flex-direction:column}.att-leave-summary-grid,.att-balance.att-balance-detailed{grid-template-columns:1fr 1fr}}
 .att-person small,.att-holidays .att-table-card td small{display:none}
+.att-loading-table{min-height:360px}.att-loading-table table{min-width:100%}.att-skeleton{display:block;height:14px;border-radius:6px;background:linear-gradient(90deg,#eef0f5 25%,#f8f9fb 37%,#eef0f5 63%);background-size:400% 100%;animation:att-skeleton-shimmer 1.4s ease infinite}.att-skeleton-head{height:12px;width:70%}@keyframes att-skeleton-shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
