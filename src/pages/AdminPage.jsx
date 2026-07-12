@@ -29,6 +29,7 @@ import { PAGE_VIEW_DEFAULTS } from '../utils/pageViewPermissions'
 import './AdminPage.css'
 import AttendancePermissionSettings from '../features/attendance/AttendancePermissionSettings'
 import { loadAttendancePermissions, saveAttendancePermissions } from '../utils/attendancePermissionStorage'
+import { getAttendancePermissions, updateAttendancePermissions } from '../services/attendanceApi'
 
 const TABS = [
   ['clients', 'Clients', Building2],
@@ -322,6 +323,15 @@ export default function AdminPage() {
   }, [isAdmin, loadAdminData])
 
   useEffect(() => {
+    if (!isAdmin) return
+    getAttendancePermissions().then(value => {
+      setSavedAttendancePermissions(value)
+      setDraftAttendancePermissions(value)
+      saveAttendancePermissions(value)
+    }).catch(err => setError(err.message))
+  }, [isAdmin])
+
+  useEffect(() => {
     if (!profileOpen) return undefined
     const close = (event) => {
       if (!profilePickerRef.current?.contains(event.target)) setProfileOpen(false)
@@ -458,8 +468,10 @@ export default function AdminPage() {
         setDraftPageViewPermissions(nextPageViewPermissions)
       }
       if (attendancePermissionsDirty) {
-        saveAttendancePermissions(draftAttendancePermissions)
-        setSavedAttendancePermissions(draftAttendancePermissions)
+        const persisted = await updateAttendancePermissions(draftAttendancePermissions)
+        saveAttendancePermissions(persisted)
+        setDraftAttendancePermissions(persisted)
+        setSavedAttendancePermissions(persisted)
       }
       setSavedPermissions(draftPermissions)
       setPermissions(draftPermissions)

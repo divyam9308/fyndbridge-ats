@@ -1,12 +1,12 @@
 export const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 export const HOLIDAY_TYPES = ['National Holiday', 'Company Holiday', 'Optional Holiday']
 export const PERMISSION_ITEMS = [
-  ['corrections','Approve Attendance Corrections','Review and approve attendance correction requests.'],
-  ['leave','Approve Leave Requests','Approve or reject leave applications.'],
-  ['team','View All Employees’ Attendance','Access monthly attendance for the whole team.'],
-  ['holidays','Manage Holiday Calendar','Add, edit and remove company holidays.'],
-  ['correctionNotifications','Receive Attendance Correction Notifications','Frontend placeholder for future notifications.'],
-  ['leaveNotifications','Receive Leave Approval Notifications','Frontend placeholder for future notifications.']
+  ['attendance_approve_corrections','Approve Attendance Corrections','Review and approve attendance correction requests.'],
+  ['attendance_approve_leave','Approve Leave Requests','Approve or reject leave applications.'],
+  ['attendance_view_all','View All Employees’ Attendance','Access monthly attendance for the whole team.'],
+  ['attendance_manage_holidays','Manage Holiday Calendar','Add, edit and remove company holidays.'],
+  ['attendance_receive_correction_notifications','Receive Attendance Correction Notifications','Receive new correction approval notifications.'],
+  ['attendance_receive_leave_notifications','Receive Leave Approval Notifications','Receive new leave approval notifications.']
 ]
 
 export const employees = [

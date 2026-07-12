@@ -1,0 +1,7 @@
+const test=require('node:test'),assert=require('node:assert/strict')
+const {localDate,workedMinutes,calculateLeave}=require('./attendanceUtils')
+test('company local date does not shift at UTC boundary',()=>assert.equal(localDate('2026-07-11T20:00:00Z'),'2026-07-12'))
+test('worked duration is authoritative minutes',()=>assert.equal(workedMinutes('2026-07-12T09:00:00Z','2026-07-12T17:30:00Z'),510))
+test('full day excludes Sunday and holiday',()=>{const x=calculateLeave({startDate:'2026-07-10',endDate:'2026-07-13',durationType:'full_day',holidays:['2026-07-11'],balance:10});assert.equal(x.charged_leave_days,2)})
+test('Saturday to Monday applies sandwich Sunday',()=>{const x=calculateLeave({startDate:'2026-07-11',endDate:'2026-07-13',durationType:'full_day',balance:10});assert.equal(x.charged_leave_days,3);assert.equal(x.calculation_breakdown[1].reason,'Sandwich leave')})
+test('half day and negative projected balance',()=>{const x=calculateLeave({startDate:'2026-07-13',endDate:'2026-07-13',durationType:'half_day',halfDaySession:'first_half',balance:0});assert.equal(x.charged_leave_days,.5);assert.equal(x.loss_of_pay_days,.5);assert.equal(x.projected_balance,-.5)})

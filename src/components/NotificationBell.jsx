@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bell, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { apiFetch } from '../services/apiClient'
 import { supabase } from '../services/supabaseClient'
@@ -46,6 +47,7 @@ function playPing() {
 }
 
 export default function NotificationBell() {
+  const navigate = useNavigate()
   const { user, isAuthenticated } = useAuth()
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
@@ -170,6 +172,12 @@ export default function NotificationBell() {
     }
   }
 
+  const openNotification = async (notification) => {
+    if (notification.status === 'pending') await markRead(notification)
+    if (notification.action_url) navigate(notification.action_url.replace(/^\/attendance/, '/dashboard/attendance'))
+    setOpen(false)
+  }
+
   const pendingCount = notifications.filter(item => item.status === 'pending').length
 
   return (
@@ -188,7 +196,7 @@ export default function NotificationBell() {
             </button>
           </div>
           {notifications.length ? notifications.map(item => (
-            <div className={`notification-item ${item.status === 'read' ? 'is-read' : ''}`} key={item.id}>
+            <div className={`notification-item ${item.status === 'read' ? 'is-read' : ''}`} key={item.id} onClick={() => openNotification(item)} role={item.action_url ? 'button' : undefined} tabIndex={item.action_url ? 0 : undefined}>
               <div className="notification-item-title">{item.title || 'Notification'}</div>
               <div className="notification-message">{item.message}</div>
               <div className="notification-meta">{item.sender_name || 'System'} • {formatDateTime(item.created_at)}</div>
@@ -196,7 +204,7 @@ export default function NotificationBell() {
                 Status: {item.status === 'read' ? 'Read' : 'Pending'}
               </div>
               {item.status === 'pending' ? (
-                <button className="notification-read-btn" type="button" onClick={() => markRead(item)}>Mark as Read</button>
+                <button className="notification-read-btn" type="button" onClick={(event) => { event.stopPropagation(); markRead(item) }}>Mark as Read</button>
               ) : (
                 <div className="notification-read-state">{formatDateTime(item.read_at)}</div>
               )}
