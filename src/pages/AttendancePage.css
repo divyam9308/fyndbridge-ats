@@ -4,3 +4,4 @@
 .att-leave-summary{padding:20px 22px;margin-bottom:22px}.att-leave-summary>div{display:flex;justify-content:space-between;align-items:center;gap:16px}.att-leave-summary span{color:var(--gray-500);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}.att-leave-summary strong{font-size:28px;color:var(--navy)}
 @media(max-width:1100px){.att-leave-summary-grid{grid-template-columns:repeat(2,1fr)}.att-balance.att-balance-detailed{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:720px){.att-leave-summary>div:first-child{align-items:flex-start;flex-direction:column}.att-leave-summary-grid,.att-balance.att-balance-detailed{grid-template-columns:1fr 1fr}}
+.att-person small,.att-holidays .att-table-card td small{display:none}

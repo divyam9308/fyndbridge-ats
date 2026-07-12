@@ -1,10 +1,11 @@
 import { CalendarDays, Clock3, Info, LogIn, LogOut, X } from 'lucide-react'
 import ReactRuntime from 'react'
+import { createPortal } from 'react-dom'
 import { dateLabel, durationLabel, minutesBetween } from './attendanceData'
 
 globalThis.React = ReactRuntime
 
-export function Modal({title,subtitle,onClose,children,wide=false}){return <div className="att-modal-backdrop" role="presentation" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><section className={`att-modal${wide?' is-wide':''}`} role="dialog" aria-modal="true"><header><div><h2>{title}</h2>{subtitle&&<p>{subtitle}</p>}</div><button onClick={onClose} aria-label="Close"><X size={20}/></button></header>{children}</section></div>}
+export function Modal({title,subtitle,onClose,children,wide=false}){const content=<div className="att-modal-backdrop" role="presentation" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><section className={`att-modal${wide?' is-wide':''}`} role="dialog" aria-modal="true"><header><div><h2>{title}</h2>{subtitle&&<p>{subtitle}</p>}</div><button onClick={onClose} aria-label="Close"><X size={20}/></button></header>{children}</section></div>;return typeof document==='undefined'?content:createPortal(content,document.body)}
 export function Toast({toast}){return toast?<div className={`att-toast is-${toast.tone||'success'}`} role="status">{toast.message}</div>:null}
 export function StatusPill({status}){return <span className={`att-status is-${status.toLowerCase().replaceAll(' ','-')}`}>{status}</span>}
 
