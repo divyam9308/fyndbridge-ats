@@ -6,16 +6,16 @@ const OPTIONS = [
   { value: 'admin_hidden', label: 'Admin · Hidden', Icon: EyeOff }
 ]
 
-export default function AdminPermissionPicker({ value, onChange, options = OPTIONS }) {
+export default function AdminPermissionPicker({ value, onChange, options = OPTIONS, disabled = false, toneForValue }) {
   const index = Math.max(0, options.findIndex(option => option.value === value))
-  const tone = value === 'everyone' ? 'is-everyone' : value.includes('disabled') ? 'is-disabled' : 'is-hidden'
+  const tone = toneForValue?.(value) || (value === 'everyone' ? 'is-everyone' : value.includes('disabled') ? 'is-disabled' : 'is-hidden')
   return (
     <div className="admin-permission-picker">
       <span className={`admin-permission-indicator ${tone}`} style={{ transform: `translateX(${index * 100}%)` }} />
       {options.map(({ value: optionValue, label, Icon }) => {
         const active = optionValue === value
         return (
-          <button key={optionValue} type="button" className={`admin-permission-option${active ? ' is-active' : ''}`} onClick={() => onChange(optionValue)}>
+          <button key={optionValue} type="button" disabled={disabled} className={`admin-permission-option${active ? ' is-active' : ''}`} onClick={() => onChange(optionValue)}>
             {active ? <Check size={13} /> : <Icon size={13} />}
             <span>{label}</span>
           </button>
