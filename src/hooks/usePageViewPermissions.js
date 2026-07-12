@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../services/supabaseClient'
 import { PAGE_VIEW_DEFAULTS, canViewPage, firstPermittedPageRoute } from '../utils/pageViewPermissions'
 
@@ -45,11 +45,11 @@ export function usePageViewPermissions(access = {}) {
     return () => listeners.delete(listener)
   }, [])
   const refresh = useCallback(() => refreshPageViewPermissions(), [])
-  return useMemo(() => ({
+  return {
     permissions: state.permissions,
     loading: state.loading || !state.loaded,
     refresh,
     canView: (pageKey) => canViewPage({ isAdmin, isSuperAdmin }, state.permissions[pageKey] || PAGE_VIEW_DEFAULTS[pageKey]),
     firstPermittedRoute: (excludedKey) => firstPermittedPageRoute({ isAdmin, isSuperAdmin }, state.permissions, excludedKey)
-  }), [isAdmin, isSuperAdmin, refresh])
+  }
 }
