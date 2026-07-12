@@ -23,6 +23,7 @@ import {
 } from '../utils/performanceReviewStorage'
 import { savePerformancePermissions } from '../services/performanceApi'
 import './AdminPage.css'
+import AttendancePermissionSettings from '../features/attendance/AttendancePermissionSettings'
 
 const TABS = [
   ['clients', 'Clients', Building2],
@@ -489,6 +490,8 @@ export default function AdminPage() {
   return (
     <div className="admin-page">
       {error && <div className="admin-error">{error}</div>}
+
+      <AttendancePermissionSettings />
 
       <Section
         title="Admin Access"
