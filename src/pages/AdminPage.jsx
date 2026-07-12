@@ -429,7 +429,7 @@ export default function AdminPage() {
     const changes = changedPermissions(savedPermissions, draftPermissions)
     const performanceChanged = isSuperAdmin && !isSamePermissions(savedPermissions?.[PERFORMANCE_TABLE_KEY], draftPermissions?.[PERFORMANCE_TABLE_KEY])
     const pageViewChanges = Object.entries(draftPageViewPermissions).filter(([pageKey, viewPermission]) => savedPageViewPermissions?.[pageKey] !== viewPermission)
-    if (!changes.length && !dashboardVisibilityDirty && !performanceChanged && !pageViewChanges.length) return
+    if (!changes.length && !dashboardVisibilityDirty && !performanceChanged && !pageViewChanges.length && !attendancePermissionsDirty) return
     setSavingPermissions(true)
     setError('')
     try {
