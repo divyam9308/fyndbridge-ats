@@ -10,6 +10,20 @@ export async function fetchAdminMe() {
   return cachedApiJson('/api/admin/me', {}, { ttlMs: 15000 })
 }
 
+export async function fetchPageViewPermissions() {
+  return cachedApiJson('/api/admin/page-view-permissions', {}, { ttlMs: 30000 })
+}
+
+export async function updatePageViewPermission(pageKey, viewPermission) {
+  const result = await json(await apiFetch('/api/admin/page-view-permissions', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pageKey, viewPermission })
+  }))
+  invalidateApiJsonCache('/api/admin/page-view-permissions')
+  return result
+}
+
 export async function fetchDashboardVisibility() { return cachedApiJson('/api/admin/dashboard-visibility', {}, { ttlMs: 30000 }) }
 export async function updateDashboardVisibility(restrictNonAdminToSelf) {
   const result = await json(await apiFetch('/api/admin/dashboard-visibility', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restrictNonAdminToSelf }) }))

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import { AuthProvider, RequireAuth } from './context/AuthContext'
 import UpdateAvailable from './components/UpdateAvailable'
+import PageViewGuard from './components/PageViewGuard'
 
 const AuthenticatedShell = lazy(() => import('./pages/AuthenticatedShell'))
 const DashboardHome = lazy(() => import('./pages/DashboardHome'))
@@ -51,23 +52,23 @@ function App() {
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/dashboard" element={<RequireAuth><Suspense fallback={<div className="route-loading" role="status">Loading...</div>}><AuthenticatedShell /></Suspense></RequireAuth>}>
-            <Route index element={<DashboardHome />} />
-            <Route path="jobs" element={<JobsPage />} />
-            <Route path="clients" element={<ClientsPage />} />
-            <Route path="clients/:clientId" element={<ClientDetailPage />} />
-            <Route path="clients/:clientId/jobs/:jobId/candidates" element={<ClientJobCandidatesPage />} />
-            <Route path="candidates" element={<CandidatesPage />} />
-            <Route path="performance" element={<PerformanceReviewPage />} />
-            <Route path="attendance" element={<AttendancePage />} />
-            <Route path="user-manual" element={<UserManualPage />} />
+            <Route index element={<PageViewGuard pageKey="dashboard"><DashboardHome /></PageViewGuard>} />
+            <Route path="jobs" element={<PageViewGuard pageKey="mandates"><JobsPage /></PageViewGuard>} />
+            <Route path="clients" element={<PageViewGuard pageKey="clients"><ClientsPage /></PageViewGuard>} />
+            <Route path="clients/:clientId" element={<PageViewGuard pageKey="clients"><ClientDetailPage /></PageViewGuard>} />
+            <Route path="clients/:clientId/jobs/:jobId/candidates" element={<PageViewGuard pageKey="clients"><ClientJobCandidatesPage /></PageViewGuard>} />
+            <Route path="candidates" element={<PageViewGuard pageKey="candidates"><CandidatesPage /></PageViewGuard>} />
+            <Route path="performance" element={<PageViewGuard pageKey="performance_review"><PerformanceReviewPage /></PageViewGuard>} />
+            <Route path="attendance" element={<PageViewGuard pageKey="attendance"><AttendancePage /></PageViewGuard>} />
+            <Route path="user-manual" element={<PageViewGuard pageKey="user_manual"><UserManualPage /></PageViewGuard>} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="cvs" element={<Navigate to="/dashboard/candidates" replace />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="profile" element={<ProfileSettingsPage />} />
           </Route>
           <Route path="/invoice" element={<RequireAuth><Suspense fallback={<div className="route-loading" role="status">Loading...</div>}><AuthenticatedShell /></Suspense></RequireAuth>}>
-            <Route index element={<InvoicePage />} />
-            <Route path="entities/:entityId" element={<InvoiceEntityDetailPage />} />
+            <Route index element={<PageViewGuard pageKey="invoice"><InvoicePage /></PageViewGuard>} />
+            <Route path="entities/:entityId" element={<PageViewGuard pageKey="invoice"><InvoiceEntityDetailPage /></PageViewGuard>} />
           </Route>
         </Routes>
       </AuthProvider>

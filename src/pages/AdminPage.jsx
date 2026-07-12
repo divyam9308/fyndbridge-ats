@@ -15,6 +15,7 @@ import {
   ,updateDashboardVisibility
 } from '../services/adminAccessApi'
 import AdminPermissionPicker from '../components/admin/AdminPermissionPicker'
+import PageViewPermissions from '../components/admin/PageViewPermissions'
 import {
   PERFORMANCE_COLUMNS,
   PERFORMANCE_PERMISSION_OPTIONS,
@@ -567,6 +568,8 @@ export default function AdminPage() {
           <button className={`admin-ios-switch${dashboardRestricted ? ' is-on' : ''}`} type="button" role="switch" aria-checked={dashboardRestricted} aria-label="Restrict dashboard to own consultant data for non-admin users" disabled={savingPermissions} onClick={() => setDashboardRestricted(current => !current)}><span /></button>
         </div>
       </Section>
+
+      <PageViewPermissions isSuperAdmin={isSuperAdmin} />
 
       <Section
         title="Column Permissions"

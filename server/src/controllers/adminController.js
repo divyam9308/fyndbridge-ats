@@ -11,7 +11,11 @@ const {
   assertCanDemoteSuperAdmin,
   serializeColumnDefs,
   getAllColumnPermissions,
-  invalidateColumnPermissionCache
+  invalidateColumnPermissionCache,
+  PAGE_VIEW_DEFAULTS,
+  PAGE_VIEW_PERMISSION_VALUES,
+  getPageViewPermissions,
+  invalidatePageViewPermissionCache
 } = require('../services/adminAccess')
 const { getDashboardVisibility, setDashboardVisibility } = require('../services/dashboardAccess')
 const { getPermissions: getPerformancePermissions } = require('../services/performanceReview')
@@ -227,6 +231,27 @@ async function columnPermissions(req, res) {
   }
 }
 
+async function pageViewPermissions(req, res) {
+  try {
+    if (req.method === 'GET') return res.json({ permissions: await getPageViewPermissions() })
+    await assertCanManageAdminUsers(req.user)
+    const pageKey = clean(req.body?.pageKey)
+    const viewPermission = clean(req.body?.viewPermission)
+    if (!Object.hasOwn(PAGE_VIEW_DEFAULTS, pageKey)) return res.status(400).json({ error: 'Invalid page key' })
+    if (!PAGE_VIEW_PERMISSION_VALUES.has(viewPermission)) return res.status(400).json({ error: 'Invalid view permission' })
+    const { data, error } = await supabase
+      .from('page_view_permissions')
+      .upsert({ page_key: pageKey, view_permission: viewPermission, updated_by: req.user.id, updated_at: new Date().toISOString() }, { onConflict: 'page_key' })
+      .select('page_key, view_permission')
+      .single()
+    if (error) throw error
+    invalidatePageViewPermissionCache()
+    return res.json({ data, permissions: await getPageViewPermissions() })
+  } catch (err) {
+    return sendError(res, err)
+  }
+}
+
 async function dashboardVisibility(req, res) {
   try {
     if (!(await isAdmin(req.user))) return res.status(403).json({ error: 'Admin required' })
@@ -299,6 +324,7 @@ module.exports = {
   removeUser,
   updateUserRole,
   columnPermissions,
+  pageViewPermissions,
   dashboardVisibility,
   updateColumnPermission,
   lockedRecords,

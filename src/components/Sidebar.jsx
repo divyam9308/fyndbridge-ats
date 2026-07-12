@@ -5,22 +5,24 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
+import { usePageViewPermissions } from '../hooks/usePageViewPermissions'
 import { preloadRoute } from '../utils/routePreload'
 import './Sidebar.css'
 
 const navItems = [
-  { to: '/dashboard',            label: 'Dashboard',  Icon: LayoutDashboard, end: true },
-  { to: '/dashboard/jobs',       label: 'Mandates', Icon: Briefcase },
-  { to: '/dashboard/clients',    label: 'Clients',    Icon: Building2 },
-  { to: '/dashboard/candidates', label: 'Candidates', Icon: Users },
-  { to: '/dashboard/attendance', label: 'Attendance', Icon: CalendarCheck },
-  { to: '/dashboard/performance', label: 'PMS', Icon: ClipboardList },
-  { to: '/dashboard/user-manual', label: 'User Manual', Icon: BookOpenText },
+  { to: '/dashboard',            label: 'Dashboard', key: 'dashboard', Icon: LayoutDashboard, end: true },
+  { to: '/dashboard/jobs',       label: 'Mandates', key: 'mandates', Icon: Briefcase },
+  { to: '/dashboard/clients',    label: 'Clients', key: 'clients', Icon: Building2 },
+  { to: '/dashboard/candidates', label: 'Candidates', key: 'candidates', Icon: Users },
+  { to: '/dashboard/attendance', label: 'Attendance', key: 'attendance', Icon: CalendarCheck },
+  { to: '/dashboard/performance', label: 'PMS', key: 'performance_review', Icon: ClipboardList },
+  { to: '/dashboard/user-manual', label: 'User Manual', key: 'user_manual', Icon: BookOpenText },
 ]
 
 export default function Sidebar() {
   const { user, signOut } = useAuth()
-  const { isAdmin } = useAdminAccess({ loadPermissions: false })
+  const { isAdmin, isSuperAdmin } = useAdminAccess({ loadPermissions: false })
+  const pageViews = usePageViewPermissions({ isAdmin, isSuperAdmin })
   const displayName = user?.profile_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Recruiter'
   const initials = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 
@@ -64,7 +66,7 @@ export default function Sidebar() {
 
       {/* Nav links */}
       <nav className="sidebar-nav">
-        {navItems.map(({ to, label, Icon, end }) => (
+        {!pageViews.loading && navItems.filter(item => pageViews.canView(item.key)).map(({ to, label, Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -80,7 +82,7 @@ export default function Sidebar() {
             <span className="sidebar-nav-label">{label}</span>
           </NavLink>
         ))}
-        {isAdmin && (
+        {!pageViews.loading && pageViews.canView('invoice') && (
           <>
           <NavLink
             to="/invoice"

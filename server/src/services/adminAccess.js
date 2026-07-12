@@ -12,6 +12,20 @@ const ROLES = {
 const PERMISSION_CACHE_TTL_MS = 10 * 60 * 1000
 let permissionCache = null
 let permissionCacheExpiresAt = 0
+let pageViewPermissionCache = null
+let pageViewPermissionCacheExpiresAt = 0
+
+const PAGE_VIEW_DEFAULTS = {
+  dashboard: 'everyone',
+  candidates: 'everyone',
+  clients: 'everyone',
+  mandates: 'everyone',
+  performance_review: 'everyone',
+  attendance: 'everyone',
+  invoice: 'admin_only',
+  user_manual: 'everyone'
+}
+const PAGE_VIEW_PERMISSION_VALUES = new Set(['everyone', 'admin_only', 'super_admin_only'])
 
 const COLUMN_DEFS = {
   clients: [
@@ -94,6 +108,25 @@ const FIELD_TO_COLUMN = Object.fromEntries(Object.entries(COLUMN_DEFS).map(([tab
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase()
+}
+
+async function getPageViewPermissions() {
+  if (pageViewPermissionCache && pageViewPermissionCacheExpiresAt > Date.now()) return pageViewPermissionCache
+  const { data, error } = await supabase.from('page_view_permissions').select('page_key, view_permission')
+  if (error) throw error
+  pageViewPermissionCache = { ...PAGE_VIEW_DEFAULTS }
+  for (const row of data || []) {
+    if (Object.hasOwn(PAGE_VIEW_DEFAULTS, row.page_key) && PAGE_VIEW_PERMISSION_VALUES.has(row.view_permission)) {
+      pageViewPermissionCache[row.page_key] = row.view_permission
+    }
+  }
+  pageViewPermissionCacheExpiresAt = Date.now() + PERMISSION_CACHE_TTL_MS
+  return pageViewPermissionCache
+}
+
+function invalidatePageViewPermissionCache() {
+  pageViewPermissionCache = null
+  pageViewPermissionCacheExpiresAt = 0
 }
 
 function serializeColumnDefs() {
@@ -278,6 +311,8 @@ async function assertRowEditable(tableName, rowId, admin) {
 module.exports = {
   ACCESS,
   ROLES,
+  PAGE_VIEW_DEFAULTS,
+  PAGE_VIEW_PERMISSION_VALUES,
   COLUMN_DEFS,
   normalizeEmail,
   serializeColumnDefs,
@@ -293,6 +328,8 @@ module.exports = {
   getColumnPermissions,
   getAllColumnPermissions,
   invalidateColumnPermissionCache,
+  getPageViewPermissions,
+  invalidatePageViewPermissionCache,
   stripHiddenFields,
   assertCanUpdateColumns,
   assertRowEditable
