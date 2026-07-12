@@ -10,7 +10,7 @@ export default function AdminPermissionPicker({ value, onChange, options = OPTIO
   const index = Math.max(0, options.findIndex(option => option.value === value))
   const tone = toneForValue?.(value) || (value === 'everyone' ? 'is-everyone' : value.includes('disabled') ? 'is-disabled' : 'is-hidden')
   return (
-    <div className="admin-permission-picker">
+    <div className="admin-permission-picker" style={{ '--admin-permission-option-count': options.length }}>
       <span className={`admin-permission-indicator ${tone}`} style={{ transform: `translateX(${index * 100}%)` }} />
       {options.map(({ value: optionValue, label, Icon }) => {
         const active = optionValue === value

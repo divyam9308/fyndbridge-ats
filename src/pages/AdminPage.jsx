@@ -28,6 +28,7 @@ import { setPageViewPermissions, usePageViewPermissions } from '../hooks/usePage
 import { PAGE_VIEW_DEFAULTS } from '../utils/pageViewPermissions'
 import './AdminPage.css'
 import AttendancePermissionSettings from '../features/attendance/AttendancePermissionSettings'
+import { loadAttendancePermissions, saveAttendancePermissions } from '../utils/attendancePermissionStorage'
 
 const TABS = [
   ['clients', 'Clients', Building2],
@@ -263,6 +264,8 @@ export default function AdminPage() {
   const { permissions: pageViewPermissions, loading: pageViewPermissionsLoading } = usePageViewPermissions()
   const [savedPageViewPermissions, setSavedPageViewPermissions] = useState(() => ({ ...PAGE_VIEW_DEFAULTS }))
   const [draftPageViewPermissions, setDraftPageViewPermissions] = useState(() => ({ ...PAGE_VIEW_DEFAULTS }))
+  const [savedAttendancePermissions, setSavedAttendancePermissions] = useState(() => loadAttendancePermissions())
+  const [draftAttendancePermissions, setDraftAttendancePermissions] = useState(() => loadAttendancePermissions())
   const profilePickerRef = useRef(null)
 
   const loadAdminData = useCallback(async () => {
@@ -358,7 +361,8 @@ export default function AdminPage() {
 
   const dashboardVisibilityDirty = dashboardRestricted !== savedDashboardRestricted
   const pageViewPermissionsDirty = !isSamePermissions(savedPageViewPermissions, draftPageViewPermissions)
-  const dirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty || pageViewPermissionsDirty
+  const attendancePermissionsDirty = !isSamePermissions(savedAttendancePermissions, draftAttendancePermissions)
+  const dirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty || pageViewPermissionsDirty || attendancePermissionsDirty
   const availableTabs = isSuperAdmin ? [...TABS, PERFORMANCE_TAB] : TABS
   const columnSource = activeTab === PERFORMANCE_TABLE_KEY ? PERFORMANCE_COLUMNS : (columns[activeTab] || [])
   const filteredColumns = columnSource.filter(column => {
@@ -416,6 +420,7 @@ export default function AdminPage() {
   const cancelPermissionChanges = () => {
     setDraftPermissions(savedPermissions)
     setDraftPageViewPermissions(savedPageViewPermissions)
+    setDraftAttendancePermissions(savedAttendancePermissions)
     setDashboardRestricted(savedDashboardRestricted)
     setError('')
   }
@@ -451,6 +456,10 @@ export default function AdminPage() {
         setPageViewPermissions(nextPageViewPermissions)
         setSavedPageViewPermissions(nextPageViewPermissions)
         setDraftPageViewPermissions(nextPageViewPermissions)
+      }
+      if (attendancePermissionsDirty) {
+        saveAttendancePermissions(draftAttendancePermissions)
+        setSavedAttendancePermissions(draftAttendancePermissions)
       }
       setSavedPermissions(draftPermissions)
       setPermissions(draftPermissions)
@@ -522,8 +531,6 @@ export default function AdminPage() {
   return (
     <div className="admin-page">
       {error && <div className="admin-error">{error}</div>}
-
-      <AttendancePermissionSettings />
 
       <Section
         title="Admin Access"
@@ -599,6 +606,13 @@ export default function AdminPage() {
           <button className={`admin-ios-switch${dashboardRestricted ? ' is-on' : ''}`} type="button" role="switch" aria-checked={dashboardRestricted} aria-label="Restrict dashboard to own consultant data for non-admin users" disabled={savingPermissions} onClick={() => setDashboardRestricted(current => !current)}><span /></button>
         </div>
       </Section>
+
+      <AttendancePermissionSettings
+        values={draftAttendancePermissions}
+        isSuperAdmin={isSuperAdmin}
+        disabled={savingPermissions}
+        onChange={(key, value) => setDraftAttendancePermissions(current => ({ ...current, [key]: value }))}
+      />
 
       <PageViewPermissions
         isSuperAdmin={isSuperAdmin}

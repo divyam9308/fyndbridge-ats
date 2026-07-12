@@ -679,7 +679,7 @@
   position: relative;
   display: grid;
   min-width: 420px;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(var(--admin-permission-option-count, 3), 1fr);
   overflow: hidden;
   border: 1px solid var(--admin-border);
   border-radius: 22px;
@@ -690,7 +690,7 @@
 .admin-permission-indicator {
   position: absolute;
   inset: 5px auto 5px 5px;
-  width: calc((100% - 10px) / 3);
+  width: calc((100% - 10px) / var(--admin-permission-option-count, 3));
   border-radius: 17px;
   transition: transform 240ms ease;
   box-shadow: 0 8px 18px rgba(0, 18, 100, 0.16);
