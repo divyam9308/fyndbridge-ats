@@ -9,10 +9,10 @@ const OPTIONS = [
   { value: 'super_admin_only', label: 'Super Admin Only', Icon: EyeOff }
 ]
 
-const toneForPermission = (value) => value === 'everyone' ? 'is-everyone' : value === 'admin_only' ? 'is-disabled' : 'is-hidden'
-const stateClass = (value) => value === 'everyone' ? 'is-everyone' : value === 'admin_only' ? 'is-admin_disabled' : 'is-admin_hidden'
+const toneForPermission = (value = 'everyone') => value === 'everyone' ? 'is-everyone' : value === 'admin_only' ? 'is-disabled' : 'is-hidden'
+const stateClass = (value = 'everyone') => value === 'everyone' ? 'is-everyone' : value === 'admin_only' ? 'is-admin_disabled' : 'is-admin_hidden'
 
-export default function PageViewPermissions({ isSuperAdmin, permissions, loading, disabled, onChange }) {
+export default function PageViewPermissions({ isSuperAdmin, permissions, disabled, onChange }) {
 
   return (
     <section className="admin-section page-view-permissions">
@@ -26,15 +26,15 @@ export default function PageViewPermissions({ isSuperAdmin, permissions, loading
         </div>
       </div>
       <div className="admin-section-body">
-        <div className="admin-permission-table page-view-permission-table" aria-busy={loading}>
+        <div className="admin-permission-table page-view-permission-table">
           <div className="admin-permission-head">
             <span>Page</span><span>Current State</span><span>View Access</span>
           </div>
           {PAGE_VIEW_ITEMS.map(([pageKey, label]) => (
             <div className="admin-permission-row page-view-permission-row" key={pageKey}>
-              <div><div className="admin-permission-label">{label}</div><div className="admin-permission-key">{loading ? 'Loading permission…' : 'Controls who can see this page.'}</div></div>
+              <div><div className="admin-permission-label">{label}</div><div className="admin-permission-key">Controls who can see this page.</div></div>
               <span className={`admin-state-chip ${stateClass(permissions[pageKey])}`}>{OPTIONS.find(option => option.value === permissions[pageKey])?.label || 'Everyone'}</span>
-              <AdminPermissionPicker value={permissions[pageKey] || 'everyone'} options={OPTIONS} toneForValue={toneForPermission} disabled={!isSuperAdmin || loading || disabled} onChange={(value) => onChange(pageKey, value)} />
+              <AdminPermissionPicker value={permissions[pageKey] || 'everyone'} options={OPTIONS} toneForValue={toneForPermission} disabled={!isSuperAdmin || disabled} onChange={(value) => onChange(pageKey, value)} />
             </div>
           ))}
         </div>

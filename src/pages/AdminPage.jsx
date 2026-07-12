@@ -25,6 +25,7 @@ import {
 } from '../utils/performanceReviewStorage'
 import { savePerformancePermissions } from '../services/performanceApi'
 import { setPageViewPermissions, usePageViewPermissions } from '../hooks/usePageViewPermissions'
+import { PAGE_VIEW_DEFAULTS } from '../utils/pageViewPermissions'
 import './AdminPage.css'
 import AttendancePermissionSettings from '../features/attendance/AttendancePermissionSettings'
 
@@ -260,8 +261,8 @@ export default function AdminPage() {
   const [savedDashboardRestricted, setSavedDashboardRestricted] = useState(true)
   const [performancePermissions, setPerformancePermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
   const { permissions: pageViewPermissions, loading: pageViewPermissionsLoading } = usePageViewPermissions()
-  const [savedPageViewPermissions, setSavedPageViewPermissions] = useState({})
-  const [draftPageViewPermissions, setDraftPageViewPermissions] = useState({})
+  const [savedPageViewPermissions, setSavedPageViewPermissions] = useState(() => ({ ...PAGE_VIEW_DEFAULTS }))
+  const [draftPageViewPermissions, setDraftPageViewPermissions] = useState(() => ({ ...PAGE_VIEW_DEFAULTS }))
   const profilePickerRef = useRef(null)
 
   const loadAdminData = useCallback(async () => {
@@ -602,7 +603,6 @@ export default function AdminPage() {
       <PageViewPermissions
         isSuperAdmin={isSuperAdmin}
         permissions={draftPageViewPermissions}
-        loading={pageViewPermissionsLoading}
         disabled={savingPermissions}
         onChange={(pageKey, viewPermission) => setDraftPageViewPermissions(current => ({ ...current, [pageKey]: viewPermission }))}
       />
