@@ -5,6 +5,7 @@ export const PERMISSION_ITEMS = [
   ['attendance_approve_leave','Approve Leave Requests','Approve or reject leave applications.'],
   ['attendance_view_all','View All Employees’ Attendance','Access monthly attendance for the whole team.'],
   ['attendance_manage_holidays','Manage Holiday Calendar','Add, edit and remove company holidays.'],
+  ['attendance_manage_leave_balances','Manage Leave Balances','Adjust individual employee leave balances.'],
   ['attendance_receive_correction_notifications','Receive Attendance Correction Notifications','Receive new correction approval notifications.'],
   ['attendance_receive_leave_notifications','Receive Leave Approval Notifications','Receive new leave approval notifications.']
 ]

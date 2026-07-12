@@ -23,4 +23,6 @@ export const getHolidays=(start,end)=>request(`/holidays?start=${start}&end=${en
 export const createHoliday=value=>request('/holidays',body(value))
 export const deactivateHoliday=id=>request(`/holidays/${id}`,{method:'DELETE'})
 export const getTeamAttendanceSummary=(year,month,financialYear)=>request(`/team?year=${year}&month=${month}&financial_year=${encodeURIComponent(financialYear)}`)
+export const getLeaveBalances=financialYear=>request(`/leave-balances?financial_year=${encodeURIComponent(financialYear)}`)
+export const adjustLeaveBalance=(userId,amount,description,financialYear)=>request(`/leave-balances/${userId}/adjust`,body({amount,description,financial_year:financialYear}))
 export function invalidateAttendance(){invalidateApiJsonCache('/attendance')}
