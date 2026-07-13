@@ -5,8 +5,9 @@ import { AuthProvider, RequireAuth } from './context/AuthContext'
 import UpdateAvailable from './components/UpdateAvailable'
 import PageViewGuard from './components/PageViewGuard'
 import AuthenticatedShellSkeleton from './components/AuthenticatedShellSkeleton'
+import { loadAuthenticatedShell } from './utils/routePreload'
 
-const AuthenticatedShell = lazy(() => import('./pages/AuthenticatedShell'))
+const AuthenticatedShell = lazy(loadAuthenticatedShell)
 const DashboardHome = lazy(() => import('./pages/DashboardHome'))
 const JobsPage = lazy(() => import('./pages/JobsPage'))
 const ClientsPage = lazy(() => import('./pages/ClientsPage'))

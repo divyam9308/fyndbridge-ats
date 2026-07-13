@@ -8,6 +8,7 @@ import { useAuth } from './useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import { usePageViewPermissions } from '../hooks/usePageViewPermissions'
 import AuthenticatedShellSkeleton from '../components/AuthenticatedShellSkeleton'
+import { preloadAuthenticatedRoute } from '../utils/routePreload'
 
 const DEACTIVATION_MESSAGE = 'Your account has been deactivated. Please contact an administrator.'
 const STATUS_EVENT = 'fb:employee-status-changed'
@@ -304,8 +305,18 @@ export function RequireAuth({ children }) {
   const adminAccess = useAdminAccess({ loadPermissions: false })
   const pageViews = usePageViewPermissions({ isAdmin: adminAccess.isAdmin, isSuperAdmin: adminAccess.isSuperAdmin })
   const location = useLocation()
+  const initialRouteRef = useRef(location.pathname)
+  const [initialRouteReady, setInitialRouteReady] = useState(false)
   const [profileReadyUserId, setProfileReadyUserId] = useState('')
   const [profileError, setProfileError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    preloadAuthenticatedRoute(initialRouteRef.current).then(() => {
+      if (active) setInitialRouteReady(true)
+    })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     const userId = session?.user?.id || ''
@@ -345,6 +356,6 @@ export function RequireAuth({ children }) {
     return <div className="route-loading employment-status-error" role="alert"><span>{profileError || adminAccess.error || pageViews.error}</span><button type="button" onClick={retryAuthorization}>Retry</button></div>
   }
   const profileReady = Boolean(profile && profileReadyUserId && profileReadyUserId === session?.user?.id)
-  if (profileLoading || !profileReady || adminAccess.loading || pageViews.loading) return <AuthenticatedShellSkeleton />
+  if (profileLoading || !profileReady || adminAccess.loading || pageViews.loading || !initialRouteReady) return <AuthenticatedShellSkeleton />
   return children
 }
