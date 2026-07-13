@@ -555,12 +555,13 @@
   --admin-border: #dbe3f1;
   --employee-active: #25a768;
   --employee-inactive: #001264;
-  top: 50%;
-  left: 50%;
+  position: relative;
+  inset: auto;
   width: min(820px, calc(100vw - 40px));
   max-width: 820px;
   max-height: calc(100vh - 40px);
-  transform: translate(-50%, -50%);
+  margin: auto;
+  transform: none;
   outline: 0;
 }
 
