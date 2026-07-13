@@ -1,1034 +1,1171 @@
-Implement the complete production-ready Employee Management feature for the existing Fyndbridge ATS.
+Enhance only the existing Employee Management reassignment feature in the Fyndbridge ATS.
 
-The Employee Management frontend may already exist using mock data. Preserve its current Lovable-style interface and connect it to real application data. Do not redesign it unless a minor adjustment is strictly required for functionality.
-
-The implementation must cover:
+The complete Employee Management system already exists, including:
 
 - Real employee data
-- Active / On Leave / Inactive status management
-- Supabase database changes
-- Secure admin-only backend operations
-- Realtime status updates
+- Active / On Leave / Inactive statuses
+- Realtime employee-status updates
 - Immediate logout for inactive employees
-- Initial ATS-load status validation
-- Filtering of assignment dropdowns
-- Employee reassignment
-- Preservation of historical records
-- Proper loading, error and empty states
+- Initial ATS-load status check
+- Active-employee filtering in assignment dropdowns
+- Existing Employee Management UI
+- Existing Reassign Employee modal and backend operation
+- Existing employee counts and preview cards for Clients, Mandates and Candidates
 
-First inspect the complete relevant codebase and existing database conventions before changing anything.
+Do not rebuild or redesign the Employee Management feature.
+
+The only required enhancement is:
+
+Allow the admin to select individual Clients, individual Mandates and individual Candidates for reassignment, while also providing a Select All option for each category.
+
+Currently, reassignment may transfer an entire category. Replace or extend that behaviour so only explicitly selected records are reassigned.
+
+Example:
+
+- An employee currently has 4 mandates.
+- The admin selects only 2 mandates.
+- The admin transfers those 2 mandates to Cherry.
+- The other 2 mandates remain assigned to the original employee.
+- When the admin opens the Reassign modal again for the original employee, only the remaining 2 mandates must appear.
+- The already-transferred mandates must not appear again because they are no longer assigned to the source employee.
+- Those remaining 2 mandates can later be reassigned to another active employee.
+
+This same behaviour must apply independently to Clients, Mandates and Candidates.
 
 ---
 
 # 1. Strict change-scope rules
 
-Make the smallest possible set of changes required to implement this feature correctly.
+Make the smallest possible set of changes required for this enhancement.
+
+Do not modify or rebuild unrelated Employee Management functionality.
+
+Do not modify:
+
+- Employee Active / On Leave / Inactive behaviour
+- Realtime employment-status handling
+- Initial ATS-load status checking
+- Inactive-user logout behaviour
+- On Leave banner behaviour
+- Assignment-dropdown filtering
+- Online / Away / Offline presence
+- Existing employee creation flow
+- Existing profile save flow
+- Existing Employee Management layout
+- Existing employee list and search
+- Existing employee status controls
+- Existing Clients, Mandates and Candidates overview cards
+- Existing locked-record functionality
+- Existing Admin Panel access controls
+- Sidebar
+- Header
+- Dashboard
+- Attendance
+- PMS
+- Invoice
+- User Manual
+- Candidate-page UI
+- Client-page UI
+- Mandate-page UI
+- Authentication
+- Unrelated backend endpoints
+- Unrelated database tables
+- Unrelated RLS policies
+- Unrelated Supabase functions
+- Unrelated migrations
+- Project-wide configuration
+- Package configuration
+- TypeScript configuration
+- Build configuration
 
 Do not:
 
-- Modify unrelated pages, components or utilities
 - Refactor unrelated code
-- Rename or move existing files unnecessarily
+- Rename unrelated files
+- Move unrelated files
 - Reformat entire files
-- Redesign the sidebar, header or Admin Panel
-- Alter existing locked-record functionality
-- Alter current access-control settings
-- Replace existing shared components
-- Change unrelated authentication behaviour
-- Install a new package unless absolutely necessary
-- Change project-wide TypeScript, Vite, Next.js or build configuration
-- Change unrelated database tables, policies or functions
-- Fix unrelated warnings or existing issues
-- Delete users, profile rows or historical ATS records
-- Reset, truncate or recreate the database
-- Run destructive production database commands
+- Install new dependencies unless absolutely necessary
+- Fix unrelated warnings or existing bugs
+- Delete records
+- Recreate tables
+- Reset the database
+- Truncate tables
+- Run destructive database commands
+- Add a new notification feature
+- Send notifications for reassignment
+- Modify existing notification logic
+- Add new activity-notification behaviour
+- Add email notifications
+- Add assignment notifications
+- Add popup notifications for reassignment
+
+There is no notification requirement for reassignment.
+
+Do not add one.
 
 Prefer:
 
-- Small isolated components
-- Isolated hooks and API helpers
-- One additive database migration
-- Existing modal, toast, icon, button and form components
-- Existing admin-authentication helpers
-- Existing backend and Supabase conventions
+- Extending the existing Reassign modal
+- Extending the existing reassignment endpoint, RPC or transaction
+- Reusing existing components
+- Reusing existing modal, button, checkbox, input, dropdown and toast components
+- Small isolated helper functions
+- Additive and narrowly scoped database changes only if required
 
-Before modifying a file, verify that it is directly required.
+Before editing a file, verify that it is directly necessary for this individual-reassignment enhancement.
 
-After implementation, inspect the complete Git diff and revert every unrelated, accidental, formatting-only or cleanup change.
+After implementation:
+
+- Inspect the complete Git diff
+- Revert all unrelated changes
+- Revert formatting-only changes outside edited sections
+- Confirm every changed file is directly required
 
 ---
 
-# 2. Understand the existing architecture first
+# 2. Inspect the existing implementation first
 
 Before writing code, inspect:
 
-- Existing profile/user table
-- The field linking a profile to auth.users
-- Existing profile-name save flow
-- Existing Admin and Super Admin authorization
-- Existing Admin Panel implementation
-- Existing Employee Management mock-data components
-- Existing Supabase client and server clients
-- Existing API route conventions
-- Existing RLS policies
-- Existing Realtime implementation
-- Existing online/away presence implementation
-- Candidate consultant fields
-- Client consultant fields
-- Mandate consultant and team-lead fields
-- Whether mandate consultants are stored as arrays, IDs, names or another format
-- Existing activity-log or notification helpers
-- Existing toast and modal system
+- Existing Employee Management frontend
+- Existing Reassign Employee modal
+- Existing employee detail API
+- Existing reassignment API or RPC
+- Existing admin authorization logic
+- Existing client assignment field
+- Existing candidate consultant field
+- Existing mandate consultant field
+- Existing mandate multi-consultant structure
+- Existing mandate Team Lead field
+- Existing database schema
+- Existing Supabase migrations
+- Existing transaction or RPC conventions
+- Existing modal and checkbox components
+- Existing toast system
+- Existing pagination and search patterns
 
-Use the actual schema and field names found in the repository. Do not assume field names without checking them.
+Use the actual existing table names, column names, types and assignment formats.
 
-Do not migrate the entire ATS to a new employee-ID system during this task. Work safely with the existing schema.
+Do not assume schema names.
 
----
+Do not create a duplicate reassignment system if one already exists.
 
-# 3. Employment statuses
-
-Support exactly these statuses:
-
-type EmploymentStatus = "active" | "on_leave" | "inactive";
-
-Meaning:
-
-## Active
-
-- Employee can access the ATS
-- Employee can receive new assignments
-- Employee appears in future assignment dropdowns
-
-## On Leave
-
-- Employee remains logged in
-- Employee can continue accessing the ATS
-- Employee must not receive new assignments
-- Employee must not appear as a selectable option in new assignment dropdowns
-- Existing records assigned to the employee must still display their name
-- Their ATS should update immediately without requiring a refresh
-- Show a clear non-blocking banner or status indication in their ATS:
-
-  You are currently marked On Leave and cannot receive new assignments.
-
-Do not log out an On Leave employee.
-
-## Inactive
-
-- Employee has left the company
-- Employee must not receive assignments
-- Employee must not appear in new assignment dropdowns
-- Employee must be logged out immediately from every currently open ATS tab when the status change is received
-- Employee must not be allowed into the authenticated ATS on a later login
-- Historical records must remain intact
-- Existing records must continue showing the employee’s name
-- Do not delete their authentication account, profile or ATS records
-
-Use this logout message:
-
-Your account has been deactivated. Please contact an administrator.
+Extend the existing system safely.
 
 ---
 
-# 4. Database design
+# 3. Required modal design
 
-Inspect whether the existing employee/profile table already has a suitable employment-status column.
+Preserve the current Employee Management design.
 
-Use the smallest safe design.
+When the admin clicks:
 
-Preferred design:
+Reassign
 
-Store employment status in the existing stable profile table when that table is not being continuously updated by presence or heartbeat activity.
+open the existing Reassign Employee modal, updated to support individual record selection.
 
-If the profile table is also used for frequent online-presence updates and would cause noisy Realtime events, create a small dedicated table such as:
+The modal should contain:
 
-employee_statuses
+## Header
 
-The table should contain, using the repository’s real user/profile key:
+- Existing reassignment icon
+- Heading:
 
-- user_id
-- status
-- created_at
-- updated_at
-- updated_by
+  Reassign Employee
 
-Requirements:
+- Description:
 
-- One status row per employee
-- Default status: active
-- Database constraint allowing only:
-  - active
-  - on_leave
-  - inactive
-- Foreign key to the existing profile/auth user identifier
-- Index on status if useful for selectable-employee queries
-- Enable Supabase Realtime for the relevant status table
-- Use the existing migration format and naming convention
+  Choose exactly which records to transfer to another employee.
 
-Do not duplicate status storage in multiple tables.
+- Existing close button
 
----
+## Source employee
 
-# 5. Existing-employee backfill
+Show the selected source employee as read-only:
 
-Create a safe additive migration that gives every existing valid employee an active status.
+- Initials avatar
+- Employee name
+- Employee email
 
-A valid employee is an existing profile with a saved, non-empty profile name, following the current application rules.
+## Destination employee
 
-Requirements:
+Show a searchable employee dropdown labelled:
 
-- Existing employees become Active
-- Existing status values must not be overwritten
-- Migration must be idempotent where practical
-- Do not delete or recreate profile rows
-- Do not alter candidate, client or mandate ownership during migration
+Transfer To
+
+Destination employee rules:
+
+- Destination employee is required
+- Source employee must not appear
+- Only Active employees may be selected
+- On Leave employees must not be selectable
+- Inactive employees must not be selectable
+- Do not change existing Active / On Leave / Inactive rules
 
 ---
 
-# 6. Automatic employee creation
+# 4. Individual record-selection sections
 
-A new employee must appear in Employee Management automatically after:
-
-1. They successfully log in for the first time
-2. They save a valid profile name
-
-Do not add an Add Employee button or employee-creation form.
-
-When the profile name is saved:
-
-- Ensure an employment-status row exists
-- Create it with status active only when no status row already exists
-- Never reset an existing employee’s status to Active when they later edit their profile
-- Prevent duplicate status rows
-
-Use the existing profile-save flow or a safe database trigger, depending on the current architecture.
-
-Do not create the employee-management status before the profile name has been saved.
-
-A first-time user without a completed profile must still be able to access the existing profile setup process.
-
----
-
-# 7. RLS and database security
-
-Enable RLS on any new status table.
-
-Use the existing Admin/Super Admin authorization system. Do not create a second role system.
-
-Required access rules:
-
-- Authenticated ATS users may read the employment statuses needed for:
-  - Their own status
-  - Employee assignment dropdown filtering
-- Normal users must not directly update employment statuses
-- Only an authorized Admin or Super Admin may change another employee’s status
-- Status changes should be performed through a secure server endpoint using existing server-side authorization conventions
-- Never expose the service-role key to the browser
-
-Inactive users must not be able to access protected ATS data using an old browser session or access token.
-
-Inspect how the ATS accesses Supabase.
-
-## If protected data is accessed through backend APIs
-
-Add or extend a centralized server-side authorization check that rejects inactive users.
-
-Use a consistent response such as:
-
-{
-  "code": "ACCOUNT_INACTIVE",
-  "message": "Your account has been deactivated."
-}
-
-Use HTTP 403.
-
-## If the browser directly accesses protected Supabase tables
-
-Add a reusable database authorization function following the existing RLS conventions, for example:
-
-is_current_employee_active()
-
-This may be a security-definer function if that matches the existing architecture and is implemented safely.
-
-Use it to ensure inactive employees cannot access protected ATS data.
-
-Avoid recursive profile-table RLS policies.
-
-Do not block On Leave users from normal ATS access. Only Inactive users should be denied general ATS access.
-
-Server-side and RLS authorization are security enforcement. They are not additional frontend status-refetch fallbacks.
-
----
-
-# 8. Admin Employee Management data
-
-Replace the isolated mock-data adapter with real data.
-
-Do not redesign the existing Employee Management interface.
-
-The employee list should include profiles that have a valid saved profile name.
-
-Load:
-
-- Employee ID
-- Profile name
-- Email
-- Mobile number when available
-- Employment status
-
-Do not show:
-
-- Role
-- Designation
-- Department
-- Last active
-- Device
-- IP address
-- Location
-
-Employee-list filters must continue to work:
-
-- All
-- Active
-- On Leave
-- Inactive
-
-Search must continue to work by:
-
-- Name
-- Email
-
-Do not load thousands of candidates or all assignment rows for every employee in the initial employee-list request.
-
-Use an efficient structure.
-
-## Employee list request
-
-Return:
-
-- Employee identity fields
-- Employment status
-- Client count
-- Mandate count
-- Candidate count
-
-## Selected employee detail request
-
-Return only:
-
-- Counts
-- A small preview of names for each section
-- Enough records to show the existing pills
-- The +N more count
-
-Avoid N+1 queries.
-
-Keep the existing card order exactly:
+Show three separate sections in this exact order:
 
 1. Clients
 2. Mandates
 3. Candidates
 
-Keep the headings exactly:
+Each section must contain:
 
-- Clients
-- Mandates
-- Candidates
+- Category icon
+- Category heading
+- Total number currently assigned to the source employee
+- Category-level Select All checkbox
+- Search input
+- Full selectable record list
+- One checkbox per record
+- Scroll support when the list is long
+- Correct selected-count state
 
-Do not use:
+Only records that are currently assigned to the source employee should appear.
 
-- Assigned Clients
-- Assigned Mandates
-- Assigned Candidates
+Previously reassigned records must not appear.
 
----
+Do not display stale reassignment data from the initial Employee Management page load.
 
-# 9. Admin status-update endpoint
-
-Create a secure admin-only backend operation following the project’s existing route conventions.
-
-Conceptually, it should support:
-
-PATCH /api/admin/employees/:employeeId/status
-
-Do not force this exact URL if the repository uses a different routing convention.
-
-Input:
-
-{
-  "status": "active | on_leave | inactive"
-}
-
-Requirements:
-
-- Verify the caller is authenticated
-- Verify the caller is an authorized Admin or Super Admin
-- Validate employee ID
-- Validate status
-- Confirm the target employee exists
-- Update only the employment-status data
-- Set updated_at
-- Set updated_by
-- Return the canonical updated employee status
-- Return clear validation and authorization errors
-- Do not trust frontend authorization
-- Do not expose service-role credentials
-
-Use the existing activity-log helper when one already exists.
-
-If an audit/activity system exists, log:
-
-- Admin who changed the status
-- Employee whose status changed
-- Previous status
-- New status
-- Timestamp
-
-Do not create an entirely new activity-log system solely for this task.
+Every time the modal opens, load or refresh the source employee’s current assignments.
 
 ---
 
-# 10. Frontend status-update behaviour
+# 5. Clients selection
 
-Connect the existing segmented status control to the real backend.
+Heading format:
 
-When an Admin changes status:
+Clients (count)
 
-- Disable the control while saving
-- Prevent duplicate submissions
-- Show success feedback
-- On failure, restore the previous UI state
-- Show a clear error message
-- Use the canonical server response
-- Update Employee Management counts and filters where necessary
+Search placeholder:
 
-Status helper text:
+Search clients
 
-## Active
+Each client row should show:
 
-Employee can log in and receive new assignments.
+- Checkbox
+- Client name
+- Client ID, if already available and useful
 
-## On Leave
+The admin must be able to:
 
-Employee remains in the system but should not receive new assignments.
+- Select one client
+- Select multiple clients
+- Select all clients
+- Deselect one client after selecting all
+- Clear all client selections
+- Reassign clients without selecting mandates or candidates
 
-## Inactive
+Only selected clients must be reassigned.
 
-Employee has left the company and should not receive new assignments.
-
-Do not use mock local-only state after the backend is connected.
-
----
-
-# 11. Realtime implementation
-
-Employment-status changes must reflect without a page reload.
-
-Use Supabase Realtime.
-
-Important performance requirements:
-
-- No polling
-- No interval-based status queries
-- No repeated database fetching
-- Use one stable Realtime status subscription per authenticated ATS tab
-- Do not create one subscription per component or employee
-- Do not recreate subscriptions on every render
-- Remove the channel on logout and unmount
-- Avoid reconnect loops
-- Use stable React effect dependencies
-
-Prefer subscribing only to the dedicated status data.
-
-If a dedicated employee_statuses table is used, subscribe to INSERT and UPDATE events for that table.
-
-The event handler should:
-
-1. Update the cached employee-status list used by assignment dropdowns
-2. Update the Admin Employee Management UI when open
-3. Check whether the changed employee is the currently logged-in user
-4. Apply the correct current-user behaviour
-
-## Current employee becomes On Leave
-
-Immediately:
-
-- Update the authenticated employee-status state
-- Show the On Leave banner
-- Keep the employee logged in
-- Do not reload the page
-
-## Current employee becomes Active
-
-Immediately:
-
-- Update the authenticated employee-status state
-- Remove the On Leave banner
-- Keep the employee logged in
-- Do not reload the page
-
-## Current employee becomes Inactive
-
-Immediately:
-
-1. Display:
-
-   Your account has been deactivated. Please contact an administrator.
-
-2. Clear relevant client-side authenticated state
-3. Call the existing Supabase sign-out flow
-4. Redirect to the login page
-5. Ensure the message remains visible after redirect, using the existing toast/message pattern or a safe one-time navigation state
-
-Do not require a page refresh.
-
-Realtime should react only when database changes occur. Do not add continuous status fetching.
-
----
-
-# 12. Initial ATS-load fallback
-
-Implement exactly one frontend fallback status check:
-
-Fetch the logged-in employee’s current status once when the authenticated ATS initially loads.
-
-Do not add additional frontend status-refetch checks on:
-
-- Browser-tab focus
-- Window focus
-- Route changes
-- Page navigation
-- Before create operations
-- Before edit operations
-- Before delete operations
-- Visibility changes
-- Timers
-- Intervals
-
-The initial-load flow should be:
-
-1. Restore or obtain the authenticated Supabase session
-2. Fetch the employee’s employment status once
-3. Do not render protected ATS content until the result is known
-4. Show an existing loading screen or layout-stable skeleton during the check
-
-Results:
-
-## Active
-
-- Render the ATS normally
-
-## On Leave
-
-- Render the ATS
-- Show the On Leave banner
-
-## Inactive
-
-- Show the deactivation message
-- Sign out
-- Redirect to login
-- Do not briefly expose protected ATS content
-
-## No profile name yet
-
-- Allow the existing first-time profile setup flow
-- Do not incorrectly log out a new employee before profile setup
-
-Do not add any other frontend fallback checks.
-
----
-
-# 13. Shared authenticated employment-status state
-
-Create or extend one shared authenticated-user/session state location for employment status.
-
-Do not independently fetch status inside multiple pages.
-
-The state should expose enough information for:
-
-- Authenticated layout
-- On Leave banner
-- Inactive logout handling
-- Employee assignment dropdowns
-- Admin Employee Management
-- Online list filtering where needed
-
-Follow the project’s current state-management approach.
-
-Do not introduce a new global state library.
-
----
-
-# 14. Assignment-dropdown filtering
-
-Search the repository for every control that assigns work to an employee.
-
-At minimum inspect:
-
-- Candidate Consultant
-- Client Consultant
-- Mandate Consultant
-- Mandate multi-consultant selector
-- Mandate Team Lead
-- Assign Another Mandate flow
-- Any other new-assignment employee selector
-
-For all future assignment controls:
-
-- Only Active employees may be selected
-- On Leave employees must not be selectable
-- Inactive employees must not be selectable
-
-Use one shared helper or query for selectable employees rather than duplicating filters throughout the application.
-
-Do not blindly change every dropdown that displays an employee.
-
-Historical reporting selectors and employee-management filters are not assignment selectors.
-
----
-
-# 15. Existing assignments and historical display
-
-Do not erase or hide historical employee names.
-
-When an existing Candidate, Client or Mandate is assigned to an On Leave or Inactive employee:
-
-- Continue displaying the employee’s name
-- Do not replace the name with -
-- Do not silently clear the field
-- Do not delete the relationship
-- Do not automatically reassign records when status changes
-
-When editing an existing record:
-
-- The current On Leave or Inactive assignee may be displayed as the current value
-- Clearly indicate that they are not available for new assignments
-- Do not allow selecting them as a new assignee for another record
-- Do not clear the value merely because it is absent from the Active employee list
-
-Keep current-assignee display logic separate from selectable-employee options.
-
-Do not rewrite creator, audit, created-by or historical activity fields.
-
----
-
-# 16. Online/Away presence
-
-Employment status and online presence are separate concepts.
-
-Do not replace or interfere with:
-
-- Online
-- Away
-- Offline
-
-Behaviour:
-
-- An On Leave employee can remain Online or Away if they are using the ATS
-- An Inactive employee should disappear from the Online/Away list after logout and presence cleanup
-- Do not show inactive employees in the live employee-presence card
-- Do not change the existing presence heartbeat unless required to remove an inactive employee cleanly
-
-Reuse the existing logout/presence-cleanup flow.
-
----
-
-# 17. Employee reassignment
-
-Connect the existing Reassign modal to real backend data.
-
-The source employee is the employee currently selected in Employee Management.
-
-Destination employee rules:
-
-- Destination must be Active
-- Exclude the source employee
-- Exclude On Leave employees
-- Exclude Inactive employees
-
-Categories:
-
-- Clients
-- Mandates
-- Candidates
-
-Validation:
-
-- Destination employee required
-- At least one category required
-- Confirm disabled until valid
-- Show the current reassignable count for each category
-- Handle zero-count categories properly
-
----
-
-# 18. Reassignment database operation
-
-Reassignment across multiple tables must be atomic.
-
-Do not issue independent frontend update calls that can partially succeed.
-
-Implement either:
-
-- One transactional PostgreSQL RPC/function
-- Or the project’s existing safe server-side transaction mechanism
-
-The transaction must:
-
-1. Verify the caller is an Admin or Super Admin
-2. Verify the source employee exists
-3. Verify the destination employee exists
-4. Verify destination status is Active
-5. Transfer only the selected categories
-6. Update current ownership/assignment fields
-7. Preserve creator and historical audit fields
-8. Avoid duplicate employee IDs or names in multi-consultant mandate arrays
-9. Roll back all changes if any selected category fails
-10. Return affected counts
-
-Use the actual existing schema.
-
-Examples requiring careful handling:
-
-- Candidate may have one Consultant field
-- Client may have one Consultant field
-- Mandate may have multiple Consultants
-- Mandate may separately have a Team Lead
-
-For mandate arrays:
-
-- Replace the source employee with the destination employee
-- Do not duplicate the destination if already present
-- Preserve unrelated assigned consultants
-- Handle the source employee as Team Lead according to the same selected Mandates reassignment action
-- Do not corrupt array or JSON formats
-
-Do not change fields unrelated to current assignment ownership.
-
-If existing activity-log or notification helpers already support assignment changes, reuse them carefully.
-
-Do not generate duplicate notifications.
-
----
-
-# 19. Reassignment frontend result
+Unselected clients must remain assigned to the source employee.
 
 After successful reassignment:
 
-- Close the modal
-- Show a success toast
-- Refresh only the affected Employee Management data
-- Update source counts
-- Update destination counts when visible
-- Update preview pills
-- Do not reload the entire Admin Panel
-- Do not reload the entire website
+- Transferred clients must disappear from the source employee’s list
+- Source employee client count must decrease
+- Destination employee client count must increase
+- Opening the modal again must show only clients still assigned to the source employee
 
-Show the server-returned affected counts.
+Do not modify:
+
+- Client contact persons
+- Client follow-ups
+- Contract data
+- Client history
+- Creator fields
+- Audit fields
+- Other unrelated client columns
+
+---
+
+# 6. Mandates selection
+
+Heading format:
+
+Mandates (count)
+
+Search placeholder:
+
+Search mandates
+
+Each mandate row should show:
+
+- Checkbox
+- Role or mandate title
+- JB ID or mandate ID when available
+- Client name as secondary text when useful
+
+The admin must be able to:
+
+- Select one mandate
+- Select multiple mandates
+- Select all mandates
+- Deselect one mandate after selecting all
+- Clear all mandate selections
+- Reassign mandates without selecting clients or candidates
+
+Only selected mandates must be reassigned.
+
+Unselected mandates must remain assigned to the source employee.
+
+Example requirement:
+
+- Source employee has 4 mandates
+- Admin selects 2
+- Admin transfers those 2 to Cherry
+- Source employee retains the other 2
+- Opening Reassign again for the source employee shows only the remaining 2
+- The transferred 2 no longer appear
+- The remaining 2 can later be reassigned elsewhere
+
+This behaviour must be based on current database assignments, not cached modal state.
+
+Inspect the actual mandate schema.
+
+Mandates may contain:
+
+- Multiple consultants
+- A separate Team Lead
+
+For each selected mandate:
+
+## Consultant assignment
+
+If the source employee is in the consultant assignment:
+
+- Replace or remove the source employee according to the existing reassignment semantics
+- Assign the destination employee
+- Preserve all unrelated consultants
+- Do not duplicate the destination employee if already assigned
+- Preserve the current array, JSON or text format
+- Remove duplicate consultant values safely
+
+## Team Lead assignment
+
+If the source employee is the Team Lead of the selected mandate:
+
+- Replace the source employee with the destination employee
+- Do not modify Team Lead values on unselected mandates
+
+Do not:
+
+- Change unselected mandates
+- Remove unrelated consultants
+- Corrupt mandate arrays
+- Change mandate status
+- Change client links
+- Change creator fields
+- Change historical fields
+- Change unrelated mandate data
+
+---
+
+# 7. Candidates selection
+
+Heading format:
+
+Candidates (count)
+
+Search placeholder:
+
+Search candidates
+
+Each candidate row should show:
+
+- Checkbox
+- Candidate name
+- Candidate ID when available
+- Current client or mandate as secondary text when useful
+
+The admin must be able to:
+
+- Select one candidate
+- Select multiple candidates
+- Select all candidates
+- Deselect one candidate after selecting all
+- Clear all candidate selections
+- Reassign candidates without selecting clients or mandates
+
+Only selected candidates must be reassigned.
+
+Unselected candidates must remain assigned to the source employee.
+
+After successful reassignment:
+
+- Transferred candidates must disappear from the source employee’s reassignment list
+- Source candidate count must decrease
+- Destination candidate count must increase
+- Opening the modal again must show only candidates still assigned to the source employee
+
+Do not load or modify:
+
+- CV files
+- Resume text
+- Candidate comments
+- Duplicate detection data
+- Candidate history
+- Creator fields
+- Client assignment
+- Mandate assignment
+- Any unrelated candidate fields
+
+Only update the existing consultant or ownership assignment field required for employee reassignment.
+
+---
+
+# 8. Select All behaviour
+
+Each category must have its own independent Select All checkbox.
+
+The admin must be able to:
+
+- Select all Clients only
+- Select all Mandates only
+- Select all Candidates only
+- Select all Clients and only two Mandates
+- Select one Client, three Candidates and no Mandates
+- Select any combination across categories
+
+Select All must select all records currently assigned to the source employee in that category.
+
+It must not select:
+
+- Only visible rows
+- Only the current scroll area
+- Only the current pagination page
+- Records no longer assigned to the source employee
+- Records belonging to another employee
+
+Search must only filter displayed records.
+
+Search must not clear existing selections.
 
 Example:
 
-Reassigned 4 clients, 7 mandates and 23 candidates to Priya Sharma.
+- Admin selects Client A
+- Searches for Client B
+- Selects Client B
+- Clears search
+- Both Client A and Client B remain selected
+
+Select All checkbox states:
+
+## Checked
+
+All currently assigned records in the category are selected.
+
+## Unchecked
+
+No records in the category are selected.
+
+## Indeterminate
+
+Some, but not all, records are selected.
+
+After Select All:
+
+- Admin may deselect individual records
+- Select All becomes indeterminate
+- Only the remaining selected records are reassigned
+
+Clearing Select All should clear all selections in that category.
+
+---
+
+# 9. Selection summary
+
+At the bottom of the record sections, show a live summary.
+
+Example:
+
+Selected: 2 clients, 1 mandate, 3 candidates
+
+Use correct singular and plural wording:
+
+- 1 client
+- 2 clients
+- 1 mandate
+- 2 mandates
+- 1 candidate
+- 2 candidates
+
+When nothing is selected, show:
+
+No records selected
+
+Update this summary immediately when selections change.
+
+---
+
+# 10. Modal actions and validation
+
+Show:
+
+- Cancel
+- Confirm Reassignment
+
+Confirm Reassignment must remain disabled until:
+
+1. An Active destination employee is selected
+2. At least one individual record is selected
+
+While submitting:
+
+- Disable destination selection
+- Disable record checkboxes
+- Disable Select All controls
+- Prevent duplicate submissions
+- Show loading state on the confirm button
+- Prevent accidental modal closing while the request is running, following the existing modal pattern
+
+On success:
+
+- Close the modal
+- Use the existing success-toast system if one already exists
+- Do not create a new notification system
+- Refresh only the affected Employee Management data
+- Update the source employee counts
+- Update source preview pills
+- Update destination counts when visible
+- Do not reload the page
+- Do not reload the Admin Panel
+- Do not reload the full ATS
+
+Example success message:
+
+Reassigned 2 clients, 1 mandate and 3 candidates to Cherry.
+
+This success message is normal immediate UI feedback only.
+
+It must not create:
+
+- Notification rows
+- Bell notifications
+- Reassignment notifications
+- Emails
+- Persistent employee notifications
 
 On failure:
 
 - Keep the modal open
-- Preserve selections
-- Show a clear error
+- Preserve the destination employee
+- Preserve all record selections
+- Show the existing error feedback
+- Do not clear selections
+- Do not update counts optimistically
 - Do not show partial success
-- Do not optimistically clear counts unless the transaction succeeds
 
 ---
 
-# 20. Efficient data access
+# 11. Reopening the modal after reassignment
+
+This behaviour is mandatory.
+
+Every time the Reassign modal opens:
+
+- Query the current assignments for the selected source employee
+- Do not reuse stale record lists
+- Do not include records already transferred
+- Show the latest counts
+- Show only records still assigned to the source employee
+
+Example:
+
+Initial state:
+
+- Mandate A
+- Mandate B
+- Mandate C
+- Mandate D
+
+Admin transfers:
+
+- Mandate A
+- Mandate B
+
+to Cherry.
+
+After success, reopening Reassign for the original employee must show:
+
+- Mandate C
+- Mandate D
+
+It must not show:
+
+- Mandate A
+- Mandate B
+
+If Mandate C is then transferred to another employee, reopening the modal again must show only:
+
+- Mandate D
+
+Apply the same logic to Clients and Candidates.
+
+The database is the source of truth.
+
+Do not rely only on frontend removal.
+
+---
+
+# 12. Efficient record loading
 
 The ATS may contain thousands of candidates.
 
-Do not load all candidate rows merely to display Employee Management counts.
+Do not fetch full records.
 
-Use database aggregation and limited previews.
+When the Reassign modal opens, load only the minimal fields required.
 
-For each selected employee return:
+## Client fields
 
-- Client total count
-- First few client names
-- Mandate total count
-- First few mandate names
-- Candidate total count
-- First few candidate names
+- Internal ID
+- Client ID when available
+- Client name
 
-Use deterministic ordering for previews.
+## Mandate fields
 
-Do not return CV data, comments, resumes, full candidate payloads or unrelated columns.
+- Internal ID
+- JB ID when available
+- Role or title
+- Client name when useful
 
-Add narrowly scoped indexes only when the relevant employee-assignment fields are not already indexed and the index is genuinely needed.
+## Candidate fields
 
-Do not alter unrelated indexes.
+- Internal ID
+- Candidate ID when available
+- Candidate name
+- Client or mandate name when useful
 
----
+Do not return:
 
-# 21. Loading, error and empty states
+- CVs
+- Resume files
+- Parsed resume content
+- Comments
+- Full candidate payloads
+- Full client payloads
+- Full mandate payloads
+- Activity histories
+- Notifications
+- Unrelated columns
 
-Preserve the existing Employee Management layout.
+Use:
 
-Add:
+- Stable ordering
+- Existing pagination patterns
+- Server-side search if necessary
+- Incremental loading if the list is large
+- Efficient filtered queries
+- No N+1 queries
 
-- Employee-list skeleton
-- Selected-employee detail skeleton
-- Status-save loading state
-- Assignment-preview loading state
-- Reassignment loading state
-- No employees state
-- No matching employees state
-- No linked clients state
-- No linked mandates state
-- No linked candidates state
-- API error retry state where appropriate
+The initial Employee Management page must continue showing only counts and preview pills.
 
-Avoid layout shift.
-
-Do not introduce artificial loading delays.
-
----
-
-# 22. Admin permissions
-
-Use the Admin Panel’s existing authorization model.
-
-Only authorized Admin/Super Admin users may:
-
-- View management controls, according to existing Admin Panel access
-- Change employment status
-- Perform reassignment
-
-Do not trust only hidden frontend buttons.
-
-Every write operation must verify admin authorization on the server.
-
-Do not create a new unrelated role or permission system.
+Do not load all individual records until the Reassign modal is opened.
 
 ---
 
-# 23. React and Realtime cleanup
+# 13. Selection-state implementation
+
+Use a selection model that safely supports:
+
+- No selection
+- Individual selected IDs
+- Select All
+- Individual exclusions after Select All
+
+A suitable structure is:
+
+type CategorySelection =
+  | {
+      mode: "none";
+      selectedIds: string[];
+      excludedIds: string[];
+    }
+  | {
+      mode: "selected";
+      selectedIds: string[];
+      excludedIds: string[];
+    }
+  | {
+      mode: "all";
+      selectedIds: string[];
+      excludedIds: string[];
+    };
+
+Meaning:
+
+## none
+
+No records selected.
+
+## selected
+
+Only the IDs in selectedIds are selected.
+
+## all
+
+All records currently assigned to the source employee are selected except IDs in excludedIds.
+
+You may use another equivalent implementation if it better matches the current codebase.
+
+Do not send thousands of IDs when Select All can be represented safely by:
+
+- mode: all
+- excludedIds
+
+---
+
+# 14. Backend request
+
+Extend the existing reassignment endpoint or RPC.
+
+Do not create unnecessary duplicate APIs.
+
+The request should support the equivalent of:
+
+{
+  "sourceEmployeeId": "source-id",
+  "destinationEmployeeId": "destination-id",
+  "selections": {
+    "clients": {
+      "mode": "selected",
+      "selectedIds": ["client-1", "client-2"],
+      "excludedIds": []
+    },
+    "mandates": {
+      "mode": "all",
+      "selectedIds": [],
+      "excludedIds": ["mandate-4"]
+    },
+    "candidates": {
+      "mode": "none",
+      "selectedIds": [],
+      "excludedIds": []
+    }
+  }
+}
+
+Use the project’s established request and naming conventions.
+
+Validation requirements:
+
+- Caller must be authenticated
+- Caller must be an authorized Admin or Super Admin
+- Source employee must exist
+- Destination employee must exist
+- Source and destination must be different
+- Destination employee must currently be Active
+- Selection modes must be valid
+- At least one record must be selected
+- Selected IDs must exist
+- Selected IDs must currently belong to the source employee
+- Excluded IDs must be valid
+- Duplicate IDs must be removed
+- IDs from another employee must be rejected
+- Already-transferred records must not be transferred again
+- Frontend-provided counts must not be trusted
+- Frontend-provided names must not be trusted
+
+Use current database values as the source of truth.
+
+---
+
+# 15. Atomic reassignment
+
+All selected record updates in one confirmation must remain atomic.
+
+Do not perform separate independent browser updates that may partially succeed.
+
+Use the existing:
+
+- PostgreSQL RPC
+- Transaction function
+- Or server-side transaction mechanism
+
+Extend it to support individual record IDs and Select All semantics.
+
+The transaction must:
+
+1. Verify admin authorization
+2. Verify the source employee
+3. Verify the destination employee
+4. Verify destination status is Active
+5. Resolve the final selected IDs for Clients
+6. Resolve the final selected IDs for Mandates
+7. Resolve the final selected IDs for Candidates
+8. Verify every resolved record is currently assigned to the source employee
+9. Update only those resolved records
+10. Leave all unselected records unchanged
+11. Preserve historical and creator fields
+12. Roll back every change if any category fails
+13. Return exact affected counts
+
+Example:
+
+If 2 Clients, 1 Mandate and 3 Candidates are selected:
+
+- Either all 6 records are transferred
+- Or no records are transferred
+
+Never allow partial reassignment.
+
+---
+
+# 16. Current-assignment verification
+
+The backend must verify ownership at transaction time.
+
+This is required because assignments may change after the modal opens.
+
+Before updating each selected record:
+
+- Confirm it is still assigned to the source employee
+- Reject or safely fail if it is no longer assigned
+- Do not overwrite a newer assignment
+- Do not transfer stale records
+- Do not silently reassign records belonging to someone else
+
+If the assignment changed after the modal was opened, return a clear error and refresh the modal data.
+
+---
+
+# 17. Historical-data preservation
+
+Reassignment changes current assignment ownership only.
+
+Do not modify:
+
+- Created by
+- Original creator
+- Historical activity data
+- Past attribution
+- Attendance
+- PMS
+- Invoice records
+- Previous notifications
+- Existing audit fields
+- Record creation dates
+- Candidate CV data
+- Client follow-ups
+- Contract documents
+- Mandate creation information
+
+Do not delete employees or records.
+
+Do not remove the original employee’s historical attribution where it is stored separately.
+
+---
+
+# 18. No notification changes
+
+Do not add any notification behaviour for reassignment.
+
+Specifically:
+
+- Do not create notification rows
+- Do not notify the source employee
+- Do not notify the destination employee
+- Do not add bell notifications
+- Do not add notification popups
+- Do not send emails
+- Do not add due notifications
+- Do not call notification helpers
+- Do not alter existing notification code
+- Do not generate duplicate assignment notifications
+- Do not create a new notification migration
+- Do not add a reassignment notification type
+
+Only use the existing immediate toast or inline success message shown to the admin who performed the reassignment.
+
+That toast is not a persistent notification feature.
+
+---
+
+# 19. Loading and empty states
+
+Add or preserve:
+
+- Modal loading skeleton
+- Record-list loading state
+- Search loading state when needed
+- API error state
+- Retry action
+- Empty Clients state
+- Empty Mandates state
+- Empty Candidates state
+- No Active destination employee state
+- No search result state
+
+Suggested messages:
+
+- No clients assigned to this employee
+- No mandates assigned to this employee
+- No candidates assigned to this employee
+- No records match your search
+- No active employees available for reassignment
+
+For a category with zero records:
+
+- Show the empty state
+- Disable Select All
+- Do not include that category in validation
+- Do not show stale records
+
+---
+
+# 20. Modal scrolling and layout
+
+Preserve the current UI style.
+
+Use:
+
+- Existing navy colour
+- Existing gold accent
+- Existing fonts
+- Existing modal component
+- Existing buttons
+- Existing inputs
+- Existing checkboxes
+- Existing spacing and border style
+
+Do not redesign the Employee Management page.
+
+The modal must:
+
+- Fit normal laptop screens
+- Keep the header visible
+- Keep the footer actions usable
+- Allow the content area to scroll
+- Prevent page-level horizontal scrolling
+- Wrap long text safely
+- Keep searches and Select All controls aligned
+
+---
+
+# 21. Accessibility
 
 Ensure:
 
-- One Realtime subscription per authenticated tab
-- No duplicate channels after React Strict Mode mounting
-- Channel removed during logout
-- Channel removed during component or provider unmount
-- No subscription inside employee-list rows
-- No subscription per assignment dropdown
-- No status polling
-- No memory leaks
-- No state updates after unmount
-- No infinite effect loops
-- No unnecessary full-app rerenders
-
-Use the project’s existing query cache or state-update mechanism where available.
+- Every checkbox has an accessible label
+- Select All supports checked, unchecked and indeterminate states
+- Modal remains keyboard accessible
+- Existing focus trap continues working
+- Escape closes the modal only when submission is not active
+- Close button has an aria-label
+- Search inputs have labels
+- Destination dropdown is keyboard searchable
+- Focus returns to the Reassign button after close
+- Selection is not communicated only through colour
 
 ---
 
-# 24. Behaviour verification
+# 22. Required tests
 
-Verify these scenarios manually or through appropriate tests.
+Use the project’s existing test setup only.
 
-## New employee
+Do not install a new testing framework.
 
-1. User logs in
-2. User has no saved profile name
-3. Profile setup remains accessible
-4. User saves profile name
-5. Employee appears automatically in Employee Management
-6. Status is Active
+Test where practical:
 
-## Active to On Leave
-
-1. Admin selects an Active employee
-2. Admin changes status to On Leave
-3. Admin UI updates
-4. Employee’s already-open ATS updates without reload
-5. Employee remains logged in
-6. On Leave banner appears
-7. Employee disappears from new-assignment dropdowns
-8. Historical assigned records continue showing their name
-
-## On Leave to Active
-
-1. Admin changes status to Active
-2. Employee’s open ATS updates without reload
-3. Banner disappears
-4. Employee reappears in new-assignment dropdowns
-
-## Active to Inactive
-
-1. Admin changes status to Inactive
-2. Employee’s open ATS receives the Realtime event
-3. Deactivation message appears
-4. Employee is signed out
-5. Employee is redirected to login
-6. Employee disappears from assignment dropdowns
-7. Employee disappears from the online-presence list
-8. Historical records remain visible
-
-## Inactive login attempt
-
-1. Inactive employee authenticates
-2. Initial ATS-load status check runs
-3. Protected ATS content does not flash
-4. Employee is signed out
-5. Deactivation message appears
-
-## Reassignment
-
-1. Admin selects the source employee
-2. Admin opens the Reassign modal
-3. Only Active destination employees are selectable
-4. Admin selects categories
-5. Reassignment succeeds atomically
-6. Counts and previews update
-7. Historical audit fields remain unchanged
-8. No duplicate mandate consultants are created
-
-## Realtime performance
-
-1. Only one employee-status channel exists per authenticated tab
-2. No recurring status network request occurs
-3. No polling interval exists
-4. Status handler runs only when a matching database change is received
-5. Unmount and logout remove the channel
+- Selecting one Client
+- Selecting multiple Clients
+- Selecting one Mandate
+- Selecting multiple Mandates
+- Selecting one Candidate
+- Selecting multiple Candidates
+- Independent selection between categories
+- Select All for Clients
+- Select All for Mandates
+- Select All for Candidates
+- Deselecting one record after Select All
+- Indeterminate Select All state
+- Clearing Select All
+- Search preserving existing selections
+- Source employee excluded from destinations
+- On Leave destination excluded
+- Inactive destination excluded
+- Confirm disabled without destination
+- Confirm disabled without selected records
+- IDs must belong to the source employee
+- Already-transferred records are rejected
+- Unselected records remain unchanged
+- Partial mandate reassignment
+- Mandate consultant deduplication
+- Selected Team Lead replacement
+- Unselected Team Lead remains unchanged
+- Atomic rollback if one category fails
+- Correct affected counts
+- Reopening modal shows only remaining records
+- Transferred records do not reappear
+- Select All does not require sending every record ID
+- No notification helper is called
+- No notification row is created
 
 ---
 
-# 25. Tests
+# 23. Mandatory scenario verification
 
-Add focused tests using the project’s existing testing setup.
+Verify this exact scenario:
 
-At minimum cover where practical:
+1. Employee A currently has four mandates:
+   - Mandate 1
+   - Mandate 2
+   - Mandate 3
+   - Mandate 4
 
-- Status validation
-- Admin authorization
-- Existing-employee backfill behaviour
-- Automatic status creation after profile save
-- Active employee filtering
-- On Leave exclusion from assignment dropdowns
-- Inactive exclusion from assignment dropdowns
-- Existing inactive assignee display
-- Initial-load inactive handling
-- Realtime Active to On Leave handling
-- Realtime On Leave to Active handling
-- Realtime Active to Inactive logout handling
-- Reassignment validation
-- Reassignment destination must be Active
-- Reassignment mandate-array deduplication
-- Reassignment transaction rollback
-- Employee counts and preview limits
+2. Admin opens Reassign.
 
-Do not introduce an entirely new test framework.
+3. Modal shows all four mandates.
+
+4. Admin selects only:
+   - Mandate 1
+   - Mandate 2
+
+5. Admin selects Cherry as destination.
+
+6. Admin confirms.
+
+7. Database updates only:
+   - Mandate 1
+   - Mandate 2
+
+8. Employee A still owns or remains assigned to:
+   - Mandate 3
+   - Mandate 4
+
+9. Employee Management count for Employee A changes from 4 to 2.
+
+10. Employee Management count for Cherry increases by 2.
+
+11. Admin opens Reassign again for Employee A.
+
+12. Modal shows only:
+   - Mandate 3
+   - Mandate 4
+
+13. Modal must not show:
+   - Mandate 1
+   - Mandate 2
+
+14. Admin can select Mandate 3 and transfer it to another Active employee.
+
+15. Opening Reassign again then shows only Mandate 4.
+
+Repeat equivalent verification for:
+
+- Clients
+- Candidates
 
 ---
 
-# 26. Migration safety
-
-Before completing:
-
-- Confirm migrations are additive
-- Confirm existing data is preserved
-- Confirm existing employees are backfilled as Active
-- Confirm no existing status is overwritten
-- Confirm no users are deleted
-- Confirm no candidate, client or mandate rows are deleted
-- Confirm no destructive production reset command was used
-- Confirm Realtime is enabled only for the required status table
-- Confirm RLS does not create recursion
-- Confirm service-role credentials remain server-side
-
-Do not automatically apply destructive migrations to production.
-
-Follow the repository’s normal migration and deployment workflow.
-
----
-
-# 27. Final verification
+# 24. Final verification
 
 Before finishing:
 
-1. Review the entire Git diff.
-2. Revert unrelated changes.
-3. Revert formatting-only changes outside edited areas.
-4. Confirm every modified file is directly required.
-5. Run the existing lint command.
-6. Run the existing typecheck command.
-7. Run the existing test command where available.
-8. Run the production build.
-9. Fix only errors introduced by this feature.
-10. Do not fix unrelated pre-existing warnings or errors.
-11. Confirm all current Admin Panel sections remain unchanged.
-12. Confirm locked records remain unchanged.
-13. Confirm the Employee Management design was preserved.
-14. Confirm there is no Add Employee button.
-15. Confirm role and last-active fields are absent.
-16. Confirm the cards are named exactly:
-    - Clients
-    - Mandates
-    - Candidates
-17. Confirm Active, On Leave and Inactive work with real data.
-18. Confirm only Active employees appear in future assignment controls.
-19. Confirm Realtime does not poll.
-20. Confirm only the initial ATS-load frontend fallback status check exists.
-21. Confirm no focus, route-change, visibility or timer-based status refetch was added.
-22. Confirm inactive users are blocked server-side or database-side.
-23. Confirm historical data remains intact.
-24. Confirm no unrelated files were touched.
+1. Inspect the complete Git diff.
+2. Revert all unrelated changes.
+3. Revert formatting-only changes outside edited sections.
+4. Confirm every modified file is directly necessary.
+5. Confirm the existing Employee Management design remains unchanged.
+6. Confirm employee status functionality remains unchanged.
+7. Confirm Realtime status functionality remains unchanged.
+8. Confirm inactive-user logout remains unchanged.
+9. Confirm assignment dropdown filtering remains unchanged.
+10. Confirm presence functionality remains unchanged.
+11. Confirm locked-record functionality remains unchanged.
+12. Confirm no notification feature was added.
+13. Confirm no existing notification logic was modified.
+14. Confirm individual Client selection works.
+15. Confirm individual Mandate selection works.
+16. Confirm individual Candidate selection works.
+17. Confirm each category has independent Select All.
+18. Confirm Select All covers the entire category.
+19. Confirm individual exclusions work after Select All.
+20. Confirm search preserves selection.
+21. Confirm only selected records are transferred.
+22. Confirm unselected records remain with the source employee.
+23. Confirm reopening the modal shows only current remaining assignments.
+24. Confirm transferred records do not reappear.
+25. Confirm reassignment is atomic.
+26. Confirm only Active destination employees are allowed.
+27. Confirm historical fields remain unchanged.
+28. Confirm no records were deleted.
+29. Confirm no unrelated files were modified.
+30. Run the existing lint command.
+31. Run the existing typecheck command.
+32. Run the existing tests.
+33. Run the production build.
+34. Fix only errors introduced by this enhancement.
+35. Do not fix unrelated pre-existing warnings or errors.
 
 ---
 
-# 28. Final response format
+# 25. Final response format
 
 After implementation, provide:
 
 ## Files created
 
-List each new file and its purpose.
+List each new file and why it was required.
 
-## Existing files modified
+## Files modified
 
 List each modified file and explain why it was necessary.
 
-## Database changes
+## Existing functionality preserved
 
-Include:
+Confirm that the following were not changed:
 
-- Migration created
-- Table or column used
-- Backfill behaviour
-- RLS policies
-- Realtime publication
-- Transaction or RPC created
+- Employee statuses
+- Realtime status updates
+- Inactive logout
+- On Leave behaviour
+- Assignment dropdown filtering
+- Presence
+- Locked records
+- Existing Admin Panel UI
+- Notifications
 
-## Backend changes
+## Frontend implementation
 
-Include:
+Explain:
 
-- Employee-list/detail endpoints
-- Status-update endpoint
-- Reassignment endpoint or RPC
-- Authorization enforcement
+- Individual Client selection
+- Individual Mandate selection
+- Individual Candidate selection
+- Select All
+- Indeterminate selection
+- Search behaviour
+- Selection summary
+- Reopening-modal refresh behaviour
+- Loading and empty states
 
-## Frontend changes
+## Backend implementation
 
-Include:
+Explain:
 
-- Mock-data removal
-- Real-data integration
-- Realtime provider or subscription
-- Initial-load status gate
-- On Leave banner
-- Inactive logout handling
-- Assignment-dropdown filtering
-- Reassignment integration
+- Current-assignment record loading
+- Selection validation
+- Active destination validation
+- Stale-assignment validation
+- Individual selected-record handling
+- Select All handling
+- No-notification handling
+
+## Database implementation
+
+Explain:
+
+- Existing RPC or transaction changes
+- Individual record IDs
+- Atomic rollback
+- Mandate consultant handling
+- Team Lead handling
+- Remaining-record behaviour
+- Affected-count response
 
 ## Verification results
 
@@ -1038,16 +1175,19 @@ Report:
 - Typecheck
 - Tests
 - Production build
-- Realtime subscription count
-- Confirmation that no polling was added
+- Four-mandates partial-reassignment scenario
+- Reopening-modal remaining-record scenario
 
 ## Scope confirmation
 
 Explicitly confirm:
 
-- No unrelated frontend was redesigned
-- No unrelated backend was modified
-- No existing records were deleted
-- No employee accounts were deleted
-- No unnecessary dependencies were installed
+- No notification feature was added
+- No notification code was modified
 - No unrelated files were changed
+- No unrelated features were redesigned
+- No records were deleted
+- Only selected records are reassigned
+- Unselected records remain assigned to the source employee
+- Transferred records do not reappear for the source employee
+- Reassignment remains atomic

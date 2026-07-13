@@ -1,12 +1,13 @@
 const {
   listEmployees,
   employeeDetail,
+  reassignmentRecords,
   updateEmployeeStatus,
   reassignEmployee
 } = require('../services/employeeManagement')
 
 function sendError(res, error) {
-  return res.status(error.statusCode || 500).json({ error: error.message || 'Internal server error' })
+  return res.status(error.statusCode || 500).json({ error: error.message || 'Internal server error', code: error.code || undefined })
 }
 
 async function list(req, res) {
@@ -20,6 +21,14 @@ async function list(req, res) {
 async function detail(req, res) {
   try {
     return res.json({ data: await employeeDetail(req.params.employeeId) })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
+async function records(req, res) {
+  try {
+    return res.json({ data: await reassignmentRecords(req.params.employeeId, req.query) })
   } catch (error) {
     return sendError(res, error)
   }
@@ -41,7 +50,7 @@ async function reassign(req, res) {
       actorEmail: req.user.email,
       sourceUserId: req.params.employeeId,
       destinationUserId: req.body?.destination_user_id,
-      categories: req.body?.categories
+      selections: req.body?.selections
     })
     return res.json({ data })
   } catch (error) {
@@ -49,4 +58,4 @@ async function reassign(req, res) {
   }
 }
 
-module.exports = { list, detail, updateStatus, reassign }
+module.exports = { list, detail, records, updateStatus, reassign }
