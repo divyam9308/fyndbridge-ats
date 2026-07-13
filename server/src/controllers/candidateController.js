@@ -14,19 +14,7 @@ const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/d
 const { createConsultantAssignmentNotification } = require('../services/assignmentNotifications')
 const { isAdmin, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
-
-const VALID_STATUSES = [
-  'Interested',
-  'Not Interested',
-  'Offered',
-  'Hired',
-  'Offer Declined',
-  'Dropout',
-  'Rejected by Recruiter',
-  'Interview',
-  'Client Submission',
-  'Rejected by Client'
-]
+const { CANDIDATE_STATUSES: VALID_STATUSES, candidateStatusError, cleanStatus: cleanCandidateStatus } = require('../services/candidateStatuses')
 
 const CANDIDATE_FIELDS = [
   'full_name',
@@ -88,6 +76,13 @@ function normalizeMobile(value) {
 
 function cleanText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function firstDefinedCandidateStatus(body = {}) {
+  for (const field of ['status', 'candidateStatus', 'application_status', 'association_status']) {
+    if (Object.prototype.hasOwnProperty.call(body, field)) return body[field]
+  }
+  return undefined
 }
 
 function isValidEmail(email) {
@@ -325,7 +320,7 @@ async function checkCandidateDuplicate(req, res) {
   }
 }
 
-function validateCandidatePayload(body, { partial = false } = {}) {
+function validateCandidatePayload(body, { partial = false, requireStatus = !partial } = {}) {
   const errors = {}
 
   if (!partial || Object.prototype.hasOwnProperty.call(body, 'full_name')) {
@@ -382,9 +377,9 @@ function validateCandidatePayload(body, { partial = false } = {}) {
     }
   }
 
-  // Allow '-' as a sentinel meaning "no status selected yet" (not just '' and null)
-  if (body.status !== undefined && body.status !== null && body.status !== '' && body.status !== '-' && !VALID_STATUSES.includes(body.status)) {
-    errors.status = `status must be one of: ${VALID_STATUSES.join(', ')}`
+  if (requireStatus || Object.prototype.hasOwnProperty.call(body, 'status')) {
+    const statusError = candidateStatusError(body.status)
+    if (statusError) errors.status = statusError
   }
 
   if (body.skills !== undefined) {
@@ -482,7 +477,7 @@ function flattenAssociation(row) {
     job_title: row.job_title || null,
     consultant_name: row.consultant_name || null,
     consultant_user_id: row.consultant_user_id || null,
-    status: row.status || '-',
+    status: cleanCandidateStatus(row.status) || '-',
     current_salary: row.current_salary || null,
     expected_salary: row.expected_salary || null,
     offered_ctc: row.offered_ctc || null,
@@ -925,10 +920,7 @@ function parseJsonFilter(value) {
 
 async function insertAssociation(payload) {
   const nextPayload = { ...payload }
-  nextPayload.status =
-    typeof nextPayload.status === 'string' && nextPayload.status.trim()
-      ? nextPayload.status.trim()
-      : '-';
+  nextPayload.status = cleanCandidateStatus(nextPayload.status)
 
   let insertPayload = nextPayload
   let result = null
@@ -949,10 +941,7 @@ async function insertAssociation(payload) {
 async function updateAssociation(associationId, payload) {
   const nextPayload = { ...payload }
   if (Object.prototype.hasOwnProperty.call(nextPayload, 'status')) {
-    nextPayload.status =
-      typeof nextPayload.status === 'string' && nextPayload.status.trim()
-        ? nextPayload.status.trim()
-        : '-';
+    nextPayload.status = cleanCandidateStatus(nextPayload.status)
   }
 
  
@@ -1066,9 +1055,13 @@ async function listCandidates(req, res) {
 
     if (req.query.status) {
       const statuses = String(req.query.status).split(',').map(status => status.trim()).filter(Boolean)
-      query = statuses.length === 1
-        ? query.ilike('candidate_associations.status', statuses[0])
-        : query.in('candidate_associations.status', statuses)
+      if (statuses.length === 1 && statuses[0] === '-') {
+        query = query.or('status.is.null,status.eq.-,status.match.^\\s*$', { referencedTable: 'candidate_associations' })
+      } else {
+        query = statuses.length === 1
+          ? query.ilike('candidate_associations.status', statuses[0])
+          : query.in('candidate_associations.status', statuses)
+      }
     }
 
     if (req.query.salary_min) {
@@ -1224,10 +1217,10 @@ async function notifyCandidateConsultantAssignment(req, candidate, association, 
 async function createCandidate(req, res) {
   let cvResult = null
   try {
-    const incomingStatus = req.body.status || req.body.candidateStatus || req.body.application_status || req.body.association_status;
+    const incomingStatus = firstDefinedCandidateStatus(req.body)
     const body = normalizeRequestBody({
       ...req.body,
-      status: incomingStatus !== undefined ? incomingStatus : '',
+      status: incomingStatus,
       source: req.body.source || 'manual'
     })
     const errors = validateCandidatePayload(body)
@@ -1239,10 +1232,7 @@ async function createCandidate(req, res) {
     const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
     const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
     const duplicateAction = cleanText(body.duplicate_action)
-    associationPayload.status =
-      typeof associationPayload.status === "string" && associationPayload.status.trim()
-        ? associationPayload.status.trim()
-        : "-";
+    associationPayload.status = cleanCandidateStatus(associationPayload.status)
     if (!associationPayload.client_id || !associationPayload.job_id) {
       return res.status(400).json({
         errors: {
@@ -1390,15 +1380,13 @@ async function updateCandidate(req, res) {
   let cvResult = null
   try {
     const admin = await isAdmin(req.user)
-    const incomingStatus = req.body.status || req.body.candidateStatus || req.body.application_status || req.body.association_status;
+    const incomingStatus = firstDefinedCandidateStatus(req.body)
     const body = normalizeRequestBody({
       ...req.body
     })
-    if (incomingStatus !== undefined) {
-      body.status = incomingStatus;
-    }
+    body.status = incomingStatus
 
-    const errors = validateCandidatePayload(body, { partial: true })
+    const errors = validateCandidatePayload(body, { partial: true, requireStatus: true })
 
     if (Object.keys(errors).length) {
       return res.status(400).json({ errors })
@@ -1411,10 +1399,7 @@ async function updateCandidate(req, res) {
     cvResult = await applyCvInput(req, candidatePayload)
 
     if (Object.prototype.hasOwnProperty.call(associationPayload, 'status')) {
-      associationPayload.status =
-        typeof associationPayload.status === 'string' && associationPayload.status.trim()
-          ? associationPayload.status.trim()
-          : '-';
+      associationPayload.status = cleanCandidateStatus(associationPayload.status)
     }
     await validateMandateReference(associationPayload)
 
@@ -1599,15 +1584,17 @@ const { data: inserted, error: insertError } = await insertAssociation(assocInse
 async function updateCandidateStatus(req, res) {
   try {
     const admin = await isAdmin(req.user)
-    if (!VALID_STATUSES.includes(req.body.status)) {
+    const status = cleanCandidateStatus(req.body.status)
+    const statusError = candidateStatusError(req.body.status)
+    if (statusError) {
       return res.status(400).json({
         errors: {
-          status: `status must be one of: ${VALID_STATUSES.join(', ')}`
+          status: statusError
         }
       })
     }
 
-    await assertCanUpdateColumns('candidates', { status: req.body.status }, admin)
+    await assertCanUpdateColumns('candidates', { status }, admin)
 
     const existing = await supabase
       .from('candidate_associations')
@@ -1618,7 +1605,7 @@ async function updateCandidateStatus(req, res) {
     await assertRowEditable('candidates', existing.data?.candidate_id, admin)
 
     const updatePayload = {
-      status: req.body.status,
+      status,
       updated_at: new Date().toISOString()
     }
 

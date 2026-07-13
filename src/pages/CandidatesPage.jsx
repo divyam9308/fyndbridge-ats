@@ -16,7 +16,7 @@ import FormattedDateInput from '../components/FormattedDateInput'
 import '../styles/Shared.css'
 import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
-import { CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
+import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS, REQUIRED_CANDIDATE_STATUS_ERROR, candidateStatusFormValue, isCandidateStatusSelected } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
 import { highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
@@ -288,7 +288,7 @@ const apiCandidateToUi = (row) => ({
   education: row.education || '',
   client: row.client_name || '',
   job: row.job_title || '',
-  status: row.status || '',
+  status: candidateStatusFormValue(row.status),
   cvLink: row.cv_link || row.resume_url || '',
   cvFileHash: row.cv_file_hash || '',
   cvStoragePath: row.cv_storage_path || row.resume_path || '',
@@ -533,6 +533,7 @@ export default function CandidatesPage() {
   const [importQueue, setImportQueue] = useState([])
   const [currentImportIndex, setCurrentImportIndex] = useState(0)
   const [importError, setImportError] = useState('')
+  const [parsedErrors, setParsedErrors] = useState({})
   const [parsing, setParsing]         = useState(false)
   const [parsed, setParsed]           = useState(false)    // after parse success
   const [parsedForm, setParsedForm]   = useState(null)
@@ -710,9 +711,9 @@ export default function CandidatesPage() {
 
   const updateCandidateStatus = async (candidate, status) => {
     const associationId = candidate.associationId || candidate.id
-    if (!associationId) return
+    if (!associationId || !isCandidateStatusSelected(status)) return
     const previous = candidates
-    const nextStatus = status || '-'
+    const nextStatus = status.trim()
     setApiError('')
     setCandidates(current => current.map(row => (row.associationId || row.id) === associationId ? { ...row, status: nextStatus } : row))
     setStatusSaving(current => ({ ...current, [associationId]: true }))
@@ -966,6 +967,9 @@ export default function CandidatesPage() {
     } else {
       setForm(f => ({ ...f, [name]: nextValue }))
     }
+    if (name === 'status' && isCandidateStatusSelected(nextValue)) {
+      setErrors(current => ({ ...current, status: undefined }))
+    }
   }
 
   const handleSkillKey = (e) => {
@@ -994,6 +998,7 @@ export default function CandidatesPage() {
     if (!f.mobile.trim()) e.mobile = 'Mobile is required'
     if (!f.clientId) e.client = 'Client is required'
     if (!f.jobId) e.job = 'Mandate is required'
+    if (!isCandidateStatusSelected(f.status)) e.status = REQUIRED_CANDIDATE_STATUS_ERROR
     if (f.client?.trim() && !f.clientId) e.client = 'Please select a valid client from the dropdown.'
     if (f.job?.trim() && !f.jobId) e.job = 'Please select a valid mandate from the dropdown.'
     if (e.client || e.job) e.form = 'Client and mandate assignment is required.'
@@ -1335,6 +1340,7 @@ export default function CandidatesPage() {
     setImportQueue(rows)
     setCurrentImportIndex(0)
     setParsedForm({ ...mapBulkResumeRowToForm(rows[0], profile.name, consultantUser?.id || ''), candidateDisplayId })
+    setParsedErrors({})
     setParsed(true)
     setReviewNotice(rows[0]?.error ? `Parsing warning: ${rows[0].error}` : '')
     if (rows[0]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
@@ -1413,6 +1419,7 @@ export default function CandidatesPage() {
     setConsultantSearch(profile.name)
     setCurrentImportIndex(nextIndex)
     setParsedForm({ ...mapBulkResumeRowToForm(importQueue[nextIndex], profile.name, consultantUser?.id || ''), candidateDisplayId })
+    setParsedErrors({})
     setParsedSkillInput('')
     setReviewNotice(importQueue[nextIndex]?.error ? `Parsing warning: ${importQueue[nextIndex].error}` : notice)
     if (importQueue[nextIndex]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
@@ -1422,11 +1429,13 @@ export default function CandidatesPage() {
   const handleSaveParsed = async () => {
     const candidateToSave = fillEmptyCandidateFields({ ...parsedForm, source: 'resume' })
     const e = validate(candidateToSave)
+    setParsedErrors(e)
     if (Object.keys(e).length) { setImportError(Object.values(e)[0]); return }
     if (!candidateToSave.cvFile && !candidateToSave.sourceFile && !candidateToSave.cvStoragePath && !candidateToSave.cvLink) {
       setImportError('Parsed resume file was lost. Please re-upload this resume.')
       return
     }
+    setImportError('')
     setSaving(true)
     try {
       await saveCandidateToApi(candidateToSave, { duplicateAction: duplicateBypass?.source === 'resume' ? 'add_duplicate' : '' })
@@ -1533,7 +1542,7 @@ export default function CandidatesPage() {
 
   const closeImport = () => {
     setImportOpen(false); setResumeFiles([]); setImportQueue([]); setCurrentImportIndex(0); setImportError(''); setReviewNotice('')
-    setParsing(false); setParsed(false); setParsedForm(null); setParsedSkillInput('')
+    setParsing(false); setParsed(false); setParsedForm(null); setParsedSkillInput(''); setParsedErrors({})
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -1565,6 +1574,10 @@ export default function CandidatesPage() {
       }))
     } else {
       setParsedForm(f => ({ ...f, [name]: nextValue }))
+    }
+    if (name === 'status' && isCandidateStatusSelected(nextValue)) {
+      setParsedErrors(current => ({ ...current, status: undefined }))
+      if (importError === REQUIRED_CANDIDATE_STATUS_ERROR) setImportError('')
     }
   }
 
@@ -1711,10 +1724,11 @@ export default function CandidatesPage() {
         </div>}
 
         {!isCandidateFieldHidden('status') && <div className="form-group">
-          <label className="form-label">Status</label>
-          <select name="status" value={f.status} onChange={handleLocalChange} className="form-control" disabled={isCandidateFieldDisabled('status')}>
+          <label className="form-label">Status <span className="req">*</span></label>
+          <select name="status" value={f.status} onChange={handleLocalChange} className={`form-control${errs?.status ? ' is-error' : ''}`} disabled={isCandidateFieldDisabled('status')}>
             {STATUS_OPTIONS.map(s => <option key={s || '-'} value={s}>{s || '-'}</option>)}
           </select>
+          {errs?.status && <span className="form-error">{errs.status}</span>}
         </div>}
 
         {!isCandidateFieldHidden('salary') && <div className="form-group">
@@ -2067,7 +2081,7 @@ export default function CandidatesPage() {
         return (
           <td key={key}>
             <div className="candidate-columns-control mandate-status-control">
-              <button className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('candidate-status', c.associationId || c.id, event.currentTarget)} disabled={statusSaving[c.associationId || c.id]}>
+              <button className={`badge ${STATUS_BADGE_MAP[c.status || '-']}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('candidate-status', c.associationId || c.id, event.currentTarget)} disabled={statusSaving[c.associationId || c.id]}>
                 {c.status || '-'}
               </button>
             </div>
@@ -2286,9 +2300,9 @@ export default function CandidatesPage() {
         if (!candidate) return null
         return (
           <TablePopover anchorRect={tablePopover.anchorRect} width={190} onClose={() => setTablePopover(null)}>
-            {STATUS_OPTIONS.map(status => (
-              <button className="candidate-columns-action" type="button" key={status || '-'} onClick={() => updateCandidateStatus(candidate, status)}>
-                {status || '-'}
+            {CANDIDATE_STATUSES.map(status => (
+              <button className="candidate-columns-action" type="button" key={status} onClick={() => updateCandidateStatus(candidate, status)}>
+                {status}
               </button>
             ))}
           </TablePopover>
@@ -2362,7 +2376,7 @@ export default function CandidatesPage() {
                 <div className="candidate-association-card" key={item.associationId || item.id}>
                   <div><strong>{item.client || '-'}</strong></div>
                   <div>{item.job || '-'}</div>
-                  <div><span className={`badge ${STATUS_BADGE_MAP[item.status] || ''}`}>{item.status}</span></div>
+                  <div><span className={`badge ${STATUS_BADGE_MAP[item.status || '-']}`}>{item.status || '-'}</span></div>
                   <div className="sub-text">Consultant: {item.consultant || '-'} ? Expected: {fmt(item.expectedSalary)}</div>
                 </div>
               ))}
@@ -2451,7 +2465,7 @@ export default function CandidatesPage() {
                   {CandidateFormBody({
                     f: parsedForm,
                     setF: setParsedForm,
-                    errs: {},
+                    errs: parsedErrors,
                     sInput: parsedSkillInput,
                     onSkillInputChange: handleParsedSkillInputChange,
                     onSkillKey: handleParsedSkillKey,

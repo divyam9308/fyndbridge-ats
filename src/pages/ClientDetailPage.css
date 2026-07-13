@@ -158,6 +158,7 @@
 }
 
 .badge-interested-link { background: #EBF5FB; color: #1A73E8; border-color: rgba(26,115,232,0.2); }
+.badge-in-discussion-link { background: #EEEAF4; color: #5F527A; border-color: #D8D0E4; }
 .badge-not-interested-link { background: var(--gray-100); color: var(--gray-500); border-color: var(--gray-200); }
 .badge-interview-link { background: #FFF3CD; color: #856404; border-color: rgba(133,100,4,0.18); }
 .badge-client-submission-link { background: #D1ECF1; color: #0C5460; border-color: rgba(12,84,96,0.18); }

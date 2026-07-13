@@ -7,7 +7,7 @@ import './ClientDetailPage.css'
 import { useAuth } from '../context/useAuth'
 import { apiCandidateToUi, logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
-import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS } from '../utils/candidateStatuses'
+import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS, REQUIRED_CANDIDATE_STATUS_ERROR, isCandidateStatusSelected } from '../utils/candidateStatuses'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import TablePopover from '../components/TablePopover'
@@ -16,30 +16,9 @@ import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { ConsultantPill } from '../components/ConsultantPill'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
-const MANDATE_SUMMARY_COLUMNS = [
-  ['Interested', 'Interested'],
-  ['Not Interested', 'Not Interested'],
-  ['Rejected by Recruiter', 'Rejected By Recruiter'],
-  ['Client Submission', 'Client Submission'],
-  ['Interview', 'Interview'],
-  ['Rejected by Client', 'Rejected By Client'],
-  ['Offered', 'Offered'],
-  ['Offer Declined', 'Offered Declined'],
-  ['Dropout', 'Dropout'],
-  ['Hired', 'Hired'],
-]
-const CLIENT_DETAIL_STATUS_OPTIONS = [
-  { value: 'Interested', label: 'Interested' },
-  { value: 'Not Interested', label: 'Not Interested' },
-  { value: 'Rejected by Recruiter', label: 'Rejected By Recruiter' },
-  { value: 'Client Submission', label: 'Client Submission' },
-  { value: 'Interview', label: 'Interview' },
-  { value: 'Rejected by Client', label: 'Rejected By Client' },
-  { value: 'Offered', label: 'Offered' },
-  { value: 'Offer Declined', label: 'Offered Declined' },
-  { value: 'Dropout', label: 'Dropout' },
-  { value: 'Hired', label: 'Hired' },
-]
+const candidateStatusLabel = (status) => status === 'Offer Declined' ? 'Offered Declined' : status
+const MANDATE_SUMMARY_COLUMNS = CANDIDATE_STATUSES.map(status => [status, candidateStatusLabel(status)])
+const CLIENT_DETAIL_STATUS_OPTIONS = CANDIDATE_STATUSES.map(value => ({ value, label: candidateStatusLabel(value) }))
 
 const SORT_OPTIONS = [
   { field: 'candidate_id', label: 'Candidate ID', toggle: true },
@@ -154,6 +133,7 @@ export default function ClientDetailPage() {
   const [editCandidate, setEditCandidate] = useState(null)
   const [editForm, setEditForm] = useState(null)
   const [editError, setEditError] = useState('')
+  const [editErrors, setEditErrors] = useState({})
   const [savingCandidate, setSavingCandidate] = useState(false)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
@@ -490,15 +470,23 @@ export default function ClientDetailPage() {
     setEditCandidate(candidate)
     setEditForm(candidateToEditForm(candidate))
     setEditError('')
+    setEditErrors({})
   }
   useEffect(() => {
     if (editCandidate) focusPopup(editModalRef)
   }, [editCandidate, focusPopup])
   const updateEditField = (field, value) => {
     setEditForm(form => ({ ...form, [field]: value }))
+    if (field === 'status' && isCandidateStatusSelected(value)) {
+      setEditErrors(current => ({ ...current, status: undefined }))
+    }
   }
   const saveEditCandidate = async () => {
     if (!editCandidate || !editForm) return
+    if (!isCandidateStatusSelected(editForm.status)) {
+      setEditErrors({ status: REQUIRED_CANDIDATE_STATUS_ERROR })
+      return
+    }
     setSavingCandidate(true)
     setEditError('')
     try {
@@ -623,7 +611,7 @@ export default function ClientDetailPage() {
           <td key={key}>
             <div className="candidate-columns-control mandate-status-control">
               <button
-                className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}
+                className={`badge ${STATUS_BADGE_MAP[c.status || '-']}`}
                 type="button"
                 onMouseDown={event => event.stopPropagation()}
                 onClick={(event) => toggleTablePopover('candidate-status', associationId, event.currentTarget)}
@@ -707,7 +695,7 @@ export default function ClientDetailPage() {
                     </div>
                   </td>
                   <td className="align-center"><button className="count-badge-link" type="button" onClick={() => openGroup(group.key, group.title)}>{group.stats.total}</button></td>
-                  {MANDATE_SUMMARY_COLUMNS.map(([key, label]) => (
+                  {MANDATE_SUMMARY_COLUMNS.map(([key]) => (
                     <td className="align-center" key={key}>
                       {group.stats[key] ? <button className="count-badge-link" type="button" onClick={() => openGroup(group.key, group.title, key)}>{group.stats[key]}</button> : <span className="count-zero">0</span>}
                     </td>
@@ -825,10 +813,11 @@ export default function ClientDetailPage() {
                   </div>
                 ))}
                 <div className="form-group">
-                  <label className="form-label">Status</label>
-                  <select className="form-control" value={editForm.status} onChange={(event) => updateEditField('status', event.target.value)} disabled={savingCandidate}>
+                  <label className="form-label">Status <span className="req">*</span></label>
+                  <select className={`form-control${editErrors.status ? ' is-error' : ''}`} value={editForm.status} onChange={(event) => updateEditField('status', event.target.value)} disabled={savingCandidate}>
                     {CANDIDATE_STATUS_OPTIONS.map(status => <option key={status || '-'} value={status}>{status || '-'}</option>)}
                   </select>
+                  {editErrors.status && <span className="form-error">{editErrors.status}</span>}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Open to Relocate</label>

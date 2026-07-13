@@ -1,6 +1,7 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') })
 
 const supabase = require('../src/services/supabaseAdmin')
+const { CANDIDATE_STATUSES: STATUSES } = require('../src/services/candidateStatuses')
 
 const CLIENTS = [
   ['AstraNova Technologies', 'Rohit Sinha', '9876501001', 'talent@astranova.in', 'Bangalore', 'Karnataka', 'Active'],
@@ -57,7 +58,6 @@ const CITY_STATE = {
   Ahmedabad: 'Gujarat'
 }
 const CITIES = Object.keys(CITY_STATE)
-const STATUSES = ['Interested', 'Not Interested', 'Offered', 'Hired', 'Rejected by Recruiter', 'Interview', 'Client Submission', 'Rejected by Client']
 const NOTICE_PERIODS = [0, 15, 30, 60, 90]
 const FIRST_NAMES = ['Aarav', 'Vivaan', 'Aditya', 'Ishaan', 'Arjun', 'Kabir', 'Krish', 'Neel', 'Rohan', 'Siddharth', 'Ananya', 'Diya', 'Ira', 'Kiara', 'Meera', 'Myra', 'Naina', 'Riya', 'Sara', 'Tanvi']
 const LAST_NAMES = ['Sharma', 'Verma', 'Gupta', 'Jain', 'Patel', 'Reddy', 'Nair', 'Iyer', 'Das', 'Saxena', 'Bhatia', 'Kohli', 'Bose', 'Tandon', 'Sinha', 'Kapoor', 'Menon', 'Arora', 'Kulkarni', 'Chawla']

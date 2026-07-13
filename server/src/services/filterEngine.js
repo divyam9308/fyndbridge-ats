@@ -1,4 +1,5 @@
 const OPERATORS = ['contains', 'equals', 'not_equals', 'starts_with', 'ends_with', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'between', 'before', 'after', 'on', 'is_empty', 'is_not_empty', 'in']
+const { CANDIDATE_STATUSES, canonicalCandidateStatus } = require('./candidateStatuses')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
@@ -147,7 +148,9 @@ function normalizeFieldValue(meta, value) {
   if (meta.type === 'boolean') {
     next = next.replace(/\b(?:signed|done|available|present)\b/i, 'yes').replace(/\b(?:not signed|missing|not available|absent)\b/i, 'no')
   }
-  return clean(next.replace(/^(?:is|are|being|equals?|equal to|contains?|include|includes|has|having|with|matching)\s+/i, ''))
+  next = clean(next.replace(/^(?:is|are|being|equals?|equal to|contains?|include|includes|has|having|with|matching)\s+/i, ''))
+  if (meta.values) return canonicalCandidateStatus(next) || next
+  return next
 }
 
 const candidateFields = {
@@ -173,7 +176,7 @@ const candidateFields = {
   expected_ctc: { aliases: ['expected salary', 'expected ctc', 'expected package', 'expected compensation'], type: 'money' },
   open_to_relocate: { aliases: ['relocate', 'open to relocate', 'relocation', 'willing to relocate'], type: 'boolean' },
   comments: { aliases: ['comment', 'comments', 'notes', 'remarks'], type: 'text' },
-  status: { aliases: ['status', 'candidate status', 'stage'], type: 'enum' },
+  status: { aliases: ['status', 'candidate status', 'stage'], type: 'enum', values: CANDIDATE_STATUSES },
   month: { aliases: ['month', 'submission month'], type: 'text' },
   linkedin: { aliases: ['linkedin', 'linkedin url', 'profile'], type: 'text' },
   cv: { aliases: ['cv', 'resume', 'document', 'candidate cv', 'resume file'], type: 'text' },
@@ -613,6 +616,7 @@ function parsePrompt(page, prompt) {
   let text = clean(prompt).replace(/^(?:clients|candidates|mandates|jobs)\s+(?=with|in|from)\b/i, '')
   if (page === 'candidates') {
     const one = (field, operator, value) => ({ conditions: [normalizeCondition(config, { field, operator, value })] })
+    if (/\bcandidates?\s+in\s+discussion\b/i.test(text)) return one('status', 'equals', 'In Discussion')
     if (/\b(?:without|no)\s+(?:cv|resume)\b|\b(?:cv|resume)\s+(?:missing|empty)\b/i.test(text)) return one('cv', 'is_empty', null)
     if (/\blinkedin\s+(?:missing|empty)\b|\bwithout\s+linkedin\b/i.test(text)) return one('linkedin', 'is_empty', null)
     if (/\bnot\s+open\s+to\s+relocate\b/i.test(text)) return one('open_to_relocate', 'equals', false)
@@ -655,7 +659,12 @@ function parsePrompt(page, prompt) {
     if (match) addParsedSegment(`${alias} ${match[1]}`)
   })
 
-  const placeMatch = text.match(/\b(?:in|from)\s+([a-z][\w\s.-]*?)(?=\s+(?:with|and|or|plus|for)\b|$)/i)
+  const candidateStatus = page === 'candidates'
+    ? [...CANDIDATE_STATUSES].sort((a, b) => b.length - a.length).find(status => new RegExp(`\\b${escapeRegExp(status)}\\b`, 'i').test(text))
+    : ''
+  if (candidateStatus) add('status', 'equals', candidateStatus)
+
+  const placeMatch = candidateStatus ? null : text.match(/\b(?:in|from)\s+([a-z][\w\s.-]*?)(?=\s+(?:with|and|or|plus|for)\b|$)/i)
   if (placeMatch) {
     if (config.fields.current_location) add('current_location', 'contains', placeMatch[1])
     else if (config.fields.location) add('location', 'contains', placeMatch[1])
@@ -713,7 +722,7 @@ function parsePrompt(page, prompt) {
   ]
   explicit.forEach(([field, regex]) => {
     if (!config.fields[field]) return
-    if (field === 'client_name' && /\bas\s+status\b/i.test(text)) return
+    if ((field === 'client_name' && /\bas\s+status\b/i.test(text)) || (field === 'status' && candidateStatus)) return
     const match = text.match(regex)
     if (match) add(field, /contains/i.test(match[0]) ? 'contains' : 'contains', match[1] || match[2])
   })

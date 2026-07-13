@@ -36,6 +36,7 @@ import {
   getMandateStatusColor
 } from '../constants/statusColors'
 import { buildDashboardDrilldownUrl } from '../utils/dashboardDrilldown'
+import { DASHBOARD_CANDIDATE_STATUSES } from '../utils/candidateStatuses'
 import './DashboardHome.css'
 
 const OVERALL = 'Overall (All Consultants)'
@@ -52,7 +53,7 @@ const chartColors = [
   'var(--modern-chart-3)'
 ]
 const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
-const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Rejected by Recruiter', 'Client Submission', 'Interview', 'Rejected by Client', 'Offered', 'Offer Declined', 'Dropout', 'Hired']
+const CANDIDATE_STATUSES = DASHBOARD_CANDIDATE_STATUSES
 const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
 const MAIN_CHART_ANIMATION_MS = 1500
 const DEFERRED_SECTION_DELAY_MS = 180

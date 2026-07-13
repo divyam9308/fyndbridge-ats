@@ -244,7 +244,7 @@ export default function ClientJobCandidatesPage() {
                     <td style={{ fontWeight: 600 }}>{fmt(c.salary)}</td>
                     <td style={{ fontWeight: 600 }}>{fmt(c.expectedSalary)}</td>
                     <td>
-                      <span className={`badge ${STATUS_BADGE_MAP[c.status] || ''}`}>{c.status}</span>
+                      <span className={`badge ${STATUS_BADGE_MAP[c.status || '-']}`}>{c.status || '-'}</span>
                     </td>
                     <td>{c.location || c.city || '—'}</td>
                     <td><ConsultantPill name={c.consultant} /></td>

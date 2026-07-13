@@ -3,6 +3,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const fs = require('fs')
 const path = require('path')
 const { createClient } = require('@supabase/supabase-js')
+const { candidateStatusError, canonicalCandidateStatus } = require('../src/services/candidateStatuses')
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false }
@@ -69,19 +70,8 @@ function parseCtc(value) {
 function normalizeStatus(value) {
   const status = clean(value)
   const lower = status.toLowerCase()
-  const map = {
-    interested: 'Interested',
-    'not interested': 'Not Interested',
-    interview: 'Interview',
-    'client submission': 'Client Submission',
-    offered: 'Offered',
-    hired: 'Hired',
-    'rejected by recruiter': 'Rejected by Recruiter',
-    'rejected by client': 'Rejected by Client',
-    'in discussion': 'Interested',
-    'may be': 'Interested'
-  }
-  return map[lower] || status || 'Interested'
+  if (lower === 'may be') return 'Interested'
+  return canonicalCandidateStatus(status) || status
 }
 
 function parseDate(value) {
@@ -144,6 +134,9 @@ async function main() {
   for (const row of records) {
     const fullName = row['Candidate name']
     const mobile = normalizeMobile(row.Mobile)
+    const status = normalizeStatus(row.Status)
+    const statusError = candidateStatusError(status)
+    if (statusError) throw new Error(`Invalid candidate status for ${fullName}: ${statusError}`)
     const key = `${fullName.toLowerCase()}|${mobile}`
     const candidate = candidateByKey.get(key) || {
       full_name: fullName,
@@ -175,7 +168,7 @@ async function main() {
         consultant_name: row.Consultant || null,
         client_name: row['Client Name'] || null,
         job_title: row.Role || null,
-        status: normalizeStatus(row.Status),
+        status,
         current_salary: parseCtc(row['Current CTC']),
         expected_salary: parseCtc(row['Expected CTC']),
         notes: row.Comments || null,

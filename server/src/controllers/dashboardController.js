@@ -1,8 +1,8 @@
 const supabase = require('../services/supabaseAdmin')
 const { getDashboardAccess } = require('../services/dashboardAccess')
+const { DASHBOARD_CANDIDATE_STATUSES: CANDIDATE_STATUSES, normalizeDashboardCandidateStatus } = require('../services/candidateStatuses')
 
 const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
-const CANDIDATE_STATUSES = ['Interested', 'Not Interested', 'Rejected by Recruiter', 'Client Submission', 'Interview', 'Rejected by Client', 'Offered', 'Offer Declined', 'Dropout', 'Hired']
 const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
 const EMPTY_DASHBOARD = {
   consultantOptions: [],
@@ -14,7 +14,7 @@ const EMPTY_DASHBOARD = {
   clientTrend: [],
   candidateTrend: [],
   mandateTrend: [],
-  candidateFunnel: ['Interested', 'Client Submission', 'Interview', 'Offered', 'Hired'].map((name) => ({ name, value: 0 })),
+  candidateFunnel: ['Interested', 'In Discussion', 'Client Submission', 'Interview', 'Offered', 'Hired'].map((name) => ({ name, value: 0 })),
   consultantPerformance: [],
   recentActivity: [],
   sectionErrors: {}
@@ -78,12 +78,6 @@ function dayLabel(value) {
 function normalizeClientStatus(value) {
   const text = clean(value)
   return CLIENT_STATUSES.includes(text) ? text : '-'
-}
-
-function normalizeCandidateStatus(value) {
-  const text = clean(value)
-  if (same(text, 'Offered Declined')) return CANDIDATE_STATUSES.includes('Offered Declined') ? 'Offered Declined' : 'Offer Declined'
-  return CANDIDATE_STATUSES.includes(text) ? text : ''
 }
 
 function normalizeMandateStatus(value) {
@@ -314,7 +308,7 @@ async function getDashboardStats(req, res) {
       .filter((row) => matchesConsultant(row, consultant, ['consultants', 'team_lead']))
 
     const activeClients = uniqueClients.filter((client) => normalizeClientStatus(client.status) === 'Active')
-    const hiredAssociations = filteredAssociations.filter((row) => normalizeCandidateStatus(row.status) === 'Hired')
+    const hiredAssociations = filteredAssociations.filter((row) => normalizeDashboardCandidateStatus(row.status) === 'Hired')
     const billingEntityData = [
       {
         label: 'FCS Billing Entity',
@@ -327,7 +321,7 @@ async function getDashboardStats(req, res) {
     ]
 
     const clientTrend = statusTrend(uniqueClients, CLIENT_STATUSES, (row) => normalizeClientStatus(row.status), (row) => row.connected_on_date || row.created_at, period, range)
-    const candidateTrend = statusTrend(filteredAssociations, CANDIDATE_STATUSES, (row) => normalizeCandidateStatus(row.status), (row) => row.created_at || row.candidate_created_at, period, range)
+    const candidateTrend = statusTrend(filteredAssociations, CANDIDATE_STATUSES, (row) => normalizeDashboardCandidateStatus(row.status), (row) => row.created_at || row.candidate_created_at, period, range)
     const mandateTrend = statusTrend(filteredMandates, MANDATE_STATUSES, (row) => normalizeMandateStatus(row.mandate_status || row.status), (row) => row.allocation_date || row.created_at, period, range)
 
     return res.json({
@@ -340,7 +334,7 @@ async function getDashboardStats(req, res) {
         placements: hiredAssociations.length
       },
       clientStatusData: countByStatus(uniqueClients, CLIENT_STATUSES, (row) => normalizeClientStatus(row.status)),
-      candidateStatusData: countByStatus(filteredAssociations, CANDIDATE_STATUSES, (row) => normalizeCandidateStatus(row.status)),
+      candidateStatusData: countByStatus(filteredAssociations, CANDIDATE_STATUSES, (row) => normalizeDashboardCandidateStatus(row.status)),
       mandateStatusData: countByStatus(filteredMandates, MANDATE_STATUSES, (row) => normalizeMandateStatus(row.mandate_status || row.status)),
       billingEntityData,
       clientTrend,

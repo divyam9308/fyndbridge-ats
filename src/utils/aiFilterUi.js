@@ -1,4 +1,5 @@
 import React from 'react'
+import { CANDIDATE_STATUSES } from './candidateStatuses'
 
 export const normalizeSearchText = (value) => String(value || '')
   .toLowerCase()
@@ -14,6 +15,7 @@ export const isSimpleKeywordSearch = (page, prompt) => {
   const text = normalizeSearchText(prompt)
   if (!text) return false
   if (/\b(ca|cl|jb)\s*\d+\b/i.test(prompt)) return false
+  if (page === 'candidates' && CANDIDATE_STATUSES.some(status => text.includes(normalizeSearchText(status)))) return false
   const structured = {
     clients: /\b(after|before|on|today|this week|between|value|follow up|connected|status|contract signed|terms|gst|gstin|pan|consultant|contact|client|location|region|sector|mobile|phone|email|linkedin|starts with)\b|[<>=]/i,
     candidates: /\b(before|after|on|between|salary|ctc|experience|notice|status|stage|relocate|consultant|client|role|job|designation|mobile|phone|email|skills?|less|above|below)\b|[<>=]/i,

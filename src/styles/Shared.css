@@ -1508,6 +1508,7 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 .badge-interested         { background: #EBF5FB; color: #1A73E8; }
+.badge-in-discussion      { background: #EEEAF4; color: #5F527A; border: 1px solid #D8D0E4; }
 .badge-not-interested     { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-200); }
 .badge-interview          { background: #FFF3CD; color: #856404; }
 .badge-client-submission  { background: #D1ECF1; color: #0C5460; }
@@ -1517,6 +1518,7 @@
 .badge-dropout            { background: #F8D7DA; color: #721C24; }
 .badge-rejected-recruiter { background: #F8D7DA; color: #721C24; }
 .badge-rejected-client    { background: #F8D7DA; color: #721C24; }
+.badge-status-unset       { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-200); }
 .badge-mandate-completed  { background: #D4EDDA; color: #155724; }
 .badge-mandate-ongoing    { background: #FFF3CD; color: #856404; }
 .badge-mandate-scrapped   { background: #F8D7DA; color: #721C24; }

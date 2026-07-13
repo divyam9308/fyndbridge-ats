@@ -9,6 +9,7 @@ const STATUS_COLORS = {
   'not adding consultants': '#EAB308',
   'didnt pick up': '#F97316',
   interested: '#14B8A6',
+  'in discussion': '#7C6F9B',
   'not interested': '#A855F7',
   'rejected by recruiter': '#C026D3',
   'client submission': '#06B6D4',

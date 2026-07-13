@@ -2,6 +2,8 @@
  * Maps a raw candidate row from the API (Supabase snake_case) to the
  * camelCase UI shape expected by all pages.
  */
+import { candidateStatusFormValue } from './candidateStatuses'
+
 export const apiCandidateToUi = (row) => ({
   id: row.association_id || row.id,
   associationId: row.association_id || row.id,
@@ -32,7 +34,7 @@ export const apiCandidateToUi = (row) => ({
   client: row.client_name || '',
   clientPhone: row.client_phone_number || '',
   job: row.job_title || '',
-  status: row.status || '',
+  status: candidateStatusFormValue(row.status),
   cvLink: row.cv_link || row.resume_url || '',
   cvFileHash: row.cv_file_hash || '',
   cvStoragePath: row.cv_storage_path || row.resume_path || '',
