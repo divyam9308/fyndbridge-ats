@@ -3,6 +3,7 @@ import { fetchAdminMe, fetchColumnPermissions } from '../services/adminAccessApi
 import { invalidateApiJsonCache } from '../services/apiClient'
 import { supabase } from '../services/supabaseClient'
 import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
+import { useAuth } from '../context/useAuth'
 
 const EMPTY = { clients: {}, candidates: {}, jobs: {} }
 const PERMISSIONS_CHANGED_EVENT = 'fb:admin-permissions-changed'
@@ -21,6 +22,9 @@ const state = {
   permissionsLoaded: false,
   adminChannel: null,
   permissionChannel: null,
+  userId: '',
+  adminError: '',
+  permissionError: '',
 }
 const listeners = new Set()
 
@@ -28,9 +32,30 @@ function emit() {
   listeners.forEach(listener => listener())
 }
 
-async function refreshAdminStatus() {
+function resetAuthorizationState(userId) {
+  if (state.userId === userId) return
+  state.userId = userId
+  state.isAdmin = false
+  state.isSuperAdmin = false
+  state.role = null
+  state.loadingAdmin = Boolean(userId)
+  state.loadingPermissions = Boolean(userId)
+  state.columns = {}
+  state.permissions = EMPTY
+  state.adminLoaded = false
+  state.permissionsLoaded = false
+  state.adminError = ''
+  state.permissionError = ''
+  state.adminRequest = null
+  state.permissionRequest = null
+  emit()
+}
+
+async function refreshAdminStatus(force = false) {
   if (state.adminRequest) return state.adminRequest
+  if (state.adminLoaded && !force) return null
   state.loadingAdmin = true
+  state.adminError = ''
   emit()
   state.adminRequest = (async () => {
     try {
@@ -40,11 +65,12 @@ async function refreshAdminStatus() {
       state.role = me.role || null
       state.adminLoaded = true
       return me
-    } catch {
+    } catch (error) {
       state.isAdmin = false
       state.isSuperAdmin = false
       state.role = null
       state.adminLoaded = true
+      state.adminError = error.message || 'Unable to load authorization.'
       return null
     } finally {
       state.loadingAdmin = false
@@ -55,9 +81,11 @@ async function refreshAdminStatus() {
   return state.adminRequest
 }
 
-async function refreshPermissions() {
+async function refreshPermissions(force = false) {
   if (state.permissionRequest) return state.permissionRequest
+  if (state.permissionsLoaded && !force) return state.permissions
   state.loadingPermissions = true
+  state.permissionError = ''
   emit()
   state.permissionRequest = (async () => {
     try {
@@ -66,10 +94,11 @@ async function refreshPermissions() {
       state.permissions = data.permissions || EMPTY
       state.permissionsLoaded = true
       return data
-    } catch {
+    } catch (error) {
       state.columns = {}
       state.permissions = EMPTY
       state.permissionsLoaded = true
+      state.permissionError = error.message || 'Unable to load permissions.'
       return { columns: {}, permissions: EMPTY }
     } finally {
       state.loadingPermissions = false
@@ -123,10 +152,12 @@ export function stopAdminAccessRealtime() {
 
 export function useAdminAccess({ loadPermissions = true, realtime = true } = {}) {
   const [, rerender] = useState(0)
+  const { isAuthenticated, loading: authLoading, session } = useAuth()
+  const userId = session?.user?.id || ''
 
   const refresh = useCallback(async () => {
-    const admin = await refreshAdminStatus()
-    if (loadPermissions) await refreshPermissions()
+    const admin = await refreshAdminStatus(true)
+    if (loadPermissions) await refreshPermissions(true)
     return admin
   }, [loadPermissions])
 
@@ -135,20 +166,22 @@ export function useAdminAccess({ loadPermissions = true, realtime = true } = {})
   useEffect(() => {
     const listener = () => rerender(value => value + 1)
     listeners.add(listener)
+    resetAuthorizationState(userId)
+    if (!isAuthenticated || authLoading) return () => listeners.delete(listener)
     if (realtime) ensureGlobalRealtime()
     if (!state.adminLoaded) refreshAdminStatus().catch(() => null)
     if (loadPermissions && !state.permissionsLoaded) refreshPermissions().catch(() => null)
     return () => listeners.delete(listener)
-  }, [loadPermissions, realtime])
+  }, [authLoading, isAuthenticated, loadPermissions, realtime, userId])
 
   useEffect(() => {
     if (!loadPermissions) return undefined
-    const syncPermissions = () => { refreshPermissions().catch(() => null) }
+    const syncPermissions = () => { refreshPermissions(true).catch(() => null) }
     window.addEventListener(PERMISSIONS_CHANGED_EVENT, syncPermissions)
     return () => window.removeEventListener(PERMISSIONS_CHANGED_EVENT, syncPermissions)
   }, [loadPermissions])
 
-  const loading = state.loadingAdmin || (loadPermissions && state.loadingPermissions && !state.permissionsLoaded)
+  const loading = authLoading || (isAuthenticated && (state.loadingAdmin || (loadPermissions && state.loadingPermissions && !state.permissionsLoaded)))
   const isAdminSnapshot = state.isAdmin
   const permissionsSnapshot = state.permissions
 
@@ -175,11 +208,12 @@ export function useAdminAccess({ loadPermissions = true, realtime = true } = {})
     loading,
     columns: state.columns,
     permissions: state.permissions,
+    error: state.adminError || (loadPermissions ? state.permissionError : ''),
     refresh,
     refreshPermissions: refreshColumns,
     setPermissions,
     ...helpers
-  }), [helpers, loading, refresh, refreshColumns, setPermissions])
+  }), [helpers, loadPermissions, loading, refresh, refreshColumns, setPermissions])
 }
 
 export function isColumnHidden(permissions, tableName, columnKey, isAdmin) {
@@ -193,5 +227,5 @@ export function isColumnDisabled(permissions, tableName, columnKey, isAdmin) {
 export function notifyAdminPermissionsChanged() {
   invalidateApiJsonCache('/api/admin/column-permissions')
   window.dispatchEvent(new Event(PERMISSIONS_CHANGED_EVENT))
-  refreshPermissions().catch(() => null)
+  refreshPermissions(true).catch(() => null)
 }

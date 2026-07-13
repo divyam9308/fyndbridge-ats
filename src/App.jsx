@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage'
 import { AuthProvider, RequireAuth } from './context/AuthContext'
 import UpdateAvailable from './components/UpdateAvailable'
 import PageViewGuard from './components/PageViewGuard'
+import AuthenticatedShellSkeleton from './components/AuthenticatedShellSkeleton'
 
 const AuthenticatedShell = lazy(() => import('./pages/AuthenticatedShell'))
 const DashboardHome = lazy(() => import('./pages/DashboardHome'))
@@ -51,7 +52,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/dashboard" element={<RequireAuth><Suspense fallback={<div className="route-loading" role="status">Loading...</div>}><AuthenticatedShell /></Suspense></RequireAuth>}>
+          <Route path="/dashboard" element={<RequireAuth><Suspense fallback={<AuthenticatedShellSkeleton />}><AuthenticatedShell /></Suspense></RequireAuth>}>
             <Route index element={<PageViewGuard pageKey="dashboard"><DashboardHome /></PageViewGuard>} />
             <Route path="jobs" element={<PageViewGuard pageKey="mandates"><JobsPage /></PageViewGuard>} />
             <Route path="clients" element={<PageViewGuard pageKey="clients"><ClientsPage /></PageViewGuard>} />
@@ -66,7 +67,7 @@ function App() {
             <Route path="settings" element={<SettingsPage />} />
             <Route path="profile" element={<ProfileSettingsPage />} />
           </Route>
-          <Route path="/invoice" element={<RequireAuth><Suspense fallback={<div className="route-loading" role="status">Loading...</div>}><AuthenticatedShell /></Suspense></RequireAuth>}>
+          <Route path="/invoice" element={<RequireAuth><Suspense fallback={<AuthenticatedShellSkeleton />}><AuthenticatedShell /></Suspense></RequireAuth>}>
             <Route index element={<PageViewGuard pageKey="invoice"><InvoicePage /></PageViewGuard>} />
             <Route path="entities/:entityId" element={<PageViewGuard pageKey="invoice"><InvoiceEntityDetailPage /></PageViewGuard>} />
           </Route>

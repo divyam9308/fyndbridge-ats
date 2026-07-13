@@ -5,6 +5,9 @@ import { API_INACTIVE_EVENT, API_UNAUTHORIZED_EVENT, apiFetch } from '../service
 import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
 import { AuthContext } from './authStore'
 import { useAuth } from './useAuth'
+import { useAdminAccess } from '../hooks/useAdminAccess'
+import { usePageViewPermissions } from '../hooks/usePageViewPermissions'
+import AuthenticatedShellSkeleton from '../components/AuthenticatedShellSkeleton'
 
 const DEACTIVATION_MESSAGE = 'Your account has been deactivated. Please contact an administrator.'
 const STATUS_EVENT = 'fb:employee-status-changed'
@@ -297,9 +300,38 @@ export function AuthProvider({ children }) {
 }
 
 export function RequireAuth({ children }) {
-  const { loading, isAuthenticated, employmentStatusError, retryEmploymentStatus } = useAuth()
+  const { loading, isAuthenticated, employmentStatusError, retryEmploymentStatus, profile, profileLoading, loadProfile, session } = useAuth()
+  const adminAccess = useAdminAccess({ loadPermissions: false })
+  const pageViews = usePageViewPermissions({ isAdmin: adminAccess.isAdmin, isSuperAdmin: adminAccess.isSuperAdmin })
   const location = useLocation()
-  if (loading) return null
+  const [profileReadyUserId, setProfileReadyUserId] = useState('')
+  const [profileError, setProfileError] = useState('')
+
+  useEffect(() => {
+    const userId = session?.user?.id || ''
+    if (!isAuthenticated || loading) return undefined
+    if (profile) {
+      Promise.resolve().then(() => setProfileReadyUserId(userId))
+      return undefined
+    }
+    let active = true
+    loadProfile()
+      .then(() => { if (active) setProfileReadyUserId(userId) })
+      .catch(error => { if (active) setProfileError(error.message || 'Unable to load your profile.') })
+    return () => { active = false }
+  }, [isAuthenticated, loadProfile, loading, profile, session?.user?.id])
+
+  const retryAuthorization = async () => {
+    setProfileError('')
+    try {
+      await Promise.all([loadProfile({ force: true }), adminAccess.refresh(), pageViews.refresh()])
+      setProfileReadyUserId(session?.user?.id || '')
+    } catch (error) {
+      setProfileError(error.message || 'Unable to load authorization.')
+    }
+  }
+
+  if (loading) return <AuthenticatedShellSkeleton />
   if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />
   if (employmentStatusError) {
     return (
@@ -309,5 +341,10 @@ export function RequireAuth({ children }) {
       </div>
     )
   }
+  if (profileError || adminAccess.error || pageViews.error) {
+    return <div className="route-loading employment-status-error" role="alert"><span>{profileError || adminAccess.error || pageViews.error}</span><button type="button" onClick={retryAuthorization}>Retry</button></div>
+  }
+  const profileReady = Boolean(profile && profileReadyUserId && profileReadyUserId === session?.user?.id)
+  if (profileLoading || !profileReady || adminAccess.loading || pageViews.loading) return <AuthenticatedShellSkeleton />
   return children
 }
