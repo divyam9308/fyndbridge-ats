@@ -28,6 +28,7 @@ import { setPageViewPermissions, usePageViewPermissions } from '../hooks/usePage
 import { PAGE_VIEW_DEFAULTS } from '../utils/pageViewPermissions'
 import './AdminPage.css'
 import AttendancePermissionSettings from '../features/attendance/AttendancePermissionSettings'
+import EmployeeManagement from '../features/employee-management/EmployeeManagement'
 import { loadAttendancePermissions, saveAttendancePermissions } from '../utils/attendancePermissionStorage'
 import { getAttendancePermissions, updateAttendancePermissions } from '../services/attendanceApi'
 
@@ -718,6 +719,8 @@ export default function AdminPage() {
           </div>
         </div>
       </Section>
+
+      <EmployeeManagement />
 
       {createPortal((
         <div className={`admin-unsaved-dock${dirty && !lockModalType ? ' is-visible' : ''}${savingPermissions ? ' is-saving' : ''}`} aria-hidden={!dirty || Boolean(lockModalType)}>

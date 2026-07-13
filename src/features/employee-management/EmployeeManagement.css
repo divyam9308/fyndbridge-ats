@@ -1,0 +1,763 @@
+.employee-management-section {
+  --employee-active: #238b57;
+  --employee-leave: #c58e0b;
+  --employee-inactive: #7a8496;
+}
+
+.employee-mgmt-header-icon {
+  border-radius: 15px;
+}
+
+.employee-mgmt-info {
+  display: flex;
+  max-width: 390px;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid rgba(218, 177, 17, 0.36);
+  border-radius: 14px;
+  background: rgba(218, 177, 17, 0.1);
+  color: #745a00;
+  padding: 11px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.employee-mgmt-info svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--admin-gold);
+}
+
+.employee-mgmt-shell {
+  display: grid;
+  min-height: 760px;
+  grid-template-columns: minmax(280px, 31%) minmax(0, 1fr);
+  background: #f7f9fc;
+}
+
+.employee-mgmt-list-panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--admin-border);
+  background: #fbfcfe;
+  padding: 20px 18px 0;
+}
+
+.employee-mgmt-search,
+.employee-reassign-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--admin-border);
+  border-radius: 13px;
+  background: #fff;
+  color: #738098;
+  box-shadow: 0 4px 12px rgba(0, 18, 100, 0.05);
+}
+
+.employee-mgmt-search {
+  min-height: 44px;
+  padding: 0 11px 0 13px;
+}
+
+.employee-mgmt-search input,
+.employee-reassign-search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--admin-navy);
+  font: inherit;
+}
+
+.employee-mgmt-search input {
+  font-size: 12px;
+}
+
+.employee-mgmt-search button,
+.employee-reassign-search button {
+  display: grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: #f0f3f8;
+  color: #69768c;
+}
+
+.employee-mgmt-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.employee-mgmt-filters button {
+  min-height: 31px;
+  border: 1px solid var(--admin-border);
+  border-radius: 999px;
+  background: #fff;
+  color: #526079;
+  padding: 0 11px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.employee-mgmt-filters button.is-active {
+  border-color: var(--admin-navy);
+  background: var(--admin-navy);
+  color: #fff;
+}
+
+.employee-mgmt-list {
+  display: flex;
+  min-height: 480px;
+  max-height: 610px;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  overflow-y: auto;
+  padding: 2px 3px 12px 0;
+  scrollbar-width: thin;
+}
+
+.employee-mgmt-list > button {
+  display: grid;
+  width: 100%;
+  min-height: 67px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.employee-mgmt-list > button:hover {
+  background: #f1f5fb;
+}
+
+.employee-mgmt-list > button.is-selected {
+  border-color: rgba(0, 18, 100, 0.18);
+  background: #edf3ff;
+  box-shadow: inset 3px 0 0 var(--admin-navy);
+}
+
+.employee-mgmt-avatar {
+  display: grid;
+  width: 66px;
+  height: 66px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid rgba(218, 177, 17, 0.42);
+  border-radius: 50%;
+  background: var(--admin-navy);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.employee-mgmt-avatar.is-small {
+  width: 42px;
+  height: 42px;
+  border-width: 1px;
+  font-size: 12px;
+}
+
+.employee-mgmt-list-copy {
+  min-width: 0;
+}
+
+.employee-mgmt-list-copy strong,
+.employee-mgmt-list-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employee-mgmt-list-copy strong {
+  color: var(--admin-navy);
+  font-size: 13px;
+}
+
+.employee-mgmt-list-copy small {
+  margin-top: 4px;
+  color: #69768c;
+  font-size: 10px;
+}
+
+.employee-mgmt-list > button > i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--employee-inactive);
+  box-shadow: 0 0 0 3px rgba(122, 132, 150, 0.12);
+}
+
+.employee-mgmt-list > button > i.is-active {
+  background: var(--employee-active);
+  box-shadow: 0 0 0 3px rgba(35, 139, 87, 0.12);
+}
+
+.employee-mgmt-list > button > i.is-on_leave {
+  background: var(--employee-leave);
+  box-shadow: 0 0 0 3px rgba(197, 142, 11, 0.12);
+}
+
+.employee-mgmt-list > button > svg {
+  color: #8994a7;
+}
+
+.employee-mgmt-list-count {
+  border-top: 1px solid var(--admin-border);
+  color: var(--admin-muted);
+  padding: 13px 2px 15px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.employee-mgmt-empty,
+.employee-mgmt-detail-empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 7px;
+  color: #7a8598;
+  text-align: center;
+}
+
+.employee-mgmt-empty strong,
+.employee-mgmt-detail-empty strong {
+  color: var(--admin-navy);
+  font-size: 13px;
+}
+
+.employee-mgmt-empty span,
+.employee-mgmt-detail-empty span {
+  font-size: 11px;
+}
+
+.employee-mgmt-detail-panel {
+  min-width: 0;
+  background: #fff;
+  padding: 25px 28px 28px;
+}
+
+.employee-mgmt-profile {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  border-bottom: 1px solid var(--admin-border);
+  padding-bottom: 21px;
+}
+
+.employee-mgmt-profile h3 {
+  margin: 0 0 7px;
+  color: var(--admin-navy);
+  font-size: 21px;
+}
+
+.employee-management-section .employee-mgmt-profile p {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 4px 0 0;
+  color: #59667d;
+  font-size: 12px;
+}
+
+.employee-mgmt-profile p svg {
+  color: var(--admin-gold);
+}
+
+.employee-mgmt-status-block {
+  margin: 20px 0;
+}
+
+.employee-mgmt-status-control {
+  display: grid;
+  max-width: 620px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--admin-border);
+  border-radius: 13px;
+  background: #f5f7fa;
+}
+
+.employee-mgmt-status-control button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-left: 1px solid var(--admin-border);
+  background: transparent;
+  color: #5b687e;
+  font-weight: 800;
+}
+
+.employee-mgmt-status-control button:first-child {
+  border-left: 0;
+}
+
+.employee-mgmt-status-control button.is-selected {
+  color: #fff;
+}
+
+.employee-mgmt-status-control button.is-status-active.is-selected {
+  background: var(--employee-active);
+}
+
+.employee-mgmt-status-control button.is-status-on_leave.is-selected {
+  background: #d69b12;
+}
+
+.employee-mgmt-status-control button.is-status-inactive.is-selected {
+  background: var(--employee-inactive);
+}
+
+.employee-management-section .employee-mgmt-status-block > p {
+  margin: 9px 0 0;
+  color: #68758a;
+  font-size: 12px;
+}
+
+.employee-mgmt-linked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.employee-mgmt-linked-card {
+  border: 1px solid var(--admin-border);
+  border-radius: 15px;
+  background: #fff;
+  padding: 15px 16px;
+  box-shadow: 0 4px 13px rgba(0, 18, 100, 0.045);
+}
+
+.employee-mgmt-linked-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+}
+
+.employee-mgmt-linked-icon {
+  display: grid;
+  width: 39px;
+  height: 39px;
+  place-items: center;
+  border-radius: 11px;
+  background: #eaf2ff;
+  color: var(--admin-navy);
+}
+
+.employee-mgmt-linked-head h4,
+.employee-mgmt-reassign-card h4 {
+  margin: 0;
+  color: var(--admin-navy);
+  font-size: 14px;
+}
+
+.employee-management-section .employee-mgmt-linked-head p,
+.employee-management-section .employee-mgmt-reassign-card p {
+  margin: 3px 0 0;
+  color: #69768b;
+  font-size: 11px;
+}
+
+.employee-mgmt-linked-head > strong {
+  display: grid;
+  min-width: 31px;
+  height: 27px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef2f8;
+  color: var(--admin-navy);
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.employee-mgmt-record-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.employee-mgmt-record-pills span {
+  border: 1px solid #dce5f3;
+  border-radius: 999px;
+  background: #f4f7fb;
+  color: #40506a;
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.employee-mgmt-record-pills span.is-more {
+  border-color: rgba(218, 177, 17, 0.35);
+  background: rgba(218, 177, 17, 0.1);
+  color: #725a00;
+}
+
+.employee-mgmt-linked-empty {
+  margin-top: 12px;
+  color: #8a94a5;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.employee-mgmt-reassign-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(218, 177, 17, 0.32);
+  border-radius: 15px;
+  background: rgba(218, 177, 17, 0.07);
+  margin-top: 13px;
+  padding: 15px 16px;
+}
+
+.employee-mgmt-reassign-card > span {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 11px;
+  background: rgba(218, 177, 17, 0.2);
+  color: var(--admin-navy);
+}
+
+.employee-mgmt-reassign-card > button,
+.employee-reassign-confirm {
+  display: inline-flex;
+  min-height: 39px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--admin-navy);
+  color: #fff;
+  padding: 0 17px;
+  font-weight: 800;
+}
+
+.employee-reassign-overlay {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(12, 20, 38, 0.48);
+  backdrop-filter: blur(2px);
+}
+
+.employee-reassign-modal {
+  position: relative;
+  inset: auto;
+  width: min(650px, calc(100vw - 40px));
+  max-width: 650px;
+  max-height: calc(100vh - 40px);
+}
+
+.employee-reassign-modal .modal-header {
+  align-items: flex-start;
+}
+
+.employee-reassign-modal .modal-header p {
+  margin: 5px 0 0;
+  color: #69768b;
+  font-size: 12px;
+}
+
+.employee-reassign-body {
+  display: grid;
+  gap: 20px;
+}
+
+.employee-reassign-field > label,
+.employee-reassign-category-head strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--admin-navy);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.employee-reassign-search {
+  min-height: 45px;
+  padding: 0 10px 0 13px;
+}
+
+.employee-reassign-options {
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  background: #fff;
+  margin-top: 7px;
+}
+
+.employee-reassign-options > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-top: 1px solid #e9edf4;
+  background: transparent;
+  padding: 9px 11px;
+  text-align: left;
+}
+
+.employee-reassign-options > button:first-child {
+  border-top: 0;
+}
+
+.employee-reassign-options > button:hover:not(:disabled),
+.employee-reassign-options > button.is-selected {
+  background: #edf3ff;
+}
+
+.employee-reassign-options > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.employee-reassign-options > button > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--admin-navy);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.employee-reassign-options > button strong,
+.employee-reassign-options > button small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employee-reassign-options > button strong {
+  color: var(--admin-navy);
+  font-size: 12px;
+}
+
+.employee-reassign-options > button small {
+  margin-top: 2px;
+  color: #6d798e;
+  font-size: 10px;
+}
+
+.employee-reassign-options > button em {
+  border-radius: 999px;
+  background: #e8f6ee;
+  color: var(--employee-active);
+  padding: 4px 7px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.employee-reassign-options > button em.is-on_leave {
+  background: #fff4d8;
+  color: #906900;
+}
+
+.employee-reassign-options > button em.is-inactive {
+  background: #eef0f4;
+  color: #697386;
+}
+
+.employee-reassign-options > p {
+  margin: 0;
+  color: #7a8597;
+  padding: 20px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.employee-reassign-categories {
+  border: 1px solid var(--admin-border);
+  border-radius: 13px;
+  overflow: hidden;
+}
+
+.employee-reassign-category-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f6f8fb;
+  padding: 12px 14px;
+}
+
+.employee-reassign-category-head strong {
+  margin: 0;
+}
+
+.employee-reassign-category-head small {
+  display: block;
+  margin-top: 3px;
+  color: #768196;
+  font-size: 10px;
+}
+
+.employee-reassign-category-head > span {
+  display: flex;
+  gap: 8px;
+}
+
+.employee-reassign-category-head button {
+  border: 0;
+  background: transparent;
+  color: var(--admin-navy);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.employee-reassign-categories > label {
+  display: grid;
+  min-height: 49px;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--admin-border);
+  padding: 8px 14px;
+}
+
+.employee-reassign-categories > label.is-disabled {
+  opacity: 0.48;
+}
+
+.employee-reassign-categories > label input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--admin-navy);
+}
+
+.employee-reassign-categories > label > span {
+  color: var(--admin-navy);
+}
+
+.employee-reassign-categories > label strong {
+  color: #34415a;
+  font-size: 12px;
+}
+
+.employee-reassign-categories > label em {
+  display: grid;
+  min-width: 28px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: var(--admin-navy);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.employee-reassign-footer {
+  border-top: 1px solid var(--admin-border);
+  background: #fafbfd;
+  padding: 14px 20px;
+}
+
+.employee-reassign-cancel {
+  min-height: 39px;
+  border: 1px solid var(--admin-border);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--admin-navy);
+  padding: 0 17px;
+  font-weight: 800;
+}
+
+.employee-reassign-confirm:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (max-width: 1000px) {
+  .employee-mgmt-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .employee-mgmt-info {
+    max-width: none;
+  }
+
+  .employee-mgmt-shell {
+    grid-template-columns: minmax(250px, 36%) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .employee-mgmt-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-mgmt-list-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--admin-border);
+  }
+
+  .employee-mgmt-list {
+    min-height: 0;
+    max-height: 330px;
+  }
+
+  .employee-mgmt-detail-panel {
+    padding: 20px;
+  }
+
+  .employee-mgmt-status-control {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-mgmt-status-control button {
+    border-top: 1px solid var(--admin-border);
+    border-left: 0;
+  }
+
+  .employee-mgmt-status-control button:first-child {
+    border-top: 0;
+  }
+
+  .employee-mgmt-reassign-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .employee-mgmt-reassign-card > button {
+    grid-column: 1 / -1;
+  }
+
+  .employee-reassign-category-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
