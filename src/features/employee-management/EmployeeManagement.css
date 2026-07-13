@@ -158,7 +158,6 @@
 .employee-mgmt-list > button.is-selected {
   border-color: rgba(0, 18, 100, 0.18);
   background: #edf3ff;
-  box-shadow: inset 3px 0 0 var(--admin-navy);
 }
 
 .employee-mgmt-avatar {
