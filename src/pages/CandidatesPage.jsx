@@ -397,6 +397,7 @@ export default function CandidatesPage() {
   const importCancelledRef = useRef(false)
   const pendingRealtimeRefreshRef = useRef(false)
   const assignmentSourceRef = useRef(null)
+  const nextCandidateIdRequestRef = useRef(0)
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1203,12 +1204,13 @@ export default function CandidatesPage() {
         ? { ...form, id: '', associationId: '', candidateId: '', cvFile: null }
         : form
       await saveCandidateToApi(candidateToSave, { update: editing && !assigningAnother, duplicateAction: assigningAnother ? 'add_duplicate' : (duplicateBypass?.source === 'manual' ? 'add_duplicate' : '') })
+      setSaving(false)
       setDuplicateBypass(null)
       setAddOpen(false)
       setEditing(false)
       setAssigningAnother(false)
-      await loadCandidates(1, { showLoading: false })
       setPage(1)
+      loadCandidates(1, { showLoading: false })
       setForm(current => ({ ...current, candidateDisplayId: 'Loading...' }))
       fetchNextCandidateDisplayId()
         .then(candidateDisplayId => setForm(current => ({ ...current, candidateDisplayId })))
@@ -1405,25 +1407,34 @@ export default function CandidatesPage() {
     return next
   }
 
-  const advanceResumeReview = async (notice = '') => {
+  const advanceResumeReview = (notice = '') => {
     const nextIndex = currentImportIndex + 1
     if (nextIndex >= importQueue.length) {
       closeImport()
-      await loadCandidates(1, { showLoading: false })
       setPage(1)
       return
     }
-    const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
-    const profile = await getFreshActiveConsultantName()
-    const consultantUser = consultantOptions.find(user => user.id && user.id === profile.userId) || consultantOptions.find(user => user.name === profile.name)
-    setConsultantSearch(profile.name)
+    const requestId = nextCandidateIdRequestRef.current + 1
+    nextCandidateIdRequestRef.current = requestId
+    const consultantName = activeConsultantName === '-' ? '' : activeConsultantName
+    const consultantUser = consultantOptions.find(user => user.name === consultantName)
+    setConsultantSearch(consultantName)
     setCurrentImportIndex(nextIndex)
-    setParsedForm({ ...mapBulkResumeRowToForm(importQueue[nextIndex], profile.name, consultantUser?.id || ''), candidateDisplayId })
+    setParsedForm({ ...mapBulkResumeRowToForm(importQueue[nextIndex], consultantName, consultantUser?.id || ''), candidateDisplayId: 'Loading...' })
     setParsedErrors({})
     setParsedSkillInput('')
     setReviewNotice(importQueue[nextIndex]?.error ? `Parsing warning: ${importQueue[nextIndex].error}` : notice)
     if (importQueue[nextIndex]?.cv_duplicate) setCvDuplicateNotice('CV already exists in the database.')
     scrollImportToTop()
+    fetchNextCandidateDisplayId()
+      .then(candidateDisplayId => {
+        if (nextCandidateIdRequestRef.current !== requestId) return
+        setParsedForm(current => current ? { ...current, candidateDisplayId } : current)
+      })
+      .catch(() => {
+        if (nextCandidateIdRequestRef.current !== requestId) return
+        setParsedForm(current => current ? { ...current, candidateDisplayId: '' } : current)
+      })
   }
 
   const handleSaveParsed = async () => {
@@ -1439,11 +1450,14 @@ export default function CandidatesPage() {
     setSaving(true)
     try {
       await saveCandidateToApi(candidateToSave, { duplicateAction: duplicateBypass?.source === 'resume' ? 'add_duplicate' : '' })
-      await discardResumeTemps([candidateToSave.cvStoragePath || importQueue[currentImportIndex]?.cv_storage_path || importQueue[currentImportIndex]?.resume_path])
+      setSaving(false)
       setDuplicateBypass(null)
-      await loadCandidates(1, { showLoading: false })
       setPage(1)
-      await advanceResumeReview('Candidate saved.')
+      advanceResumeReview('Candidate saved.')
+      Promise.all([
+        discardResumeTemps([candidateToSave.cvStoragePath || importQueue[currentImportIndex]?.cv_storage_path || importQueue[currentImportIndex]?.resume_path]),
+        loadCandidates(1, { showLoading: false })
+      ])
     } catch (err) {
       if (err.identityDuplicate) {
         setImportError(err.message)

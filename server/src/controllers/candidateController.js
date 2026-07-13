@@ -204,24 +204,53 @@ async function getNextCandidateDisplayId(req, res) {
   }
 }
 
+async function findCandidateRowsByIdentity(email, mobileNumber, columns = '*') {
+  const normalizedEmail = normalizeDuplicateEmail(email)
+  const normalizedMobile = normalizeDuplicateMobile(mobileNumber)
+  const queries = []
+
+  if (isDuplicateValue(normalizedEmail)) {
+    // Keep the final exact comparison below because ilike treats % and _ as wildcards.
+    queries.push(supabase
+      .from('candidates')
+      .select(columns)
+      .ilike('email', normalizedEmail)
+      .limit(10000))
+  }
+
+  if (isDuplicateValue(normalizedMobile)) {
+    // Candidate mobile values are stored without formatting, with an optional leading +.
+    queries.push(supabase
+      .from('candidates')
+      .select(columns)
+      .in('mobile_number', [normalizedMobile, `+${normalizedMobile}`])
+      .limit(10000))
+  }
+
+  if (!queries.length) return []
+
+  const results = await Promise.all(queries)
+  const candidatesById = new Map()
+  for (const { data, error } of results) {
+    if (error) throw error
+    for (const candidate of data || []) candidatesById.set(candidate.id, candidate)
+  }
+
+  return [...candidatesById.values()].filter((candidate) => {
+    const emailMatches = isDuplicateValue(normalizedEmail) && normalizeDuplicateEmail(candidate.email) === normalizedEmail
+    const mobileMatches = isDuplicateValue(normalizedMobile) && normalizeDuplicateMobile(candidate.mobile_number) === normalizedMobile
+    return emailMatches || mobileMatches
+  })
+}
+
 async function findCandidateAnyDuplicate(email, mobileNumber) {
   const normalizedEmail = normalizeDuplicateEmail(email)
   const mobile = normalizeDuplicateMobile(mobileNumber)
 
   if (!isDuplicateValue(normalizedEmail) && !isDuplicateValue(mobile)) return null
 
-  const { data, error } = await supabase
-    .from('candidates')
-    .select('*')
-    .limit(10000)
-
-  if (error) throw error
-
-  return (data || []).find((candidate) => {
-    const emailMatches = isDuplicateValue(normalizedEmail) && normalizeDuplicateEmail(candidate.email) === normalizedEmail
-    const mobileMatches = isDuplicateValue(mobile) && normalizeDuplicateMobile(candidate.mobile_number) === mobile
-    return emailMatches || mobileMatches
-  }) || null
+  const candidates = await findCandidateRowsByIdentity(email, mobileNumber)
+  return candidates[0] || null
 }
 
 async function findCandidateIdentityDuplicate(email, mobileNumber, excludeCandidateId = '') {
@@ -230,14 +259,8 @@ async function findCandidateIdentityDuplicate(email, mobileNumber, excludeCandid
 
   if (!isDuplicateValue(normalizedEmail) && !isDuplicateValue(normalizedMobile)) return null
 
-  const { data, error } = await supabase
-    .from('candidates')
-    .select('id, email, mobile_number')
-    .limit(10000)
-
-  if (error) throw error
-
-  return (data || []).find((candidate) => {
+  const candidates = await findCandidateRowsByIdentity(email, mobileNumber, 'id, email, mobile_number')
+  return candidates.find((candidate) => {
     if (excludeCandidateId && candidate.id === excludeCandidateId) return false
     const emailMatches = isDuplicateValue(normalizedEmail) && normalizeDuplicateEmail(candidate.email) === normalizedEmail
     const mobileMatches = isDuplicateValue(normalizedMobile) && normalizeDuplicateMobile(candidate.mobile_number) === normalizedMobile
@@ -266,18 +289,7 @@ async function findMatchingCandidates(email, mobileNumber) {
     return { matches: [], bestMatch: null, exactMatch: null }
   }
 
-  const { data: candidates, error: candidatesError } = await supabase
-    .from('candidates')
-    .select('*')
-    .limit(10000)
-
-  if (candidatesError) throw candidatesError
-
-  const matchedCandidates = (candidates || []).filter((candidate) => {
-    const emailMatches = isDuplicateValue(normalizedEmail) && normalizeDuplicateEmail(candidate.email) === normalizedEmail
-    const mobileMatches = isDuplicateValue(normalizedMobile) && normalizeDuplicateMobile(candidate.mobile_number) === normalizedMobile
-    return emailMatches || mobileMatches
-  })
+  const matchedCandidates = await findCandidateRowsByIdentity(email, mobileNumber)
 
   if (!matchedCandidates.length) {
     return { matches: [], bestMatch: null, exactMatch: null }
@@ -1241,10 +1253,11 @@ async function createCandidate(req, res) {
         }
       })
     }
-    await validateMandateReference(associationPayload)
-    await validateConsultantReference(associationPayload)
-
-    const duplicateMatch = await findMatchingCandidates(candidatePayload.email, candidatePayload.mobile_number)
+    const [, , duplicateMatch] = await Promise.all([
+      validateMandateReference(associationPayload),
+      validateConsultantReference(associationPayload),
+      findMatchingCandidates(candidatePayload.email, candidatePayload.mobile_number)
+    ])
     const exactAssociation = duplicateMatch.matches.length
       ? duplicateMatch.matches.find((match) => hasSameConcreteAssociation(match, associationPayload))
       : null
@@ -1354,8 +1367,12 @@ const { data: association, error: associationError } = await insertAssociation(a
       throw associationError
     }
 
-    await syncMandateStatusForJob(association.job_id || assocInsert.job_id)
-    await notifyCandidateConsultantAssignment(req, candidate, association, undefined)
+    await Promise.all([
+      association.status === 'Hired'
+        ? syncMandateStatusForJob(association.job_id || assocInsert.job_id)
+        : Promise.resolve(),
+      notifyCandidateConsultantAssignment(req, candidate, association, undefined)
+    ])
 
     return res.status(201).json({ ...flattenAssociation(association), cv_duplicate: Boolean(cvResult?.duplicate) })
   } catch (err) {
@@ -1515,9 +1532,9 @@ const { error } = await updateAssociation(existingAssociation.id, assocUpdate)
         if (error) {
           throw error
         }
-        const affectedJobIds = [...new Set([existingAssociation.job_id, assocUpdate.job_id].filter(Boolean))]
-        for (const jobId of affectedJobIds) {
-          await syncMandateStatusForJob(jobId)
+        if (assocUpdate.status === 'Hired') {
+          const affectedJobIds = [...new Set([existingAssociation.job_id, assocUpdate.job_id].filter(Boolean))]
+          await Promise.all(affectedJobIds.map(syncMandateStatusForJob))
         }
       }
     } else if (hasAssociation) {
@@ -1536,7 +1553,9 @@ const { data: inserted, error: insertError } = await insertAssociation(assocInse
       }
 
       newAssociation = inserted
-      await syncMandateStatusForJob(inserted.job_id || assocInsert.job_id)
+      if (inserted.status === 'Hired') {
+        await syncMandateStatusForJob(inserted.job_id || assocInsert.job_id)
+      }
     }
 
     if (existingAssociation || newAssociation) {
