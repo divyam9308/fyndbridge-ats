@@ -26,7 +26,17 @@ import {
   XAxis,
   YAxis
 } from 'recharts'
-import { DASHBOARD_PERIODS, useDashboardStats } from '../hooks/useDashboardStats'
+import {
+  DASHBOARD_FINANCIAL_YEARS,
+  DASHBOARD_QUARTERS,
+  DEFAULT_DASHBOARD_PERIOD,
+  dashboardFinancialYearForDate,
+  dashboardFinancialYearMonths,
+  dashboardMonthPeriod,
+  dashboardPeriodLabel,
+  dashboardQuarterPeriod,
+  useDashboardStats
+} from '../hooks/useDashboardStats'
 import { useOnlineUsers } from '../hooks/useOnlineUsers'
 import OnlineUsersStrip from '../components/dashboard/OnlineUsersStrip'
 import {
@@ -588,7 +598,9 @@ function DashboardDrilldownModal({ drilldown, onClose, onOpenFullPage }) {
 export default function DashboardHome() {
   const navigate = useNavigate()
   const [consultant, setConsultant] = useState(OVERALL)
-  const [period, setPeriod] = useState(DASHBOARD_PERIODS[0])
+  const [financialYear, setFinancialYear] = useState(() => dashboardFinancialYearForDate(new Date()))
+  const [selectedMonth, setSelectedMonth] = useState(() => DEFAULT_DASHBOARD_PERIOD.slice(6))
+  const [period, setPeriod] = useState(DEFAULT_DASHBOARD_PERIOD)
   const [consultantOpen, setConsultantOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState(null)
   const [selectedDrilldown, setSelectedDrilldown] = useState(null)
@@ -597,6 +609,10 @@ export default function DashboardHome() {
   const consultantSelectRef = useRef(null)
   const { loading, error, data } = useDashboardStats({ consultant, period })
   const onlineUsers = useOnlineUsers()
+  const financialYearMonths = useMemo(() => dashboardFinancialYearMonths(financialYear), [financialYear])
+  const financialYearPeriodSelected = period === financialYear
+  const monthPeriodSelected = period === dashboardMonthPeriod(selectedMonth)
+  const periodLabel = dashboardPeriodLabel(period)
 
   const consultantOptionSource = data?.consultantOptions || EMPTY_ARRAY
   const consultantOptions = useMemo(() => {
@@ -721,7 +737,7 @@ export default function DashboardHome() {
     icon: Clock,
     activities: recentActivity
   }), [openCard, recentActivity])
-  const modalContext = useMemo(() => ({ consultant, period }), [consultant, period])
+  const modalContext = useMemo(() => ({ consultant, period: periodLabel }), [consultant, periodLabel])
 
   return (
     <div className="ats-dashboard-page modern-dashboard" id="page-dashboard">
@@ -756,12 +772,42 @@ export default function DashboardHome() {
           </div>}
 
           <div className="ats-dashboard-periods">
-            {DASHBOARD_PERIODS.map(item => (
+            <select
+              aria-label="Dashboard financial year"
+              className={financialYearPeriodSelected ? 'is-active' : ''}
+              value={financialYearPeriodSelected ? financialYear : ''}
+              onChange={(event) => {
+                const value = event.target.value
+                if (!value) return
+                setFinancialYear(value)
+                const firstMonth = dashboardFinancialYearMonths(value)[0].value
+                setSelectedMonth(firstMonth)
+                setPeriod(value)
+              }}
+            >
+              <option value="">View {financialYear}</option>
+              {DASHBOARD_FINANCIAL_YEARS.map(value => <option value={value} key={value}>{value}</option>)}
+            </select>
+            <select
+              aria-label="Dashboard month"
+              className={monthPeriodSelected ? 'is-active' : ''}
+              value={monthPeriodSelected ? selectedMonth : ''}
+              onChange={(event) => {
+                const value = event.target.value
+                if (!value) return
+                setSelectedMonth(value)
+                setPeriod(dashboardMonthPeriod(value))
+              }}
+            >
+              <option value="">Choose month</option>
+              {financialYearMonths.map(item => <option value={item.value} key={item.value}>{item.label}</option>)}
+            </select>
+            {DASHBOARD_QUARTERS.map(item => (
               <button
                 type="button"
                 key={item}
-                className={item === period ? 'is-active' : ''}
-                onClick={() => setPeriod(item)}
+                className={dashboardQuarterPeriod(financialYear, item) === period ? 'is-active' : ''}
+                onClick={() => setPeriod(dashboardQuarterPeriod(financialYear, item))}
               >
                 {item}
               </button>
@@ -803,7 +849,7 @@ export default function DashboardHome() {
         </section>
         </ExpandableCard>
         <div className="ats-dashboard-entity-stack">
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', id: 'mandates-trend', title: 'Mandates Trend', subtitle: `${consultant} - ${period}`, icon: TrendingUp, trend: mandateTrend, statuses: MANDATE_STATUSES })}>
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', id: 'mandates-trend', title: 'Mandates Trend', subtitle: `${consultant} - ${periodLabel}`, icon: TrendingUp, trend: mandateTrend, statuses: MANDATE_STATUSES })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={TrendingUp} title="Mandates Trend" subtitle="Ongoing, completed, and scrapped mandates" />
           <div className="ats-dashboard-chart">
@@ -813,7 +859,7 @@ export default function DashboardHome() {
           </div>
         </section>
         </ExpandableCard>
-        <KpiExpandableCard item={kpis[2]} isReady={dashboardDataReady} consultant={consultant} period={period} onOpen={openCard} />
+        <KpiExpandableCard item={kpis[2]} isReady={dashboardDataReady} consultant={consultant} period={periodLabel} onOpen={openCard} />
         </div>
       </div>
       </section>
@@ -836,7 +882,7 @@ export default function DashboardHome() {
         </section>
         </ExpandableCard>
         <div className="ats-dashboard-entity-stack">
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', id: 'candidate-movement-trend', title: 'Candidate Movement Trend', subtitle: `${consultant} - ${period}`, icon: Activity, trend: candidateTrend, statuses: CANDIDATE_STATUSES })}>
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', id: 'candidate-movement-trend', title: 'Candidate Movement Trend', subtitle: `${consultant} - ${periodLabel}`, icon: Activity, trend: candidateTrend, statuses: CANDIDATE_STATUSES })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={Activity} title="Candidate Movement Trend" subtitle="Candidate statuses over time" />
           <div className="ats-dashboard-chart">
@@ -846,7 +892,7 @@ export default function DashboardHome() {
           </div>
         </section>
         </ExpandableCard>
-        <KpiExpandableCard item={kpis[1]} isReady={dashboardDataReady} consultant={consultant} period={period} onOpen={openCard} />
+        <KpiExpandableCard item={kpis[1]} isReady={dashboardDataReady} consultant={consultant} period={periodLabel} onOpen={openCard} />
         </div>
       </div>
       </section>
@@ -879,7 +925,7 @@ export default function DashboardHome() {
         </section>
         </ExpandableCard>
         <div className="ats-dashboard-entity-stack">
-        <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', id: 'client-acquisition-trend', title: 'Client Acquisition Trend', subtitle: `${consultant} - ${period}`, icon: TrendingUp, trend: clientTrend, statuses: CLIENT_STATUSES })}>
+        <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', id: 'client-acquisition-trend', title: 'Client Acquisition Trend', subtitle: `${consultant} - ${periodLabel}`, icon: TrendingUp, trend: clientTrend, statuses: CLIENT_STATUSES })}>
         <section className="ats-dashboard-card card-3d">
           <SectionTitle icon={TrendingUp} title="Client Acquisition Trend" subtitle="Client statuses over time" />
           <div className="ats-dashboard-chart">
@@ -889,7 +935,7 @@ export default function DashboardHome() {
           </div>
         </section>
         </ExpandableCard>
-        <KpiExpandableCard item={kpis[0]} isReady={dashboardDataReady} consultant={consultant} period={period} onOpen={openCard} />
+        <KpiExpandableCard item={kpis[0]} isReady={dashboardDataReady} consultant={consultant} period={periodLabel} onOpen={openCard} />
         </div>
       </div>
       </section>

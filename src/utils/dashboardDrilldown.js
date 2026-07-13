@@ -29,11 +29,18 @@ export function clearDashboardFilters(search = '') {
   return params.toString()
 }
 
+function dashboardPeriodDisplay(value) {
+  const month = String(value || '').match(/^Month (\d{4})-(0[1-9]|1[0-2])$/)
+  if (month) return new Date(Number(month[1]), Number(month[2]) - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+  const quarter = String(value || '').match(/^(FY \d{4}-\d{2}) (Q[1-4])$/)
+  return quarter ? `${quarter[2]} · ${quarter[1]}` : value
+}
+
 export const dashboardFilterEntries = (filters) => [
   ['Consultant', filters?.consultant],
   ['Team Lead', filters?.teamLead],
   ['Status', filters?.status],
   ['Client', filters?.clientName],
   ['Role', filters?.role],
-  ['Period', filters?.period]
+  ['Period', dashboardPeriodDisplay(filters?.period)]
 ].filter(([, value]) => value)

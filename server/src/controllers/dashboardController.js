@@ -1,6 +1,7 @@
 const supabase = require('../services/supabaseAdmin')
 const { getDashboardAccess } = require('../services/dashboardAccess')
 const { DASHBOARD_CANDIDATE_STATUSES: CANDIDATE_STATUSES, normalizeDashboardCandidateStatus } = require('../services/candidateStatuses')
+const { dashboardPeriodRange } = require('../utils/dashboardPeriod')
 
 const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
@@ -41,19 +42,6 @@ function toDate(value) {
   if (!value) return null
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? null : date
-}
-
-function periodRange(period) {
-  const now = new Date()
-  const year = now.getFullYear()
-  const end = new Date(year, now.getMonth(), now.getDate(), 23, 59, 59, 999)
-  if (period === 'This Month') return { start: new Date(year, now.getMonth(), 1), end }
-  if (period === 'Q1') return { start: new Date(year, 3, 1), end: new Date(year, 5, 30, 23, 59, 59, 999) }
-  if (period === 'Q2') return { start: new Date(year, 6, 1), end: new Date(year, 8, 30, 23, 59, 59, 999) }
-  if (period === 'Q3') return { start: new Date(year, 9, 1), end: new Date(year, 11, 31, 23, 59, 59, 999) }
-  if (period === 'Q4') return { start: new Date(year + 1, 0, 1), end: new Date(year + 1, 2, 31, 23, 59, 59, 999) }
-  if (period === 'Till This Date') return { start: null, end }
-  return { start: new Date(year, 0, 1), end }
 }
 
 function withinPeriod(value, range) {
@@ -107,12 +95,16 @@ function countByStatus(rows, statuses, getStatus) {
 }
 
 function bucketKey(date, period) {
-  if (period === 'This Month') return date.toISOString().slice(0, 10)
+  if (isMonthPeriod(period)) return date.toISOString().slice(0, 10)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
 function bucketLabel(date, period) {
-  return period === 'This Month' ? dayLabel(date) : monthLabel(date)
+  return isMonthPeriod(period) ? dayLabel(date) : monthLabel(date)
+}
+
+function isMonthPeriod(period) {
+  return period === 'This Month' || /^Month \d{4}-(0[1-9]|1[0-2])$/.test(String(period))
 }
 
 function addMonths(date, count) {
@@ -131,7 +123,7 @@ function buildBuckets(period, range, rows, getDate, statuses) {
   const now = new Date()
   const rowDates = rows.map((row) => toDate(getDate(row))).filter(Boolean).sort((a, b) => a - b)
   const startDate = range.start || rowDates[0] || new Date(now.getFullYear(), now.getMonth(), 1)
-  const cursor = period === 'This Month'
+  const cursor = isMonthPeriod(period)
     ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
     : new Date(startDate.getFullYear(), startDate.getMonth(), 1)
   const end = range.end || now
@@ -144,7 +136,7 @@ function buildBuckets(period, range, rows, getDate, statuses) {
       raw,
       ...Object.fromEntries(statuses.map((status) => [status, 0]))
     })
-    const next = period === 'This Month' ? addDays(cursor, 1) : addMonths(cursor, 1)
+    const next = isMonthPeriod(period) ? addDays(cursor, 1) : addMonths(cursor, 1)
     cursor.setTime(next.getTime())
   }
   return buckets.length ? buckets : [{ key: bucketKey(now, period), m: bucketLabel(now, period), raw: Object.fromEntries(statuses.map((status) => [status, 0])), ...Object.fromEntries(statuses.map((status) => [status, 0])) }]
@@ -246,7 +238,7 @@ async function getDashboardStats(req, res) {
   const requestedConsultant = clean(req.query.consultant) || 'Overall (All Consultants)'
   const consultant = access.restrictedToSelf && access.consultantName ? access.consultantName : requestedConsultant
   const period = clean(req.query.period) || 'This Month'
-  const range = periodRange(period)
+  const range = dashboardPeriodRange(period)
   const sectionErrors = {}
 
   const settled = await Promise.allSettled([

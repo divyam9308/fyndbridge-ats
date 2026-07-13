@@ -3,6 +3,27 @@ function dashboardPeriodRange(period) {
   const now = new Date()
   const year = now.getFullYear()
   const end = new Date(year, now.getMonth(), now.getDate(), 23, 59, 59, 999)
+  const financialYear = String(period).match(/^FY (\d{4})-\d{2}$/)
+  if (financialYear) {
+    const startYear = Number(financialYear[1])
+    return { start: new Date(startYear, 3, 1), end: new Date(startYear + 1, 2, 31, 23, 59, 59, 999) }
+  }
+  const financialQuarter = String(period).match(/^FY (\d{4})-\d{2} Q([1-4])$/)
+  if (financialQuarter) {
+    const startYear = Number(financialQuarter[1])
+    const quarter = Number(financialQuarter[2])
+    const startMonth = 3 + ((quarter - 1) * 3)
+    return {
+      start: new Date(startYear, startMonth, 1),
+      end: new Date(startYear, startMonth + 3, 0, 23, 59, 59, 999)
+    }
+  }
+  const month = String(period).match(/^Month (\d{4})-(0[1-9]|1[0-2])$/)
+  if (month) {
+    const monthYear = Number(month[1])
+    const monthIndex = Number(month[2]) - 1
+    return { start: new Date(monthYear, monthIndex, 1), end: new Date(monthYear, monthIndex + 1, 0, 23, 59, 59, 999) }
+  }
   if (period === 'This Month') return { start: new Date(year, now.getMonth(), 1), end }
   if (period === 'Q1') return { start: new Date(year, 3, 1), end: new Date(year, 5, 30, 23, 59, 59, 999) }
   if (period === 'Q2') return { start: new Date(year, 6, 1), end: new Date(year, 8, 30, 23, 59, 59, 999) }
@@ -15,8 +36,9 @@ function dashboardPeriodRange(period) {
 function applyDashboardPeriod(query, column, period, { fallbackColumn = '', dateOnly = false } = {}) {
   const range = dashboardPeriodRange(period)
   if (!range) return query
-  const start = range.start && (dateOnly ? range.start.toISOString().slice(0, 10) : range.start.toISOString())
-  const end = dateOnly ? range.end.toISOString().slice(0, 10) : range.end.toISOString()
+  const toDateOnly = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const start = range.start && (dateOnly ? toDateOnly(range.start) : range.start.toISOString())
+  const end = dateOnly ? toDateOnly(range.end) : range.end.toISOString()
   if (fallbackColumn) {
     const primary = [start ? `${column}.gte.${start}` : '', `${column}.lte.${end}`].filter(Boolean).join(',')
     const fallback = [`${column}.is.null`, range.start ? `${fallbackColumn}.gte.${range.start.toISOString()}` : '', `${fallbackColumn}.lte.${range.end.toISOString()}`].filter(Boolean).join(',')
@@ -26,4 +48,4 @@ function applyDashboardPeriod(query, column, period, { fallbackColumn = '', date
   return query.lte(column, end)
 }
 
-module.exports = { applyDashboardPeriod }
+module.exports = { applyDashboardPeriod, dashboardPeriodRange }

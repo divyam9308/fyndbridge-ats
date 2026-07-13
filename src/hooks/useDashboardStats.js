@@ -2,15 +2,50 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../services/apiClient'
 import { supabase } from '../services/supabaseClient'
 
-export const DASHBOARD_PERIODS = [
-  'This Month',
-  'Q1',
-  'Q2',
-  'Q3',
-  'Q4',
-  'This Year (YTD)',
-  'Till This Date'
-]
+const dashboardNow = new Date()
+
+export const DASHBOARD_QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4']
+
+export function dashboardFinancialYearForDate(date) {
+  const year = date.getFullYear()
+  const start = date.getMonth() >= 3 ? year : year - 1
+  return `FY ${start}-${String((start + 1) % 100).padStart(2, '0')}`
+}
+
+function financialYearLabel(start) {
+  return `FY ${start}-${String((start + 1) % 100).padStart(2, '0')}`
+}
+
+const currentFinancialYearStart = Number(dashboardFinancialYearForDate(dashboardNow).slice(3, 7))
+
+export const DASHBOARD_FINANCIAL_YEARS = [-1, 0, 1].map(offset => financialYearLabel(currentFinancialYearStart + offset))
+
+export function dashboardFinancialYearMonths(financialYear) {
+  const start = Number(String(financialYear).slice(3, 7))
+  return Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(start, 3 + index, 1)
+    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    return {
+      value,
+      label: date.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+    }
+  })
+}
+
+export const dashboardMonthPeriod = month => `Month ${month}`
+export const dashboardQuarterPeriod = (financialYear, quarter) => `${financialYear} ${quarter}`
+
+export function dashboardPeriodLabel(period) {
+  const month = String(period).match(/^Month (\d{4})-(0[1-9]|1[0-2])$/)
+  if (month) {
+    return new Date(Number(month[1]), Number(month[2]) - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+  }
+  const quarter = String(period).match(/^(FY \d{4}-\d{2}) (Q[1-4])$/)
+  return quarter ? `${quarter[2]} · ${quarter[1]}` : period
+}
+
+const DEFAULT_MONTH = `${dashboardNow.getFullYear()}-${String(dashboardNow.getMonth() + 1).padStart(2, '0')}`
+export const DEFAULT_DASHBOARD_PERIOD = dashboardMonthPeriod(DEFAULT_MONTH)
 
 const DEFAULT_CONSULTANT = 'Overall (All Consultants)'
 const dashboardCache = new Map()
@@ -24,7 +59,7 @@ function debugDashboard(message, details) {
 function requestKey({ consultant, period }) {
   return JSON.stringify({
     consultant: consultant || DEFAULT_CONSULTANT,
-    period: period || DASHBOARD_PERIODS[0]
+    period: period || DEFAULT_DASHBOARD_PERIOD
   })
 }
 

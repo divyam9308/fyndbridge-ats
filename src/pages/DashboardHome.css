@@ -168,7 +168,8 @@
 }
 
 .ats-dashboard-select > button,
-.ats-dashboard-periods button {
+.ats-dashboard-periods button,
+.ats-dashboard-periods select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -190,7 +191,8 @@
 }
 
 .ats-dashboard-select > button:hover,
-.ats-dashboard-periods button:hover {
+.ats-dashboard-periods button:hover,
+.ats-dashboard-periods select:hover {
   border-color: rgba(var(--brand-gold-rgb), 0.5);
   box-shadow: 0 4px 12px rgba(var(--brand-blue-rgb), 0.08);
 }
@@ -242,11 +244,22 @@
   padding: 0 10px;
 }
 
-.ats-dashboard-periods button.is-active {
+.ats-dashboard-periods select {
+  min-width: 118px;
+  padding: 0 30px 0 10px;
+}
+
+.ats-dashboard-periods button.is-active,
+.ats-dashboard-periods select.is-active {
   border-color: transparent;
   background-image: var(--modern-gradient-primary);
   color: var(--white);
   box-shadow: var(--modern-shadow-pop);
+}
+
+.ats-dashboard-periods select.is-active option {
+  background: var(--white);
+  color: var(--navy-darkest);
 }
 
 .ats-dashboard-state-slot {
@@ -1695,7 +1708,8 @@
     width: 100%;
   }
 
-  .ats-dashboard-periods button {
+  .ats-dashboard-periods button,
+  .ats-dashboard-periods select {
     flex: 1 1 42%;
   }
 
