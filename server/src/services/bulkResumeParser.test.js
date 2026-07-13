@@ -133,6 +133,6 @@ test('only Upload Resumes is wired to the scoped parser', () => {
   assert.match(candidateController, /await parseResume\(tmpFilePath\)/)
   assert.doesNotMatch(candidateController, /parseBulkResume/)
   assert.match(candidatesPage, /fetch\('\/api\/resumes\/bulk-parse'/)
-  assert.match(resumeController, /const rows = await runLimited\(files, 2, parseOne\)/)
+  assert.match(resumeController, /const rows = await runLimited\(files, 5, parseOne\)/)
   assert.match(resumeController, /catch \(err\) \{[\s\S]*return rowFromParsed\(file, null, err\.message/)
 })

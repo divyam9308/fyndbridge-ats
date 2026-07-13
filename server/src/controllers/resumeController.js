@@ -110,7 +110,7 @@ async function bulkParseResumes(req, res) {
       return res.status(400).json({ error: 'Upload at least one resume.' })
     }
 
-    const rows = await runLimited(files, 2, parseOne)
+    const rows = await runLimited(files, 5, parseOne)
 
     return res.json({
       total: rows.length,
