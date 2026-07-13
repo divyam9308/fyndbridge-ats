@@ -19,11 +19,11 @@ const CATEGORY_META = {
     aria: count => `View ${count} employees on leave`
   },
   unmarked: {
-    label: 'Unmarked',
-    title: 'Unmarked Employees',
-    status: 'Unmarked',
+    label: 'Not Marked',
+    title: 'Not Marked Employees',
+    status: 'Not Marked',
     Icon: Clock3,
-    aria: count => `View ${count} unmarked employees`
+    aria: count => `View ${count} not marked employees`
   }
 }
 
@@ -57,7 +57,6 @@ export default function TeamTodaySummary({ summary, loading, error }) {
           return <article className={`att-team-today-card is-${key}`} key={key}>
             <div><span><Icon size={18} /></span><small>{meta.label}</small></div>
             {loading ? <i className="att-team-today-count-skeleton" /> : <button type="button" onClick={() => setActiveCategory(key)} aria-label={meta.aria(count)}>{count}</button>}
-            <em>View employees</em>
           </article>
         })}
       </div>
