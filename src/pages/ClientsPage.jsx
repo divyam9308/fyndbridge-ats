@@ -331,7 +331,7 @@ export default function ClientsPage() {
   const [addingContactPerson, setAddingContactPerson] = useState(false)
   const [sectorSearch, setSectorSearch] = useState('')
   const [sectorOpen, setSectorOpen] = useState(false)
-  const { staff: consultantOptions } = useStaffDirectory()
+  const { staff: allConsultantOptions, selectableStaff: consultantOptions } = useStaffDirectory()
   const [consultantSearch, setConsultantSearch] = useState('')
   const [consultantOpen, setConsultantOpen] = useState(false)
   const columnsDropdownRef = useRef(null)
@@ -529,8 +529,8 @@ export default function ClientsPage() {
       .filter(client => normalizeText(client.client_name || client.name).includes(normalizeText(form.client_name)))
   ), [canonicalClients, form.client_name])
   const matchingSectors = useMemo(() => SECTOR_OPTIONS.filter(value => value.toLowerCase().includes(sectorSearch.trim().toLowerCase())), [sectorSearch])
-  const consultantByName = useMemo(() => new Map(consultantOptions.map(user => [String(user.name || '').trim(), user])), [consultantOptions])
-  const consultantByNormalizedName = useMemo(() => new Map(consultantOptions.map(user => [normalizeText(user.name), user])), [consultantOptions])
+  const consultantByName = useMemo(() => new Map(allConsultantOptions.map(user => [String(user.name || '').trim(), user])), [allConsultantOptions])
+  const consultantByNormalizedName = useMemo(() => new Map(allConsultantOptions.map(user => [normalizeText(user.name), user])), [allConsultantOptions])
   const matchingConsultants = useMemo(() => {
     const query = consultantSearch.trim().toLowerCase()
     return consultantOptions.filter(user => !query || user.name.toLowerCase().includes(query))
@@ -657,12 +657,13 @@ export default function ClientsPage() {
     const profile = await loadProfile().catch(() => null)
     const consultantName = String(profile?.name || profile?.display_name || '').trim()
     const consultantUser = consultantOptions.find(user => user.id && user.id === profile?.user_id) || consultantOptions.find(user => user.name === consultantName)
+    const activeConsultantName = consultantUser?.name || ''
     setForm(current => ({
       ...current,
-      consultant_name: consultantName,
+      consultant_name: activeConsultantName,
       consultant_user_id: consultantUser?.id || ''
     }))
-    setConsultantSearch(consultantName)
+    setConsultantSearch(activeConsultantName)
   }, [consultantOptions, loadProfile])
 
   useEffect(() => {

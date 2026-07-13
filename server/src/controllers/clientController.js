@@ -8,6 +8,7 @@ const { parseAiFilters } = require('../services/aiFilterParser')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { createConsultantAssignmentNotification, createClientFollowUpDueNotification } = require('../services/assignmentNotifications')
 const { isAdmin, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
+const { assertActiveAssignments } = require('../services/employeeStatus')
 
 const CLIENT_STATUSES = [
   'Active',
@@ -449,7 +450,7 @@ async function findContactDuplicate(payload) {
   }) || null
 }
 
-async function validateConsultantReference(payload) {
+async function validateConsultantReference(payload, existing = {}) {
   const name = clean(payload.consultant_name || payload.consultant)
   let userId = clean(payload.consultant_user_id)
   if (!name || name === '-') return
@@ -482,6 +483,12 @@ async function validateConsultantReference(payload) {
     err.statusCode = 400
     throw err
   }
+  await assertActiveAssignments({
+    userIds: [userId],
+    names: [name],
+    existingUserIds: [existing.userId],
+    existingNames: [existing.name]
+  })
 }
 
 async function checkClientDuplicate(req, res) {
@@ -949,7 +956,10 @@ async function updateClient(req, res) {
 
     await syncEditedClientFollowUp(req.params.id, req.body)
     const payload = clientPayload({ ...existing, ...req.body }, { validateContactPerson: false })
-    await validateConsultantReference(payload)
+    await validateConsultantReference(payload, {
+      userId: existing.consultant_user_id,
+      name: existing.consultant_name || existing.consultant
+    })
     delete payload.follow_up_date
     const existingGroupId = existing.client_group_id || existing.id
     if (!payload.client_group_id || payload.client_group_id === existing.id) {

@@ -434,7 +434,7 @@ export default function CandidatesPage() {
 
   const [dbClients, setDbClients] = useState([])
   const [dbJobs, setDbJobs] = useState([])
-  const { staff: consultantOptions } = useStaffDirectory()
+  const { staff: allConsultantOptions, selectableStaff: consultantOptions } = useStaffDirectory()
   const [consultantSearch, setConsultantSearch] = useState('')
   const [consultantOpen, setConsultantOpen] = useState(false)
 
@@ -454,7 +454,7 @@ export default function CandidatesPage() {
     return () => window.clearTimeout(timer)
   }, [refreshOptionData])
 
-  const consultantByName = useMemo(() => new Map(consultantOptions.map(user => [user.name, user])), [consultantOptions])
+  const consultantByName = useMemo(() => new Map(allConsultantOptions.map(user => [user.name, user])), [allConsultantOptions])
   const matchingConsultants = useMemo(() => {
     const query = consultantSearch.trim().toLowerCase()
     return consultantOptions.filter(user => !query || user.name.toLowerCase().includes(query))
@@ -463,9 +463,11 @@ export default function CandidatesPage() {
   const getFreshActiveConsultantName = useCallback(async () => {
     const profile = await loadProfile().catch(() => null)
     const nextName = String(profile?.name || profile?.display_name || '').trim()
-    setActiveConsultantName(nextName || '-')
-    return { name: nextName, userId: profile?.user_id || '' }
-  }, [loadProfile])
+    const activeEmployee = consultantOptions.find(user => user.id === profile?.user_id) || consultantOptions.find(user => user.name === nextName)
+    const activeName = activeEmployee?.name || ''
+    setActiveConsultantName(activeName || '-')
+    return { name: activeName, userId: activeEmployee?.id || '' }
+  }, [consultantOptions, loadProfile])
 
   useEffect(() => {
     let cancelled = false

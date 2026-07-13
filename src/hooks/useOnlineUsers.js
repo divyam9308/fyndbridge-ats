@@ -8,6 +8,7 @@ const OnlineUsersContext = createContext([])
 const HEARTBEAT_MS = 25000
 const PRESENCE_POLL_MS = 5000
 const MIN_WRITE_MS = 2000
+const STATUS_EVENT = 'fb:employee-status-changed'
 
 function createPresenceTabId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
@@ -103,6 +104,14 @@ function usePresenceUsers() {
       body: JSON.stringify({ tab_id: tabIdRef.current })
     }).catch(() => {})
   }, [accessToken, enabled])
+
+  useEffect(() => {
+    const handleStatusChange = (event) => {
+      if (event.detail?.user_id === user?.id && event.detail?.status === 'inactive') markCurrentTabOffline()
+    }
+    window.addEventListener(STATUS_EVENT, handleStatusChange)
+    return () => window.removeEventListener(STATUS_EVENT, handleStatusChange)
+  }, [markCurrentTabOffline, user?.id])
 
   useEffect(() => {
     if (!enabled) {

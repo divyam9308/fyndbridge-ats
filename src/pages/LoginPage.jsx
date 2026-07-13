@@ -33,9 +33,15 @@ export default function LoginPage() {
   const { isAuthenticated } = useAuth()
 
   useEffect(() => {
-    if (searchParams.get('error') === 'domain') {
+    const reason = searchParams.get('error')
+    if (reason === 'domain') {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('Only @fyndbridge.in accounts are allowed.')
+    } else if (reason === 'inactive') {
+      setError(window.sessionStorage.getItem('fb_login_message') || 'Your account has been deactivated. Please contact an administrator.')
+      window.sessionStorage.removeItem('fb_login_message')
+    } else if (reason === 'session') {
+      setError('Your session has expired. Please sign in again.')
     }
   }, [searchParams])
 

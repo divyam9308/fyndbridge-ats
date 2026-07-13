@@ -8,6 +8,7 @@ const { parseAiFilters } = require('../services/aiFilterParser')
 const { applyQueryFilters } = require('../services/queryFilters')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { isAdmin, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
+const { assertActiveAssignments } = require('../services/employeeStatus')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
@@ -211,17 +212,23 @@ async function assertNoDuplicateMandate(clientId, title, excludeJobId = '') {
   }
 }
 
-async function assertAssignmentUsersExist(payload) {
+async function assertAssignmentUsersExist(payload, existing = {}) {
   const consultantNames = parseList(payload.consultants).filter(name => name !== '-')
   const teamLeadNames = payload.team_lead && payload.team_lead !== '-' ? [payload.team_lead] : []
   const names = [...consultantNames, ...teamLeadNames]
   if (!names.length) return
-  const resolved = await resolveAssignmentUsers(names, parseList(payload.consultant_user_ids || payload.team_lead_user_id))
+  const requestedIds = [...parseList(payload.consultant_user_ids), ...parseList(payload.team_lead_user_id)]
+  const resolved = await resolveAssignmentUsers(names, requestedIds)
   const resolvedNames = new Set(resolved.map(user => clean(user.name).toLowerCase()))
   const unresolved = names.find(name => !resolvedNames.has(clean(name).toLowerCase()))
   if (unresolved) {
     throw Object.assign(new Error('Typed text is not a selected record. Please choose an option from the list.'), { statusCode: 400 })
   }
+  await assertActiveAssignments({
+    userIds: requestedIds,
+    names,
+    existingNames: [...parseList(existing.consultants), existing.team_lead].filter(Boolean)
+  })
 }
 
 function jobFilterValue(row, field) {
@@ -479,21 +486,23 @@ async function updateJob(req, res) {
     await assertRowEditable('jobs', req.params.id, admin)
     await assertCanUpdateColumns('jobs', req.body, admin)
     const payload = await payloadFromBody(req.body, true)
-    const { data: currentJob, error: currentJobError } = await supabase.from('jobs').select('client_id, title').eq('id', req.params.id).maybeSingle()
+    const { data: currentJob, error: currentJobError } = await supabase.from('jobs').select('client_id, title, consultants, team_lead').eq('id', req.params.id).maybeSingle()
     if (currentJobError) throw currentJobError
     if (!currentJob) return res.status(404).json({ error: 'Mandate not found' })
     const nextClientId = payload.client_id || currentJob.client_id
     const nextTitle = Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : currentJob.title
     await assertClientExists(nextClientId)
     await assertNoDuplicateMandate(nextClientId, nextTitle, req.params.id)
-    await assertAssignmentUsersExist({ ...payload, consultant_user_ids: req.body.consultant_user_ids, team_lead_user_id: req.body.team_lead_user_id })
+    await assertAssignmentUsersExist(
+      { ...payload, consultant_user_ids: req.body.consultant_user_ids, team_lead_user_id: req.body.team_lead_user_id },
+      { consultants: currentJob.consultants, team_lead: currentJob.team_lead }
+    )
     if (req.file) {
       const jd = await uploadDocument(req.file, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
       payload.jd_url = jd.path
       payload.jd_storage_path = jd.path
     }
     payload.updated_at = new Date().toISOString()
-    const { data: previousJob } = await supabase.from('jobs').select('consultants, team_lead').eq('id', req.params.id).maybeSingle()
     const { data, error } = await updateJobRow(req.params.id, payload)
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Mandate not found' })
@@ -503,8 +512,8 @@ async function updateJob(req, res) {
       senderId: req.user?.id,
       consultantIds: req.body.consultant_user_ids,
       teamLeadId: req.body.team_lead_user_id,
-      previousConsultants: previousJob?.consultants || [],
-      previousTeamLead: previousJob?.team_lead || ''
+      previousConsultants: currentJob?.consultants || [],
+      previousTeamLead: currentJob?.team_lead || ''
     })
     return res.json(await stripHiddenFields('jobs', job, admin))
   } catch (err) {

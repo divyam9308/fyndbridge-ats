@@ -484,7 +484,7 @@ export default function AdminPage() {
         await refreshPermissions()
         notifyAdminPermissionsChanged()
       }
-      employeeManagementRef.current?.saveChanges()
+      await employeeManagementRef.current?.saveChanges()
     } catch (err) {
       setError(err.message)
       if (permissionChangesDirty) await refreshPermissions().catch(() => null)

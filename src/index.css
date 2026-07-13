@@ -191,6 +191,40 @@ input, textarea, select {
   font-size: 18px;
   line-height: 1;
 }
+
+.global-account-notice {
+  position: fixed;
+  z-index: 10000;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 10px;
+  background: #9f1d2c;
+  padding: 11px 16px;
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(25, 35, 60, 0.2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.employment-status-error {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+.employment-status-error button {
+  border: 0;
+  border-radius: 8px;
+  background: #001264;
+  padding: 9px 16px;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+}
 @keyframes globalNoticeIn {
   from { opacity: 0; transform: translate(-50%, -8px); filter: blur(4px); }
   to { opacity: 1; transform: translate(-50%, 0); filter: blur(0); }

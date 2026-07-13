@@ -69,8 +69,18 @@ async function listPresence(req, res) {
       .order('last_seen_at', { ascending: false })
 
     if (error) throw error
-
-    return res.json({ data: aggregatePresence(data), cutoff })
+    const userIds = [...new Set((data || []).map((row) => row.user_id).filter(Boolean))]
+    let inactiveIds = new Set()
+    if (userIds.length) {
+      const { data: inactive, error: statusError } = await supabase
+        .from('employee_statuses')
+        .select('user_id')
+        .in('user_id', userIds)
+        .eq('status', 'inactive')
+      if (statusError) throw statusError
+      inactiveIds = new Set((inactive || []).map((row) => row.user_id))
+    }
+    return res.json({ data: aggregatePresence((data || []).filter((row) => !inactiveIds.has(row.user_id))), cutoff })
   } catch (err) {
     console.error('listPresence:', err.message || err)
     return res.status(500).json({ error: 'Unable to load presence.' })

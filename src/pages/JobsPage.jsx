@@ -167,7 +167,7 @@ export default function JobsPage() {
   const [jobs, setJobs] = useState([])
   const [allJobs, setAllJobs] = useState([])
   const [dbClients, setDbClients] = useState([])
-  const { staff: userOptions } = useStaffDirectory()
+  const { staff: allUserOptions, selectableStaff: userOptions } = useStaffDirectory()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -346,8 +346,9 @@ export default function JobsPage() {
   const getFreshActiveConsultantName = useCallback(async () => {
     const profile = await loadProfile().catch(() => null)
     const nextName = String(profile?.name || '').trim()
-    return { name: nextName, userId: profile?.user_id || '' }
-  }, [loadProfile])
+    const activeEmployee = userOptions.find(user => user.id === profile?.user_id) || userOptions.find(user => user.name === nextName)
+    return { name: activeEmployee?.name || '', userId: activeEmployee?.id || '' }
+  }, [loadProfile, userOptions])
 
   const fetchNextId = async () => {
     const res = await fetch('/api/jobs/next-display-id')
@@ -442,9 +443,16 @@ export default function JobsPage() {
       return name ? { ...user, name } : null
     })
     .filter(Boolean), [userOptions])
+  const allUserList = useMemo(() => allUserOptions
+    .map(user => {
+      if (!user || typeof user !== 'object') return null
+      const name = String(user.name || user.display_name || '').trim()
+      return name ? { ...user, name } : null
+    })
+    .filter(Boolean), [allUserOptions])
   const sortedUsers = useMemo(() => ['-', ...userList.map(user => user.name)], [userList])
-  const userByName = useMemo(() => new Map(userList.map(user => [user.name, user])), [userList])
-  const userByNormalizedName = useMemo(() => new Map(userList.map(user => [user.name.toLowerCase(), user])), [userList])
+  const userByName = useMemo(() => new Map(allUserList.map(user => [user.name, user])), [allUserList])
+  const userByNormalizedName = useMemo(() => new Map(allUserList.map(user => [user.name.toLowerCase(), user])), [allUserList])
   const clientOptions = useMemo(() => canonicalClients(dbClients), [dbClients])
   const matchingClients = useMemo(() => clientOptions
     .filter(client => `${clientName(client)} ${client.client_display_id || ''}`.toLowerCase().includes(clientSearch.trim().toLowerCase())), [clientOptions, clientSearch])

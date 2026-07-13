@@ -1,4 +1,5 @@
 const supabase = require('../services/supabaseAdmin')
+const { listEmployeeDirectory } = require('../services/employeeStatus')
 
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 const nullable = (value) => clean(value) || null
@@ -77,8 +78,7 @@ async function saveProfile(req, res) {
 
 async function listProfileOptions(req, res) {
   try {
-    const { data, error } = await supabase.from('user_profiles').select('user_id, name, email').not('name', 'is', null).order('name')
-    if (error) throw error
+    const data = await listEmployeeDirectory()
     const seen = new Set()
     const users = []
     for (const row of data || []) {
@@ -86,7 +86,7 @@ async function listProfileOptions(req, res) {
       const key = row.user_id || name.toLowerCase()
       if (!name || seen.has(key)) continue
       seen.add(key)
-      users.push({ id: row.user_id, name, email: row.email || '' })
+      users.push({ id: row.user_id, name, email: row.email || '', status: row.status })
     }
     return res.json({ data: users })
   } catch (err) {
@@ -96,4 +96,3 @@ async function listProfileOptions(req, res) {
 }
 
 module.exports = { getProfile, saveProfile, listProfileOptions }
-

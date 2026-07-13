@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAuth } from '../context/useAuth'
 import { apiFetch } from '../services/apiClient'
 import { supabase } from '../services/supabaseClient'
 import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
@@ -11,7 +12,7 @@ let channel = null
 const listeners = new Set()
 
 const normalize = (rows) => (Array.isArray(rows) ? rows : [])
-  .map(user => ({ id: user.id || user.user_id || '', user_id: user.user_id || user.id || '', name: String(user.name || user.display_name || '').trim(), email: user.email || '' }))
+  .map(user => ({ id: user.id || user.user_id || '', user_id: user.user_id || user.id || '', name: String(user.name || user.display_name || '').trim(), email: user.email || '', status: user.status || 'active' }))
   .filter(user => user.name)
   .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
 
@@ -61,7 +62,8 @@ export function stopStaffDirectoryRealtime() {
 }
 
 export function useStaffDirectory({ enabled = true } = {}) {
-  const [, rerender] = useState(0)
+  const [revision, rerender] = useState(0)
+  const { employmentStatusByUserId, registerEmploymentStatuses } = useAuth()
   useEffect(() => {
     if (!enabled) return undefined
     const listener = () => rerender(value => value + 1)
@@ -71,6 +73,15 @@ export function useStaffDirectory({ enabled = true } = {}) {
     return () => listeners.delete(listener)
   }, [enabled])
 
+  useEffect(() => {
+    if (enabled && staff.length) registerEmploymentStatuses(staff)
+  }, [enabled, registerEmploymentStatuses, revision])
+
   const refresh = useCallback(() => refreshStaffDirectory(), [])
-  return { staff, loading, refresh }
+  const mergedStaff = staff.map((employee) => ({
+    ...employee,
+    status: employmentStatusByUserId[employee.user_id] || employee.status || 'active'
+  }))
+  const selectableStaff = useMemo(() => mergedStaff.filter((employee) => employee.status === 'active'), [mergedStaff])
+  return { staff: mergedStaff, selectableStaff, loading, refresh }
 }

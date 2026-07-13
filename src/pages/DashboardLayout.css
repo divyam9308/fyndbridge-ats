@@ -17,6 +17,21 @@
   animation: fadeUp 0.2s ease forwards;
 }
 
+.employment-on-leave-banner {
+  margin: 16px 28px -8px;
+  border: 1px solid rgba(218, 177, 17, 0.5);
+  border-radius: 10px;
+  background: #fff5cf;
+  padding: 10px 14px;
+  color: #001264;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dashboard-embed > .employment-on-leave-banner {
+  margin: 0 0 14px;
+}
+
 .dashboard-embed {
   min-height: 100vh;
   padding: 16px;

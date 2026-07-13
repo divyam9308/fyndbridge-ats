@@ -13,6 +13,7 @@ const { applyQueryFilters } = require('../services/queryFilters')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { createConsultantAssignmentNotification } = require('../services/assignmentNotifications')
 const { isAdmin, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
+const { assertActiveAssignments } = require('../services/employeeStatus')
 
 const VALID_STATUSES = [
   'Interested',
@@ -603,7 +604,7 @@ async function validateMandateReference(payload) {
   payload.client_name = data.clients?.client_name || data.clients?.name || payload.client_name
 }
 
-async function validateConsultantReference(payload) {
+async function validateConsultantReference(payload, existing = {}) {
   const name = cleanText(payload.consultant_name)
   const userId = cleanText(payload.consultant_user_id)
   if (!name || name === '-') return
@@ -615,6 +616,12 @@ async function validateConsultantReference(payload) {
   if (userProfileError) throw userProfileError
   if (profileError) throw profileError
   if (!userProfile && !profile) throw Object.assign(new Error('Please select a valid consultant from the dropdown.'), { statusCode: 400 })
+  await assertActiveAssignments({
+    userIds: [userId],
+    names: [name],
+    existingUserIds: [existing.userId],
+    existingNames: [existing.name]
+  })
 }
 
 const CANDIDATE_FILTER_MAPPING = {
@@ -1410,14 +1417,13 @@ async function updateCandidate(req, res) {
           : '-';
     }
     await validateMandateReference(associationPayload)
-    await validateConsultantReference(associationPayload)
 
     let existingCandidateId = null
     let existingAssociation = null
 
     const { data: existingAssoc, error: lookupError } = await supabase
       .from('candidate_associations')
-      .select('id, candidate_id, client_id, job_id, consultant_name')
+      .select('id, candidate_id, client_id, job_id, consultant_name, consultant_user_id')
       .eq('id', associationId)
       .maybeSingle()
 
@@ -1442,6 +1448,11 @@ async function updateCandidate(req, res) {
         existingCandidateId = existingCand.id
       }
     }
+
+    await validateConsultantReference(associationPayload, {
+      userId: existingAssociation?.consultant_user_id,
+      name: existingAssociation?.consultant_name
+    })
 
     if (!existingCandidateId) {
       return res.status(404).json({ error: 'Candidate or association not found' })

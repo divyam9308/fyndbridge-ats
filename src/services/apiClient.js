@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient'
 
 const API_UNAUTHORIZED_EVENT = 'fb:api-unauthorized'
+const API_INACTIVE_EVENT = 'fb:account-inactive'
 const documentOpenLocks = new Map()
 const debugCallCounts = {}
 const apiJsonCache = new Map()
@@ -43,6 +44,12 @@ export async function apiFetch(input, init = {}) {
 
   if (needsAuth && response.status === 401) {
     window.dispatchEvent(new CustomEvent(API_UNAUTHORIZED_EVENT, { detail: { url } }))
+  }
+  if (needsAuth && response.status === 403) {
+    const payload = await response.clone().json().catch(() => ({}))
+    if (payload.code === 'ACCOUNT_INACTIVE') {
+      window.dispatchEvent(new CustomEvent(API_INACTIVE_EVENT, { detail: payload }))
+    }
   }
 
   return response
@@ -117,6 +124,12 @@ export function installApiFetchInterceptor() {
 
     if (needsAuth && response.status === 401) {
       window.dispatchEvent(new CustomEvent(API_UNAUTHORIZED_EVENT, { detail: { url } }))
+    }
+    if (needsAuth && response.status === 403) {
+      const payload = await response.clone().json().catch(() => ({}))
+      if (payload.code === 'ACCOUNT_INACTIVE') {
+        window.dispatchEvent(new CustomEvent(API_INACTIVE_EVENT, { detail: payload }))
+      }
     }
 
     return response
@@ -289,4 +302,4 @@ export async function openProtectedDocumentPath(type, path, options = {}) {
   return openProtectedUrl(documentOpenUrl(type, path), options)
 }
 
-export { API_UNAUTHORIZED_EVENT }
+export { API_INACTIVE_EVENT, API_UNAUTHORIZED_EVENT }
