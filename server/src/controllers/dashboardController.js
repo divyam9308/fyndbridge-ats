@@ -139,7 +139,7 @@ function buildBuckets(period, range, rows, getDate, statuses) {
     const next = isMonthPeriod(period) ? addDays(cursor, 1) : addMonths(cursor, 1)
     cursor.setTime(next.getTime())
   }
-  return buckets.length ? buckets : [{ key: bucketKey(now, period), m: bucketLabel(now, period), raw: Object.fromEntries(statuses.map((status) => [status, 0])), ...Object.fromEntries(statuses.map((status) => [status, 0])) }]
+  return buckets
 }
 
 function statusTrend(rows, statuses, getStatus, getDate, period, range) {
