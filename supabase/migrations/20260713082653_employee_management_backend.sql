@@ -249,10 +249,11 @@ begin
   if p_actor_id is null or not exists (
     select 1
     from public.admin_users admin_user
-    where admin_user.user_id = p_actor_id
-       or lower(coalesce(admin_user.email, '')) = lower(coalesce(p_actor_email, ''))
+    where (admin_user.user_id = p_actor_id
+       or lower(coalesce(admin_user.email, '')) = lower(coalesce(p_actor_email, '')))
+      and admin_user.role = 'super_admin'
   ) then
-    raise exception 'Admin access required' using errcode = '42501';
+    raise exception 'Super Admin access required' using errcode = '42501';
   end if;
 
   if p_source_user_id is null or p_destination_user_id is null or p_source_user_id = p_destination_user_id then

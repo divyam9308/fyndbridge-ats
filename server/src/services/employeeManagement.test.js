@@ -10,6 +10,7 @@ const adminRoutes = fs.readFileSync(path.resolve(__dirname, '../routes/admin.js'
 const requireAuth = fs.readFileSync(path.resolve(__dirname, '../middleware/requireAuth.js'), 'utf8')
 const authContext = fs.readFileSync(path.resolve(__dirname, '../../../src/context/AuthContext.jsx'), 'utf8')
 const staffDirectory = fs.readFileSync(path.resolve(__dirname, '../../../src/hooks/useStaffDirectory.js'), 'utf8')
+const employeeManagementUi = fs.readFileSync(path.resolve(__dirname, '../../../src/features/employee-management/EmployeeManagement.jsx'), 'utf8')
 
 test('employment status accepts exactly the supported values', () => {
   assert.equal(validateEmploymentStatus('active'), 'active')
@@ -56,8 +57,10 @@ test('migration enables RLS, authenticated reads and only the required Realtime 
   assert.equal((migration.match(/alter publication supabase_realtime add table/gi) || []).length, 1)
 })
 
-test('reassignment is one database function with destination validation and mandate deduplication', () => {
+test('reassignment is one Super Admin-only database function with destination validation and mandate deduplication', () => {
   assert.match(migration, /create or replace function public\.reassign_employee_assignments/i)
+  assert.match(migration, /admin_user\.role = 'super_admin'/i)
+  assert.match(migration, /Super Admin access required/i)
   assert.match(migration, /destination_status <> 'active'/i)
   assert.match(migration, /distinct on \(lower\(btrim\(replaced\.value\)\)\)/i)
   assert.match(migration, /revoke all on function public\.reassign_employee_assignments[\s\S]*from public, anon, authenticated/i)
@@ -74,10 +77,15 @@ test('reassignment runs atomically inside Postgres and preserves existing rows',
   assert.doesNotMatch(migration, /truncate|drop table|delete from/i)
 })
 
-test('employee management endpoints are protected by existing Admin authorization', () => {
+test('employee-management reads remain Admin-visible while mutations require Super Admin', () => {
   const guardPosition = adminRoutes.indexOf('router.use(requireAdmin)')
   const employeePosition = adminRoutes.indexOf("router.get('/employees'")
   assert.ok(guardPosition >= 0 && employeePosition > guardPosition)
+  assert.match(adminRoutes, /router\.patch\('\/employees\/:employeeId\/status', requireSuperAdmin, employeeController\.updateStatus\)/)
+  assert.match(adminRoutes, /router\.post\('\/employees\/:employeeId\/reassign', requireSuperAdmin, employeeController\.reassign\)/)
+  assert.match(employeeManagementUi, /isSuperAdmin = false/)
+  assert.match(employeeManagementUi, /disabled=\{!isSuperAdmin \|\| statusSaving\}/)
+  assert.match(employeeManagementUi, /disabled=\{!isSuperAdmin\}/)
 })
 
 test('inactive accounts are rejected centrally while On Leave remains authorized', () => {

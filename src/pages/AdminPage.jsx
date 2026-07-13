@@ -727,7 +727,7 @@ export default function AdminPage() {
         </div>
       </Section>
 
-      <EmployeeManagement ref={employeeManagementRef} onDirtyChange={setEmployeeManagementDirty} />
+      <EmployeeManagement ref={employeeManagementRef} isSuperAdmin={isSuperAdmin} onDirtyChange={setEmployeeManagementDirty} />
 
       {createPortal((
         <div className={`admin-unsaved-dock${dirty && !lockModalType ? ' is-visible' : ''}${savingPermissions ? ' is-saving' : ''}`} aria-hidden={!dirty || Boolean(lockModalType)}>

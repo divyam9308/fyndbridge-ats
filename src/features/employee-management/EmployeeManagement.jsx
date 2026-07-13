@@ -146,7 +146,7 @@ function ReassignmentModal({ source, employees, onClose, onConfirm }) {
   )
 }
 
-const EmployeeManagement = forwardRef(function EmployeeManagement({ onDirtyChange = NOOP }, ref) {
+const EmployeeManagement = forwardRef(function EmployeeManagement({ isSuperAdmin = false, onDirtyChange = NOOP }, ref) {
   const { employmentStatusByUserId, registerEmploymentStatuses } = useAuth()
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
@@ -234,7 +234,7 @@ const EmployeeManagement = forwardRef(function EmployeeManagement({ onDirtyChang
   }, [loadDetail, selectedDetail.loaded, selectedDetail.loading, selectedEmployee?.id])
 
   const changeStatus = (status) => {
-    if (!selectedEmployee || statusSaving) return
+    if (!isSuperAdmin || !selectedEmployee || statusSaving) return
     const next = employees.map(employee => employee.id === selectedEmployee.id ? { ...employee, status } : employee)
     setEmployees(next)
     onDirtyChange(next.some(employee => employee.status !== savedStatusesRef.current[employee.id]))
@@ -247,6 +247,7 @@ const EmployeeManagement = forwardRef(function EmployeeManagement({ onDirtyChang
   }, [onDirtyChange])
 
   const saveChanges = useCallback(async () => {
+    if (!isSuperAdmin) return
     const changes = employees.filter((employee) => employee.status !== savedStatusesRef.current[employee.id])
     if (!changes.length) return
     setStatusSaving(true)
@@ -265,7 +266,7 @@ const EmployeeManagement = forwardRef(function EmployeeManagement({ onDirtyChang
     } finally {
       setStatusSaving(false)
     }
-  }, [employees, loadEmployees, onDirtyChange, registerEmploymentStatuses])
+  }, [employees, isSuperAdmin, loadEmployees, onDirtyChange, registerEmploymentStatuses])
 
   useImperativeHandle(ref, () => ({ saveChanges, cancelChanges }), [cancelChanges, saveChanges])
 
@@ -318,9 +319,9 @@ const EmployeeManagement = forwardRef(function EmployeeManagement({ onDirtyChang
           {loading ? <EmployeeDetailSkeleton /> : selectedEmployee ? (
             <>
               <div className="employee-mgmt-profile"><span className="employee-mgmt-avatar">{initials(selectedEmployee.name)}</span><div><h3>{selectedEmployee.name}</h3><p><Mail size={15} />{selectedEmployee.email}</p>{selectedEmployee.mobile && <p><Phone size={15} />{selectedEmployee.mobile}</p>}</div></div>
-              <div className="employee-mgmt-status-block"><div className="employee-mgmt-status-control">{STATUS_OPTIONS.map(({ value, label, Icon }) => <button key={value} type="button" disabled={statusSaving} className={`is-status-${value}${selectedEmployee.status === value ? ' is-selected' : ''}`} onClick={() => changeStatus(value)}><Icon size={15} />{statusSaving ? 'Saving…' : label}</button>)}</div><p>{STATUS_HELP[selectedEmployee.status]}</p></div>
+              <div className="employee-mgmt-status-block"><div className="employee-mgmt-status-control">{STATUS_OPTIONS.map(({ value, label, Icon }) => <button key={value} type="button" disabled={!isSuperAdmin || statusSaving} title={!isSuperAdmin ? 'Super Admin required.' : undefined} className={`is-status-${value}${selectedEmployee.status === value ? ' is-selected' : ''}`} onClick={() => changeStatus(value)}><Icon size={15} />{statusSaving ? 'Saving…' : label}</button>)}</div><p>{STATUS_HELP[selectedEmployee.status]}</p></div>
               <div className="employee-mgmt-linked-list">{LINKED_RECORD_META.map(meta => <LinkedRecordCard key={meta.key} meta={meta} records={selectedDetail[meta.key] || []} total={selectedEmployee.counts[meta.key]} loading={Boolean(selectedDetail.loading)} error={selectedDetail.error} onRetry={() => loadDetail(selectedEmployee.id)} />)}</div>
-              <div className="employee-mgmt-reassign-card"><span><ArrowRightLeft size={19} /></span><div><h4>Reassign Employee</h4><p>Transfer this employee&apos;s assignments to another employee.</p></div><button type="button" onClick={() => setReassignSourceId(selectedEmployee.id)}>Reassign</button></div>
+              <div className="employee-mgmt-reassign-card"><span><ArrowRightLeft size={19} /></span><div><h4>Reassign Employee</h4><p>Transfer this employee&apos;s assignments to another employee.</p></div><button type="button" disabled={!isSuperAdmin} title={!isSuperAdmin ? 'Super Admin required.' : undefined} onClick={() => setReassignSourceId(selectedEmployee.id)}>Reassign</button></div>
             </>
           ) : <div className="employee-mgmt-detail-empty"><Users size={30} /><strong>Select an employee</strong><span>Employee details will appear here.</span></div>}
         </div>
