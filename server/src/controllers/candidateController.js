@@ -7,12 +7,12 @@ const supabase = require('../services/supabaseAdmin')
 const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
 const { parseResume } = require('../services/resumeParser')
 const { RESUME_BUCKET, prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplicate, checkLinkedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
-const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
 const { parseAiFilters } = require('../services/aiFilterParser')
-const { applyQueryFilters } = require('../services/queryFilters')
+const { FIELD_REGISTRY, validateCandidateFilter, nodeDomain, flattenConditions } = require('../services/candidateAiFilter')
+const { applyCandidateAstQuery } = require('../services/candidateFilterQuery')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { createConsultantAssignmentNotification } = require('../services/assignmentNotifications')
-const { isAdmin, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
+const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
 const { CANDIDATE_STATUSES: VALID_STATUSES, candidateStatusError, cleanStatus: cleanCandidateStatus } = require('../services/candidateStatuses')
 
@@ -56,6 +56,64 @@ const ASSOCIATION_FIELDS = [
   'client_id',
   'job_id'
 ]
+
+const CANDIDATE_FILTER_PERMISSION_KEYS = {
+  candidate_id: 'candidate_display_id', candidate_name: 'full_name', email: 'email', mobile: 'mobile_number',
+  designation: 'current_designation', organisation: 'current_organisation', experience: 'experience_years',
+  current_location: 'location', notice_period: 'notice_period', open_to_relocate: 'open_to_relocate', skills: 'skills',
+  linkedin: 'linkedin_url', cv: 'cv_link', created_date: 'created_at', consultant: 'consultant_name', consultant_user_id: 'consultant_name',
+  client_id: 'client_id', client_name: 'client_name', job_id: 'job_id', role: 'job_title', status: 'status', current_ctc: 'current_salary',
+  expected_ctc: 'expected_salary', offered_ctc: 'current_salary', date_of_joining: 'created_at', comments: 'notes'
+}
+
+async function allowedCandidateFilterFields(user) {
+  if (await isAdmin(user)) return Object.keys(FIELD_REGISTRY)
+  const permissions = await getColumnPermissions('candidates')
+  return Object.keys(FIELD_REGISTRY).filter(field => permissions[CANDIDATE_FILTER_PERMISSION_KEYS[field]] !== 'hidden')
+}
+
+async function resolveCandidateFilterReferences(filters) {
+  const conditions = flattenConditions(filters.root)
+  const needsConsultants = conditions.some(item => item.field === 'consultant' && ['equals', 'not_equals'].includes(item.operator))
+  const profiles = needsConsultants
+    ? await supabase.from('user_profiles').select('user_id, name').not('name', 'is', null).order('name')
+    : { data: [], error: null }
+  if (profiles.error) throw profiles.error
+
+  async function visit(node) {
+    if (node.type === 'group') return { ...node, children: await Promise.all(node.children.map(visit)) }
+    if (node.field === 'consultant' && ['equals', 'not_equals'].includes(node.operator)) {
+      const wanted = cleanText(node.value).toLowerCase()
+      const rows = (profiles.data || []).filter(row => cleanText(row.name).toLowerCase() === wanted)
+      const matches = rows.length ? rows : (profiles.data || []).filter(row => cleanText(row.name).toLowerCase().includes(wanted))
+      if (matches.length > 1) throw Object.assign(new Error(`Consultant name "${node.value}" is ambiguous. Please enter the full name.`), { statusCode: 400 })
+      if (!matches.length) throw Object.assign(new Error(`No consultant matched "${node.value}".`), { statusCode: 400 })
+      if (node.operator === 'not_equals') return node
+      return {
+        type: 'group', combinator: 'OR', children: [
+          { type: 'condition', field: 'consultant_user_id', operator: 'equals', value: matches[0].user_id },
+          node
+        ]
+      }
+    }
+    if (node.field === 'job_id' && node.operator === 'equals' && /^JB\d+$/i.test(cleanText(node.value))) {
+      const { data, error } = await supabase.from('jobs').select('id').ilike('job_display_id', cleanText(node.value)).limit(2)
+      if (error) throw error
+      if (data?.length !== 1) throw Object.assign(new Error(`No unique mandate matched "${node.value}".`), { statusCode: 400 })
+      return { ...node, value: data[0].id }
+    }
+    if (node.field === 'client_id' && node.operator === 'equals' && /^CL\d+$/i.test(cleanText(node.value))) {
+      const { data, error } = await supabase.from('clients').select('id').ilike('client_display_id', cleanText(node.value)).limit(2)
+      if (error) throw error
+      if (data?.length !== 1) throw Object.assign(new Error(`No unique client matched "${node.value}".`), { statusCode: 400 })
+      return { ...node, value: data[0].id }
+    }
+    return node
+  }
+
+  const root = await visit(filters.root)
+  return { ...filters, root, conditions: flattenConditions(root) }
+}
 
 function logAndSendInternal(res, routeName, err) {
   console.error(`${routeName}:`, err.message)
@@ -631,120 +689,6 @@ async function validateConsultantReference(payload, existing = {}) {
   })
 }
 
-const CANDIDATE_FILTER_MAPPING = {
-  candidate_id: [{ column: 'candidate_display_id', kind: 'text' }],
-  candidate_name: [{ column: 'full_name', kind: 'text' }],
-  job_id: [{ column: 'candidate_associations.job_id', kind: 'text' }],
-  email: [{ column: 'email', kind: 'text' }],
-  mobile: [{ column: 'mobile_number', kind: 'text' }],
-  designation: [{ column: 'current_designation', kind: 'text' }],
-  organisation: [{ column: 'current_organisation', kind: 'text' }],
-  experience: [{ column: 'experience_years', kind: 'number' }],
-  date: [{ column: 'created_at', kind: 'date' }],
-  skills: [],
-  current_location: [{ column: 'location', kind: 'text' }, { column: 'city', kind: 'text' }],
-  notice_period: [{ column: 'notice_period', kind: 'number' }],
-  open_to_relocate: [{ column: 'open_to_relocate', kind: 'boolean' }],
-  education: [{ column: 'education', kind: 'text' }],
-  linkedin: [{ column: 'linkedin_url', kind: 'text' }],
-  cv: [{ column: 'cv_link', kind: 'text' }, { column: 'resume_url', kind: 'text' }],
-  consultant: [{ column: 'candidate_associations.consultant_name', kind: 'text' }],
-  client_name: [{ column: 'candidate_associations.client_name', kind: 'text' }],
-  role: [{ column: 'candidate_associations.job_title', kind: 'text' }],
-  current_ctc: [{ column: 'candidate_associations.current_salary', kind: 'number' }],
-  expected_ctc: [{ column: 'candidate_associations.expected_salary', kind: 'number' }],
-  offered_ctc: [{ column: 'candidate_associations.offered_ctc', kind: 'number' }],
-  date_of_joining: [{ column: 'candidate_associations.date_of_joining', kind: 'date' }],
-  comments: [{ column: 'candidate_associations.notes', kind: 'text' }],
-  status: [{ column: 'candidate_associations.status', kind: 'text' }]
-}
-const ASSOCIATION_FILTER_FIELDS = new Set(['job_id', 'consultant', 'client_name', 'role', 'current_ctc', 'expected_ctc', 'offered_ctc', 'date_of_joining', 'comments', 'status'])
-
-function candidateFilterValue(row, field) {
-  return {
-    candidate_id: row.candidate_display_id,
-    candidate_name: row.full_name,
-    consultant: row.consultant_name,
-    job_id: row.job_display_id || row.job_id,
-    email: row.email,
-    mobile: row.mobile_number,
-    designation: row.current_designation,
-    organisation: row.current_organisation || row.current_company,
-    experience: row.experience_years,
-    skills: row.skills,
-    client_id: row.client_display_id,
-    client_name: row.client_name,
-    role: row.job_title,
-    date: row.created_at,
-    current_ctc: row.current_salary,
-    expected_ctc: row.expected_salary,
-    offered_ctc: row.offered_ctc,
-    date_of_joining: row.date_of_joining,
-    current_location: row.location || row.city,
-    notice_period: row.notice_period,
-    open_to_relocate: row.open_to_relocate,
-    comments: row.notes,
-    status: row.status,
-    month: row.created_at,
-    linkedin: row.linkedin_url,
-    education: row.education,
-    cv: row.cv_link || row.resume_url
-  }[field]
-}
-
-function skillVariants(value) {
-  const text = cleanText(value)
-  if (!text) return []
-  const title = text.toLowerCase().replace(/\b\w/g, char => char.toUpperCase())
-  return [...new Set([text, text.toLowerCase(), text.toUpperCase(), title])]
-}
-
-async function resolveSkillCandidateIds(filters) {
-  const skillConditions = (filters?.conditions || []).filter(condition => String(condition.field || '').toLowerCase() === 'skills')
-  if (!skillConditions.length) return null
-  const ids = new Set()
-  for (const condition of skillConditions) {
-    const values = Array.isArray(condition.value) ? condition.value : [condition.value]
-    for (const value of values) {
-      for (const variant of skillVariants(value)) {
-        const { data, error } = await supabase.from('candidates').select('id').contains('skills', [variant]).limit(10000)
-        if (error) throw error
-        ;(data || []).forEach(row => ids.add(row.id))
-      }
-    }
-  }
-  return [...ids]
-}
-
-async function resolveAssociationCandidateIds(filters) {
-  if (filters?.mode !== 'any') return null
-  const conditions = (filters.conditions || []).filter(condition => ASSOCIATION_FILTER_FIELDS.has(String(condition.field || '').toLowerCase()))
-  if (!conditions.length) return null
-  const clauses = conditions.map(condition => {
-    const value = cleanText(condition.value).replace(/,/g, '\\,').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
-    if (!value) return null
-    if (condition.field === 'consultant') return `consultant_name.ilike.*${value}*`
-    if (condition.field === 'client_name') return `client_name.ilike.*${value}*`
-    if (condition.field === 'role') return `job_title.ilike.*${value}*`
-    if (condition.field === 'comments') return `notes.ilike.*${value}*`
-    if (condition.field === 'status') return `status.ilike.*${value}*`
-    return null
-  }).filter(Boolean)
-  if (!clauses.length) return []
-  const { data, error } = await supabase
-    .from('candidate_associations')
-    .select('candidate_id')
-    .or(clauses.join(','))
-    .limit(10000)
-  if (error) throw error
-  return [...new Set((data || []).map(row => row.candidate_id).filter(Boolean))]
-}
-
-function candidateFilterMappingFor(filters) {
-  if (filters?.mode !== 'any') return CANDIDATE_FILTER_MAPPING
-  return Object.fromEntries(Object.entries(CANDIDATE_FILTER_MAPPING).filter(([field]) => !ASSOCIATION_FILTER_FIELDS.has(field)))
-}
-
 function missingAssociationColumn(error) {
   if (error?.code !== 'PGRST204' || !/candidate_associations/i.test(error.message || '')) return null
   const match = String(error.message || '').match(/'([^']+)' column/)
@@ -1009,11 +953,15 @@ async function listCandidates(req, res) {
     const to = from + limit - 1
     const sortField = cleanText(req.query.sortField)
     const sortDirection = cleanText(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
-    const aiFilters = parseJsonFilter(req.query.ai_filters)
-    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.rankingHints || []).length || (aiFilters?.conditions || []).some((condition) => ['skills', 'client_id', 'month', ...ASSOCIATION_FILTER_FIELDS].includes(String(condition.field || '').toLowerCase()))
-    const skillCandidateIds = await resolveSkillCandidateIds(aiFilters)
-    const associationCandidateIds = await resolveAssociationCandidateIds(aiFilters)
-    const aiAssociationFilter = aiFilters?.mode !== 'any' && (aiFilters?.conditions || []).some((condition) => ASSOCIATION_FILTER_FIELDS.has(String(condition.field || '').toLowerCase()))
+    const rawAiFilters = parseJsonFilter(req.query.ai_filters)
+    if (req.query.ai_filters && rawAiFilters?.mode !== 'ast') {
+      throw Object.assign(new Error('Invalid Candidates AI filter.'), { statusCode: 400 })
+    }
+    const aiFilters = rawAiFilters?.mode === 'ast'
+      ? await resolveCandidateFilterReferences(validateCandidateFilter(rawAiFilters, { allowedFields: await allowedCandidateFilterFields(req.user) }))
+      : rawAiFilters
+    const astDomain = aiFilters?.mode === 'ast' ? nodeDomain(aiFilters.root) : ''
+    const aiAssociationFilter = astDomain === 'association'
 
     const hasAssocFilters = req.query.job_title || 
                             req.query.job_id ||
@@ -1116,21 +1064,10 @@ async function listCandidates(req, res) {
       )
     }
 
-    const appliedAi = localAiFilter ? { query } : applyQueryFilters(query, 'candidates', aiFilters, candidateFilterMappingFor(aiFilters), {
-      applyCondition(nextQuery, condition) {
-        if (condition.field !== 'skills') return nextQuery
-        if (!skillCandidateIds?.length) return nextQuery.eq('id', '__no_match__')
-        return nextQuery.in('id', skillCandidateIds)
-      },
-      orClauses(normalized) {
-        const clauses = []
-        if (skillCandidateIds?.length && normalized.some(condition => condition.field === 'skills')) clauses.push(`id.in.(${skillCandidateIds.join(',')})`)
-        if (associationCandidateIds?.length) clauses.push(`id.in.(${associationCandidateIds.join(',')})`)
-        return clauses
-      }
-    })
-    query = appliedAi.query
-    if (!localAiFilter) query = query.range(from, to)
+    if (aiFilters?.mode === 'ast') {
+      query = (await applyCandidateAstQuery(supabase, query, aiFilters.root)).query
+    }
+    query = query.range(from, to)
     const { data, error, count } = await query
 
     if (error) {
@@ -1155,10 +1092,9 @@ async function listCandidates(req, res) {
     }
 
     flattened = await enrichCandidateRows(flattened)
-    if (localAiFilter) flattened = applySharedFilters('candidates', flattened, aiFilters, candidateFilterValue)
 
-    const total = localAiFilter ? flattened.length : count || 0
-    const paged = localAiFilter ? flattened.slice(from, to + 1) : flattened.slice(0, limit)
+    const total = count || 0
+    const paged = flattened.slice(0, limit)
     const safeRows = await stripHiddenFields('candidates', paged, await isAdmin(req.user))
 
     return res.json({
@@ -1169,6 +1105,7 @@ async function listCandidates(req, res) {
       limit
     })
   } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'listCandidates', err)
   }
 }
@@ -1662,11 +1599,11 @@ async function buildAiCandidateFilters(req, res) {
       return res.status(400).json({ error: 'prompt is required' })
     }
 
-    const result = await parseAiFilters('candidates', prompt)
+    const allowedFields = await allowedCandidateFilterFields(req.user)
+    const result = await parseAiFilters('candidates', prompt, { allowedFields })
+    await resolveCandidateFilterReferences(result.filters)
     return res.json(result)
   } catch (err) {
-    const fallback = validateAiFilters('candidates', null, req.body.prompt)
-    if (fallback) return res.json({ filters: fallback, fallback: true })
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'buildAiCandidateFilters', err)
   }

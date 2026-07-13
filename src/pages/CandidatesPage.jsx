@@ -18,7 +18,7 @@ import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtecte
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS, REQUIRED_CANDIDATE_STATUS_ERROR, candidateStatusFormValue, isCandidateStatusSelected } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
-import { highlightText, isSimpleKeywordSearch, keywordFilters } from '../utils/aiFilterUi'
+import { highlightText } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 
@@ -167,31 +167,11 @@ function CandidatesTableSkeleton({ columns, tableMinWidth }) {
     </table>
   )
 }
-const AI_FILTER_FIELDS = [
-  'candidate_id',
-  'name',
-  'city',
-  'state',
-  'currentDesignation',
-  'email',
-  'mobile',
-  'experience',
-  'salary',
-  'consultant',
-  'client',
-  'job',
-  'clientMobile',
-  'status',
-  'skills',
-  'education'
-]
-
 const SORT_OPTIONS = [
   { field: 'candidate_id', label: 'Candidate ID', toggle: true },
   { field: 'candidate_name', label: 'Alphabetic Order', toggle: true },
   { field: 'consultant', label: 'Consultant', toggle: false }
 ]
-const CANDIDATE_AI_SEARCH_FIELDS = ['candidate_id', 'candidate_name', 'consultant', 'job_id', 'email', 'mobile', 'designation', 'organisation', 'experience', 'skills', 'client_id', 'client_name', 'role', 'date', 'current_ctc', 'expected_ctc', 'offered_ctc', 'date_of_joining', 'current_location', 'notice_period', 'open_to_relocate', 'comments', 'status', 'month', 'linkedin', 'cv']
 const CANDIDATE_PERMISSION_BY_COLUMN = {
   candidateDisplayId: 'candidate_display_id',
   date: 'created_at',
@@ -219,35 +199,6 @@ const CANDIDATE_PERMISSION_BY_COLUMN = {
   cv: 'cv_link',
   month: 'created_at_month'
 }
-const CANDIDATE_PERMISSION_BY_AI_FIELD = {
-  candidate_id: 'candidate_display_id',
-  candidate_name: 'full_name',
-  consultant: 'consultant_name',
-  job_id: 'job_id',
-  email: 'email',
-  mobile: 'mobile_number',
-  designation: 'current_designation',
-  organisation: 'current_organisation',
-  experience: 'experience_years',
-  skills: 'skills',
-  client_id: 'client_id',
-  client_name: 'client_name',
-  role: 'job_title',
-  date: 'created_at',
-  current_ctc: 'current_salary',
-  expected_ctc: 'expected_salary',
-  offered_ctc: 'current_salary',
-  date_of_joining: 'created_at',
-  current_location: 'location',
-  notice_period: 'notice_period',
-  open_to_relocate: 'open_to_relocate',
-  comments: 'notes',
-  status: 'status',
-  month: 'created_at_month',
-  linkedin: 'linkedin_url',
-  cv: 'cv_link'
-}
-
 /* ====== Empty forms ====== */
 const EMPTY_CAND = {
   name:'', email:'', mobile:'', designation:'', city:'', state:'',
@@ -398,6 +349,7 @@ export default function CandidatesPage() {
   const pendingRealtimeRefreshRef = useRef(false)
   const assignmentSourceRef = useRef(null)
   const nextCandidateIdRequestRef = useRef(0)
+  const aiFilterRequestRef = useRef(0)
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -839,6 +791,7 @@ export default function CandidatesPage() {
   }
 
   const clearFilters = () => {
+    aiFilterRequestRef.current += 1
     setFilterJob('All')
     setAiFilterText('')
     setAiFilters(null)
@@ -848,6 +801,7 @@ export default function CandidatesPage() {
   }
 
   const clearAiFilter = () => {
+    aiFilterRequestRef.current += 1
     setAiFilterText('')
     setAiFilters(null)
     setAiAppliedPrompt('')
@@ -1156,42 +1110,32 @@ export default function CandidatesPage() {
       clearAiFilter()
       return
     }
-    const visibleAiFields = CANDIDATE_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'candidates', CANDIDATE_PERMISSION_BY_AI_FIELD[field], isAdmin))
-    if (isSimpleKeywordSearch('candidates', prompt)) {
-      setAiFilters(keywordFilters('candidates', prompt, visibleAiFields))
-      setAiAppliedPrompt(prompt)
-      setAiFilterError('')
-      setPage(1)
-      return
-    }
+    const requestId = ++aiFilterRequestRef.current
     setAiFilterLoading(true)
     setAiFilterError('')
     try {
       const response = await fetch('/api/candidates/ai-filter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          allowedFields: AI_FILTER_FIELDS
-        })
+        body: JSON.stringify({ prompt })
       })
       const payload = await response.json().catch(() => ({}))
 
       if (!response.ok) {
         throw new Error(payload.error || 'AI filter failed.')
       }
+      if (requestId !== aiFilterRequestRef.current) return
+      if (!payload.filters?.root) throw new Error("I couldn't confidently understand this filter. Try specifying a candidate field, condition, and value.")
 
-      setAiFilters(payload.filters || null)
+      setAiFilters(payload.filters)
       setAiAppliedPrompt(prompt)
       setPage(1)
     } catch (err) {
+      if (requestId !== aiFilterRequestRef.current) return
       notifyAiQuota(err.message)
-      setAiFilters(keywordFilters('candidates', prompt, visibleAiFields))
-      setAiAppliedPrompt(prompt)
-      setAiFilterError('')
-      setPage(1)
+      setAiFilterError(err.message || "I couldn't confidently understand this filter. Try specifying a candidate field, condition, and value.")
     } finally {
-      setAiFilterLoading(false)
+      if (requestId === aiFilterRequestRef.current) setAiFilterLoading(false)
     }
   }
 
