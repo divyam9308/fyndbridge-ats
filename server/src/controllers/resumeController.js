@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require('uuid')
-const { parseResume } = require('../services/resumeParser')
+const { parseBulkResume } = require('../services/bulkResumeParser')
 const supabase = require('../services/supabaseAdmin')
 const fs = require('fs/promises')
 const path = require('path')
@@ -78,7 +78,7 @@ async function parseOne(file) {
   }
 
   try {
-    const parsed = await parseResume(file.path)
+    const parsed = await parseBulkResume(file)
     return rowFromParsed(file, parsed, null, storage, warnings)
   } catch (err) {
     return rowFromParsed(file, null, err.message || 'Unable to parse resume', storage, warnings)
@@ -185,4 +185,3 @@ module.exports = {
   openResume,
   discardTempResumes
 }
-

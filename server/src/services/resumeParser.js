@@ -169,16 +169,7 @@ async function extractTextWithOcr(fileBuffer) {
   }
 }
 
-async function parseResume(filePath) {
-  const fileBuffer = await fs.readFile(filePath)
-
-  const parsed = await pdfParse(fileBuffer)
-  let rawText = parsed.text || ''
-
-  if (rawText.trim().length < 100) {
-    rawText = await extractTextWithOcr(fileBuffer)
-  }
-
+async function parseResumeText(rawText) {
   const extracted = extractFields(rawText)
   let aiExtracted = null
   try {
@@ -208,7 +199,21 @@ async function parseResume(filePath) {
   }
 }
 
-module.exports = {
-  parseResume
+async function parseResume(filePath) {
+  const fileBuffer = await fs.readFile(filePath)
+
+  const parsed = await pdfParse(fileBuffer)
+  let rawText = parsed.text || ''
+
+  if (rawText.trim().length < 100) {
+    rawText = await extractTextWithOcr(fileBuffer)
+  }
+
+  return parseResumeText(rawText)
 }
 
+module.exports = {
+  extractTextWithOcr,
+  parseResume,
+  parseResumeText
+}
