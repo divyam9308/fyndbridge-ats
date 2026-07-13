@@ -1,7 +1,7 @@
 .employee-management-section {
-  --employee-active: #238b57;
-  --employee-leave: #c58e0b;
-  --employee-inactive: #7a8496;
+  --employee-active: #25a768;
+  --employee-leave: #DAB111;
+  --employee-inactive: var(--admin-navy);
 }
 
 .employee-mgmt-header-icon {
@@ -114,6 +114,17 @@
   color: #fff;
 }
 
+.employee-mgmt-filters button.is-filter-active.is-active {
+  border-color: var(--employee-active);
+  background: var(--employee-active);
+}
+
+.employee-mgmt-filters button.is-filter-on_leave.is-active {
+  border-color: rgba(218, 177, 17, 0.45);
+  background: #ffe5a3;
+  color: var(--admin-navy);
+}
+
 .employee-mgmt-list {
   display: flex;
   min-height: 480px;
@@ -200,7 +211,7 @@
   height: 8px;
   border-radius: 50%;
   background: var(--employee-inactive);
-  box-shadow: 0 0 0 3px rgba(122, 132, 150, 0.12);
+  box-shadow: 0 0 0 3px rgba(0, 18, 100, 0.1);
 }
 
 .employee-mgmt-list > button > i.is-active {
@@ -321,7 +332,9 @@
 }
 
 .employee-mgmt-status-control button.is-status-on_leave.is-selected {
-  background: #d69b12;
+  border-color: rgba(218, 177, 17, 0.45);
+  background: #ffe5a3;
+  color: var(--admin-navy);
 }
 
 .employee-mgmt-status-control button.is-status-inactive.is-selected {
@@ -467,6 +480,11 @@
 }
 
 .employee-reassign-modal {
+  --admin-navy: #001264;
+  --admin-gold: #DAB111;
+  --admin-border: #dbe3f1;
+  --employee-active: #25a768;
+  --employee-inactive: #001264;
   position: relative;
   inset: auto;
   width: min(650px, calc(100vw - 40px));
@@ -587,8 +605,8 @@
 }
 
 .employee-reassign-options > button em.is-inactive {
-  background: #eef0f4;
-  color: #697386;
+  background: var(--admin-navy);
+  color: #fff;
 }
 
 .employee-reassign-options > p {

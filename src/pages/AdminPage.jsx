@@ -268,7 +268,9 @@ export default function AdminPage() {
   const [draftPageViewPermissions, setDraftPageViewPermissions] = useState(() => ({ ...PAGE_VIEW_DEFAULTS }))
   const [savedAttendancePermissions, setSavedAttendancePermissions] = useState(() => loadAttendancePermissions())
   const [draftAttendancePermissions, setDraftAttendancePermissions] = useState(() => loadAttendancePermissions())
+  const [employeeManagementDirty, setEmployeeManagementDirty] = useState(false)
   const profilePickerRef = useRef(null)
+  const employeeManagementRef = useRef(null)
 
   const loadAdminData = useCallback(async () => {
     const bootstrap = await fetchAdminBootstrap()
@@ -373,7 +375,8 @@ export default function AdminPage() {
   const dashboardVisibilityDirty = dashboardRestricted !== savedDashboardRestricted
   const pageViewPermissionsDirty = !isSamePermissions(savedPageViewPermissions, draftPageViewPermissions)
   const attendancePermissionsDirty = !isSamePermissions(savedAttendancePermissions, draftAttendancePermissions)
-  const dirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty || pageViewPermissionsDirty || attendancePermissionsDirty
+  const permissionChangesDirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty || pageViewPermissionsDirty || attendancePermissionsDirty
+  const dirty = permissionChangesDirty || employeeManagementDirty
   const availableTabs = isSuperAdmin ? [...TABS, PERFORMANCE_TAB] : TABS
   const columnSource = activeTab === PERFORMANCE_TABLE_KEY ? PERFORMANCE_COLUMNS : (columns[activeTab] || [])
   const filteredColumns = columnSource.filter(column => {
@@ -433,6 +436,7 @@ export default function AdminPage() {
     setDraftPageViewPermissions(savedPageViewPermissions)
     setDraftAttendancePermissions(savedAttendancePermissions)
     setDashboardRestricted(savedDashboardRestricted)
+    employeeManagementRef.current?.cancelChanges()
     setError('')
   }
 
@@ -440,7 +444,7 @@ export default function AdminPage() {
     const changes = changedPermissions(savedPermissions, draftPermissions)
     const performanceChanged = isSuperAdmin && !isSamePermissions(savedPermissions?.[PERFORMANCE_TABLE_KEY], draftPermissions?.[PERFORMANCE_TABLE_KEY])
     const pageViewChanges = Object.entries(draftPageViewPermissions).filter(([pageKey, viewPermission]) => savedPageViewPermissions?.[pageKey] !== viewPermission)
-    if (!changes.length && !dashboardVisibilityDirty && !performanceChanged && !pageViewChanges.length && !attendancePermissionsDirty) return
+    if (!changes.length && !dashboardVisibilityDirty && !performanceChanged && !pageViewChanges.length && !attendancePermissionsDirty && !employeeManagementDirty) return
     setSavingPermissions(true)
     setError('')
     try {
@@ -474,13 +478,16 @@ export default function AdminPage() {
         setDraftAttendancePermissions(persisted)
         setSavedAttendancePermissions(persisted)
       }
-      setSavedPermissions(draftPermissions)
-      setPermissions(draftPermissions)
-      await refreshPermissions()
-      notifyAdminPermissionsChanged()
+      if (permissionChangesDirty) {
+        setSavedPermissions(draftPermissions)
+        setPermissions(draftPermissions)
+        await refreshPermissions()
+        notifyAdminPermissionsChanged()
+      }
+      employeeManagementRef.current?.saveChanges()
     } catch (err) {
       setError(err.message)
-      await refreshPermissions().catch(() => null)
+      if (permissionChangesDirty) await refreshPermissions().catch(() => null)
     } finally {
       setSavingPermissions(false)
     }
@@ -720,15 +727,15 @@ export default function AdminPage() {
         </div>
       </Section>
 
-      <EmployeeManagement />
+      <EmployeeManagement ref={employeeManagementRef} onDirtyChange={setEmployeeManagementDirty} />
 
       {createPortal((
         <div className={`admin-unsaved-dock${dirty && !lockModalType ? ' is-visible' : ''}${savingPermissions ? ' is-saving' : ''}`} aria-hidden={!dirty || Boolean(lockModalType)}>
           <div className="admin-unsaved-dock-inner">
             <span><AlertTriangle size={18} /></span>
             <div>
-              <strong>Unsaved permission changes</strong>
-              <p>Review your edits and apply them across the workspace.</p>
+              <strong>{employeeManagementDirty ? (permissionChangesDirty ? 'Unsaved changes' : 'Unsaved employee changes') : 'Unsaved permission changes'}</strong>
+              <p>{employeeManagementDirty ? 'Review your employee updates and save them across the workspace.' : 'Review your edits and apply them across the workspace.'}</p>
             </div>
             <button className="admin-footer-cancel" type="button" onClick={cancelPermissionChanges} disabled={savingPermissions || !dirty}><X size={16} />Cancel</button>
             <button className="admin-footer-save" type="button" onClick={savePermissionChanges} disabled={savingPermissions || !dirty}><Save size={16} />{savingPermissions ? 'Saving...' : 'Save Changes'}</button>

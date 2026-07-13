@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowRightLeft, Briefcase, Building2, CheckCircle2, ChevronRight, CircleOff, Clock3, Info, Mail, Phone, Search, Users, X } from 'lucide-react'
 import { EMPLOYEE_MANAGEMENT_MOCK_DATA } from './employeeManagementMockData'
@@ -143,8 +143,13 @@ function ReassignmentModal({ source, employees, onClose, onConfirm }) {
   )
 }
 
-export default function EmployeeManagement() {
+function employeesMatch(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+const EmployeeManagement = forwardRef(function EmployeeManagement({ onDirtyChange }, ref) {
   const [employees, setEmployees] = useState(cloneEmployees)
+  const savedEmployeesRef = useRef(employees)
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(() => EMPLOYEE_MANAGEMENT_MOCK_DATA[0]?.id || '')
@@ -165,16 +170,34 @@ export default function EmployeeManagement() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
+  useImperativeHandle(ref, () => ({
+    saveChanges() {
+      savedEmployeesRef.current = employees.map(employee => ({ ...employee, clients: [...employee.clients], mandates: [...employee.mandates], candidates: [...employee.candidates] }))
+      onDirtyChange(false)
+    },
+    cancelChanges() {
+      const saved = savedEmployeesRef.current.map(employee => ({ ...employee, clients: [...employee.clients], mandates: [...employee.mandates], candidates: [...employee.candidates] }))
+      setEmployees(saved)
+      setReassignSourceId('')
+      onDirtyChange(false)
+    }
+  }), [employees, onDirtyChange])
+
+  const updateEmployees = nextEmployees => {
+    setEmployees(nextEmployees)
+    onDirtyChange(!employeesMatch(nextEmployees, savedEmployeesRef.current))
+  }
+
   const changeStatus = status => {
     if (!selectedEmployee) return
-    setEmployees(current => current.map(employee => employee.id === selectedEmployee.id ? { ...employee, status } : employee))
+    updateEmployees(employees.map(employee => employee.id === selectedEmployee.id ? { ...employee, status } : employee))
   }
 
   const confirmReassignment = (destinationId, categories) => {
     const source = employees.find(employee => employee.id === reassignSourceId)
     const destination = employees.find(employee => employee.id === destinationId)
     if (!source || !destination || !categories.length) return
-    setEmployees(current => current.map(employee => {
+    const nextEmployees = employees.map(employee => {
       if (employee.id === source.id) {
         return categories.reduce((next, key) => ({ ...next, [key]: [] }), employee)
       }
@@ -185,9 +208,10 @@ export default function EmployeeManagement() {
         }, employee)
       }
       return employee
-    }))
+    })
+    updateEmployees(nextEmployees)
     setReassignSourceId('')
-    setToast(`${categories.length} assignment ${categories.length === 1 ? 'category' : 'categories'} reassigned from ${source.name} to ${destination.name}.`)
+    setToast(`Reassignment staged from ${source.name} to ${destination.name}. Save changes to apply it.`)
   }
 
   return (
@@ -209,7 +233,7 @@ export default function EmployeeManagement() {
           </div>
           <div className="employee-mgmt-filters" aria-label="Filter employees by status">
             {[['all', 'All'], ...STATUS_OPTIONS.map(option => [option.value, option.label])].map(([value, label]) => (
-              <button key={value} type="button" className={statusFilter === value ? 'is-active' : ''} onClick={() => setStatusFilter(value)}>{label}</button>
+              <button key={value} type="button" className={`is-filter-${value}${statusFilter === value ? ' is-active' : ''}`} onClick={() => setStatusFilter(value)}>{label}</button>
             ))}
           </div>
           <div className="employee-mgmt-list">
@@ -259,4 +283,6 @@ export default function EmployeeManagement() {
       {toast && createPortal(<div className="notice-toast is-visible" role="status"><CheckCircle2 size={17} /><span>{toast}</span><button className="notice-toast-close" type="button" onClick={() => setToast('')} aria-label="Close"><X size={14} /></button></div>, document.body)}
     </section>
   )
-}
+})
+
+export default EmployeeManagement
