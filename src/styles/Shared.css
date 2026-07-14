@@ -658,6 +658,9 @@
   min-height: 620px;
   overflow-y: auto;
 }
+.table-card-popovers.candidates-table-card {
+  overflow-x: clip;
+}
 .candidates-table-card > .candidates-table-scroll {
   width: 100%;
   min-width: 100%;
