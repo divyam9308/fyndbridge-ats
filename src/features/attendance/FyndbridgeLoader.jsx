@@ -18,7 +18,7 @@ export function FyndbridgeLoader({ size = 84, label = 'Loading attendance...', c
       >
         <g
           fill="none"
-          stroke="#B39266"
+          stroke="#DAB111"
           strokeWidth="5"
           strokeLinecap="round"
           strokeLinejoin="round"
