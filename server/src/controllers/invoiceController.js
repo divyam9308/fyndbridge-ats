@@ -33,7 +33,7 @@ async function nextInvoiceDisplayId() {
 
 function entityPayload(body) {
   const billing = BILLING_ENTITIES.has(body.billing_entity) ? body.billing_entity : 'FCS'
-  const gst = GST_COMPONENTS.has(body.gst_component) ? body.gst_component : detectGstComponent(body.address, body.state, body.place_of_supply)
+  const gst = GST_COMPONENTS.has(body.gst_component) ? body.gst_component : detectGstComponent(body.state_code, body.state, body.place_of_supply, body.address)
   const gstin = nullable(body.gstin)
   return {
     legal_entity_name: nullable(body.legal_entity_name),
@@ -132,7 +132,7 @@ async function invoiceInput(body) {
     ...entity, ...body,
     billing_entity: BILLING_ENTITIES.has(body.billing_entity) ? body.billing_entity : entity.billing_entity || 'FCS',
     model: MODELS.has(body.model) ? body.model : 'joining_percentage',
-    gst_component: GST_COMPONENTS.has(body.gst_component) ? body.gst_component : entity.gst_component || detectGstComponent(entity.address, entity.state, entity.place_of_supply)
+    gst_component: detectGstComponent(entity.state_code, entity.state, entity.place_of_supply, entity.address)
   }
   const invoiceDate = body.invoice_date || new Date().toISOString().slice(0, 10)
   return { entity, input, invoiceDate, billing: input.billing_entity, calc: calculateInvoice(input) }

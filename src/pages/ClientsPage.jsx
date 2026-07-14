@@ -1390,7 +1390,7 @@ export default function ClientsPage() {
           onUploadResumes={() => navigate('/dashboard/candidates', { state: { action: 'upload-resumes' } })}
           onAddCandidate={() => navigate('/dashboard/candidates', { state: { action: 'add-candidate' } })}
           onAddClient={openModal}
-          onAddJob={() => navigate('/dashboard/jobs', { state: { action: 'add-job' } })}
+          onAddJob={() => navigate('/dashboard/jobs?new=mandate')}
         />
         <div className="candidate-columns-control" ref={columnsDropdownRef}>
           <button className="filter-select candidate-columns-btn" type="button" onClick={(event) => { setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setColumnsOpen(open => !open) }}>

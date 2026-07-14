@@ -2083,7 +2083,7 @@ export default function CandidatesPage() {
           onUploadResumes={() => fileInputRef.current?.click()}
           onAddCandidate={openAddModal}
           onAddClient={() => navigate('/dashboard/clients', { state: { action: 'add-client' } })}
-          onAddJob={() => navigate('/dashboard/jobs', { state: { action: 'add-job' } })}
+          onAddJob={() => navigate('/dashboard/jobs?new=mandate')}
         />
         <div className="candidate-columns-control" ref={columnsDropdownRef}>
           <button

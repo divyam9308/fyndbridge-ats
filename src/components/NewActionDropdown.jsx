@@ -1,16 +1,19 @@
 import { useState } from 'react'
 import { Briefcase, Building2, Plus, Upload, UserPlus } from 'lucide-react'
 import FloatingDropdown from './FloatingDropdown'
+import { preloadRoute } from '../utils/routePreload'
 
 export default function NewActionDropdown({ onUploadResumes, onAddCandidate, onAddClient, onAddJob }) {
   const [open, setOpen] = useState(false)
   const [anchorRect, setAnchorRect] = useState(null)
   const [anchorEl, setAnchorEl] = useState(null)
 
-  const item = (label, Icon, action) => (
+  const item = (label, Icon, action, preloadPath = '') => (
     <button
       className="new-action-item"
       type="button"
+      onPointerEnter={() => preloadPath && preloadRoute(preloadPath)}
+      onFocus={() => preloadPath && preloadRoute(preloadPath)}
       onClick={() => {
         setOpen(false)
         action?.()
@@ -29,10 +32,10 @@ export default function NewActionDropdown({ onUploadResumes, onAddCandidate, onA
       </button>
       {open && (
         <FloatingDropdown anchorRect={anchorRect} ignoreElement={anchorEl} className="new-action-dropdown" minWidth={178} onClose={() => setOpen(false)}>
-          {item('Upload resumes', Upload, onUploadResumes)}
-          {item('Add candidate', UserPlus, onAddCandidate)}
-          {item('Add client', Building2, onAddClient)}
-          {item('Add mandate', Briefcase, onAddJob)}
+          {item('Upload resumes', Upload, onUploadResumes, '/dashboard/candidates')}
+          {item('Add candidate', UserPlus, onAddCandidate, '/dashboard/candidates')}
+          {item('Add client', Building2, onAddClient, '/dashboard/clients')}
+          {item('Add mandate', Briefcase, onAddJob, '/dashboard/jobs')}
         </FloatingDropdown>
       )}
     </div>

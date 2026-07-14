@@ -10,33 +10,54 @@ const COMPANY = {
   FCS: {
     name: 'FyndBridge Consulting Services',
     address: ['Ground Floor, 20, Okhla Industrial Estate Phase 3,', 'New Delhi, South East Delhi, Delhi, 110020'],
+    mobile: '9717773066',
+    telephone: '9717773066',
+    email: 'partner@fyndbridge.in',
+    website: 'www.fyndbridge.in',
+    state: 'Delhi',
+    stateCode: '07',
     gst: 'GSTIN: 07AAJFF1433D1ZV',
     pan: 'AAJFF1433D',
-    bank: ['ICICI Bank Limited', '102305501028', 'ICIC0001023', 'D-1, Alaknanda Shopping Complex,', 'New Delhi - 110019'],
-    sign: ['For FyndBridge Consulting Services', 'Authorized Signatory'],
+    bank: {
+      name: 'ICICI Bank Limited',
+      account: '102305501028',
+      ifsc: 'ICIC0001023',
+      branch: 'D-1, Alaknanda Shopping Complex, New Delhi - 110019'
+    },
+    reverseCharge: 'Tax Payable on reverse charge basis : No',
     prefix: 'FB',
     feeLabel: 'Professional Fees'
   },
   FCAPL: {
     name: 'FyndBridge Consultants & Advisors Private Limited',
     address: ['Second Floor, House No- A-34, Pocket A-8,', 'Kalkaji Extension, Behind Aggarwal Sweet House,', 'New Delhi, South East Delhi, Delhi - 110019'],
+    mobile: '9717773066',
+    telephone: '9717773066',
+    email: 'partner@fyndbridge.in',
+    website: 'www.fyndbridge.in',
+    state: 'Delhi',
+    stateCode: '07',
     gst: 'GSTIN: 07AAFCF8821L1ZA  |  CIN: U70200DL2024PTC429251',
     pan: 'AAFCF8821L',
-    bank: ['State Bank of India', '42926962136', 'SBIN0000727', '233 OKHLA INDUSTRIAL ESTATE,', 'New Delhi - 110020'],
-    sign: ['For FyndBridge Consultants & Advisors Private Limited', 'Authorized Signatory'],
+    bank: {
+      name: 'State Bank of India',
+      account: '42926962136',
+      ifsc: 'SBIN0000727',
+      branch: '233 Okhla Industrial Estate, New Delhi - 110020'
+    },
+    reverseCharge: 'Our Payments on reverse charge basis: No',
     prefix: 'FCAPL',
     feeLabel: 'Professional Fee'
   }
 }
 
-const NAVY = '#0b3d91'
-const BORDER = '#b7c2da'
-const LIGHT = '#e8eef9'
-const WHITE = '#ffffff'
+const BLACK = '#000000'
 const REGULAR_FONT = 'InvoiceRegular'
 const BOLD_FONT = 'InvoiceBold'
+const MONEY_SCALE = 100n
+const RATE_SCALE = 10000n
 
-const firstExisting = (items) => items.find(item => fs.existsSync(item))
+const firstExisting = items => items.find(item => fs.existsSync(item))
 const FONT_PATHS = {
   regular: firstExisting([
     path.join(__dirname, '../../assets/fonts/NotoSans-Regular.ttf'),
@@ -53,9 +74,46 @@ const FONT_PATHS = {
   ])
 }
 
-const n = (value) => Number(String(value ?? '').replace(/₹|Rs\.?|,/gi, '').trim() || 0)
-const money = (value) => Math.round(n(value) * 100) / 100
-const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
+const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim()
+const isBlank = value => value === '' || value === null || value === undefined
+
+function decimalString(value) {
+  const stripped = String(value ?? '')
+    .replace(/₹|â‚¹|Rs\.?/gi, '')
+    .replace(/,/g, '')
+    .trim()
+  if (!stripped) return '0'
+  if (/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(stripped)) return stripped
+  const numeric = Number(stripped)
+  if (!Number.isFinite(numeric)) throw new Error('Amount fields must be numeric')
+  return numeric.toFixed(10).replace(/0+$/, '').replace(/\.$/, '') || '0'
+}
+
+function parseScaledInteger(value, decimalPlaces) {
+  const source = decimalString(value)
+  const negative = source.startsWith('-')
+  const unsigned = source.replace(/^[+-]/, '')
+  const [wholePart = '0', fractionPart = ''] = unsigned.split('.')
+  const padded = `${fractionPart}${'0'.repeat(decimalPlaces + 1)}`
+  let scaled = BigInt(wholePart || '0') * (10n ** BigInt(decimalPlaces)) + BigInt(padded.slice(0, decimalPlaces) || '0')
+  if (Number(padded[decimalPlaces] || '0') >= 5) scaled += 1n
+  return negative ? -scaled : scaled
+}
+
+const moneyToPaise = value => parseScaledInteger(value, 2)
+const rateToUnits = value => parseScaledInteger(value, 4)
+const paiseToAmount = value => Number(value) / 100
+const numberValue = value => Number(decimalString(value))
+
+function roundedDivision(numerator, denominator) {
+  if (denominator <= 0n) throw new Error('Invalid calculation denominator')
+  if (numerator < 0n) return -roundedDivision(-numerator, denominator)
+  return (numerator + denominator / 2n) / denominator
+}
+
+function percentageOfPaise(amountPaise, rate) {
+  return roundedDivision(amountPaise * rateToUnits(rate), 100n * RATE_SCALE)
+}
 
 function financialYear(dateValue) {
   const date = new Date(`${dateValue}T00:00:00`)
@@ -63,58 +121,82 @@ function financialYear(dateValue) {
   return `${String(year).slice(-2)}-${String(year + 1).slice(-2)}`
 }
 
-function detectGstComponent(...values) {
-  const text = values.map(clean).join(' ').toLowerCase()
+function normalizeStateCode(value) {
+  const match = clean(value).match(/^0*(\d{1,2})$/)
+  if (!match) return ''
+  const number = Number(match[1])
+  return (number >= 1 && number <= 38) || number === 97 || number === 99 ? String(number).padStart(2, '0') : ''
+}
+
+function detectGstComponent(stateCode, ...values) {
+  const normalizedCode = normalizeStateCode(stateCode)
+  if (normalizedCode) return normalizedCode === '07' ? 'CGST_SGST' : 'IGST'
+  const text = [stateCode, ...values].map(clean).join(' ').toLowerCase()
   return /\b(new\s+delhi|delhi|south east delhi|north delhi|south delhi|east delhi|west delhi|central delhi)\b/.test(text) ? 'CGST_SGST' : 'IGST'
 }
 
-function calculateTaxable(input) {
-  const model = MODELS.has(input.model) ? input.model : 'joining_percentage'
-  if (!MODELS.has(model)) throw new Error('Invalid model')
-  const ctc = n(input.ctc_lpa)
-  ;['ctc_lpa', 'model_percent', 'model_flat_fee', 'retainer_amount', 'project_amount', 'jra_adjustment_value', 'jra_base_value', 'jra_flat_fee', 'others_amount'].forEach(field => {
-    if (input[field] !== '' && input[field] !== null && input[field] !== undefined && (!Number.isFinite(n(input[field])) || n(input[field]) < 0)) throw new Error('Calculation fields must be numeric and non-negative')
+function validateNonNegative(input, fields, message) {
+  fields.forEach(field => {
+    if (isBlank(input[field])) return
+    const value = numberValue(input[field])
+    if (!Number.isFinite(value) || value < 0) throw new Error(message)
   })
-  if (model === 'joining_percentage') return money(ctc * n(input.model_percent) / 100)
-  if (model === 'joining_flat_fee') return money(input.model_flat_fee)
-  if (model === 'retainer') return money(input.retainer_amount)
-  if (model === 'project') return money(input.project_amount)
-  if (model === 'jra_adjustment_percentage') return money(ctc * n(input.model_percent) / 100 - n(input.jra_adjustment_value))
-  if (model === 'jra_adjustment_flat_fee') return money(n(input.jra_base_value) - n(input.jra_flat_fee))
-  return money(input.others_amount)
+}
+
+function calculateTaxablePaise(input) {
+  const model = MODELS.has(input.model) ? input.model : 'joining_percentage'
+  validateNonNegative(input, ['ctc_lpa', 'model_percent', 'model_flat_fee', 'retainer_amount', 'project_amount', 'jra_adjustment_value', 'jra_base_value', 'jra_flat_fee', 'others_amount'], 'Calculation fields must be numeric and non-negative')
+  if (model === 'joining_percentage') return percentageOfPaise(moneyToPaise(input.ctc_lpa), input.model_percent)
+  if (model === 'joining_flat_fee') return moneyToPaise(input.model_flat_fee)
+  if (model === 'retainer') return moneyToPaise(input.retainer_amount)
+  if (model === 'project') return moneyToPaise(input.project_amount)
+  if (model === 'jra_adjustment_percentage') return percentageOfPaise(moneyToPaise(input.ctc_lpa), input.model_percent) - moneyToPaise(input.jra_adjustment_value)
+  if (model === 'jra_adjustment_flat_fee') return moneyToPaise(input.jra_base_value) - moneyToPaise(input.jra_flat_fee)
+  return moneyToPaise(input.others_amount)
+}
+
+function roundInvoiceTotalPaise(totalPaise) {
+  const exact = BigInt(totalPaise)
+  const fraction = ((exact % MONEY_SCALE) + MONEY_SCALE) % MONEY_SCALE
+  if (fraction === 0n) return { finalPaise: exact, adjustmentPaise: 0n, type: null }
+  if (fraction < 50n) return { finalPaise: exact - fraction, adjustmentPaise: fraction, type: 'LESS' }
+  const adjustment = MONEY_SCALE - fraction
+  return { finalPaise: exact + adjustment, adjustmentPaise: adjustment, type: 'MORE' }
 }
 
 function calculateInvoice(input) {
   if (!BILLING_ENTITIES.has(input.billing_entity)) throw new Error('Invalid billing entity')
-  const gstComponent = GST_COMPONENTS.has(input.gst_component) ? input.gst_component : detectGstComponent(input.address, input.state, input.place_of_supply)
-  ;['igst_rate', 'cgst_rate', 'sgst_rate'].forEach(field => {
-    if (input[field] !== '' && input[field] !== null && input[field] !== undefined && (!Number.isFinite(n(input[field])) || n(input[field]) < 0)) throw new Error('GST rates must be numeric and non-negative')
-  })
-  const taxable = calculateTaxable(input)
-  if (taxable < 0) throw new Error('Taxable amount cannot be negative')
-  const igstAmount = gstComponent === 'IGST' ? money(taxable * n(input.igst_rate || 18) / 100) : null
-  const cgstAmount = gstComponent === 'CGST_SGST' ? money(taxable * n(input.cgst_rate || 9) / 100) : null
-  const sgstAmount = gstComponent === 'CGST_SGST' ? money(taxable * n(input.sgst_rate || 9) / 100) : null
-  const tax = money((igstAmount || 0) + (cgstAmount || 0) + (sgstAmount || 0))
-  const before = money(taxable + tax)
-  const grand = Math.round(before)
-  const rounding = money(Math.abs(grand - before))
+  validateNonNegative(input, ['igst_rate', 'cgst_rate', 'sgst_rate'], 'GST rates must be numeric and non-negative')
+  const gstComponent = detectGstComponent(input.state_code, input.state, input.place_of_supply, input.address)
+  const taxablePaise = calculateTaxablePaise(input)
+  if (taxablePaise < 0n) throw new Error('Taxable amount cannot be negative')
+
+  const igstRate = isBlank(input.igst_rate) ? 18 : numberValue(input.igst_rate)
+  const cgstRate = isBlank(input.cgst_rate) ? 9 : numberValue(input.cgst_rate)
+  const sgstRate = isBlank(input.sgst_rate) ? 9 : numberValue(input.sgst_rate)
+  const igstPaise = gstComponent === 'IGST' ? percentageOfPaise(taxablePaise, igstRate) : 0n
+  const cgstPaise = gstComponent === 'CGST_SGST' ? percentageOfPaise(taxablePaise, cgstRate) : 0n
+  const sgstPaise = gstComponent === 'CGST_SGST' ? percentageOfPaise(taxablePaise, sgstRate) : 0n
+  const taxPaise = igstPaise + cgstPaise + sgstPaise
+  const beforePaise = taxablePaise + taxPaise
+  const rounded = roundInvoiceTotalPaise(beforePaise)
+
   return {
-    taxable_amount: taxable,
+    taxable_amount: paiseToAmount(taxablePaise),
     gst_component: gstComponent,
-    igst_rate: gstComponent === 'IGST' ? n(input.igst_rate || 18) : null,
-    igst_amount: igstAmount,
-    cgst_rate: gstComponent === 'CGST_SGST' ? n(input.cgst_rate || 9) : null,
-    cgst_amount: cgstAmount,
-    sgst_rate: gstComponent === 'CGST_SGST' ? n(input.sgst_rate || 9) : null,
-    sgst_amount: sgstAmount,
-    total_tax_amount: tax,
-    total_before_rounding: before,
-    rounding_type: rounding ? (grand > before ? 'MORE' : 'LESS') : null,
-    rounding_amount: rounding,
-    grand_total: grand,
-    amount_in_words: `INR ${amountWords(grand)} Only`,
-    tax_amount_in_words: `${input.billing_entity === 'FCAPL' && !String(tax).includes('.') ? 'INR ' : ''}${amountWords(tax)} Only`
+    igst_rate: gstComponent === 'IGST' ? igstRate : null,
+    igst_amount: gstComponent === 'IGST' ? paiseToAmount(igstPaise) : null,
+    cgst_rate: gstComponent === 'CGST_SGST' ? cgstRate : null,
+    cgst_amount: gstComponent === 'CGST_SGST' ? paiseToAmount(cgstPaise) : null,
+    sgst_rate: gstComponent === 'CGST_SGST' ? sgstRate : null,
+    sgst_amount: gstComponent === 'CGST_SGST' ? paiseToAmount(sgstPaise) : null,
+    total_tax_amount: paiseToAmount(taxPaise),
+    total_before_rounding: paiseToAmount(beforePaise),
+    rounding_type: rounded.type,
+    rounding_amount: paiseToAmount(rounded.adjustmentPaise),
+    grand_total: paiseToAmount(rounded.finalPaise),
+    amount_in_words: `INR ${amountWordsFromPaise(rounded.finalPaise)} Only`,
+    tax_amount_in_words: `${taxWordsFromPaise(taxPaise)} Only`
   }
 }
 
@@ -130,7 +212,7 @@ function under1000(num) {
   return [hundred ? `${ONES[hundred]} Hundred` : '', rest ? under100(rest) : ''].filter(Boolean).join(' ')
 }
 function rupeeWords(num) {
-  let value = Math.floor(Math.abs(n(num)))
+  let value = Number(BigInt(num))
   if (!value) return 'Zero'
   const parts = []
   const crore = Math.floor(value / 10000000); value %= 10000000
@@ -142,14 +224,29 @@ function rupeeWords(num) {
   if (value) parts.push(under1000(value))
   return parts.join(' ')
 }
+function amountWordsFromPaise(paise) {
+  const absolute = BigInt(paise) < 0n ? -BigInt(paise) : BigInt(paise)
+  const rupees = absolute / MONEY_SCALE
+  const remainder = absolute % MONEY_SCALE
+  return remainder ? `${rupeeWords(rupees)} and ${rupeeWords(remainder)} Paise` : rupeeWords(rupees)
+}
+function taxWordsFromPaise(paise) {
+  const absolute = BigInt(paise) < 0n ? -BigInt(paise) : BigInt(paise)
+  const rupees = absolute / MONEY_SCALE
+  const remainder = absolute % MONEY_SCALE
+  return `${rupeeWords(rupees)} Rupees${remainder ? ` and ${rupeeWords(remainder)} Paise` : ''}`
+}
 function amountWords(value) {
-  const rupees = Math.floor(n(value))
-  const paise = Math.round((n(value) - rupees) * 100)
-  return paise ? `${rupeeWords(rupees)} and ${rupeeWords(paise)} Paise` : rupeeWords(rupees)
+  return amountWordsFromPaise(moneyToPaise(value))
 }
 
 function formatRs(value) {
-  return `₹${n(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const paise = moneyToPaise(value)
+  const negative = paise < 0n
+  const absolute = negative ? -paise : paise
+  const rupees = absolute / MONEY_SCALE
+  const fraction = String(absolute % MONEY_SCALE).padStart(2, '0')
+  return `${negative ? '-' : ''}₹${Number(rupees).toLocaleString('en-IN')}.${fraction}`
 }
 
 function normalizeInvoiceText(value) {
@@ -159,6 +256,7 @@ function normalizeInvoiceText(value) {
     .replace(/\bRs\.?\s*/gi, '₹')
     .replace(/₹\s+/g, '₹')
     .replace(/₹([\d,]+)(?:\.(\d{1,2}))?/g, (_, amount, decimals = '') => `₹${amount}.${decimals.padEnd(2, '0')}`)
+    .trim()
 }
 
 function setupFonts(doc) {
@@ -170,40 +268,253 @@ function setupFonts(doc) {
   }
 }
 
-function drawCell(doc, x, y, w, h, text, opts = {}) {
-  const fonts = doc._invoiceFonts || { regular: 'Helvetica', bold: 'Helvetica-Bold' }
-  const padding = opts.padding ?? 5
-  doc.save()
-  doc.lineWidth(opts.lineWidth || 0.7).strokeColor(opts.strokeColor || BORDER)
-  if (opts.fill) doc.rect(x, y, w, h).fillAndStroke(opts.fill, opts.strokeColor || BORDER)
-  else doc.rect(x, y, w, h).stroke()
-  const font = opts.bold ? fonts.bold : fonts.regular
-  let size = opts.size || 8.5
-  const usableWidth = w - padding * 2
-  const usableHeight = h - padding * 2
+function line(doc, x1, y1, x2, y2, width = 0.84) {
+  doc.save().lineWidth(width).strokeColor(BLACK).moveTo(x1, y1).lineTo(x2, y2).stroke().restore()
+}
+
+function rectangle(doc, x, y, width, height, lineWidth = 0.84) {
+  doc.save().lineWidth(lineWidth).strokeColor(BLACK).rect(x, y, width, height).stroke().restore()
+}
+
+function fitFontSize(doc, text, font, width, height, maxSize, minSize, singleLine = false) {
+  let size = maxSize
+  const content = String(text ?? '')
   doc.font(font)
-  while (size > (opts.minSize || 7) && doc.fontSize(size).heightOfString(String(text ?? ''), { width: usableWidth }) > usableHeight) size -= 0.5
-  doc.fillColor(opts.textColor || '#111827').font(font).fontSize(size)
-  doc.text(String(text ?? ''), x + padding, y + padding, {
+  while (size > minSize) {
+    doc.fontSize(size)
+    const tooWide = singleLine && doc.widthOfString(content) > width
+    const tooTall = doc.heightOfString(content, { width, lineGap: 0 }) > height
+    if (!tooWide && !tooTall) break
+    size -= 0.2
+  }
+  return Math.max(size, minSize)
+}
+
+function textBox(doc, text, x, y, width, height, options = {}) {
+  const fonts = doc._invoiceFonts
+  const paddingX = options.paddingX ?? 2
+  const paddingY = options.paddingY ?? 1.5
+  const font = options.bold ? fonts.bold : fonts.regular
+  const usableWidth = Math.max(1, width - paddingX * 2)
+  const usableHeight = Math.max(1, height - paddingY * 2)
+  const size = fitFontSize(doc, text, font, usableWidth, usableHeight, options.size || 7.5, options.minSize || 5.2, options.singleLine)
+  doc.fillColor(BLACK).font(font).fontSize(size).text(String(text ?? ''), x + paddingX, y + paddingY, {
     width: usableWidth,
     height: usableHeight,
-    align: opts.align || 'left',
-    valign: opts.valign || 'top'
+    align: options.align || 'left',
+    lineGap: 0,
+    lineBreak: options.singleLine ? false : true
   })
-  doc.restore()
+  return { size, height: doc.font(font).fontSize(size).heightOfString(String(text ?? ''), { width: usableWidth, lineGap: 0 }) }
+}
+
+function normalizedOptionalName(value) {
+  const optionalName = clean(value)
+  const placeholder = optionalName.toLowerCase().replace(/[.\s]/g, '')
+  return !optionalName || new Set(['-', '--', 'na', 'n/a', 'none', 'null', 'nil', 'notavailable', 'notapplicable', 'undefined']).has(placeholder) ? '' : optionalName
+}
+
+function drawClientDetails(doc, entity, x, y, width, height) {
+  textBox(doc, 'BILL TO:', x + 1, y + 1, width - 2, 13, { bold: true, size: 7.5, singleLine: true })
+  const insetX = x + 2
+  const contentWidth = width - 5
+  let cursor = y + 14
+  const legal = clean(entity.legal_entity_name)
+  const legalResult = textBox(doc, legal, insetX, cursor, contentWidth, 23, { bold: true, size: 7.2, minSize: 5.4 })
+  cursor += Math.min(23, legalResult.height + 1)
+  const optionalName = normalizedOptionalName(entity.optional_name)
+  if (optionalName) {
+    const optionalResult = textBox(doc, optionalName, insetX, cursor, contentWidth, 12, { size: 7, minSize: 5.2 })
+    cursor += Math.min(12, optionalResult.height + 1)
+  }
+  const detailTop = y + 69
+  textBox(doc, clean(entity.address), insetX, cursor, contentWidth, Math.max(8, detailTop - cursor - 1), { size: 6.8, minSize: 5.2 })
+
+  const rows = [
+    ['PAN / IT No', entity.pan],
+    ['Place of Supply', entity.place_of_supply],
+    ['State', [clean(entity.state), normalizeStateCode(entity.state_code) ? `Code: ${normalizeStateCode(entity.state_code)}` : clean(entity.state_code)].filter(Boolean).join('   ')],
+    ['GSTIN', entity.gstin],
+    ['Contact Person', entity.contact_person],
+    ['Email', entity.email]
+  ]
+  const rowHeight = (height - (detailTop - y)) / rows.length
+  const labelWidth = 87
+  rows.forEach(([label, value], index) => {
+    const rowY = detailTop + index * rowHeight
+    textBox(doc, label, insetX, rowY, labelWidth, rowHeight, { bold: true, size: 6.7, singleLine: true })
+    textBox(doc, clean(value), insetX + labelWidth, rowY, contentWidth - labelWidth, rowHeight, { size: 6.7, minSize: 4.8, singleLine: true })
+  })
+}
+
+function drawIssuerDetails(doc, company, x, y, width, height) {
+  const insetX = x + 3
+  const contentWidth = width - 6
+  const nameResult = textBox(doc, company.name, insetX, y + 2, contentWidth, 24, { bold: true, size: 7.5, minSize: 5.8 })
+  const cursor = y + 4 + Math.min(24, nameResult.height)
+  const details = [
+    `Regd Office: ${company.address.join(' ')}`,
+    `Mobile: ${company.mobile}`,
+    `Tel: ${company.telephone}`,
+    `Email: ${company.email}`,
+    company.website,
+    `State: ${company.state}   State Code: ${company.stateCode}`,
+    company.gst
+  ].join('\n')
+  textBox(doc, details, insetX, cursor, contentWidth, y + height - cursor - 2, { size: 6.8, minSize: 5.2 })
+}
+
+function drawServiceTable(doc, entity, invoice, overrides, company, y, rounded) {
+  const x = 22.5
+  const right = 579
+  const columns = [22.5, 69, 263.5, 332, 416, 473.5, right]
+  const headerBottom = y + 20
+  const taxBottom = rounded ? 464 : 489
+  const taxRows = invoice.gst_component === 'CGST_SGST' ? 2 : 1
+  const taxRowHeight = 15
+  const taxTop = taxBottom - taxRows * taxRowHeight
+
+  rectangle(doc, x, y, right - x, taxBottom - y)
+  line(doc, x, headerBottom, right, headerBottom, 1.8)
+  columns.slice(1, -1).forEach(columnX => line(doc, columnX, y, columnX, taxBottom))
+  for (let row = 0; row < taxRows; row += 1) line(doc, x, taxTop + row * taxRowHeight, right, taxTop + row * taxRowHeight)
+
+  const headers = ['SL.No', 'Description of Services', 'SAC', 'GST Rate', '%', 'Amount']
+  headers.forEach((label, index) => textBox(doc, label, columns[index], y, columns[index + 1] - columns[index], 20, { bold: true, size: 7.4, align: index === 1 ? 'center' : index === 5 ? 'right' : 'center', singleLine: true }))
+
+  textBox(doc, '1', columns[0], headerBottom, columns[1] - columns[0], 16, { size: 7.2, align: 'center', singleLine: true })
+  const feeText = normalizeInvoiceText(overrides.professional_fee_text || entity.professional_fee_text || '')
+  textBox(doc, [company.feeLabel, feeText].filter(Boolean).join('\n'), columns[1], headerBottom, columns[2] - columns[1], Math.min(62, taxTop - headerBottom), { size: 7.2, minSize: 5.5 })
+  textBox(doc, clean(entity.sac || invoice.sac || '998512'), columns[2], headerBottom, columns[3] - columns[2], 16, { size: 7.2, align: 'center', singleLine: true })
+  textBox(doc, formatRs(invoice.taxable_amount), columns[5], headerBottom, columns[6] - columns[5], 16, { size: 7.2, align: 'right', singleLine: true })
+
+  const taxRowsData = invoice.gst_component === 'CGST_SGST'
+    ? [['Central Tax (CGST)', invoice.cgst_rate, invoice.cgst_amount], ['State Tax (SGST)', invoice.sgst_rate, invoice.sgst_amount]]
+    : [['Integrated GST (IGST)', invoice.igst_rate, invoice.igst_amount]]
+  taxRowsData.forEach(([label, rate, amount], index) => {
+    const rowY = taxTop + index * taxRowHeight
+    textBox(doc, label, columns[1], rowY, columns[2] - columns[1], taxRowHeight, { size: 7.2, singleLine: true })
+    textBox(doc, clean(rate), columns[3], rowY, columns[4] - columns[3], taxRowHeight, { size: 7.2, align: 'center', singleLine: true })
+    textBox(doc, '%', columns[4], rowY, columns[5] - columns[4], taxRowHeight, { size: 7.2, align: 'center', singleLine: true })
+    textBox(doc, formatRs(amount), columns[5], rowY, columns[6] - columns[5], taxRowHeight, { size: 7.2, align: 'right', singleLine: true })
+  })
+  return taxBottom
+}
+
+function drawTotals(doc, invoice, y) {
+  const rounded = Boolean(invoice.rounding_type && moneyToPaise(invoice.rounding_amount) > 0n)
+  const rowHeight = 15
+  if (rounded) {
+    rectangle(doc, 22.5, y, 556.5, rowHeight)
+    textBox(doc, 'Total before Rounding Off', 22.5, y, 420, rowHeight, { size: 7.2, singleLine: true })
+    textBox(doc, formatRs(invoice.total_before_rounding), 473.5, y, 105.5, rowHeight, { size: 7.2, align: 'right', singleLine: true })
+    y += rowHeight
+    rectangle(doc, 22.5, y, 556.5, rowHeight)
+    textBox(doc, 'More: ROUNDING OFF', 22.5, y, 420, rowHeight, { size: 7.2, singleLine: true })
+    const sign = invoice.rounding_type === 'MORE' ? '(+)' : '(-)'
+    textBox(doc, `${sign}${formatRs(invoice.rounding_amount)}`, 473.5, y, 105.5, rowHeight, { size: 7.2, align: 'right', singleLine: true })
+    y += rowHeight
+  }
+  const finalHeight = rounded ? 15 : 16
+  rectangle(doc, 22.5, y, 556.5, finalHeight)
+  textBox(doc, 'Total', 22.5, y, 420, finalHeight, { bold: true, size: 7.4, singleLine: true })
+  textBox(doc, formatRs(invoice.grand_total), 473.5, y, 105.5, finalHeight, { bold: true, size: 7.4, align: 'right', singleLine: true })
+  return y + finalHeight
+}
+
+function drawAmountWords(doc, invoice, y) {
+  const height = 14
+  rectangle(doc, 22.5, y, 556.5, height)
+  textBox(doc, `Amount Chargeable (in words): ${invoice.amount_in_words}`, 22.5, y, 556.5, height, { bold: true, size: 7.1, minSize: 5.5, singleLine: true })
+  return y + height
+}
+
+function drawTaxSummary(doc, invoice, sac, y) {
+  const x = 22.5
+  const right = 579
+  if (invoice.gst_component === 'IGST') {
+    const columns = [x, 69, 195.5, 473.5, right]
+    const headerHeight = 22
+    const rowHeight = 14
+    const bottom = y + headerHeight + rowHeight * 2
+    rectangle(doc, x, y, right - x, bottom - y)
+    columns.slice(1, -1).forEach(columnX => line(doc, columnX, y, columnX, bottom))
+    line(doc, x, y + headerHeight, right, y + headerHeight)
+    line(doc, x, y + headerHeight + rowHeight, right, y + headerHeight + rowHeight)
+    const headers = ['SAC', 'Taxable Value', 'Integrated GST (IGST) – Rate', 'IGST Amount']
+    headers.forEach((label, index) => textBox(doc, label, columns[index], y, columns[index + 1] - columns[index], headerHeight, { bold: true, size: 7, align: 'center' }))
+    const values = [sac, formatRs(invoice.taxable_amount), `${clean(invoice.igst_rate)}%`, formatRs(invoice.igst_amount)]
+    values.forEach((value, index) => textBox(doc, value, columns[index], y + headerHeight, columns[index + 1] - columns[index], rowHeight, { size: 7, align: index === 1 || index === 3 ? 'right' : 'center', singleLine: true }))
+    const totals = ['Total', formatRs(invoice.taxable_amount), '', formatRs(invoice.igst_amount)]
+    totals.forEach((value, index) => textBox(doc, value, columns[index], y + headerHeight + rowHeight, columns[index + 1] - columns[index], rowHeight, { bold: true, size: 7, align: index === 1 || index === 3 ? 'right' : 'center', singleLine: true }))
+    return bottom
+  }
+
+  const groupHeight = 13
+  const headerHeight = 27
+  const rowHeight = 14
+  const bottom = y + headerHeight + rowHeight * 2
+  rectangle(doc, x, y, right - x, bottom - y)
+  ;[69, 195.5, 332, 473.5].forEach(columnX => line(doc, columnX, y, columnX, bottom))
+  ;[263.5, 416].forEach(columnX => line(doc, columnX, y + groupHeight, columnX, bottom))
+  line(doc, 195.5, y + groupHeight, 473.5, y + groupHeight)
+  line(doc, x, y + headerHeight, right, y + headerHeight)
+  line(doc, x, y + headerHeight + rowHeight, right, y + headerHeight + rowHeight)
+  textBox(doc, 'SAC', x, y, 46.5, headerHeight, { bold: true, size: 7, align: 'center' })
+  textBox(doc, 'Taxable Value', 69, y, 126.5, headerHeight, { bold: true, size: 7, align: 'center' })
+  textBox(doc, 'Central Tax (CGST)', 195.5, y, 136.5, groupHeight, { bold: true, size: 6.8, align: 'center', singleLine: true })
+  textBox(doc, 'State Tax (SGST)', 332, y, 141.5, groupHeight, { bold: true, size: 6.8, align: 'center', singleLine: true })
+  textBox(doc, 'Total Tax Amount', 473.5, y, 105.5, headerHeight, { bold: true, size: 6.8, align: 'center' })
+  ;[[195.5, 'Rate'], [263.5, 'Amount'], [332, 'Rate'], [416, 'Amount']].forEach(([columnX, label], index) => {
+    const nextX = [263.5, 332, 416, 473.5][index]
+    textBox(doc, label, columnX, y + groupHeight, nextX - columnX, headerHeight - groupHeight, { bold: true, size: 6.8, align: 'center', singleLine: true })
+  })
+  const values = [sac, formatRs(invoice.taxable_amount), `${clean(invoice.cgst_rate)}%`, formatRs(invoice.cgst_amount), `${clean(invoice.sgst_rate)}%`, formatRs(invoice.sgst_amount), formatRs(invoice.total_tax_amount)]
+  const totalValues = ['Total', formatRs(invoice.taxable_amount), '', formatRs(invoice.cgst_amount), '', formatRs(invoice.sgst_amount), formatRs(invoice.total_tax_amount)]
+  const cellStarts = [x, 69, 195.5, 263.5, 332, 416, 473.5]
+  const cellEnds = [69, 195.5, 263.5, 332, 416, 473.5, right]
+  ;[values, totalValues].forEach((row, rowIndex) => row.forEach((value, index) => textBox(doc, value, cellStarts[index], y + headerHeight + rowHeight * rowIndex, cellEnds[index] - cellStarts[index], rowHeight, { bold: rowIndex === 1, size: 6.8, align: [1, 3, 5, 6].includes(index) ? 'right' : 'center', singleLine: true })))
+  return bottom
+}
+
+function drawLowerDetails(doc, company, y, bottom) {
+  const splitX = 332
+  const detailsHeight = 80
+  const detailsBottom = Math.min(bottom - 88, y + detailsHeight)
+  rectangle(doc, 22.5, y, 556.5, detailsBottom - y)
+  line(doc, splitX, y, splitX, detailsBottom, 1.8)
+
+  textBox(doc, 'Description of Services', 23.5, y + 2, splitX - 24.5, 13, { bold: true, size: 7.2, singleLine: true })
+  textBox(doc, 'Permanent placement services, other than executive search services', 23.5, y + 15, splitX - 24.5, 25, { size: 6.8, minSize: 5.5 })
+  textBox(doc, `Company's PAN: ${company.pan}`, 23.5, detailsBottom - 29, splitX - 24.5, 13, { bold: true, size: 6.8, singleLine: true })
+  textBox(doc, company.reverseCharge, 23.5, detailsBottom - 15, splitX - 24.5, 13, { size: 6.5, minSize: 5.2, singleLine: true })
+
+  const bankRows = [
+    ['Bank Name', company.bank.name],
+    ['IFSC Code', company.bank.ifsc],
+    ['A/c No.', String(company.bank.account)],
+    ['Branch', company.bank.branch]
+  ]
+  const rowHeight = (detailsBottom - y) / bankRows.length
+  const labelWidth = 66
+  bankRows.forEach(([label, value], index) => {
+    const rowY = y + index * rowHeight
+    textBox(doc, label, splitX + 1, rowY, labelWidth, rowHeight, { bold: true, size: 6.7, singleLine: true })
+    textBox(doc, value, splitX + 1 + labelWidth, rowY, 579 - splitX - 2 - labelWidth, rowHeight, { size: 6.7, minSize: 4.9 })
+  })
+
+  line(doc, 22.5, detailsBottom, 579, detailsBottom, 1.8)
+  textBox(doc, `For ${company.name}`, splitX + 4, detailsBottom + 6, 579 - splitX - 8, 16, { bold: true, size: 7, minSize: 5.5, align: 'right', singleLine: true })
+  textBox(doc, 'Authorized Signatory', splitX + 4, bottom - 17, 579 - splitX - 8, 14, { size: 7, align: 'right', singleLine: true })
 }
 
 async function createInvoicePdf(data) {
-  const standard = await renderInvoicePdf(data)
-  if (data.invoice.gst_component === 'CGST_SGST') {
-    return (await renderInvoicePdf(data, true)).buffer
-  }
-  return standard.buffer
+  return (await renderInvoicePdf(data)).buffer
 }
 
-function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
+function renderInvoicePdf({ entity, invoice, overrides = {} }) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: compact ? 18 : 28 })
+    const doc = new PDFDocument({ size: 'LETTER', margin: 0, autoFirstPage: true, compress: true })
     const chunks = []
     let pageCount = 1
     doc.on('data', chunk => chunks.push(chunk))
@@ -211,192 +522,50 @@ function renderInvoicePdf({ entity, invoice, overrides }, compact = false) {
     doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), pageCount }))
     doc.on('error', reject)
     doc._invoiceFonts = setupFonts(doc)
-    const F = doc._invoiceFonts
 
     const company = COMPANY[invoice.billing_entity]
+    if (!company) return reject(new Error('Invalid billing entity'))
+    const outer = { x: 22.5, y: 22, right: 579, bottom: 764 }
+    const splitX = 332
+    const headerBottom = 67
+    const metaBottom = 85
+    const detailsBottom = 238
     const logo = path.join(__dirname, '../../../public/assets/fyndbridge-official-logo.png')
-    const top = compact ? 18 : 24
-    const headerY = compact ? 50 : 64
-    const headerHeight = compact ? 96 : 92
-    const headerTextY = compact ? 56 : 70
-    if (fs.existsSync(logo)) doc.image(logo, 32, top, { width: 92 })
-    doc.fillColor(NAVY).font(F.bold).fontSize(15).text('TAX INVOICE', 250, compact ? 20 : 28, { align: 'center', width: 110 })
-    doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, headerY, 530, headerHeight).stroke().moveTo(320, headerY).lineTo(320, headerY + headerHeight).stroke().restore()
-    doc.fontSize(invoice.billing_entity === 'FCAPL' ? 9.5 : 11).text(company.name, 40, headerTextY, { width: 272 })
-    doc.fillColor('#111827').font(F.regular).fontSize(invoice.billing_entity === 'FCAPL' ? 7.6 : 9)
-    company.address.forEach((line, index) => doc.text(`${index === 0 ? 'Regd Office: ' : ''}${line}`, { continued: false }))
-    doc.text('Mobile: 9717773066  |  Tel: 9717773066')
-    doc.text('Email: partner@fyndbridge.in  |  www.fyndbridge.in')
-    doc.text('State: Delhi   State Code: 07')
-    doc.text(company.gst)
 
-    const metaY = compact ? 62 : 72
-    drawCell(doc, 350, metaY, 112, 22, 'Invoice No.', { bold: true, fill: NAVY, textColor: WHITE, align: 'center', valign: 'center' })
-    drawCell(doc, 462, metaY, 80, 22, 'Dated', { bold: true, fill: NAVY, textColor: WHITE, align: 'center', valign: 'center' })
-    drawCell(doc, 350, metaY + 22, 112, 30, invoice.invoice_number, { size: 9, align: 'center', valign: 'center' })
-    drawCell(doc, 462, metaY + 22, 80, 30, dateDDMMYYYY(invoice.invoice_date), { size: 9, align: 'center', valign: 'center' })
+    rectangle(doc, outer.x, outer.y, outer.right - outer.x, outer.bottom - outer.y, 1.8)
+    line(doc, outer.x, headerBottom, outer.right, headerBottom, 1.8)
+    if (fs.existsSync(logo)) doc.image(logo, 28, 29, { width: 190 })
+    textBox(doc, 'TAX INVOICE', 443, 31, 132, 25, { bold: true, size: 14, minSize: 11, align: 'right', singleLine: true })
 
-    let y = compact ? 150 : 165
-    const infoX = 330
-    const pairs = [['PAN / IT No', entity.pan], ['Place of Supply', entity.place_of_supply], ['State', `${entity.state || '-'}   Code: ${entity.state_code || '-'}`], ['GSTIN', entity.gstin], ['Contact Person', entity.contact_person], ['Email', entity.email]]
-    const leftWidth = 272
-    const optionalName = clean(entity.optional_name) && clean(entity.optional_name) !== '-' ? clean(entity.optional_name) : ''
-    const leftHeight = 14 + doc.font(F.bold).fontSize(9).heightOfString(entity.legal_entity_name || '-', { width: leftWidth }) + (optionalName ? doc.heightOfString(optionalName, { width: leftWidth }) + 3 : 0) + 5 + doc.font(F.regular).fontSize(8.5).heightOfString(entity.address || '-', { width: leftWidth }) + 10
-    const rowHeights = pairs.map(([label, value]) => Math.max(compact ? 16 : 18, doc.font(F.regular).fontSize(label === 'Email' ? 7.5 : 8.5).heightOfString(value || '-', { width: 120 }) + (compact ? 6 : 8)))
-    const detailHeight = Math.max(leftHeight, rowHeights.reduce((sum, height) => sum + height, 0), compact ? 112 : 124)
-    doc.save().lineWidth(0.7).strokeColor(BORDER).rect(32, y - 4, 530, detailHeight).stroke().moveTo(320, y - 4).lineTo(320, y - 4 + detailHeight).stroke().restore()
-    doc.fillColor(NAVY).font(F.bold).fontSize(9).text('Bill To:', 40, y + 4)
-    let leftY = y + 18
-    doc.fillColor('#111827').font(F.bold).fontSize(9).text(entity.legal_entity_name || '-', 40, leftY, { width: leftWidth })
-    leftY += doc.heightOfString(entity.legal_entity_name || '-', { width: leftWidth }) + 5
-    if (optionalName) {
-      doc.font(F.regular).fontSize(8.5).text(optionalName, 40, leftY, { width: leftWidth })
-      leftY += doc.heightOfString(optionalName, { width: leftWidth }) + 3
-    }
-    doc.font(F.regular).fontSize(8.5).text(entity.address || '-', 40, leftY, { width: leftWidth })
-    let py = y
-    pairs.forEach(([label, value], index) => {
-      const rowHeight = rowHeights[index]
-      drawCell(doc, infoX - 8, py - 4, 96, rowHeight, label, { bold: true, fill: LIGHT, size: 8.5, padding: 4 })
-      drawCell(doc, infoX + 88, py - 4, 136, rowHeight, value || '-', { size: label === 'Email' ? 7.5 : 8.5, padding: 4, minSize: 7 })
-      py += rowHeight
-    })
+    line(doc, outer.x, metaBottom, outer.right, metaBottom, 1.8)
+    line(doc, splitX, headerBottom, splitX, detailsBottom, 1.8)
+    textBox(doc, 'Invoice No.:', 23.5, 69, 62, 14, { bold: true, size: 7.4, singleLine: true })
+    textBox(doc, invoice.invoice_number, 84, 69, splitX - 87, 14, { size: 7.4, minSize: 5.4, singleLine: true })
+    textBox(doc, 'Dated:', splitX + 2, 69, 42, 14, { bold: true, size: 7.4, singleLine: true })
+    textBox(doc, dateDDMMYYYY(invoice.invoice_date), splitX + 43, 69, outer.right - splitX - 45, 14, { size: 7.4, singleLine: true })
 
-    y += detailHeight + (compact ? 6 : 8)
-    const desc = `${company.feeLabel}\n${normalizeInvoiceText(overrides.professional_fee_text || entity.professional_fee_text || '')}`
-    const descH = Math.max(compact ? 60 : 68, doc.font(F.regular).fontSize(8.5).heightOfString(desc, { width: 245 }) + (compact ? 9 : 12))
-    const tableHeaderHeight = compact ? 22 : 24
-    const summaryHeight = compact ? 18 : 20
-    const totalHeight = compact ? 20 : 22
-    const header = { bold: true, align: 'center', valign: 'center', fill: NAVY, textColor: WHITE }
-    drawCell(doc, 32, y, 42, tableHeaderHeight, 'SL.No', header)
-    drawCell(doc, 74, y, 255, tableHeaderHeight, 'Description of Services', { ...header, align: 'left' })
-    drawCell(doc, 329, y, 58, tableHeaderHeight, 'SAC', header)
-    drawCell(doc, 387, y, 45, tableHeaderHeight, 'GST Rate', header)
-    drawCell(doc, 432, y, 25, tableHeaderHeight, '%', header)
-    drawCell(doc, 457, y, 105, tableHeaderHeight, 'Amount', { ...header, align: 'right' })
-    drawCell(doc, 32, y + tableHeaderHeight, 42, descH, '1', { align: 'center', padding: 8 })
-    drawCell(doc, 74, y + tableHeaderHeight, 255, descH, desc)
-    drawCell(doc, 329, y + tableHeaderHeight, 58, descH, entity.sac || '998512', { align: 'center' })
-    drawCell(doc, 387, y + tableHeaderHeight, 45, descH, '', { align: 'center' })
-    drawCell(doc, 432, y + tableHeaderHeight, 25, descH, '', { align: 'center' })
-    drawCell(doc, 457, y + tableHeaderHeight, 105, descH, formatRs(invoice.taxable_amount, invoice.rounding_type ? 0 : 0), { align: 'right' })
-    y += tableHeaderHeight + descH
-    const summaryRow = (label, amount, rate = '', percent = '') => {
-      drawCell(doc, 32, y, 42, summaryHeight, '')
-      drawCell(doc, 74, y, 255, summaryHeight, label, { bold: true, padding: 5 })
-      drawCell(doc, 329, y, 58, summaryHeight, '')
-      drawCell(doc, 387, y, 45, summaryHeight, rate, { align: 'center', padding: 5 })
-      drawCell(doc, 432, y, 25, summaryHeight, percent, { align: 'center', padding: 5 })
-      drawCell(doc, 457, y, 105, summaryHeight, amount, { align: 'right', padding: 5 })
-      y += summaryHeight
-    }
-    if (invoice.gst_component === 'IGST') {
-      summaryRow('Integrated GST (IGST)', formatRs(invoice.igst_amount, cents(invoice.igst_amount)), invoice.igst_rate, '%')
-    } else {
-      summaryRow('State GST (SGST)', formatRs(invoice.sgst_amount, cents(invoice.sgst_amount)), invoice.sgst_rate, '%')
-      summaryRow('Central GST (CGST)', formatRs(invoice.cgst_amount, cents(invoice.cgst_amount)), invoice.cgst_rate, '%')
-    }
-    if (invoice.rounding_type) {
-      summaryRow('Total before Rounding Off', formatRs(invoice.total_before_rounding, 2))
-      summaryRow(`${invoice.rounding_type === 'MORE' ? 'More' : 'Less'} : ROUNDING OFF`, `${invoice.rounding_type === 'MORE' ? '(+)' : '(-)'}${formatRs(invoice.rounding_amount)}`)
-    }
-    ;[[32, 42], [329, 58], [387, 45], [432, 25]].forEach(([x, w]) => drawCell(doc, x, y, w, totalHeight, '', { fill: LIGHT }))
-    drawCell(doc, 74, y, 255, totalHeight, 'Total', { bold: true, fill: LIGHT, textColor: NAVY, padding: 5 })
-    drawCell(doc, 457, y, 105, totalHeight, formatRs(invoice.grand_total, invoice.rounding_type ? 2 : 0), { bold: true, align: 'right', fill: LIGHT, textColor: NAVY, padding: 5 })
-    y += compact ? 24 : 30
+    line(doc, outer.x, detailsBottom, outer.right, detailsBottom, 1.8)
+    drawClientDetails(doc, entity, outer.x, metaBottom, splitX - outer.x, detailsBottom - metaBottom)
+    drawIssuerDetails(doc, company, splitX, metaBottom, outer.right - splitX, detailsBottom - metaBottom)
 
-    const wordsHeight = Math.max(compact ? 28 : 30, doc.font(F.bold).fontSize(8.5).heightOfString(invoice.amount_in_words, { width: 346 }) + (compact ? 9 : 12))
-    const bankLabels = ['Bank Name', 'A/c No.', 'IFSC Code', 'Branch']
-    const bankRowHeights = company.bank.map(value => Math.max(14, doc.font(F.regular).fontSize(7.5).heightOfString(value, { width: 132 }) + 5))
-    const bankHeight = 24 + bankRowHeights.reduce((sum, height) => sum + height, 0) + 6
-    doc.save().rect(32, y, 530, wordsHeight).fillAndStroke(LIGHT, BORDER).restore()
-    doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Amount Chargeable (in words):', 36, y + 9, { width: 170 })
-    doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(invoice.amount_in_words, 206, y + 6, { width: 346, align: 'right' })
-    y += wordsHeight + (compact ? 6 : 10)
-    drawTaxBreakdown(doc, y, invoice, entity.sac || '998512', compact)
-    y += invoice.gst_component === 'IGST' ? (compact ? 68 : 74) : (compact ? 88 : 96)
-    doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(`Tax Amount (in words): ${invoice.tax_amount_in_words}`, 32, y, { width: 520 })
-    y += compact ? 20 : 24
+    const rounded = Boolean(invoice.rounding_type && moneyToPaise(invoice.rounding_amount) > 0n)
+    let y = drawServiceTable(doc, entity, invoice, overrides, company, detailsBottom, rounded)
+    y = drawTotals(doc, invoice, y)
+    y = drawAmountWords(doc, invoice, y)
+    y = drawTaxSummary(doc, invoice, clean(entity.sac || invoice.sac || '998512'), y)
 
-    const bottomHeight = Math.max(compact ? 78 : 84, bankHeight)
-    const pageBottom = doc.page.height - doc.page.margins.bottom
-    let bottomY = y
-    let signatureY = bottomY + bankHeight + 8
-    let signatureBoxHeight = pageBottom - signatureY
-    if (signatureBoxHeight < 40) {
-      doc.addPage()
-      bottomY = doc.page.margins.top
-      signatureY = bottomY + bankHeight + 8
-      signatureBoxHeight = pageBottom - signatureY
-    }
-    signatureBoxHeight = Math.max(40, signatureBoxHeight * 0.8)
-    drawCell(doc, 32, bottomY, 300, bottomHeight, '', {})
-    doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text('Description of Services', 40, bottomY + 10)
-    doc.fillColor('#111827').font(F.regular).text('Permanent placement services, other than executive\nsearch services', 40, bottomY + 22)
-    doc.font(F.bold).text(`Company's PAN: ${company.pan}`, 40, bottomY + 58)
-    doc.font(F.regular).text('Tax Payable on reverse charge basis: No', 40, bottomY + 68)
-    drawCell(doc, 332, bottomY, 230, bankHeight, '', {})
-    drawCell(doc, 344, bottomY + 6, 206, 18, "Company's Bank Details", { bold: true, align: 'center', valign: 'center', fill: NAVY, textColor: WHITE, padding: 3 })
-    let bankY = bottomY + 24
-    company.bank.forEach((value, index) => {
-      const rowHeight = bankRowHeights[index]
-      drawCell(doc, 344, bankY, 70, rowHeight, bankLabels[index] || '', { bold: true, size: 7.5, padding: 2, fill: LIGHT, textColor: NAVY })
-      drawCell(doc, 414, bankY, 136, rowHeight, value, { size: 7.5, padding: 2, minSize: 7 })
-      bankY += rowHeight
-    })
-    drawCell(doc, 262, signatureY, 300, signatureBoxHeight, '', {})
-    const signatureLines = company.sign.slice(0, -1)
-    signatureLines.forEach((line, index) => doc.fillColor(NAVY).font(F.bold).fontSize(8.5).text(line, 270, signatureY + 3 + index * 12, { width: 284, align: 'center', lineBreak: false }))
-    const authorizationY = signatureY + signatureBoxHeight - 12
-    doc.fillColor('#111827').font(F.regular).fontSize(8.5).text(company.sign.at(-1), 270, authorizationY, { width: 284, align: 'center' })
+    const taxWordsHeight = 14
+    rectangle(doc, outer.x, y, outer.right - outer.x, taxWordsHeight)
+    textBox(doc, `Tax Amount (in words): ${invoice.tax_amount_in_words}`, outer.x, y, outer.right - outer.x, taxWordsHeight, { bold: true, size: 6.9, minSize: 5.2, singleLine: true })
+    y += taxWordsHeight
+    drawLowerDetails(doc, company, y, outer.bottom)
     doc.end()
   })
 }
 
-function drawTaxBreakdown(doc, y, invoice, sac) {
-  const header = { bold: true, align: 'center', fill: NAVY, textColor: WHITE }
-  const total = { bold: true, align: 'center', fill: LIGHT }
-  drawCell(doc, 32, y, 70, 22, 'SAC', header)
-  drawCell(doc, 102, y, 115, 22, 'Taxable Value', header)
-  if (invoice.gst_component === 'IGST') {
-    drawCell(doc, 217, y, 165, 22, 'Integrated GST (IGST) - Rate', header)
-    drawCell(doc, 382, y, 110, 22, 'IGST Amount', header)
-    drawCell(doc, 32, y + 22, 70, 22, sac, { align: 'center' })
-    drawCell(doc, 102, y + 22, 115, 22, formatRs(invoice.taxable_amount, invoice.rounding_type ? 2 : 0), { align: 'right' })
-    drawCell(doc, 217, y + 22, 165, 22, `${invoice.igst_rate}%`, { align: 'center' })
-    drawCell(doc, 382, y + 22, 110, 22, formatRs(invoice.igst_amount, cents(invoice.igst_amount)), { align: 'right' })
-    drawCell(doc, 32, y + 44, 70, 22, 'Total', total)
-    drawCell(doc, 102, y + 44, 115, 22, formatRs(invoice.taxable_amount, invoice.rounding_type ? 2 : 0), { ...total, align: 'right' })
-    drawCell(doc, 217, y + 44, 165, 22, '', total)
-    drawCell(doc, 382, y + 44, 110, 22, formatRs(invoice.igst_amount, cents(invoice.igst_amount)), { ...total, align: 'right' })
-  } else {
-    drawCell(doc, 217, y, 105, 22, 'GST Component', header)
-    drawCell(doc, 322, y, 70, 22, 'Rate', header)
-    drawCell(doc, 392, y, 100, 22, 'Amount', header)
-    ;['SGST', 'CGST'].forEach((label, index) => {
-      const rowY = y + 22 + index * 22
-      const amount = label === 'SGST' ? invoice.sgst_amount : invoice.cgst_amount
-      const rate = label === 'SGST' ? invoice.sgst_rate : invoice.cgst_rate
-      drawCell(doc, 32, rowY, 70, 22, sac, { align: 'center' })
-      drawCell(doc, 102, rowY, 115, 22, formatRs(invoice.taxable_amount, invoice.rounding_type ? 2 : 0), { align: 'right' })
-      drawCell(doc, 217, rowY, 105, 22, label, { align: 'center' })
-      drawCell(doc, 322, rowY, 70, 22, `${rate}%`, { align: 'center' })
-      drawCell(doc, 392, rowY, 100, 22, formatRs(amount, cents(amount)), { align: 'right' })
-    })
-    drawCell(doc, 32, y + 66, 70, 22, 'Total', total)
-    drawCell(doc, 102, y + 66, 115, 22, formatRs(invoice.taxable_amount, invoice.rounding_type ? 2 : 0), { ...total, align: 'right' })
-    drawCell(doc, 217, y + 66, 175, 22, '', total)
-    drawCell(doc, 392, y + 66, 100, 22, formatRs(invoice.total_tax_amount, cents(invoice.total_tax_amount)), { ...total, align: 'right' })
-  }
-}
-
-function cents(value) {
-  return Math.round(n(value) * 100) % 100 ? 2 : 0
-}
-
 function dateDDMMYYYY(value) {
   const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return clean(value)
   return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`
 }
 
@@ -407,9 +576,13 @@ module.exports = {
   COMPANY,
   clean,
   financialYear,
+  normalizeStateCode,
   detectGstComponent,
   calculateInvoice,
+  roundInvoiceTotalPaise,
+  normalizedOptionalName,
   amountWords,
   formatRs,
-  createInvoicePdf
+  createInvoicePdf,
+  renderInvoicePdf
 }

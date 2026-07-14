@@ -205,6 +205,7 @@ export default function JobsPage() {
   const sortRef = useRef(null)
   const columnsDropdownRef = useRef(null)
   const pendingRealtimeRefreshRef = useRef(false)
+  const handledRouteActionRef = useRef('')
 
   const fetchData = useCallback(async () => {
     try {
@@ -384,11 +385,19 @@ export default function JobsPage() {
   }, [getFreshActiveConsultantName])
 
   useEffect(() => {
-    const action = location.state?.action
-    if (!action) return
-    navigate(location.pathname, { replace: true, state: null })
-    if (action === 'add-job') openModal()
-  }, [location.pathname, location.state?.action, navigate, openModal])
+    const query = new URLSearchParams(location.search)
+    const action = query.get('new') === 'mandate' ? 'add-job' : location.state?.action
+    if (action !== 'add-job') return
+
+    const actionKey = `${location.key}:${action}`
+    if (handledRouteActionRef.current === actionKey) return
+    handledRouteActionRef.current = actionKey
+    openModal()
+
+    query.delete('new')
+    const search = query.toString()
+    navigate(`${location.pathname}${search ? `?${search}` : ''}`, { replace: true, state: null })
+  }, [location.key, location.pathname, location.search, location.state?.action, navigate, openModal])
 
   const editJob = (job) => {
     const consultantFields = normalizeConsultantFields(Array.isArray(job.consultants) ? job.consultants : [])
