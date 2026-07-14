@@ -13,8 +13,9 @@
   text-align: center;
 }
 
-.candidates-table-card:has(> .fyndbridge-loader-wrap) {
-  min-height: clamp(280px, calc(100dvh - 360px), 440px);
+.candidates-table-card > .fyndbridge-loader-wrap {
+  height: 100%;
+  min-height: 0;
 }
 
 .fyndbridge-loader {
@@ -29,7 +30,7 @@
 
 @media (max-width: 720px) {
   .fyndbridge-loader-wrap { min-height: clamp(240px, calc(100dvh - 300px), 360px); }
-  .candidates-table-card:has(> .fyndbridge-loader-wrap) { min-height: clamp(240px, calc(100dvh - 300px), 360px); }
+  .candidates-table-card > .fyndbridge-loader-wrap { min-height: 0; }
   .fyndbridge-loader { width: min(var(--fyndbridge-loader-size), 60px); }
 }
 
