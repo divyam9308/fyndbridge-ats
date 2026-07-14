@@ -135,4 +135,6 @@ test('only Upload Resumes is wired to the scoped parser', () => {
   assert.match(candidatesPage, /fetch\('\/api\/resumes\/bulk-parse'/)
   assert.match(resumeController, /const rows = await runLimited\(files, 5, parseOne\)/)
   assert.match(resumeController, /catch \(err\) \{[\s\S]*return rowFromParsed\(file, null, err\.message/)
+  assert.match(candidatesPage, /response\.status === 413 \? `\$\{message\} \$\{RESUME_PARSE_SIZE_GUIDANCE\}` : message/)
+  assert.doesNotMatch(resumeController, /combined file size of all uploaded CVs/i)
 })

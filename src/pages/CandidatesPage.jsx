@@ -27,6 +27,7 @@ const STATUS_OPTIONS = CANDIDATE_STATUS_OPTIONS
 const RELOCATE_OPTIONS = ['', 'Yes', 'No']
 const MAX_RESUME_FILES = 10
 const MAX_RESUME_SIZE = 10 * 1024 * 1024
+const RESUME_PARSE_SIZE_GUIDANCE = 'The combined file size of all uploaded CVs must not exceed 4.5 MB.'
 const ACCEPTED_RESUME_EXTENSIONS = ['pdf', 'doc', 'docx']
 const consumedRouteActions = new Set()
 
@@ -1312,7 +1313,10 @@ export default function CandidatesPage() {
         body
       })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error || 'Unable to parse resumes.')
+      if (!response.ok) {
+        const message = payload.error || 'Unable to parse resumes.'
+        throw new Error(response.status === 413 ? `${message} ${RESUME_PARSE_SIZE_GUIDANCE}` : message)
+      }
       const rows = payload.rows || []
       if (!rows.length) throw new Error('No resumes were parsed.')
       if (importCancelledRef.current) {
@@ -1334,7 +1338,7 @@ export default function CandidatesPage() {
       })))
     } catch (err) {
       notifyAiQuota(err.message)
-      setImportError(err.message)
+      setImportError(err.message || 'Unable to parse resumes.')
     } finally {
       setParsing(false)
     }
