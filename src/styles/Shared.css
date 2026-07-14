@@ -219,7 +219,7 @@
 .candidates-page {
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: visible;
 }
 .candidates-toolbar .filter-select,
 .candidates-toolbar .filter-input,
@@ -651,18 +651,19 @@
   overflow-x: auto;
 }
 .candidates-table-card {
-  width: 100%;
-  max-width: 100%;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
   height: 620px;
   min-height: 620px;
-  overflow: hidden;
+  overflow-y: auto;
 }
 .candidates-table-card > .candidates-table-scroll {
-  width: 100%;
-  max-width: 100%;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
   height: 100%;
-  overflow: auto;
-  container-type: inline-size;
+  overflow: visible;
 }
 .candidates-table-card > .empty-state {
   min-height: 100%;
@@ -681,7 +682,7 @@
 .table-inline-loader {
   position: sticky;
   left: 0;
-  width: 100cqw;
+  width: min(100%, calc(100vw - var(--sidebar-width) - 56px));
   height: 100%;
   min-height: 0;
 }
