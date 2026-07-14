@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { CalendarDays } from 'lucide-react'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 const toDisplayValue = (value) => {
@@ -29,34 +30,71 @@ const toIsoDate = (value) => {
 export default function FormattedDateInput({ value, onChange, className = 'form-control', disabled = false, name }) {
   const [displayValue, setDisplayValue] = useState('')
   const [isEditing, setIsEditing] = useState(false)
+  const pickerRef = useRef(null)
+
+  const openPicker = () => {
+    if (disabled || !pickerRef.current) return
+    try {
+      if (typeof pickerRef.current.showPicker === 'function') pickerRef.current.showPicker()
+      else pickerRef.current.click()
+    } catch {
+      pickerRef.current.click()
+    }
+  }
 
   return (
-    <input
-      name={name}
-      type="text"
-      inputMode="numeric"
-      placeholder="dd/mm/yyyy"
-      value={isEditing ? displayValue : toDisplayValue(value)}
-      onFocus={() => {
-        setDisplayValue(toDisplayValue(value))
-        setIsEditing(true)
-      }}
-      onChange={(event) => {
-        const nextDisplay = normalizeTypedDate(event.target.value)
-        setDisplayValue(nextDisplay)
-        if (!nextDisplay) onChange('')
-        else {
-          const isoDate = toIsoDate(nextDisplay)
-          if (isoDate) onChange(isoDate)
-        }
-      }}
-      onBlur={() => {
-        setIsEditing(false)
-        setDisplayValue('')
-      }}
-      className={className}
-      disabled={disabled}
-      autoComplete="off"
-    />
+    <span className="formatted-date-input">
+      <input
+        name={name}
+        type="text"
+        inputMode="numeric"
+        placeholder="dd/mm/yyyy"
+        value={isEditing ? displayValue : toDisplayValue(value)}
+        onFocus={() => {
+          setDisplayValue(toDisplayValue(value))
+          setIsEditing(true)
+        }}
+        onChange={(event) => {
+          const nextDisplay = normalizeTypedDate(event.target.value)
+          setDisplayValue(nextDisplay)
+          if (!nextDisplay) onChange('')
+          else {
+            const isoDate = toIsoDate(nextDisplay)
+            if (isoDate) onChange(isoDate)
+          }
+        }}
+        onBlur={() => {
+          setIsEditing(false)
+          setDisplayValue('')
+        }}
+        className={className}
+        disabled={disabled}
+        autoComplete="off"
+      />
+      <button
+        type="button"
+        className="formatted-date-calendar-button"
+        onClick={openPicker}
+        disabled={disabled}
+        aria-label="Choose date from calendar"
+        title="Choose date from calendar"
+      >
+        <CalendarDays size={16} />
+      </button>
+      <input
+        ref={pickerRef}
+        className="formatted-date-native-picker"
+        type="date"
+        tabIndex={-1}
+        aria-hidden="true"
+        value={value || ''}
+        onChange={(event) => {
+          onChange(event.target.value)
+          setDisplayValue('')
+          setIsEditing(false)
+        }}
+        disabled={disabled}
+      />
+    </span>
   )
 }
