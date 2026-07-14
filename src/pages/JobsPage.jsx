@@ -896,7 +896,19 @@ export default function JobsPage() {
 
       <div className="table-card table-card-popovers candidates-table-card">
         {loading ? (
-          <FyndbridgeLoader size={88} label="Loading mandates..." />
+          <div className="table-wrapper candidates-table-scroll">
+            <table className="data-table fb-theme-table candidates-master-table candidates-table table-loading-table" aria-label="Loading mandates" style={{ minWidth: mandateTableMinWidth }}>
+              <colgroup>{activeColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}</colgroup>
+              <thead><tr>{activeColumns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead>
+              <tbody>
+                <tr className="table-loading-row">
+                  <td className="table-loading-cell" colSpan={Math.max(activeColumns.length, 1)}>
+                    <FyndbridgeLoader size={88} label="Loading mandates..." className="table-inline-loader" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         ) : error ? (
           <div className="empty-state"><div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div><div className="empty-state-title">Error loading data</div><div className="empty-state-desc">{error}</div></div>
         ) : jobs.length === 0 ? (

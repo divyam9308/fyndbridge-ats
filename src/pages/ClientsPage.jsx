@@ -1486,7 +1486,19 @@ export default function ClientsPage() {
 
       <div className="table-card candidates-table-card">
         {loading ? (
-          <FyndbridgeLoader size={88} label="Loading clients..." />
+          <div className="table-wrapper candidates-table-scroll">
+            <table className="data-table fb-theme-table candidates-master-table candidates-table table-loading-table" aria-label="Loading clients" style={{ minWidth: clientTableMinWidth }}>
+              <colgroup>{activeColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}</colgroup>
+              <thead><tr>{activeColumns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead>
+              <tbody>
+                <tr className="table-loading-row">
+                  <td className="table-loading-cell" colSpan={Math.max(activeColumns.length, 1)}>
+                    <FyndbridgeLoader size={88} label="Loading clients..." className="table-inline-loader" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         ) : error ? (
           <div className="empty-state">
             <div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div>

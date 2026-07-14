@@ -2186,7 +2186,25 @@ export default function CandidatesPage() {
       {/* Table */}
       <div className="table-card candidates-table-card">
         {loadingCandidates ? (
-          <FyndbridgeLoader size={88} label="Loading candidates..." />
+          <div className="table-wrapper candidates-table-scroll">
+            <table className="data-table candidates-master-table candidates-table table-loading-table" aria-label="Loading candidates" style={{ minWidth: candidateTableMinWidth }}>
+              <colgroup>
+                {activeColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}
+              </colgroup>
+              <thead>
+                <tr>
+                  {activeColumns.map(column => <th key={column.key}>{column.label}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="table-loading-row">
+                  <td className="table-loading-cell" colSpan={Math.max(activeColumns.length, 1)}>
+                    <FyndbridgeLoader size={88} label="Loading candidates..." className="table-inline-loader" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         ) : filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon"><Users size={28} color="var(--gold)" strokeWidth={1.5} /></div>

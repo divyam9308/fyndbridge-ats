@@ -240,6 +240,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.candidates-toolbar .filter-label {
+  flex: 0 0 auto;
+}
 .filter-bar-spacer {
   flex: 1 1 auto;
   min-width: 16px;
@@ -275,16 +278,19 @@
   z-index: 10050;
 }
 .compact-pagination {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(9, 30px);
   align-items: center;
   gap: 6px;
-  width: 280px;
-  min-width: 280px;
+  width: 318px;
+  min-width: 318px;
   min-height: 30px;
-  flex: 0 0 280px;
-  flex-wrap: nowrap;
+  flex: 0 0 318px;
   margin-left: auto;
   justify-content: flex-end;
+}
+.compact-pagination > :last-child {
+  grid-column: 9;
 }
 .compact-pagination-btn {
   width: 30px;
@@ -660,6 +666,21 @@
 }
 .candidates-table-card > .empty-state {
   min-height: 100%;
+}
+.table-loading-table {
+  height: 100%;
+}
+.data-table .table-loading-cell {
+  height: 100%;
+  padding: 0;
+  border-bottom: 0;
+}
+.data-table .table-loading-row:hover {
+  background: transparent;
+}
+.table-inline-loader {
+  height: 100%;
+  min-height: 0;
 }
 .data-table {
   width: 100%;
