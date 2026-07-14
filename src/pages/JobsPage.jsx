@@ -894,7 +894,7 @@ export default function JobsPage() {
       </div>
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}
 
-      <div className="table-card table-card-popovers candidates-table-card">
+      <div className="table-card table-card-popovers candidates-table-card" style={{ minWidth: `max(100%, ${mandateTableMinWidth}px)` }}>
         {loading ? (
           <div className="table-wrapper candidates-table-scroll">
             <table className="data-table fb-theme-table candidates-master-table candidates-table table-loading-table" aria-label="Loading mandates" style={{ minWidth: mandateTableMinWidth }}>

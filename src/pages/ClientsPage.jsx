@@ -1484,7 +1484,7 @@ export default function ClientsPage() {
         </div>
       )}
 
-      <div className="table-card candidates-table-card">
+      <div className="table-card candidates-table-card" style={{ minWidth: `max(100%, ${clientTableMinWidth}px)` }}>
         {loading ? (
           <div className="table-wrapper candidates-table-scroll">
             <table className="data-table fb-theme-table candidates-master-table candidates-table table-loading-table" aria-label="Loading clients" style={{ minWidth: clientTableMinWidth }}>

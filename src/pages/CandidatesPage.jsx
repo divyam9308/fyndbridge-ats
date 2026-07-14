@@ -2184,7 +2184,7 @@ export default function CandidatesPage() {
 
 
       {/* Table */}
-      <div className="table-card candidates-table-card">
+      <div className="table-card candidates-table-card" style={{ minWidth: `max(100%, ${candidateTableMinWidth}px)` }}>
         {loadingCandidates ? (
           <div className="table-wrapper candidates-table-scroll">
             <table className="data-table candidates-master-table candidates-table table-loading-table" aria-label="Loading candidates" style={{ minWidth: candidateTableMinWidth }}>

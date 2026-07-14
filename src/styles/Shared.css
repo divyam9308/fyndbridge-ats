@@ -651,7 +651,7 @@
   overflow-x: auto;
 }
 .candidates-table-card {
-  width: max-content;
+  width: 100%;
   min-width: 100%;
   max-width: none;
   height: 620px;
@@ -659,7 +659,7 @@
   overflow-y: auto;
 }
 .candidates-table-card > .candidates-table-scroll {
-  width: max-content;
+  width: 100%;
   min-width: 100%;
   max-width: none;
   height: 100%;
