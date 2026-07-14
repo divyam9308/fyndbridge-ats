@@ -278,23 +278,22 @@
   z-index: 10050;
 }
 .compact-pagination {
-  display: grid;
-  grid-template-columns: repeat(9, 30px);
+  display: flex;
   align-items: center;
   gap: 6px;
   width: 318px;
   min-width: 318px;
   min-height: 30px;
   flex: 0 0 318px;
+  flex-wrap: nowrap;
   margin-left: auto;
   justify-content: flex-end;
 }
-.compact-pagination > :last-child {
-  grid-column: 9;
-}
 .compact-pagination-btn {
   width: 30px;
+  min-width: 30px;
   height: 30px;
+  flex: 0 0 30px;
   border-radius: 999px;
   border: 1px solid #d9e1eb;
   background: var(--white);
