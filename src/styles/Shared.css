@@ -201,13 +201,103 @@
   position: relative;
   width: 100%;
 }
-.formatted-date-native-picker {
+.formatted-date-calendar {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
+  z-index: 9200;
+  top: calc(100% + 8px);
+  left: 0;
+  display: block;
+  width: min(324px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid rgba(15, 35, 88, 0.1);
+  border-radius: 16px;
+  background: var(--white);
+  box-shadow: 0 18px 48px rgba(15, 35, 88, 0.18), 0 3px 10px rgba(15, 35, 88, 0.08);
+  animation: formatted-date-calendar-in 0.14s ease-out;
+}
+.formatted-date-calendar-header {
+  display: grid;
+  grid-template-columns: 34px 1fr 34px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.formatted-date-calendar-header strong {
+  color: var(--navy-darkest);
+  font-size: 14px;
+  font-weight: 750;
+  text-align: center;
+}
+.formatted-date-calendar-header button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--gray-600);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.formatted-date-calendar-header button:hover {
+  border-color: rgba(var(--brand-blue-rgb), 0.25);
+  background: rgba(var(--brand-blue-rgb), 0.07);
+  color: var(--navy);
+}
+.formatted-date-weekdays,
+.formatted-date-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.formatted-date-weekdays {
+  margin-bottom: 6px;
+}
+.formatted-date-weekdays span {
+  color: var(--gray-400);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 26px;
+  text-align: center;
+  text-transform: uppercase;
+}
+.formatted-date-days button {
+  display: grid;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--gray-700);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
+}
+.formatted-date-days button:hover {
+  background: rgba(var(--brand-blue-rgb), 0.08);
+  color: var(--navy);
+  transform: translateY(-1px);
+}
+.formatted-date-days button.is-outside:not(.is-selected) {
+  color: var(--gray-400);
+  opacity: 0.55;
+}
+.formatted-date-days button.is-today {
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-blue-rgb), 0.45);
+  color: var(--navy);
+}
+.formatted-date-days button.is-selected,
+.formatted-date-days button.is-selected:hover {
+  background: var(--navy);
+  box-shadow: 0 5px 12px rgba(var(--brand-blue-rgb), 0.28);
+  color: var(--white);
+  transform: none;
+}
+@keyframes formatted-date-calendar-in {
+  from { opacity: 0; transform: translateY(-5px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* ===== Filter Bar ===== */
