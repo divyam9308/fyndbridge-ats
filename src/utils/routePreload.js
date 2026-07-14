@@ -7,6 +7,7 @@ const preloaders = {
   '/dashboard/candidates': () => import('../pages/CandidatesPage'),
   '/dashboard/performance': () => import('../pages/PerformanceReviewPage'),
   '/dashboard/attendance': () => import('../pages/AttendancePage'),
+  '/dashboard/reports/consultant': () => import('../pages/ConsultantReportPage'),
   '/dashboard/user-manual': () => import('../pages/UserManualPage'),
   '/dashboard/admin': () => import('../pages/AdminPage'),
   '/dashboard/settings': () => import('../pages/SettingsPage'),

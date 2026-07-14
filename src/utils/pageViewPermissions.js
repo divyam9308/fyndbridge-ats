@@ -5,6 +5,7 @@ export const PAGE_VIEW_DEFAULTS = {
   mandates: 'everyone',
   performance_review: 'everyone',
   attendance: 'everyone',
+  report: 'everyone',
   invoice: 'admin_only',
   user_manual: 'everyone'
 }
@@ -16,6 +17,7 @@ export const PAGE_VIEW_ROUTES = {
   mandates: '/dashboard/jobs',
   performance_review: '/dashboard/performance',
   attendance: '/dashboard/attendance',
+  report: '/dashboard/reports/consultant',
   invoice: '/invoice',
   user_manual: '/dashboard/user-manual'
 }
@@ -27,6 +29,7 @@ export const PAGE_VIEW_ITEMS = [
   ['mandates', 'Mandates'],
   ['performance_review', 'PMS / Performance Review'],
   ['attendance', 'Attendance'],
+  ['report', 'Report'],
   ['invoice', 'Invoice'],
   ['user_manual', 'User Manual']
 ]

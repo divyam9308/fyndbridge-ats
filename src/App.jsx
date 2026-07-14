@@ -22,6 +22,7 @@ const UserManualPage = lazy(() => import('./pages/UserManualPage'))
 const InvoicePage = lazy(() => import('./pages/InvoicePage'))
 const InvoiceEntityDetailPage = lazy(() => import('./pages/InvoiceEntityDetailPage'))
 const AttendancePage = lazy(() => import('./pages/AttendancePage'))
+const ConsultantReportPage = lazy(() => import('./pages/ConsultantReportPage'))
 
 function App() {
   const [aiQuotaNotice, setAiQuotaNotice] = useState('')
@@ -62,6 +63,7 @@ function App() {
             <Route path="candidates" element={<PageViewGuard pageKey="candidates"><CandidatesPage /></PageViewGuard>} />
             <Route path="performance" element={<PageViewGuard pageKey="performance_review"><PerformanceReviewPage /></PageViewGuard>} />
             <Route path="attendance" element={<PageViewGuard pageKey="attendance"><AttendancePage /></PageViewGuard>} />
+            <Route path="reports/consultant" element={<PageViewGuard pageKey="report"><ConsultantReportPage /></PageViewGuard>} />
             <Route path="user-manual" element={<PageViewGuard pageKey="user_manual"><UserManualPage /></PageViewGuard>} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="cvs" element={<Navigate to="/dashboard/candidates" replace />} />
