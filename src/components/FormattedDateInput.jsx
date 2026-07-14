@@ -56,7 +56,7 @@ const calendarDays = (monthDate) => {
   })
 }
 
-export default function FormattedDateInput({ value, onChange, className = 'form-control', disabled = false, name }) {
+export default function FormattedDateInput({ value, onChange, className = 'form-control', disabled = false, name, id }) {
   const [displayValue, setDisplayValue] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
@@ -104,6 +104,7 @@ export default function FormattedDateInput({ value, onChange, className = 'form-
   return (
     <span className="formatted-date-input" ref={containerRef}>
       <input
+        id={id}
         name={name}
         type="text"
         inputMode="numeric"
@@ -135,7 +136,7 @@ export default function FormattedDateInput({ value, onChange, className = 'form-
       />
 
       {isOpen && (
-        <span className="formatted-date-calendar" role="dialog" aria-label="Choose a date">
+        <span className="formatted-date-calendar" role="dialog" aria-label="Choose a date" onClick={(event) => event.stopPropagation()}>
           <span className="formatted-date-calendar-header">
             <button type="button" onClick={() => changeMonth(-1)} aria-label="Previous month">
               <ChevronLeft size={18} />

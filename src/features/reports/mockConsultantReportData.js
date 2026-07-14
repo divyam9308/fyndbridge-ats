@@ -23,8 +23,7 @@ export const mockConsultants = [
     employeeStatus: 'Active',
     employeeId: 'FB-1042',
     designation: 'Senior Consultant',
-    department: 'Executive Search',
-    reportingManager: 'Rhea Kapoor'
+    department: 'Executive Search'
   },
   {
     key: 'consultant-vikram',
@@ -34,8 +33,7 @@ export const mockConsultants = [
     employeeStatus: 'Active',
     employeeId: 'FB-1036',
     designation: 'Consultant',
-    department: 'Technology Hiring',
-    reportingManager: 'Rhea Kapoor'
+    department: 'Technology Hiring'
   },
   {
     key: 'consultant-neha',
@@ -45,8 +43,7 @@ export const mockConsultants = [
     employeeStatus: 'On Leave',
     employeeId: 'FB-1058',
     designation: 'Associate Consultant',
-    department: 'Consumer & Retail',
-    reportingManager: 'Vikram Sethi'
+    department: 'Consumer & Retail'
   }
 ]
 

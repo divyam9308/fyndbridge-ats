@@ -199,7 +199,7 @@ export default function ConsultantReportPage() {
         </div>
         <div className="report-header-actions">
           <label className="report-control report-consultant-control">
-            <span>Consultant</span>
+            <span className="report-control-label">Consultant</span>
             <div>
               <input
                 list="report-consultants"
@@ -215,14 +215,14 @@ export default function ConsultantReportPage() {
             </div>
           </label>
           <div className="report-date-range" aria-label="Report period date range">
-            <label className="report-control">
-              <span>From date</span>
-              <FormattedDateInput value={draftFromDate} onChange={setDraftFromDate} className="report-date-input" name="report-from-date" />
-            </label>
-            <label className="report-control">
-              <span>To date</span>
-              <FormattedDateInput value={draftToDate} onChange={setDraftToDate} className="report-date-input" name="report-to-date" />
-            </label>
+            <div className="report-control">
+              <label className="report-control-label" htmlFor="report-from-date">From date</label>
+              <FormattedDateInput id="report-from-date" value={draftFromDate} onChange={setDraftFromDate} className="report-date-input" name="report-from-date" />
+            </div>
+            <div className="report-control">
+              <label className="report-control-label" htmlFor="report-to-date">To date</label>
+              <FormattedDateInput id="report-to-date" value={draftToDate} onChange={setDraftToDate} className="report-date-input" name="report-to-date" />
+            </div>
           </div>
           <button className="report-primary-button" type="button" onClick={generateReport}><Play size={16} fill="currentColor" />Generate Report</button>
           <button className="report-secondary-button" type="button" onClick={() => setToast('Export will be connected in a future update.')}><FileDown size={17} />Export Report</button>
@@ -244,7 +244,6 @@ export default function ConsultantReportPage() {
           <div><dt>Employee ID</dt><dd>{selectedConsultant.employeeId}</dd></div>
           <div><dt>Designation</dt><dd>{selectedConsultant.designation}</dd></div>
           <div><dt>Department</dt><dd>{selectedConsultant.department}</dd></div>
-          <div><dt>Reporting Manager</dt><dd>{selectedConsultant.reportingManager}</dd></div>
           <div><dt>Report Period</dt><dd>{selectedPeriod}</dd></div>
         </dl>
       </section>
