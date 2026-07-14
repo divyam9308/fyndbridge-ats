@@ -13,6 +13,7 @@ import FloatingDropdown from '../components/FloatingDropdown'
 import TablePopover from '../components/TablePopover'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
+import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import '../styles/Shared.css'
 import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
@@ -142,31 +143,6 @@ const storeCandidateColumns = (value) => {
   } catch {
     // Ignore storage failures; backend preference remains the source of truth.
   }
-}
-function CandidatesTableSkeleton({ columns, tableMinWidth }) {
-  return (
-    <table className="data-table candidates-master-table candidates-table candidates-table-skeleton" aria-label="Loading candidates" style={{ minWidth: tableMinWidth }}>
-      <colgroup>
-        {columns.map(column => <col key={column.key} style={{ width: column.width }} />)}
-      </colgroup>
-      <thead>
-        <tr>
-          {columns.map(column => (
-            <th key={column.key}><span className="candidate-skeleton-cell candidate-skeleton-header" /></th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {Array.from({ length: 10 }).map((_, rowIndex) => (
-          <tr key={rowIndex}>
-            {columns.map(column => (
-              <td key={column.key}><span className="candidate-skeleton-cell" /></td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
 }
 const SORT_OPTIONS = [
   { field: 'candidate_id', label: 'Candidate ID', toggle: true },
@@ -2210,9 +2186,7 @@ export default function CandidatesPage() {
       {/* Table */}
       <div className="table-card candidates-table-card">
         {loadingCandidates ? (
-          <div className="table-wrapper candidates-table-scroll">
-            <CandidatesTableSkeleton columns={activeColumns} tableMinWidth={candidateTableMinWidth} />
-          </div>
+          <FyndbridgeLoader size={88} label="Loading candidates..." />
         ) : filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon"><Users size={28} color="var(--gold)" strokeWidth={1.5} /></div>

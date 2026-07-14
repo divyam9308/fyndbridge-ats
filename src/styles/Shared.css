@@ -1338,25 +1338,6 @@
   flex-wrap: wrap;
 }
 
-.candidates-table-skeleton td,
-.candidates-table-skeleton th {
-  background: inherit;
-}
-
-.candidate-skeleton-cell {
-  display: block;
-  width: 78%;
-  height: 14px;
-  border-radius: 5px;
-  background: #e8edf5;
-}
-
-.candidate-skeleton-header {
-  width: 64%;
-  height: 12px;
-  background: rgba(255, 255, 255, 0.32);
-}
-
 .candidates-master-table th:nth-child(1),
 .candidates-master-table td:nth-child(1) {
   min-width: 50px;

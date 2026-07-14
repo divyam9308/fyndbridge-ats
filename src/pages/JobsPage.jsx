@@ -13,6 +13,7 @@ import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
+import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import { apiFetch, isValidStoragePath, openProtectedDocumentPath } from '../services/apiClient'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
@@ -87,15 +88,6 @@ const readStoredMandateColumns = () => {
 const storeMandateColumns = (value) => {
   if (typeof window === 'undefined') return
   try { window.localStorage.setItem(MANDATES_TABLE_COLUMNS_PREFERENCE_KEY, JSON.stringify(value)) } catch {}
-}
-function TableSkeleton({ columns, tableMinWidth, label }) {
-  return (
-    <table className="data-table fb-theme-table candidates-master-table candidates-table candidates-table-skeleton" aria-label={label} style={{ minWidth: tableMinWidth }}>
-      <colgroup>{columns.map(column => <col key={column.key} style={{ width: column.width }} />)}</colgroup>
-      <thead><tr>{columns.map(column => <th key={column.key}><span className="candidate-skeleton-cell candidate-skeleton-header" /></th>)}</tr></thead>
-      <tbody>{Array.from({ length: 10 }).map((_, rowIndex) => <tr key={rowIndex}>{columns.map(column => <td key={column.key}><span className="candidate-skeleton-cell" /></td>)}</tr>)}</tbody>
-    </table>
-  )
 }
 const EMPTY_FORM = {
   id: '',
@@ -904,9 +896,7 @@ export default function JobsPage() {
 
       <div className="table-card table-card-popovers candidates-table-card">
         {loading ? (
-          <div className="table-wrapper candidates-table-scroll">
-            <TableSkeleton columns={activeColumns} tableMinWidth={mandateTableMinWidth} label="Loading mandates" />
-          </div>
+          <FyndbridgeLoader size={88} label="Loading mandates..." />
         ) : error ? (
           <div className="empty-state"><div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div><div className="empty-state-title">Error loading data</div><div className="empty-state-desc">{error}</div></div>
         ) : jobs.length === 0 ? (

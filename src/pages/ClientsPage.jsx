@@ -13,6 +13,7 @@ import FloatingDropdown from '../components/FloatingDropdown'
 import TablePopover from '../components/TablePopover'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
+import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
 import { normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, isValidStoragePath } from '../services/apiClient'
@@ -153,15 +154,6 @@ const storeClientColumns = (value) => {
   try { window.localStorage.setItem(CLIENTS_TABLE_COLUMNS_PREFERENCE_KEY, JSON.stringify(value)) } catch {
     // Ignore storage failures; backend preference remains the source of truth.
   }
-}
-function TableSkeleton({ columns, tableMinWidth, label }) {
-  return (
-    <table className="data-table fb-theme-table candidates-master-table candidates-table candidates-table-skeleton" aria-label={label} style={{ minWidth: tableMinWidth }}>
-      <colgroup>{columns.map(column => <col key={column.key} style={{ width: column.width }} />)}</colgroup>
-      <thead><tr>{columns.map(column => <th key={column.key}><span className="candidate-skeleton-cell candidate-skeleton-header" /></th>)}</tr></thead>
-      <tbody>{Array.from({ length: 10 }).map((_, rowIndex) => <tr key={rowIndex}>{columns.map(column => <td key={column.key}><span className="candidate-skeleton-cell" /></td>)}</tr>)}</tbody>
-    </table>
-  )
 }
 const CLIENT_AI_SEARCH_FIELDS = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'billing_entity', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
 const CLIENT_PERMISSION_BY_COLUMN = {
@@ -1494,9 +1486,7 @@ export default function ClientsPage() {
 
       <div className="table-card candidates-table-card">
         {loading ? (
-          <div className="table-wrapper candidates-table-scroll">
-            <TableSkeleton columns={activeColumns} tableMinWidth={clientTableMinWidth} label="Loading clients" />
-          </div>
+          <FyndbridgeLoader size={88} label="Loading clients..." />
         ) : error ? (
           <div className="empty-state">
             <div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div>

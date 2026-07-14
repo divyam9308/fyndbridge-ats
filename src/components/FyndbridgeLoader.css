@@ -1,0 +1,39 @@
+.fyndbridge-loader-wrap {
+  width: 100%;
+  min-height: clamp(280px, calc(100dvh - 360px), 440px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: transparent;
+  color: var(--gray-500);
+  font-size: 14px;
+  font-weight: 400;
+  text-align: center;
+}
+
+.candidates-table-card:has(> .fyndbridge-loader-wrap) {
+  min-height: clamp(280px, calc(100dvh - 360px), 440px);
+}
+
+.fyndbridge-loader {
+  width: var(--fyndbridge-loader-size);
+  height: auto;
+  flex-shrink: 0;
+}
+
+@media (max-width: 1100px) {
+  .fyndbridge-loader { width: min(var(--fyndbridge-loader-size), 70px); }
+}
+
+@media (max-width: 720px) {
+  .fyndbridge-loader-wrap { min-height: clamp(240px, calc(100dvh - 300px), 360px); }
+  .candidates-table-card:has(> .fyndbridge-loader-wrap) { min-height: clamp(240px, calc(100dvh - 300px), 360px); }
+  .fyndbridge-loader { width: min(var(--fyndbridge-loader-size), 60px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fyndbridge-loader path { stroke-dashoffset: 0; opacity: 1; }
+  .fyndbridge-loader animate { display: none; }
+}
