@@ -250,7 +250,7 @@
   background: var(--report-accent-soft);
   color: var(--report-accent);
 }
-.report-kpi strong { color: var(--navy); font-family: var(--font-display); font-size: 31px; font-weight: 700; line-height: .95; letter-spacing: -.02em; }
+.report-kpi strong { color: var(--navy); font-family: var(--font-body); font-size: 29px; font-weight: 800; line-height: 1; letter-spacing: -.025em; }
 .report-kpi.is-compact { min-height: 108px; }
 .report-tone-navy { --report-accent: #001264; --report-accent-soft: #edf0f8; }
 .report-tone-blue { --report-accent: #3578c5; --report-accent-soft: #edf4fc; }
