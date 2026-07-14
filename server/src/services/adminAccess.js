@@ -22,6 +22,7 @@ const PAGE_VIEW_DEFAULTS = {
   mandates: 'everyone',
   performance_review: 'everyone',
   attendance: 'everyone',
+  report: 'everyone',
   invoice: 'admin_only',
   user_manual: 'everyone'
 }
@@ -122,6 +123,20 @@ async function getPageViewPermissions() {
   }
   pageViewPermissionCacheExpiresAt = Date.now() + PERMISSION_CACHE_TTL_MS
   return pageViewPermissionCache
+}
+
+async function getPageViewPermission(pageKey, { fresh = false } = {}) {
+  if (!Object.hasOwn(PAGE_VIEW_DEFAULTS, pageKey)) return null
+  if (!fresh) return (await getPageViewPermissions())[pageKey]
+  const { data, error } = await supabase
+    .from('page_view_permissions')
+    .select('view_permission')
+    .eq('page_key', pageKey)
+    .maybeSingle()
+  if (error) throw error
+  return PAGE_VIEW_PERMISSION_VALUES.has(data?.view_permission)
+    ? data.view_permission
+    : PAGE_VIEW_DEFAULTS[pageKey]
 }
 
 function invalidatePageViewPermissionCache() {
@@ -329,6 +344,7 @@ module.exports = {
   getAllColumnPermissions,
   invalidateColumnPermissionCache,
   getPageViewPermissions,
+  getPageViewPermission,
   invalidatePageViewPermissionCache,
   stripHiddenFields,
   assertCanUpdateColumns,

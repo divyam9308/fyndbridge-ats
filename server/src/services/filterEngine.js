@@ -99,9 +99,9 @@ function budgetNumber(value) {
 
 function normalizeMandateStatus(value) {
   const text = lower(value)
-  if (['ongoing', 'open', 'active'].includes(text)) return 'Ongoing'
+  if (['ongoing', 'open', 'active', 'p1', 'p2', 'p3'].includes(text)) return 'Ongoing'
   if (['scrap', 'scrapped'].includes(text)) return 'Scrapped'
-  if (['completed', 'complete', 'closed'].includes(text)) return 'Completed'
+  if (['completed', 'complete', 'closed', 'filled'].includes(text)) return 'Completed'
   return clean(value)
 }
 
@@ -890,4 +890,4 @@ function applyFilters(page, rows, filters, valueGetter) {
   return semanticRankRows(page, filtered, filters, valueGetter)
 }
 
-module.exports = { configs, parsePrompt, applyFilters, normalizeCondition, buildAiFilterPrompt, buildSemanticAiFilterPrompt, validateAiFilters, aiFilterSchema, semanticAiFilterSchema, withSemanticMetadata, OPERATORS, isSimpleKeywordPrompt, buildKeywordFilters }
+module.exports = { configs, parsePrompt, applyFilters, normalizeCondition, buildAiFilterPrompt, buildSemanticAiFilterPrompt, validateAiFilters, aiFilterSchema, semanticAiFilterSchema, withSemanticMetadata, OPERATORS, MANDATE_STATUSES, normalizeMandateStatus, isSimpleKeywordPrompt, buildKeywordFilters }

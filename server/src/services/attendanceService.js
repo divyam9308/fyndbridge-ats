@@ -1,6 +1,7 @@
 const supabase=require('./supabaseAdmin')
 const {localDate,addDays,weekday,workedMinutes,calculateLeave,applySandwichContext,bad,getFinancialYearForDate,getFinancialYearRange,getFinancialYearMonths,previousFinancialYear,calculateLeaveEntitlement,calculateCarryForward}=require('./attendanceUtils')
 const {buildActiveProfiles,buildTodayAttendanceSummary}=require('./teamAttendanceToday')
+const {buildAttendancePeriodSummary}=require('./attendancePeriodSummary')
 const KEYS=['attendance_approve_corrections','attendance_approve_leave','attendance_view_all','attendance_manage_holidays','attendance_manage_leave_balances','attendance_receive_correction_notifications','attendance_receive_leave_notifications']
 const clean=v=>String(v||'').trim()
 async function admin(user){const {data,error}=await supabase.from('admin_users').select('*').or(`user_id.eq.${user.id},email.ilike.${user.email}`).maybeSingle();if(error)throw error;return data}
@@ -62,39 +63,21 @@ async function holidays(start,end,active=true){let q=supabase.from('company_holi
 async function today(user){const date=localDate(),{data,error}=await supabase.from('attendance_records').select('*').eq('user_id',user.id).eq('attendance_date',date).maybeSingle();if(error)throw error;return data}
 async function clockIn(user){const date=localDate();if(weekday(date)===0)throw bad('Attendance is disabled on weekly off.');if((await holidays(date,date)).length)throw bad('Attendance is disabled on a company holiday.');const {data:leave}=await supabase.from('leave_requests').select('id').eq('user_id',user.id).eq('status','approved').lte('start_date',date).gte('end_date',date).maybeSingle();if(leave)throw bad('Attendance is disabled during approved leave.');const {data,error}=await supabase.from('attendance_records').upsert({user_id:user.id,attendance_date:date,clock_in_at:new Date().toISOString(),status:'clocked_in',source:'clock',created_by:user.id,updated_by:user.id},{onConflict:'user_id,attendance_date',ignoreDuplicates:true}).select().maybeSingle();if(error)throw error;if(!data)throw bad('You have already clocked in today.',409);return data}
 async function clockOut(user){const row=await today(user);if(!row?.clock_in_at)throw bad('Clock in before clocking out.');if(row.clock_out_at)throw bad('You have already clocked out today.',409);const at=new Date().toISOString(),{data,error}=await supabase.from('attendance_records').update({clock_out_at:at,worked_minutes:workedMinutes(row.clock_in_at,at),status:'present',updated_at:at,updated_by:user.id}).eq('id',row.id).is('clock_out_at',null).select().maybeSingle();if(error)throw error;if(!data)throw bad('You have already clocked out today.',409);return data}
-async function monthly(user,userId,year,month){
+async function periodSummary(user,userId,start,end){
  if(userId&&userId!==user.id)await requirePermission(user,'attendance_view_all')
- const uid=userId||user.id,start=`${year}-${String(month).padStart(2,'0')}-01`,last=new Date(Date.UTC(+year,+month,0)).toISOString().slice(0,10)
+ const uid=userId||user.id
  const [records,hs,leaves,corrections]=await Promise.all([
-  supabase.from('attendance_records').select('*').eq('user_id',uid).gte('attendance_date',start).lte('attendance_date',last),
-  holidays(start,last),
-  supabase.from('leave_requests').select('*').eq('user_id',uid).in('status',['pending','approved','rejected']).lte('start_date',last).gte('end_date',start),
-  supabase.from('attendance_correction_requests').select('*').eq('user_id',uid).gte('attendance_date',start).lte('attendance_date',last)
+  supabase.from('attendance_records').select('*').eq('user_id',uid).gte('attendance_date',start).lte('attendance_date',end),
+  holidays(start,end),
+  supabase.from('leave_requests').select('*').eq('user_id',uid).in('status',['pending','approved','rejected']).lte('start_date',end).gte('end_date',start),
+  supabase.from('attendance_correction_requests').select('*').eq('user_id',uid).gte('attendance_date',start).lte('attendance_date',end)
  ])
  for(const x of [records,leaves,corrections])if(x.error)throw x.error
- const holidayDates=(hs||[]).map(h=>h.holiday_date),leaveRows=leaves.data||[],byDate=Object.fromEntries((records.data||[]).map(r=>[r.attendance_date,r]))
- // Approved requests can be submitted separately (for example Saturday and Monday).
- // Build one date set so the intervening Sunday is represented as sandwich leave too.
- const approvedDates=new Set()
- leaveRows.filter(row=>row.status==='approved').forEach(row=>{
-  const calc=calculateLeave({startDate:row.start_date,endDate:row.end_date,durationType:row.duration_type,halfDaySession:row.half_day_session,holidays:holidayDates,balance:0})
-  calc.calculation_breakdown.filter(item=>item.charged>0&&item.date>=start&&item.date<=last).forEach(item=>approvedDates.add(item.date))
- })
- const sandwichSundays=new Set()
- for(let d=start;d<=last;d=addDays(d,1))if(weekday(d)===0&&approvedDates.has(addDays(d,-1))&&approvedDates.has(addDays(d,1)))sandwichSundays.add(d)
- const approvedRowForDate=d=>leaveRows.find(row=>row.status==='approved'&&d>=row.start_date&&d<=row.end_date)|| (sandwichSundays.has(d)?{status:'approved',duration_type:'full_day',sandwich:true}:null)
- const pendingRowForDate=d=>leaveRows.find(row=>row.status==='pending'&&d>=row.start_date&&d<=row.end_date)||null
- const rejectedRowForDate=d=>leaveRows.find(row=>row.status==='rejected'&&d>=row.start_date&&d<=row.end_date)||null
- const days=[];let working=0,unmarked=0
- for(let d=start;d<=last;d=addDays(d,1)){
-  const future=d>localDate(),holiday=hs.some(h=>h.holiday_date===d),off=weekday(d)===0
-  const pendingLeave=pendingRowForDate(d),rejectedLeave=rejectedRowForDate(d),approvedLeave=approvedRowForDate(d)
-  if(!holiday&&!off)working++
-  if(!future&&!holiday&&!off&&!byDate[d]&&!pendingLeave&&!rejectedLeave&&!approvedLeave&&d!==localDate())unmarked++
-  days.push({date:d,record:byDate[d]||null,holiday:hs.find(h=>h.holiday_date===d)||null,weekly_off:off,future,pending_leave:pendingLeave,rejected_leave:rejectedLeave,approved_leave:approvedLeave})
- }
- const present=(records.data||[]).filter(r=>['present','corrected'].includes(r.status)),leaveDates=new Set([...approvedDates,...sandwichSundays,...(records.data||[]).filter(r=>r.status.includes('leave')).map(r=>r.attendance_date)])
- return {days,records:records.data||[],holidays:hs,leave_requests:leaveRows,correction_requests:corrections.data||[],kpis:{working_days:working,present:present.length,leave:leaveDates.size,corrections:(records.data||[]).filter(r=>['corrected','correction_pending'].includes(r.status)).length,unmarked,holidays:hs.length,total_minutes:present.reduce((n,r)=>n+(r.worked_minutes||0),0)}}
+ return buildAttendancePeriodSummary({start,end,records:records.data||[],holidayRows:hs||[],leaveRequests:leaves.data||[],correctionRequests:corrections.data||[]})
+}
+async function monthly(user,userId,year,month){
+ const start=`${year}-${String(month).padStart(2,'0')}-01`,end=new Date(Date.UTC(+year,+month,0)).toISOString().slice(0,10)
+ return periodSummary(user,userId,start,end)
 }
 async function team(user,year,month,financialYear){
  await requirePermission(user,'attendance_view_all')
@@ -141,4 +124,4 @@ async function listRequests(user,type,approval=false){
 async function cancel(user,type,id){const table=type==='correction'?'attendance_correction_requests':'leave_requests',{data,error}=await supabase.from(table).update({status:'cancelled',updated_at:new Date().toISOString()}).eq('id',id).eq('user_id',user.id).eq('status','pending').select().maybeSingle();if(error)throw error;if(!data)throw bad('Only a pending request can be cancelled.',409);return data}
 async function review(user,type,id,decision,note){const key=type==='correction'?'attendance_approve_corrections':'attendance_approve_leave';await requirePermission(user,key);if(decision==='rejected'&&!clean(note))throw bad('A rejection reason is required.');const table=type==='correction'?'attendance_correction_requests':'leave_requests',current=await supabase.from(table).select('*').eq('id',id).eq('status','pending').maybeSingle();if(current.error)throw current.error;if(!current.data)throw bad('This request has already been reviewed.',409);const update={status:decision,reviewed_by:user.id,reviewed_at:new Date().toISOString(),review_note:clean(note)||null,updated_at:new Date().toISOString()},{data,error}=await supabase.from(table).update(update).eq('id',id).eq('status','pending').select().maybeSingle();if(error)throw error;if(!data)throw bad('This request has already been reviewed.',409);if(decision==='approved'&&type==='correction')await supabase.from('attendance_records').upsert({user_id:data.user_id,attendance_date:data.attendance_date,clock_in_at:data.requested_clock_in_at,clock_out_at:data.requested_clock_out_at,worked_minutes:workedMinutes(data.requested_clock_in_at,data.requested_clock_out_at),status:'corrected',source:'correction',correction_request_id:data.id,updated_by:user.id},{onConflict:'user_id,attendance_date'});if(type==='leave'&&decision==='approved'){const calc=await previewLeave({id:data.user_id},data),snapshot={charged_leave_days:calc.charged_leave_days,paid_leave_days:calc.paid_leave_days,loss_of_pay_days:calc.loss_of_pay_days,balance_before:calc.balance_before,projected_balance:calc.projected_balance,calculation_breakdown:calc.calculation_breakdown};await supabase.from('leave_requests').update(snapshot).eq('id',id);await supabase.from('leave_ledger').insert({user_id:data.user_id,entry_date:data.start_date,entry_type:'leave_used',amount:-calc.charged_leave_days,leave_request_id:id,financial_year:calc.financial_year,description:'Approved leave',created_by:user.id});for(const d of calc.calculation_breakdown.filter(x=>x.charged>0))await supabase.from('attendance_records').upsert({user_id:data.user_id,attendance_date:d.date,status:data.duration_type==='half_day'?'half_day_leave':'on_leave',source:'leave',leave_request_id:id,updated_by:user.id},{onConflict:'user_id,attendance_date'})}if(type==='correction'&&decision==='rejected')await supabase.from('attendance_records').update({status:'not_marked',correction_request_id:null}).eq('correction_request_id',id);await notify({recipient_user_id:data.user_id,sender_user_id:user.id,role_type:'system',title:'Attendance request updated',message:`Your ${type==='correction'?'attendance correction':'leave'} request has been ${decision}.`,status:'pending',action_type:'attendance_result',entity_type:type,entity_id:id,action_url:`/attendance?tab=requests&type=${type}&request=${id}`,idempotency_key:`${type}-${decision}:${id}:${data.user_id}`});return data}
 async function updatePermissions(user,values){const a=await admin(user);if(!(a?.role==='super_admin'||a?.is_super_admin))throw bad('Super Admin required.',403);for(const [key,value] of Object.entries(values||{})){if(!KEYS.includes(key)||!['admins','super_admins'].includes(value))throw bad('Invalid attendance permission.');const {error}=await supabase.from('attendance_permissions').upsert({permission_key:key,access_level:value,updated_by:user.id,updated_at:new Date().toISOString()});if(error)throw error}return permissions()}
-module.exports={permissions,updatePermissions,today,clockIn,clockOut,monthly,team,previewLeave,createLeave,createCorrection,listRequests,cancel,review,balance,leaveBalanceSummary,listLeaveBalances,adjustLeaveBalance,holidays,requirePermission}
+module.exports={permissions,updatePermissions,today,clockIn,clockOut,monthly,periodSummary,team,previewLeave,createLeave,createCorrection,listRequests,cancel,review,balance,leaveBalanceSummary,listLeaveBalances,adjustLeaveBalance,holidays,requirePermission}

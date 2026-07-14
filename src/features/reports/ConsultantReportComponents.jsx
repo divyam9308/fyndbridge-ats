@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
@@ -22,7 +22,8 @@ import {
   X
 } from 'lucide-react'
 import CompactPagination from '../../components/CompactPagination'
-import { CANDIDATE_STATUSES, MOCK_REPORT_DATE, candidateOverviewCounts, candidateTotal } from './mockConsultantReportData'
+import { FyndbridgeLoader } from '../../components/FyndbridgeLoader'
+import { CANDIDATE_STATUSES } from '../../utils/candidateStatuses'
 import { formatReportDate } from './reportFormatters'
 
 const STATUS_SHORT_LABELS = {
@@ -51,7 +52,7 @@ const STATUS_TONES = {
 const METRIC_ICON_PROPS = { size: 16, strokeWidth: 1.9 }
 
 function MetricIcon({ label }) {
-  const normalized = label.toLowerCase()
+  const normalized = String(label || '').toLowerCase()
   if (normalized === 'total mandates' || normalized.includes('completed mandates') || normalized.includes('mandates with')) return <BriefcaseBusiness {...METRIC_ICON_PROPS} />
   if (normalized === 'ongoing') return <RefreshCw {...METRIC_ICON_PROPS} />
   if (normalized === 'completed') return <CheckCircle2 {...METRIC_ICON_PROPS} />
@@ -70,14 +71,17 @@ function MetricIcon({ label }) {
   return <BarChart3 {...METRIC_ICON_PROPS} />
 }
 
-export function ReportKpiCard({ label, value, tone = 'blue', compact = false }) {
+export function ReportKpiCard({ label, value, tone = 'blue', compact = false, detail = '' }) {
   return (
     <article className={`report-kpi report-tone-${tone}${compact ? ' is-compact' : ''}`}>
       <div className="report-kpi-top">
         <span className="report-kpi-label">{label}</span>
         <span className="report-kpi-icon" aria-hidden="true"><MetricIcon label={label} /></span>
       </div>
-      <strong>{value}</strong>
+      <div className="report-kpi-value">
+        <strong>{value ?? '—'}</strong>
+        {detail && <small>{detail}</small>}
+      </div>
     </article>
   )
 }
@@ -95,7 +99,9 @@ export function ReportSectionHeader({ title, description, action }) {
 }
 
 function StatusChip({ status }) {
-  return <span className={`report-status-chip is-${status.toLowerCase().replaceAll(' ', '-')}`}>{status}</span>
+  const value = status || '—'
+  const className = String(value).toLowerCase().replaceAll(' ', '-').replace(/[^a-z-]/g, '')
+  return <span className={`report-status-chip is-${className}`}>{value}</span>
 }
 
 function MandateTableHead({ modal = false }) {
@@ -122,55 +128,49 @@ function MandateTableHead({ modal = false }) {
   )
 }
 
-export function RecentMandatesTable({ rows, modal = false }) {
+export function RecentMandatesTable({ rows = [], modal = false }) {
   return (
     <div className="report-table-scroll">
       <table className="report-table report-mandates-table">
         <MandateTableHead modal={modal} />
         <tbody>
-          {rows.map((row) => (
+          {rows.length ? rows.map((row) => (
             <tr key={row.key}>
-              <td><strong>{row.consultant}</strong></td>
-              <td>{row.teamLead}</td>
-              <td>{row.clientName}</td>
-              <td>{row.role}</td>
-              <td>{row.budget}</td>
+              <td><strong>{row.consultant || '—'}</strong></td>
+              <td>{row.teamLead || '—'}</td>
+              <td>{row.clientName || '—'}</td>
+              <td>{row.role || '—'}</td>
+              <td>{row.budget || '—'}</td>
               <td><StatusChip status={row.status} /></td>
-              <td>{row.sector}</td>
+              <td>{row.sector || '—'}</td>
               <td>{formatReportDate(row.allocationDate)}</td>
-              <td className="report-number-cell">{row.candidatesAssigned}</td>
-              {CANDIDATE_STATUSES.map((status) => <td className="report-split-cell" key={status}>{row.counts[status]}</td>)}
+              <td className="report-number-cell">{row.candidatesAssigned ?? 0}</td>
+              {CANDIDATE_STATUSES.map((status) => <td className="report-split-cell" key={status}>{row.counts?.[status] ?? 0}</td>)}
             </tr>
-          ))}
+          )) : (
+            <tr><td className="report-table-empty" colSpan={9 + CANDIDATE_STATUSES.length}>No mandates found for this report scope.</td></tr>
+          )}
         </tbody>
       </table>
     </div>
   )
 }
 
-function daysFromAllocation(date) {
-  const start = new Date(`${date}T00:00:00Z`)
-  const end = new Date(MOCK_REPORT_DATE)
-  return Math.floor((end - start) / 86400000)
+function milestoneLabel(row, field, labelField) {
+  if (row[labelField]) return row[labelField]
+  return row[field] !== undefined && row[field] !== null && Number.isFinite(Number(row[field])) ? `${Number(row[field])} d` : 'Not tracked'
 }
 
-function durationLabel(row) {
-  if (row.status === 'Ongoing') return `${daysFromAllocation(row.allocationDate)} d (ongoing)`
-  if (row.status === 'Completed') return `${row.firstHireDays} d (final)`
-  return '—'
-}
-
-const timingLabel = (value) => Number.isFinite(value) ? `${value} d` : '—'
-
-export function MandateConversionTable({ rows }) {
+export function MandateConversionTable({ rows = [] }) {
   return (
     <div className="report-table-scroll">
       <table className="report-table report-conversion-table">
         <thead>
           <tr>
-            <th>Mandate Name</th>
             <th>Client Name</th>
             <th>Role</th>
+            <th>Status</th>
+            <th>Allocation Date</th>
             <th>First Client Submission</th>
             <th>First Interview</th>
             <th>First Offer</th>
@@ -179,77 +179,141 @@ export function MandateConversionTable({ rows }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
-            const ageing = row.status === 'Ongoing' && daysFromAllocation(row.allocationDate) > 45
-            return (
-              <tr className={ageing ? 'is-ageing' : ''} key={row.key}>
-                <td><strong>{row.mandateName}</strong></td>
-                <td>{row.clientName}</td>
-                <td>{row.role}</td>
-                <td>{timingLabel(row.firstClientSubmissionDays)}</td>
-                <td>{timingLabel(row.firstInterviewDays)}</td>
-                <td>{timingLabel(row.firstOfferDays)}</td>
-                <td>{timingLabel(row.firstHireDays)}</td>
-                <td><span className={`report-duration${ageing ? ' is-ageing' : ''}`}>{durationLabel(row)}</span></td>
-              </tr>
-            )
-          })}
+          {rows.length ? rows.map((row) => (
+            <tr className={row.isAgeingWarning ? 'is-ageing' : ''} key={row.key}>
+              <td><strong>{row.clientName || '—'}</strong></td>
+              <td>{row.role || '—'}</td>
+              <td><StatusChip status={row.status} /></td>
+              <td>{formatReportDate(row.allocationDate)}</td>
+              <td>{milestoneLabel(row, 'firstClientSubmissionDays', 'firstClientSubmissionLabel')}</td>
+              <td>{milestoneLabel(row, 'firstInterviewDays', 'firstInterviewLabel')}</td>
+              <td>{milestoneLabel(row, 'firstOfferDays', 'firstOfferLabel')}</td>
+              <td>{milestoneLabel(row, 'firstHireDays', 'firstHireLabel')}</td>
+              <td><span className={`report-duration${row.isAgeingWarning ? ' is-ageing' : ''}`}>{row.durationLabel || '—'}</span></td>
+            </tr>
+          )) : (
+            <tr><td className="report-table-empty" colSpan="9">No conversion data found for this report scope.</td></tr>
+          )}
         </tbody>
       </table>
     </div>
   )
 }
 
-function matchesQuery(row, query) {
-  if (!query) return true
-  return [row.consultant, row.teamLead, row.clientName, row.role, row.sector, row.mandateName]
-    .some((value) => String(value || '').toLowerCase().includes(query))
+function modalPagination(value, requestedPage, requestedPageSize) {
+  const total = Number(value?.total) || 0
+  const pageSize = Number(value?.pageSize ?? value?.page_size) || requestedPageSize
+  const totalPages = Math.max(Number(value?.totalPages ?? value?.total_pages) || Math.ceil(total / pageSize), 1)
+  const page = Math.min(Math.max(Number(value?.page) || requestedPage, 1), totalPages)
+  return { page, pageSize, total, totalPages }
 }
 
-function sortRows(rows, sort, kind) {
-  const sorted = [...rows]
-  if (sort === 'oldest') return sorted.sort((a, b) => a.allocationDate.localeCompare(b.allocationDate))
-  if (sort === 'client') return sorted.sort((a, b) => a.clientName.localeCompare(b.clientName))
-  if (sort === 'candidates') return sorted.sort((a, b) => b.candidatesAssigned - a.candidatesAssigned)
-  if (sort === 'age') return sorted.sort((a, b) => daysFromAllocation(b.allocationDate) - daysFromAllocation(a.allocationDate))
-  if (sort === 'submission') return sorted.sort((a, b) => (a.firstClientSubmissionDays ?? Infinity) - (b.firstClientSubmissionDays ?? Infinity))
-  if (kind === 'conversion') return sorted.sort((a, b) => b.allocationDate.localeCompare(a.allocationDate))
-  return sorted.sort((a, b) => b.allocationDate.localeCompare(a.allocationDate))
-}
-
-export function ReportDataModal({ kind, rows, onClose }) {
+export function ReportDataModal({ kind, fetchRows, onClose }) {
   const isMandates = kind === 'mandates'
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [sort, setSort] = useState('newest')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(5)
+  const [pageSize, setPageSize] = useState(10)
+  const [rows, setRows] = useState([])
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [retryKey, setRetryKey] = useState(0)
+  const dialogRef = useRef(null)
 
   useEffect(() => {
-    const closeOnEscape = (event) => { if (event.key === 'Escape') onClose() }
+    const normalizedQuery = query.trim()
+    if (normalizedQuery === debouncedQuery) return undefined
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      setError('')
+      setDebouncedQuery(normalizedQuery)
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [debouncedQuery, query])
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const previousFocus = document.activeElement
+    const appRoot = document.getElementById('root')
     const previousOverflow = document.body.style.overflow
+    const previousAriaHidden = appRoot?.getAttribute('aria-hidden') ?? null
+    const rootWasInert = appRoot?.hasAttribute('inert') || false
+
+    const focusableElements = () => [...(dialog?.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    ) || [])].filter((element) => !element.hasAttribute('hidden'))
+    const handleDialogKeys = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusable = focusableElements()
+      if (!focusable.length) {
+        event.preventDefault()
+        dialog?.focus()
+        return
+      }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog?.contains(document.activeElement))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
     document.body.style.overflow = 'hidden'
-    document.addEventListener('keydown', closeOnEscape)
+    appRoot?.setAttribute('inert', '')
+    appRoot?.setAttribute('aria-hidden', 'true')
+    document.addEventListener('keydown', handleDialogKeys)
+    const focusFrame = window.requestAnimationFrame(() => (focusableElements()[0] || dialog)?.focus())
     return () => {
+      window.cancelAnimationFrame(focusFrame)
       document.body.style.overflow = previousOverflow
-      document.removeEventListener('keydown', closeOnEscape)
+      document.removeEventListener('keydown', handleDialogKeys)
+      if (!rootWasInert) appRoot?.removeAttribute('inert')
+      if (previousAriaHidden === null) appRoot?.removeAttribute('aria-hidden')
+      else appRoot?.setAttribute('aria-hidden', previousAriaHidden)
+      previousFocus?.focus?.()
     }
   }, [onClose])
 
-  const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    const next = rows.filter((row) => matchesQuery(row, normalizedQuery) && (status === 'all' || row.status === status))
-    return sortRows(next, sort, kind)
-  }, [kind, query, rows, sort, status])
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const safePage = Math.min(page, totalPages)
-  const pagedRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
+  useEffect(() => {
+    const controller = new AbortController()
+
+    fetchRows({ search: debouncedQuery, status, sort, page, pageSize }, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return
+        const nextRows = Array.isArray(result?.rows) ? result.rows : []
+        const nextPagination = modalPagination(result?.pagination, page, pageSize)
+        setRows(nextRows)
+        setPagination(nextPagination)
+      })
+      .catch((requestError) => {
+        if (requestError?.name !== 'AbortError' && !controller.signal.aborted) {
+          setRows([])
+          setError(requestError?.message || 'Unable to load this report list.')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [debouncedQuery, fetchRows, page, pageSize, retryKey, sort, status])
 
   if (typeof document === 'undefined') return null
 
   return createPortal(
     <div className="report-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section className="report-modal" role="dialog" aria-modal="true" aria-labelledby={`${kind}-modal-title`}>
+      <section ref={dialogRef} className="report-modal" role="dialog" aria-modal="true" aria-labelledby={`${kind}-modal-title`} tabIndex={-1}>
         <header className="report-modal-header">
           <div>
             <h2 id={`${kind}-modal-title`}>{isMandates ? 'All Mandates' : 'All Mandate Conversion & Ageing'}</h2>
@@ -260,11 +324,15 @@ export function ReportDataModal({ kind, rows, onClose }) {
         <div className="report-modal-toolbar">
           <label className="report-search-control">
             <Search size={17} />
-            <input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder="Search by client, role, sector or consultant" />
+            <input
+              value={query}
+              onChange={(event) => { setError(''); setQuery(event.target.value); setPage(1) }}
+              placeholder={isMandates ? 'Search by client, role, sector or consultant' : 'Search by client or role'}
+            />
           </label>
           <label>
             <span>Mandate status</span>
-            <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }}>
+            <select value={status} onChange={(event) => { setLoading(true); setError(''); setStatus(event.target.value); setPage(1) }}>
               <option value="all">All statuses</option>
               <option>Ongoing</option>
               <option>Completed</option>
@@ -273,7 +341,7 @@ export function ReportDataModal({ kind, rows, onClose }) {
           </label>
           <label>
             <span>Sort by</span>
-            <select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1) }}>
+            <select value={sort} onChange={(event) => { setLoading(true); setError(''); setSort(event.target.value); setPage(1) }}>
               <option value="newest">Newest allocation</option>
               <option value="oldest">Oldest allocation</option>
               <option value="client">Client A–Z</option>
@@ -281,21 +349,27 @@ export function ReportDataModal({ kind, rows, onClose }) {
             </select>
           </label>
         </div>
-        <div className="report-modal-body">
-          {pagedRows.length ? (isMandates ? <RecentMandatesTable rows={pagedRows} modal /> : <MandateConversionTable rows={pagedRows} />) : (
+        <div className="report-modal-body" aria-busy={loading}>
+          {loading ? <FyndbridgeLoader size={70} label="Loading report data..." /> : error ? (
+            <div className="report-empty-state report-error-state">
+              <p>{error}</p>
+              <button className="report-secondary-button" type="button" onClick={() => { setLoading(true); setError(''); setRetryKey((value) => value + 1) }}>Try again</button>
+            </div>
+          ) : rows.length ? (isMandates ? <RecentMandatesTable rows={rows} modal /> : <MandateConversionTable rows={rows} />) : (
             <div className="report-empty-state">No mandates match these filters.</div>
           )}
         </div>
         <footer className="report-modal-footer">
           <label className="report-page-size">
             <span>Rows per page</span>
-            <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1) }}>
-              <option value="5">5</option>
+            <select value={pageSize} onChange={(event) => { setLoading(true); setError(''); setPageSize(Number(event.target.value)); setPage(1) }}>
               <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
             </select>
           </label>
-          <span className="report-result-count">{filtered.length} mandate{filtered.length === 1 ? '' : 's'}</span>
-          <CompactPagination page={safePage} totalPages={totalPages} onPageChange={setPage} />
+          <span className="report-result-count">{pagination.total} mandate{pagination.total === 1 ? '' : 's'}</span>
+          <CompactPagination page={pagination.page} totalPages={pagination.totalPages} onPageChange={(nextPage) => { setLoading(true); setError(''); setPage(nextPage) }} loading={loading} />
           <button className="report-secondary-button" type="button" onClick={onClose}>Close</button>
         </footer>
       </section>
@@ -304,12 +378,14 @@ export function ReportDataModal({ kind, rows, onClose }) {
   )
 }
 
-export function CandidateOverview() {
+export function CandidateOverview({ overview }) {
+  const total = Number(overview?.total) || 0
+  const counts = overview?.counts || {}
   return (
     <div className="candidate-overview-grid">
-      <ReportKpiCard label="Total Candidates" value={candidateTotal} tone="navy" />
+      <ReportKpiCard label="Total Candidates" value={total} tone="navy" />
       {CANDIDATE_STATUSES.map((status) => (
-        <ReportKpiCard key={status} label={status} value={candidateOverviewCounts[status]} tone={STATUS_TONES[status]} />
+        <ReportKpiCard key={status} label={status} value={Number(counts[status]) || 0} tone={STATUS_TONES[status]} />
       ))}
     </div>
   )
@@ -320,27 +396,28 @@ function formatPercent(value) {
   return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}%`
 }
 
-export function CandidatePipeline() {
-  const stages = [
-    { label: 'Total Candidates', count: candidateTotal, detail: '100% of Total' },
-    { label: 'Interested', count: candidateOverviewCounts.Interested, detail: `${formatPercent(candidateOverviewCounts.Interested / candidateTotal * 100)} of Total` },
-    { label: 'Client Submission', count: candidateOverviewCounts['Client Submission'], detail: `${formatPercent(candidateOverviewCounts['Client Submission'] / candidateTotal * 100)} of Total` },
-    { label: 'Interview', count: candidateOverviewCounts.Interview, detail: `${formatPercent(candidateOverviewCounts.Interview / candidateTotal * 100)} of Total` },
-    { label: 'Offered', count: candidateOverviewCounts.Offered, detail: `${formatPercent(candidateOverviewCounts.Offered / candidateTotal * 100)} of Total` },
-    { label: 'Hired', count: candidateOverviewCounts.Hired, detail: `${formatPercent(candidateOverviewCounts.Hired / candidateTotal * 100)} of Total` }
-  ]
+export function CandidatePipeline({ stages = [], total = 0 }) {
+  const safeTotal = Number(total) || 0
+  const hasTotalStage = stages.some((stage) => stage.key === 'total' || stage.label === 'Total Candidates')
+  const displayedStages = hasTotalStage ? stages : [{ key: 'total', label: 'Total Candidates', count: safeTotal }, ...stages]
+
   return (
     <div className="candidate-pipeline" aria-label="Candidate pipeline">
-      {stages.map((stage, index) => (
-        <div className="candidate-pipeline-step" key={stage.label}>
-          <article className={`pipeline-stage stage-${index}`}>
-            <span>{stage.label}</span>
-            <strong>{stage.count}</strong>
-            <small>{stage.detail}</small>
-          </article>
-          {index < stages.length - 1 && <ArrowRight className="pipeline-arrow" size={19} aria-hidden="true" />}
-        </div>
-      ))}
+      {displayedStages.map((stage, index) => {
+        const count = Number(stage.count) || 0
+        const isTotal = stage.key === 'total' || stage.label === 'Total Candidates'
+        const percentage = isTotal ? (safeTotal ? 100 : 0) : (safeTotal ? count / safeTotal * 100 : 0)
+        return (
+          <div className="candidate-pipeline-step" key={stage.key || stage.label}>
+            <article className={`pipeline-stage stage-${Math.min(index, 5)}`}>
+              <span>{stage.label}</span>
+              <strong>{count}</strong>
+              <small>{formatPercent(percentage)} of Total</small>
+            </article>
+            {index < displayedStages.length - 1 && <ArrowRight className="pipeline-arrow" size={19} aria-hidden="true" />}
+          </div>
+        )
+      })}
     </div>
   )
 }

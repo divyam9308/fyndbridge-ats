@@ -5,7 +5,7 @@ const requireAuth = require('./middleware/requireAuth')
 
 const app = express()
 
-const PERF_ROUTES = /^\/api\/(candidates|clients|jobs|dashboard|notifications|invoice|admin|performance|presence)(?:\/|$)/
+const PERF_ROUTES = /^\/api\/(candidates|clients|jobs|dashboard|notifications|invoice|admin|performance|presence|reports)(?:\/|$)/
 
 app.use((req, res, next) => {
   if (!(process.env.NODE_ENV !== 'production' || process.env.DEBUG_PERF === 'true') || !PERF_ROUTES.test(req.path)) return next()
@@ -52,6 +52,7 @@ app.use('/api/notifications', requireAuth, require('./routes/notifications'))
 app.use('/api/admin', requireAuth, require('./routes/admin'))
 app.use('/api/performance', requireAuth, require('./routes/performance'))
 app.use('/api/attendance', requireAuth, require('./routes/attendance'))
+app.use('/api/reports', requireAuth, require('./routes/reports'))
 app.use('/api/user-manual', requireAuth, require('./routes/userManual'))
 app.use('/api/presence', requireAuth, require('./routes/presence'))
 app.use('/api/invoice', requireAuth, require('./routes/invoice'))

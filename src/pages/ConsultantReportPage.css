@@ -78,6 +78,7 @@
 .report-control .formatted-date-input { display: block; width: 100%; height: 41px; margin: 0; line-height: normal; letter-spacing: normal; text-transform: none; }
 .report-control .report-date-input { display: block; height: 41px; padding: 0 12px; cursor: pointer; }
 .report-date-range .formatted-date-calendar { z-index: 10150; }
+.report-date-range .report-control:last-child .formatted-date-calendar { right: 0; left: auto; }
 .report-control input { padding: 0 34px 0 12px; }
 .report-control select { padding: 0 32px 0 12px; }
 .report-control input:focus,
@@ -105,6 +106,8 @@
 }
 .report-primary-button { background: var(--navy); color: #fff; }
 .report-primary-button:hover { background: #11277c; transform: translateY(-1px); }
+.report-primary-button:disabled,
+.report-secondary-button:disabled { opacity: .58; cursor: not-allowed; transform: none; }
 .report-secondary-button { border: 1px solid #d9dee7; background: #fff; color: #263248; }
 .report-secondary-button:hover { border-color: #c3cad5; background: #f8f9fb; }
 .report-text-button { min-height: 34px; padding: 6px 11px; background: rgba(var(--brand-blue-rgb), .065); color: var(--navy); }
@@ -112,7 +115,7 @@
 
 .consultant-identity-card {
   display: grid;
-  grid-template-columns: minmax(260px, 1.15fr) minmax(680px, 2.6fr);
+  grid-template-columns: minmax(260px, 1fr) auto;
   align-items: center;
   gap: 28px;
   margin-bottom: 16px;
@@ -153,10 +156,11 @@
 }
 .employee-status-chip::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .employee-status-chip.is-leave { background: #f3ecff; color: #7446b8; }
-.consultant-scope-details { display: grid; grid-template-columns: .8fr 1.2fr 1.35fr 1.65fr; gap: 12px; }
+.consultant-scope-details { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .consultant-scope-details div { min-width: 0; padding-left: 13px; border-left: 1px solid #e7e9ee; }
 .consultant-scope-details dt { margin-bottom: 3px; color: #7a8495; font-size: 9.5px; font-weight: 800; letter-spacing: .055em; text-transform: uppercase; }
 .consultant-scope-details dd { color: #273247; font-size: 11.5px; font-weight: 750; overflow-wrap: anywhere; }
+.consultant-scope-details.is-report-only { min-width: 220px; }
 
 .report-tabs {
   display: flex;
@@ -250,7 +254,9 @@
   background: var(--report-accent-soft);
   color: var(--report-accent);
 }
+.report-kpi-value { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
 .report-kpi strong { color: var(--navy); font-family: var(--font-body); font-size: 29px; font-weight: 800; line-height: 1; letter-spacing: -.025em; }
+.report-kpi-value small { color: #778194; font-size: 9.5px; font-weight: 650; line-height: 1.25; }
 .report-kpi.is-compact { min-height: 108px; }
 .report-tone-navy { --report-accent: #001264; --report-accent-soft: #edf0f8; }
 .report-tone-blue { --report-accent: #3578c5; --report-accent-soft: #edf4fc; }
@@ -297,6 +303,7 @@
 .report-table tbody tr:last-child td { border-bottom: 0; }
 .report-table tbody tr:hover td { background: #fafbfd; }
 .report-table td strong { color: #1e2a40; font-weight: 750; }
+.report-table td.report-table-empty { height: 120px; color: #778194; text-align: center; }
 .report-table th.report-status-group { background: #edf2fb; color: var(--navy); text-align: center; }
 .report-table th.report-status-heading { max-width: 118px; min-width: 78px; padding: 8px 7px; font-size: 8.5px; text-align: center; white-space: normal; }
 .report-number-cell,
@@ -321,7 +328,6 @@
 .report-conversion-table tr.is-ageing:hover td { background: #fff6e7; }
 .report-duration.is-ageing { background: #fff0d8; color: #8a5a12; }
 .leave-balance-value { background: #e9f7ee; color: #23733d; }
-.leave-balance-table { min-width: 620px; }
 
 .candidate-overview-grid {
   display: grid;
@@ -360,7 +366,57 @@
 .pipeline-arrow { flex: 0 0 auto; margin: 0 7px; color: #9ba3b1; }
 
 .attendance-metric-grid { display: grid; grid-template-columns: repeat(6, minmax(125px, 1fr)); gap: 11px; }
-.attendance-metric-grid .report-kpi:last-child { grid-column: span 2; }
+.report-leave-balance { width: min(280px, 100%); }
+
+.report-load-state {
+  min-height: clamp(340px, calc(100dvh - 330px), 560px);
+  border: 1px solid #e0e3e9;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(var(--brand-blue-rgb), .04);
+}
+.report-load-state .fyndbridge-loader-wrap { min-height: inherit; }
+.report-error-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px;
+  color: #6d3d3d;
+  text-align: center;
+}
+.report-error-panel h2 { color: var(--navy); font-family: var(--font-display); font-size: 25px; }
+.report-error-panel p { max-width: 600px; color: #6d7585; font-size: 12px; }
+.report-warning-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 11px 14px;
+  border: 1px solid #ecdba8;
+  border-radius: 10px;
+  background: #fffaf0;
+  color: #795b18;
+  font-size: 11.5px;
+}
+.report-refresh-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  border: 1px solid #d8e3ee;
+  border-radius: 9px;
+  background: #f4f8fc;
+  color: #3d5d78;
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.report-refresh-banner.is-error { border-color: #ebc7c7; background: #fff7f7; color: #874949; }
+.report-refresh-banner .report-text-button { min-height: 30px; flex: 0 0 auto; padding: 5px 10px; }
+.report-inline-empty { min-height: 112px; border: 1px dashed #dfe3ea; border-radius: 11px; background: #fafbfd; }
 
 .report-page-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 0 2px; color: #7a8495; font-size: 10.5px; }
 .report-page-footer strong { color: #4a566a; }
@@ -427,7 +483,9 @@
 .report-search-control svg { position: absolute; left: 12px; bottom: 12px; color: #778194; }
 .report-search-control input { padding-left: 36px; }
 .report-modal-body { min-height: 230px; padding: 14px 20px; overflow: auto; }
+.report-modal-body .fyndbridge-loader-wrap { min-height: 230px; }
 .report-empty-state { display: grid; min-height: 210px; place-items: center; color: #778194; }
+.report-error-state { align-content: center; gap: 12px; text-align: center; }
 .report-modal-footer {
   display: flex;
   align-items: center;
@@ -470,8 +528,7 @@
 @media (max-width: 1050px) {
   .report-header-actions { grid-template-columns: 1fr 1fr; }
   .report-kpi-grid.is-five { grid-template-columns: repeat(3, minmax(135px, 1fr)); }
-  .consultant-scope-details { grid-template-columns: repeat(2, 1fr); row-gap: 15px; }
-  .consultant-scope-details div:nth-child(3) { padding-left: 0; border-left: 0; }
+  .consultant-scope-details { grid-template-columns: 1fr; row-gap: 15px; }
 }
 
 @media (max-width: 760px) {
@@ -482,7 +539,7 @@
   .report-primary-button,
   .report-secondary-button { width: 100%; }
   .consultant-identity-card { padding: 16px; }
-  .consultant-scope-details { grid-template-columns: 1fr 1fr; }
+  .consultant-scope-details { grid-template-columns: 1fr; }
   .consultant-scope-details div,
   .consultant-scope-details div:nth-child(3) { padding-left: 0; border-left: 0; }
   .report-section { padding: 16px; }
@@ -493,8 +550,7 @@
   .report-kpi-grid.is-six,
   .candidate-overview-grid,
   .attendance-metric-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
-  .attendance-metric-grid .report-kpi:last-child { grid-column: span 2; }
-  .report-modal-backdrop { padding: 0; }
+  .report-modal-backdrop { inset: var(--topbar-height) 0 0 0; padding: 0; }
   .report-modal { width: 100%; height: 100%; max-height: none; border-radius: 0; }
   .report-modal-toolbar { grid-template-columns: 1fr; }
   .report-modal-body { padding: 12px; }
@@ -513,7 +569,6 @@
   .report-kpi-grid.is-six,
   .candidate-overview-grid,
   .attendance-metric-grid { grid-template-columns: 1fr; }
-  .attendance-metric-grid .report-kpi:last-child { grid-column: auto; }
   .consultant-scope-details { grid-template-columns: 1fr; }
   .report-modal-footer .compact-pagination { order: 3; width: 100%; justify-content: center; }
 }
