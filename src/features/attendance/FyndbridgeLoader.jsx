@@ -9,7 +9,7 @@ export function FyndbridgeLoader({ size = 84, label = 'Loading attendance...', c
       <svg
         width={size}
         height={size}
-        viewBox="0 0 240 240"
+        viewBox="0 0 90 94"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         aria-hidden="true"
@@ -18,13 +18,13 @@ export function FyndbridgeLoader({ size = 84, label = 'Loading attendance...', c
       >
         <g
           fill="none"
-          stroke="#E0B300"
-          strokeWidth="16"
+          stroke="#B39266"
+          strokeWidth="5"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
           <path
-            d="M83 126 L83 45 L191 45 L191 132 L155 132"
+            d="M47 52 L35 52 L35 14 L79 14 L79 52 L69 52"
             pathLength="1"
             strokeDasharray="1"
             strokeDashoffset="1"
@@ -46,7 +46,7 @@ export function FyndbridgeLoader({ size = 84, label = 'Loading attendance...', c
           </path>
 
           <path
-            d="M68 98 L37 98 L37 185 L139 185 L139 98 L112 98"
+            d="M26 35 L13 35 L13 73 L58 73 L58 35 L47 35"
             pathLength="1"
             strokeDasharray="1"
             strokeDashoffset="1"
