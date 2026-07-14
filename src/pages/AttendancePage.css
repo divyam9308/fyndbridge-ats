@@ -6,6 +6,10 @@
 @media(max-width:720px){.att-leave-summary{grid-template-columns:1fr}.att-leave-summary-grid,.att-balance.att-balance-detailed{grid-template-columns:1fr 1fr}}
 .att-person small,.att-holidays .att-table-card td small{display:none}
 .att-loading-table{min-height:360px}.att-loading-table table{min-width:100%}.att-skeleton{display:block;height:14px;border-radius:6px;background:linear-gradient(90deg,#eef0f5 25%,#f8f9fb 37%,#eef0f5 63%);background-size:400% 100%;animation:att-skeleton-shimmer 1.4s ease infinite}.att-skeleton-head{height:12px;width:70%}@keyframes att-skeleton-shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
+.fyndbridge-loader-wrap{width:100%;min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:transparent;color:var(--gray-500);font-size:14px;font-weight:400;text-align:center}.fyndbridge-loader{width:var(--fyndbridge-loader-size);height:auto;flex-shrink:0}
+@media(max-width:1100px){.fyndbridge-loader{width:min(var(--fyndbridge-loader-size),70px)}}
+@media(max-width:720px){.fyndbridge-loader{width:min(var(--fyndbridge-loader-size),60px)}}
+@media(prefers-reduced-motion:reduce){.fyndbridge-loader path{stroke-dashoffset:0;opacity:1}.fyndbridge-loader animate{display:none}}
 .att-day.is-pending-leave{background:#fff1d8;border-color:#e5ad4f;color:#936000}
 .att-day.is-rejected-leave{background:#fbeaea;border-color:#e4a5a5;color:#a63a3a}.att-day.is-holiday,.att-day.is-weekly{cursor:not-allowed;pointer-events:none}
 
