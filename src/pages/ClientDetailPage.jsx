@@ -25,7 +25,7 @@ const SORT_OPTIONS = [
   { field: 'candidate_name', label: 'Alphabetic Order', toggle: true },
   { field: 'consultant', label: 'Consultant', toggle: false },
 ]
-const RELOCATE_OPTIONS = ['', 'Yes', 'No']
+const RELOCATE_OPTIONS = ['', 'Yes', 'No', 'NA']
 const statusLabelForValue = (value) => CLIENT_DETAIL_STATUS_OPTIONS.find(option => option.value === value)?.label || value
 
 const pageSize = 50
@@ -495,7 +495,7 @@ export default function ClientDetailPage() {
         skills: editForm.skills.split(',').map(skill => skill.trim()).filter(Boolean),
         experience_years: editForm.experience_years === '' ? null : Number(editForm.experience_years),
         notice_period: editForm.notice_period === '' ? null : Number(editForm.notice_period),
-        open_to_relocate: editForm.open_to_relocate === '' ? null : editForm.open_to_relocate === 'Yes',
+        open_to_relocate: editForm.open_to_relocate === '' ? null : (editForm.open_to_relocate === 'NA' ? 'NA' : editForm.open_to_relocate === 'Yes'),
         current_salary: editForm.current_salary === '' ? null : Number(editForm.current_salary),
         expected_salary: editForm.expected_salary === '' ? null : Number(editForm.expected_salary),
         offered_ctc: editForm.status === 'Hired' && editForm.offered_ctc !== '' ? Number(editForm.offered_ctc) : null,

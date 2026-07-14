@@ -433,9 +433,9 @@ function validateCandidatePayload(body, { partial = false, requireStatus = !part
   if (
     body.open_to_relocate !== undefined &&
     body.open_to_relocate !== null &&
-    typeof body.open_to_relocate !== 'boolean'
+    !['true', 'false', 'NA'].includes(body.open_to_relocate)
   ) {
-    errors.open_to_relocate = 'open_to_relocate must be true or false'
+    errors.open_to_relocate = 'open_to_relocate must be Yes, No, or NA'
   }
 
   for (const field of ['current_salary', 'expected_salary']) {
@@ -1735,8 +1735,11 @@ function normalizeRequestBody(body) {
       next.skills = next.skills.split(',').map(cleanText).filter(Boolean)
     }
   }
+  if (next.open_to_relocate === true) next.open_to_relocate = 'true'
+  if (next.open_to_relocate === false) next.open_to_relocate = 'false'
   if (typeof next.open_to_relocate === 'string') {
-    next.open_to_relocate = next.open_to_relocate === '' ? null : next.open_to_relocate === 'true'
+    const value = cleanText(next.open_to_relocate).toLowerCase()
+    next.open_to_relocate = value === '' ? null : (['yes', 'true'].includes(value) ? 'true' : (['no', 'false'].includes(value) ? 'false' : (value === 'na' ? 'NA' : next.open_to_relocate)))
   }
   return next
 }

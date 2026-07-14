@@ -24,7 +24,7 @@ export const apiCandidateToUi = (row) => ({
   currentOrganisation: row.current_organisation || row.current_company || '',
   exp: row.experience_years ?? '',
   noticePeriod: row.notice_period ?? '',
-  openToRelocate: row.open_to_relocate === null || row.open_to_relocate === undefined ? '' : (row.open_to_relocate ? 'Yes' : 'No'),
+  openToRelocate: row.open_to_relocate === null || row.open_to_relocate === undefined || row.open_to_relocate === '' ? '' : (row.open_to_relocate === 'NA' ? 'NA' : (row.open_to_relocate === true || row.open_to_relocate === 'true' || row.open_to_relocate === 'Yes' ? 'Yes' : 'No')),
   salary: row.current_salary ?? '',
   expectedSalary: row.expected_salary ?? '',
   offeredCtc: row.offered_ctc ?? '',

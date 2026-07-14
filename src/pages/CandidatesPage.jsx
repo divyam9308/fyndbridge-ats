@@ -25,7 +25,7 @@ import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 
 /* ====== Static reference data ====== */
 const STATUS_OPTIONS = CANDIDATE_STATUS_OPTIONS
-const RELOCATE_OPTIONS = ['', 'Yes', 'No']
+const RELOCATE_OPTIONS = ['', 'Yes', 'No', 'NA']
 const MAX_RESUME_FILES = 10
 const MAX_RESUME_SIZE = 10 * 1024 * 1024
 const RESUME_PARSE_SIZE_GUIDANCE = 'The combined file size of all uploaded CVs must not exceed 4.5 MB.'
@@ -207,7 +207,7 @@ const apiCandidateToUi = (row) => ({
   currentOrganisation: row.current_organisation || row.current_company || '',
   exp: row.experience_years ?? '',
   noticePeriod: row.notice_period ?? '',
-  openToRelocate: row.open_to_relocate === null || row.open_to_relocate === undefined ? '' : (row.open_to_relocate ? 'Yes' : 'No'),
+  openToRelocate: row.open_to_relocate === null || row.open_to_relocate === undefined || row.open_to_relocate === '' ? '' : (row.open_to_relocate === 'NA' ? 'NA' : (row.open_to_relocate === true || row.open_to_relocate === 'true' || row.open_to_relocate === 'Yes' ? 'Yes' : 'No')),
   salary: row.current_salary ?? '',
   expectedSalary: row.expected_salary ?? '',
   offeredCtc: row.offered_ctc ?? '',
@@ -283,7 +283,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     current_organisation: f.currentOrganisation,
     experience_years: cleanNumberForApi(f.exp),
     notice_period: cleanNumberForApi(f.noticePeriod),
-    open_to_relocate: f.openToRelocate === '' ? null : f.openToRelocate === 'Yes',
+    open_to_relocate: f.openToRelocate === '' ? null : (f.openToRelocate === 'NA' ? 'NA' : f.openToRelocate === 'Yes'),
     skills: f.skills,
     education: f.education,
     client_name: f.client,
