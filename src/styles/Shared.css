@@ -281,10 +281,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 318px;
-  min-width: 318px;
+  width: auto;
+  min-width: 0;
   min-height: 30px;
-  flex: 0 0 318px;
+  flex: 0 0 auto;
   flex-wrap: nowrap;
   margin-left: auto;
   justify-content: flex-end;
