@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { CalendarDays } from 'lucide-react'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
 const toDisplayValue = (value) => {
@@ -50,6 +49,7 @@ export default function FormattedDateInput({ value, onChange, className = 'form-
         inputMode="numeric"
         placeholder="dd/mm/yyyy"
         value={isEditing ? displayValue : toDisplayValue(value)}
+        onClick={openPicker}
         onFocus={() => {
           setDisplayValue(toDisplayValue(value))
           setIsEditing(true)
@@ -71,16 +71,6 @@ export default function FormattedDateInput({ value, onChange, className = 'form-
         disabled={disabled}
         autoComplete="off"
       />
-      <button
-        type="button"
-        className="formatted-date-calendar-button"
-        onClick={openPicker}
-        disabled={disabled}
-        aria-label="Choose date from calendar"
-        title="Choose date from calendar"
-      >
-        <CalendarDays size={16} />
-      </button>
       <input
         ref={pickerRef}
         className="formatted-date-native-picker"
@@ -92,6 +82,7 @@ export default function FormattedDateInput({ value, onChange, className = 'form-
           onChange(event.target.value)
           setDisplayValue('')
           setIsEditing(false)
+          pickerRef.current?.blur()
         }}
         disabled={disabled}
       />
