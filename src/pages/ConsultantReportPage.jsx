@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BriefcaseBusiness, CalendarCheck2, ChevronDown, FileDown, Play, UsersRound } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
+import FormattedDateInput from '../components/FormattedDateInput'
 import {
   CandidateOverview,
   CandidatePipeline,
@@ -19,9 +20,9 @@ import {
   leaveBalances,
   mockConsultants,
   mockMandates,
-  positiveOutcomeMetrics,
-  reportPeriods
+  positiveOutcomeMetrics
 } from '../features/reports/mockConsultantReportData'
+import '../styles/Shared.css'
 import './ConsultantReportPage.css'
 
 const TABS = [
@@ -34,6 +35,10 @@ function generatedLabel(value) {
   return new Intl.DateTimeFormat('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
   }).format(new Date(value))
+}
+
+function dateRangeLabel(fromDate, toDate) {
+  return `${formatReportDate(fromDate)} – ${formatReportDate(toDate)}`
 }
 
 function MandatesReport({ rows, openModal }) {
@@ -138,9 +143,11 @@ function OutcomesReport() {
 export default function ConsultantReportPage() {
   const { user } = useAuth()
   const [draftConsultantName, setDraftConsultantName] = useState(mockConsultants[0].name)
-  const [draftPeriod, setDraftPeriod] = useState(reportPeriods[0])
+  const [draftFromDate, setDraftFromDate] = useState('2026-07-01')
+  const [draftToDate, setDraftToDate] = useState('2026-07-15')
   const [selectedConsultant, setSelectedConsultant] = useState(mockConsultants[0])
-  const [selectedPeriod, setSelectedPeriod] = useState(reportPeriods[0])
+  const [selectedFromDate, setSelectedFromDate] = useState('2026-07-01')
+  const [selectedToDate, setSelectedToDate] = useState('2026-07-15')
   const [generatedOn, setGeneratedOn] = useState(MOCK_REPORT_DATE)
   const [activeTab, setActiveTab] = useState('mandates')
   const [modal, setModal] = useState('')
@@ -148,6 +155,7 @@ export default function ConsultantReportPage() {
 
   const generatedBy = user?.profile_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'FYNDBRIDGE User'
   const scopedMandates = useMemo(() => mockMandates.map((row) => ({ ...row, consultant: selectedConsultant.name })), [selectedConsultant.name])
+  const selectedPeriod = dateRangeLabel(selectedFromDate, selectedToDate)
 
   useEffect(() => {
     if (!toast) return undefined
@@ -156,13 +164,22 @@ export default function ConsultantReportPage() {
   }, [toast])
 
   const generateReport = () => {
+    if (!draftFromDate || !draftToDate) {
+      setToast('Choose both a From date and a To date.')
+      return
+    }
+    if (draftFromDate > draftToDate) {
+      setToast('From date cannot be later than To date.')
+      return
+    }
     const normalized = draftConsultantName.trim().toLowerCase()
     const match = mockConsultants.find((consultant) => consultant.name.toLowerCase() === normalized)
       || mockConsultants.find((consultant) => consultant.name.toLowerCase().startsWith(normalized))
       || selectedConsultant
     setDraftConsultantName(match.name)
     setSelectedConsultant(match)
-    setSelectedPeriod(draftPeriod)
+    setSelectedFromDate(draftFromDate)
+    setSelectedToDate(draftToDate)
     setGeneratedOn(new Date().toISOString())
     setToast(`Report updated for ${match.name}.`)
   }
@@ -197,12 +214,16 @@ export default function ConsultantReportPage() {
               </datalist>
             </div>
           </label>
-          <label className="report-control">
-            <span>Report period</span>
-            <select value={draftPeriod} onChange={(event) => setDraftPeriod(event.target.value)}>
-              {reportPeriods.map((period) => <option key={period}>{period}</option>)}
-            </select>
-          </label>
+          <div className="report-date-range" aria-label="Report period date range">
+            <label className="report-control">
+              <span>From date</span>
+              <FormattedDateInput value={draftFromDate} onChange={setDraftFromDate} className="report-date-input" name="report-from-date" />
+            </label>
+            <label className="report-control">
+              <span>To date</span>
+              <FormattedDateInput value={draftToDate} onChange={setDraftToDate} className="report-date-input" name="report-to-date" />
+            </label>
+          </div>
           <button className="report-primary-button" type="button" onClick={generateReport}><Play size={16} fill="currentColor" />Generate Report</button>
           <button className="report-secondary-button" type="button" onClick={() => setToast('Export will be connected in a future update.')}><FileDown size={17} />Export Report</button>
         </div>

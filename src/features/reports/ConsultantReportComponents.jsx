@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowRight, Search, X } from 'lucide-react'
 import CompactPagination from '../../components/CompactPagination'
 import { CANDIDATE_STATUSES, MOCK_REPORT_DATE, candidateOverviewCounts, candidateTotal } from './mockConsultantReportData'
@@ -199,7 +200,9 @@ export function ReportDataModal({ kind, rows, onClose }) {
   const safePage = Math.min(page, totalPages)
   const pagedRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
 
-  return (
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
     <div className="report-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <section className="report-modal" role="dialog" aria-modal="true" aria-labelledby={`${kind}-modal-title`}>
         <header className="report-modal-header">
@@ -251,7 +254,8 @@ export function ReportDataModal({ kind, rows, onClose }) {
           <button className="report-secondary-button" type="button" onClick={onClose}>Close</button>
         </footer>
       </section>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -275,10 +279,10 @@ export function CandidatePipeline() {
   const stages = [
     { label: 'Total Candidates', count: candidateTotal, detail: '100% of Total' },
     { label: 'Interested', count: candidateOverviewCounts.Interested, detail: `${formatPercent(candidateOverviewCounts.Interested / candidateTotal * 100)} of Total` },
-    { label: 'Client Submission', count: candidateOverviewCounts['Client Submission'], detail: `${formatPercent(candidateOverviewCounts['Client Submission'] / candidateOverviewCounts.Interested * 100)} of Interested` },
-    { label: 'Interview', count: candidateOverviewCounts.Interview, detail: `${formatPercent(candidateOverviewCounts.Interview / candidateOverviewCounts['Client Submission'] * 100)} of Client Submission` },
-    { label: 'Offered', count: candidateOverviewCounts.Offered, detail: `${formatPercent(candidateOverviewCounts.Offered / candidateOverviewCounts.Interview * 100)} of Interview` },
-    { label: 'Hired', count: candidateOverviewCounts.Hired, detail: `${formatPercent(candidateOverviewCounts.Hired / candidateOverviewCounts.Offered * 100)} of Offered` }
+    { label: 'Client Submission', count: candidateOverviewCounts['Client Submission'], detail: `${formatPercent(candidateOverviewCounts['Client Submission'] / candidateTotal * 100)} of Total` },
+    { label: 'Interview', count: candidateOverviewCounts.Interview, detail: `${formatPercent(candidateOverviewCounts.Interview / candidateTotal * 100)} of Total` },
+    { label: 'Offered', count: candidateOverviewCounts.Offered, detail: `${formatPercent(candidateOverviewCounts.Offered / candidateTotal * 100)} of Total` },
+    { label: 'Hired', count: candidateOverviewCounts.Hired, detail: `${formatPercent(candidateOverviewCounts.Hired / candidateTotal * 100)} of Total` }
   ]
   return (
     <div className="candidate-pipeline" aria-label="Candidate pipeline">

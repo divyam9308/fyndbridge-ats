@@ -50,13 +50,6 @@ export const mockConsultants = [
   }
 ]
 
-export const reportPeriods = [
-  'This Month · Jul 2026',
-  'Last 30 Days',
-  'Q1 · FY 2026–27',
-  'FY 2026–27'
-]
-
 const statusCounts = (values) => Object.fromEntries(CANDIDATE_STATUSES.map((status, index) => [status, values[index] || 0]))
 
 const mandateRows = [
