@@ -9,6 +9,7 @@ import { useAdminAccess } from '../hooks/useAdminAccess'
 import { usePageViewPermissions } from '../hooks/usePageViewPermissions'
 import AuthenticatedShellSkeleton from '../components/AuthenticatedShellSkeleton'
 import { preloadAuthenticatedRoute } from '../utils/routePreload'
+import { clearPresenceBeforeLogout } from '../services/presenceSession'
 
 const DEACTIVATION_MESSAGE = 'Your account has been deactivated. Please contact an administrator.'
 const STATUS_EVENT = 'fb:employee-status-changed'
@@ -82,6 +83,7 @@ export function AuthProvider({ children }) {
     registerEmploymentStatuses(changed)
     window.sessionStorage.setItem('fb_login_message', DEACTIVATION_MESSAGE)
     window.dispatchEvent(new CustomEvent(STATUS_EVENT, { detail: changed }))
+    await clearPresenceBeforeLogout(userId)
     if (supabase) await supabase.auth.signOut().catch(() => null)
     clearAuthState()
     navigate('/login?error=inactive', { replace: true })
@@ -284,6 +286,7 @@ export function AuthProvider({ children }) {
     setProfile,
     signOut: async () => {
       inactiveLogoutRef.current = false
+      await clearPresenceBeforeLogout(session?.user?.id || user?.id || '')
       if (supabase) await supabase.auth.signOut()
       else {
         clearAuthState()
