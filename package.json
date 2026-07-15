@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "seed:demo": "node server/scripts/seed-demo.js",
-    "invoice:reset": "node server/scripts/reset-invoice-sequence.js"
+    "invoice:reset": "node server/scripts/reset-invoice-sequence.js",
+    "invoice:visual": "node server/scripts/invoice-visual-regression.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",

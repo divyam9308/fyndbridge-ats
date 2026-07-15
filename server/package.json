@@ -6,9 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test src/**/*.test.js"
+    "test": "node --test src/**/*.test.js",
+    "invoice:visual": "node scripts/invoice-visual-regression.js"
   },
   "dependencies": {
+    "@fontsource/arimo": "5.2.8",
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.39.0",
     "axios": "^1.6.5",

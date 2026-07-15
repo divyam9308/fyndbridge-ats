@@ -757,9 +757,10 @@
   width: 100%;
   min-width: 100%;
   max-width: none;
-  height: 620px;
   min-height: 620px;
-  overflow-y: auto;
+  /* Keep horizontal table overflow behavior, but let the page own vertical scrolling. */
+  height: auto;
+  overflow-y: visible;
 }
 .table-card-popovers.candidates-table-card {
   overflow-x: clip;
@@ -768,14 +769,14 @@
   width: 100%;
   min-width: 100%;
   max-width: none;
-  height: 100%;
+  height: auto;
   overflow: visible;
 }
 .candidates-table-card > .empty-state {
-  min-height: 100%;
+  min-height: calc(620px - 2px);
 }
 .table-loading-table {
-  height: 100%;
+  height: calc(620px - 2px);
 }
 .data-table .table-loading-cell {
   height: 100%;

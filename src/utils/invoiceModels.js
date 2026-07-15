@@ -8,6 +8,12 @@ export const EMPTY_INVOICE = {
   model_flat_fee: '', retainer_amount: '', project_amount: '', jra_adjustment_value: '', jra_base_value: '', jra_flat_fee: '',
   others_amount: '', sac: '998512', billing_entity: 'FCS', gst_component: 'IGST', igst_rate: 18, cgst_rate: 9, sgst_rate: 9
 }
+export function detectInvoiceGstComponent(location = {}) {
+  const match = String(location.state_code ?? '').trim().match(/^0*(\d{1,2})$/)
+  if (match) return Number(match[1]) === 7 ? 'CGST_SGST' : 'IGST'
+  const text = [location.address, location.state, location.place_of_supply].map(value => String(value ?? '')).join(' ')
+  return /\b(new\s+delhi|delhi|south east delhi|north delhi|south delhi|east delhi|west delhi|central delhi)\b/i.test(text) ? 'CGST_SGST' : 'IGST'
+}
 const decimalString = value => {
   const text = String(value ?? '').replace(/₹|â‚¹|Rs\.?|,/gi, '').trim()
   if (!text) return '0'

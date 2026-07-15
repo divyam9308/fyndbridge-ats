@@ -201,8 +201,8 @@ async function generate(req, res) {
 
 async function commitPreview(req, res) {
   try {
-    const { record } = await createStoredInvoice(req.body, req.body.invoice_number)
-    return res.status(201).json({ data: record, fileName: `Invoice-${record.invoice_number.replace(/\//g, '-')}.pdf` })
+    const { record, pdf } = await createStoredInvoice(req.body, req.body.invoice_number)
+    return res.status(201).json({ data: record, fileName: `Invoice-${record.invoice_number.replace(/\//g, '-')}.pdf`, pdfBase64: pdf.toString('base64') })
   } catch (err) { return sendError(res, err) }
 }
 

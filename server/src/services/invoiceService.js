@@ -9,35 +9,33 @@ const BILLING_ENTITIES = new Set(['FCS', 'FCAPL'])
 const COMPANY = {
   FCS: {
     name: 'FyndBridge Consulting Services',
-    address: ['Ground Floor, 20, Okhla Industrial Estate Phase 3,', 'New Delhi, South East Delhi, Delhi, 110020'],
+    address: ['Ground Floor, 20, New Delhi,', 'Okhla Industrial Estate Phase 3, New Delhi,', 'South East Delhi,', 'Delhi, 110020'],
     mobile: '9717773066',
-    telephone: '9717773066',
     email: 'partner@fyndbridge.in',
-    website: 'www.fyndbridge.in',
     state: 'Delhi',
     stateCode: '07',
-    gst: 'GSTIN: 07AAJFF1433D1ZV',
+    gstin: '07AAJFF1433D1ZV',
+    cin: '',
     pan: 'AAJFF1433D',
     bank: {
       name: 'ICICI Bank Limited',
       account: '102305501028',
       ifsc: 'ICIC0001023',
-      branch: 'D-1, Alaknanda Shopping Complex, New Delhi - 110019'
+      branch: '233 Okhla Industrial Estate, New Delhi - 110020'
     },
-    reverseCharge: 'Tax Payable on reverse charge basis : No',
+    reverseCharge: 'Our Payments on reverse charge basis: No',
     prefix: 'FB',
-    feeLabel: 'Professional Fees'
+    feeLabel: 'Professional Fee'
   },
   FCAPL: {
     name: 'FyndBridge Consultants & Advisors Private Limited',
-    address: ['Second Floor, House No- A-34, Pocket A-8,', 'Kalkaji Extension, Behind Aggarwal Sweet House,', 'New Delhi, South East Delhi, Delhi - 110019'],
+    address: ['Second Floor, House No- A-34,', 'Pocket A-8, Kalkaji Extension, Behind', 'Aggarwal Sweet House, New Delhi,', 'South East Delhi, Delhi - 110019'],
     mobile: '9717773066',
-    telephone: '9717773066',
     email: 'partner@fyndbridge.in',
-    website: 'www.fyndbridge.in',
     state: 'Delhi',
     stateCode: '07',
-    gst: 'GSTIN: 07AAFCF8821L1ZA  |  CIN: U70200DL2024PTC429251',
+    gstin: '07AAFCF8821L1ZA',
+    cin: 'U70200DL2024PTC429251',
     pan: 'AAFCF8821L',
     bank: {
       name: 'State Bank of India',
@@ -54,25 +52,144 @@ const COMPANY = {
 const BLACK = '#000000'
 const REGULAR_FONT = 'InvoiceRegular'
 const BOLD_FONT = 'InvoiceBold'
+const CURRENCY_REGULAR_FONT = 'InvoiceCurrencyRegular'
+const CURRENCY_BOLD_FONT = 'InvoiceCurrencyBold'
 const MONEY_SCALE = 100n
 const RATE_SCALE = 10000n
+const A4_WIDTH = 595.28
+const A4_HEIGHT = 841.89
+const A4_SCALE = 595.275590551 / 612
 
 const firstExisting = items => items.find(item => fs.existsSync(item))
 const FONT_PATHS = {
   regular: firstExisting([
-    path.join(__dirname, '../../assets/fonts/NotoSans-Regular.ttf'),
-    'C:/Windows/Fonts/ARIALUNI.ttf',
-    'C:/Windows/Fonts/segoeui.ttf',
-    'C:/Windows/Fonts/arial.ttf',
-    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+    '/System/Library/Fonts/Supplemental/Arial.ttf',
+    '/Library/Fonts/Arial.ttf',
+    'C:\\Windows\\Fonts\\arial.ttf',
+    path.join(__dirname, '../../node_modules/@fontsource/arimo/files/arimo-latin-400-normal.woff'),
+    path.join(__dirname, '../../assets/fonts/NotoSans-Regular.ttf')
   ]),
   bold: firstExisting([
-    path.join(__dirname, '../../assets/fonts/NotoSans-Bold.ttf'),
-    'C:/Windows/Fonts/segoeuib.ttf',
-    'C:/Windows/Fonts/arialbd.ttf',
-    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+    '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
+    '/Library/Fonts/Arial Bold.ttf',
+    'C:\\Windows\\Fonts\\arialbd.ttf',
+    path.join(__dirname, '../../node_modules/@fontsource/arimo/files/arimo-latin-700-normal.woff'),
+    path.join(__dirname, '../../assets/fonts/NotoSans-Bold.ttf')
+  ]),
+  currencyRegular: firstExisting([
+    path.join(__dirname, '../../assets/fonts/NotoSans-Regular.ttf')
+  ]),
+  currencyBold: firstExisting([
+    path.join(__dirname, '../../assets/fonts/NotoSans-Bold.ttf')
   ])
 }
+
+const scaled = value => Number((value * A4_SCALE).toFixed(3))
+
+const INVOICE_LAYOUTS = Object.freeze({
+  FCAPL_CGST_SGST: {
+    id: 'FCAPL_CGST_SGST', reference: 'FCAPL CGST SGST.pdf', tax: 'CGST_SGST', rounded: true,
+    rule: scaled(0.84), majorRule: scaled(0.84), bodySize: scaled(8.88), metaSize: scaled(9.36), titleSize: scaled(14.88),
+    x: {
+      left: 21.13, right: 568.43, split: 328.64, lowerSplit: 328.64,
+      service: [21.13, 67.00, 255.32, 328.64, 410.22, 466.40, 568.43],
+      summary: [21.13, 67.00, 181.05, 255.32, 328.64, 410.22, 466.40, 568.43]
+    },
+    y: {
+      top: 21.13, header: 65.15, meta: 82.77, details: 231.16, serviceHeader: 250.76, serviceBottom: 444.25,
+      totals: [458.51, 472.75, 486.99], amountWords: 500.53, summaryGroup: 514.07, summaryHeader: 527.61,
+      summaryData: 541.15, summaryBottom: 554.69, taxWords: 568.23, lowerBottom: 639.10, bottom: 750.71
+    },
+    logo: { x: scaled(27.30), y: scaled(30.87), width: scaled(174.95), height: scaled(27.83) },
+    taxTextY: [390.18, 405.48], splitStartsAtTop: true, descriptionBreak: true,
+    branchLines: '233 Okhla Industrial Estate, New Delhi -\n110020'
+  },
+  FCAPL_IGST_NO_ROUND: {
+    id: 'FCAPL_IGST_NO_ROUND', reference: 'FCAPL NOROUNDING (1).pdf', tax: 'IGST', rounded: false,
+    rule: scaled(0.96), majorRule: scaled(0.96), serviceHeaderRule: scaled(1.80), bodySize: scaled(9.12), metaSize: scaled(9.60), titleSize: scaled(15.36),
+    x: {
+      left: 21.01, right: 572.16, split: 324.67, lowerSplit: 324.67,
+      service: [21.01, 68.40, 247.61, 324.67, 408.94, 466.86, 572.16],
+      summary: [21.01, 179.07, 324.67, 466.86, 572.16]
+    },
+    y: {
+      top: 21.01, header: 66.55, meta: 84.76, details: 246.80, serviceHeader: 266.76, serviceBottom: 490.78,
+      totals: [505.49], amountWords: 519.50, summaryHeader: 541.91, summaryData: 555.91,
+      summaryBottom: 569.92, taxWords: 583.92, lowerBottom: 658.19, bottom: 772.19
+    },
+    logo: { x: scaled(27.484), y: scaled(31.171), width: scaled(180.75), height: scaled(28.759) },
+    taxTextY: [433.72], descriptionBreak: true,
+    branchLines: '233 OKHLA INDUSTRIAL ESTATE\nNew Delhi - 110020'
+  },
+  FCAPL_IGST_ROUND: {
+    id: 'FCAPL_IGST_ROUND', reference: 'FCAPL WITH ROUNDOFF.pdf', tax: 'IGST', rounded: true,
+    rule: scaled(0.84), majorRule: scaled(0.84), serviceHeaderRule: scaled(1.80), bodySize: scaled(8.88), metaSize: scaled(9.36), titleSize: scaled(14.88),
+    x: {
+      left: 21.13, right: 569.48, split: 326.89, lowerSplit: 326.89,
+      service: [21.13, 67.00, 250.76, 326.89, 408.47, 464.65, 569.48],
+      summary: [21.13, 174.17, 326.89, 464.65, 569.48]
+    },
+    y: {
+      top: 21.13, header: 65.15, meta: 82.77, details: 237.11, serviceHeader: 256.25, serviceBottom: 511.47,
+      totals: [525.71, 539.95, 554.19], amountWords: 567.73, summaryHeader: 589.44, summaryData: 602.98,
+      summaryBottom: 616.52, taxWords: 630.06, lowerBottom: 700.94, bottom: 807.44
+    },
+    logo: { x: scaled(27.30), y: scaled(30.87), width: scaled(175.02), height: scaled(27.83) },
+    taxTextY: [438.73], lineItemBold: true, taxBold: true, descriptionBreak: true,
+    branchLines: '233 Okhla Industrial Estate, New Delhi -\n110020'
+  },
+  FCS_IGST_NO_ROUND: {
+    id: 'FCS_IGST_NO_ROUND', reference: 'FCS NoRounding.pdf', tax: 'IGST', rounded: false,
+    rule: scaled(0.96), majorRule: scaled(1.92), bodySize: scaled(9.24), metaSize: scaled(9.72), titleSize: scaled(15.48),
+    x: {
+      left: 20.54, right: 570.53, split: 328.17, lowerSplit: 328.17,
+      service: [20.54, 68.87, 254.15, 328.64, 413.73, 472.23, 570.53],
+      summary: [20.54, 184.90, 328.64, 472.23, 570.53]
+    },
+    y: {
+      top: 20.54, header: 66.43, meta: 84.76, details: 234.54, serviceHeader: 255.08, serviceBottom: 535.09,
+      totals: [549.91], amountWords: 564.03, summaryHeader: 587.14, summaryData: 601.27,
+      summaryBottom: 614.92, taxWords: 629.05, lowerBottom: 695.49, bottom: 816.66
+    },
+    logo: { x: scaled(27.546), y: scaled(31.271), width: scaled(182.52), height: scaled(28.909) },
+    taxTextY: [468.13], taxWordsBold: false,
+    branchLines: '233 Okhla Industrial Estate, New Delhi\n- 110020'
+  },
+  FCS_IGST_ROUND: {
+    id: 'FCS_IGST_ROUND', reference: 'FCS with roundoff.pdf', tax: 'IGST', rounded: true,
+    rule: scaled(0.96), majorRule: scaled(0.96), bodySize: scaled(9.00), metaSize: scaled(9.36), titleSize: scaled(15.00),
+    x: {
+      left: 21.01, right: 570.06, split: 336.92, lowerSplit: 336.92,
+      service: [21.01, 67.46, 266.17, 336.92, 419.47, 476.20, 570.06],
+      summary: [21.01, 188.41, 336.92, 476.20, 570.06]
+    },
+    y: {
+      top: 21.01, header: 65.38, meta: 83.12, details: 237.23, serviceHeader: 257.07, serviceBottom: 514.29,
+      totals: [528.65, 543.01, 557.36], amountWords: 571.14, summaryHeader: 593.08, summaryData: 606.85,
+      summaryBottom: 620.63, taxWords: 634.43, lowerBottom: 706.91, bottom: 814.09
+    },
+    logo: { x: scaled(27.362), y: scaled(30.970), width: scaled(177.00), height: scaled(27.98) },
+    taxTextY: [452.96], descriptionBreak: true,
+    branchLines: '233 Okhla Industrial Estate, New\nDelhi - 110020'
+  },
+  FCS_CGST_SGST: {
+    id: 'FCS_CGST_SGST', reference: 'FCS_CGST_SGST.pdf', tax: 'CGST_SGST', rounded: true,
+    rule: scaled(0.96), majorRule: scaled(0.96), bodySize: scaled(9.24), metaSize: scaled(9.72), titleSize: scaled(15.48),
+    x: {
+      left: 21.01, right: 572.63, split: 322.57, lowerSplit: 322.57,
+      service: [21.01, 68.87, 237.81, 322.57, 407.66, 466.16, 572.63],
+      summary: [21.01, 68.87, 168.56, 237.81, 322.57, 407.66, 466.16, 572.63]
+    },
+    y: {
+      top: 21.01, header: 66.90, meta: 85.23, details: 235.01, serviceHeader: 255.55, serviceBottom: 453.20,
+      totals: [468.02, 482.85, 497.67], amountWords: 511.79, summaryGroup: 525.92, summaryHeader: 540.04,
+      summaryData: 554.16, summaryBottom: 568.29, taxWords: 582.41, lowerBottom: 648.85, bottom: 779.31
+    },
+    logo: { x: scaled(27.546), y: scaled(31.271), width: scaled(182.59), height: scaled(28.909) },
+    taxTextY: [395.83, 411.36], reverseBold: false, roundingDivider: true,
+    branchLines: '233 Okhla Industrial Estate, New Delhi -\n110020'
+  }
+})
 
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim()
 const isBlank = value => value === '' || value === null || value === undefined
@@ -240,13 +357,27 @@ function amountWords(value) {
   return amountWordsFromPaise(moneyToPaise(value))
 }
 
-function formatRs(value) {
+function groupIndianDigits(value) {
+  const digits = String(value)
+  if (digits.length <= 3) return digits
+  const tail = digits.slice(-3)
+  const head = digits.slice(0, -3)
+  const groups = []
+  for (let end = head.length; end > 0; end -= 2) groups.unshift(head.slice(Math.max(0, end - 2), end))
+  return `${groups.join(',')},${tail}`
+}
+
+function formatMoney(value, includeSymbol = true) {
   const paise = moneyToPaise(value)
   const negative = paise < 0n
   const absolute = negative ? -paise : paise
   const rupees = absolute / MONEY_SCALE
   const fraction = String(absolute % MONEY_SCALE).padStart(2, '0')
-  return `${negative ? '-' : ''}₹${Number(rupees).toLocaleString('en-IN')}.${fraction}`
+  return `${negative ? '-' : ''}${includeSymbol ? '₹' : ''}${groupIndianDigits(rupees)}.${fraction}`
+}
+
+function formatRs(value) {
+  return formatMoney(value, true)
 }
 
 function normalizeInvoiceText(value) {
@@ -255,25 +386,20 @@ function normalizeInvoiceText(value) {
     .replace(/Â¹|â‚¹|¹|\?{1,3}(?=\d)/g, '₹')
     .replace(/\bRs\.?\s*/gi, '₹')
     .replace(/₹\s+/g, '₹')
-    .replace(/₹([\d,]+)(?:\.(\d{1,2}))?/g, (_, amount, decimals = '') => `₹${amount}.${decimals.padEnd(2, '0')}`)
     .trim()
 }
 
 function setupFonts(doc) {
   if (FONT_PATHS.regular) doc.registerFont(REGULAR_FONT, FONT_PATHS.regular)
   if (FONT_PATHS.bold) doc.registerFont(BOLD_FONT, FONT_PATHS.bold)
+  if (FONT_PATHS.currencyRegular) doc.registerFont(CURRENCY_REGULAR_FONT, FONT_PATHS.currencyRegular)
+  if (FONT_PATHS.currencyBold) doc.registerFont(CURRENCY_BOLD_FONT, FONT_PATHS.currencyBold)
   return {
     regular: FONT_PATHS.regular ? REGULAR_FONT : 'Helvetica',
-    bold: FONT_PATHS.bold ? BOLD_FONT : 'Helvetica-Bold'
+    bold: FONT_PATHS.bold ? BOLD_FONT : 'Helvetica-Bold',
+    currencyRegular: FONT_PATHS.currencyRegular ? CURRENCY_REGULAR_FONT : (FONT_PATHS.regular ? REGULAR_FONT : 'Helvetica'),
+    currencyBold: FONT_PATHS.currencyBold ? CURRENCY_BOLD_FONT : (FONT_PATHS.bold ? BOLD_FONT : 'Helvetica-Bold')
   }
-}
-
-function line(doc, x1, y1, x2, y2, width = 0.84) {
-  doc.save().lineWidth(width).strokeColor(BLACK).moveTo(x1, y1).lineTo(x2, y2).stroke().restore()
-}
-
-function rectangle(doc, x, y, width, height, lineWidth = 0.84) {
-  doc.save().lineWidth(lineWidth).strokeColor(BLACK).rect(x, y, width, height).stroke().restore()
 }
 
 function fitFontSize(doc, text, font, width, height, maxSize, minSize, singleLine = false) {
@@ -283,29 +409,83 @@ function fitFontSize(doc, text, font, width, height, maxSize, minSize, singleLin
   while (size > minSize) {
     doc.fontSize(size)
     const tooWide = singleLine && doc.widthOfString(content) > width
-    const tooTall = doc.heightOfString(content, { width, lineGap: 0 }) > height
+    const tooTall = !singleLine && doc.heightOfString(content, { width, lineGap: 0 }) > height
     if (!tooWide && !tooTall) break
-    size -= 0.2
+    size -= 0.18
+  }
+  return Math.max(size, minSize)
+}
+
+function currencySegments(content) {
+  return String(content).split(/(₹)/).filter(Boolean)
+}
+
+function mixedCurrencyMetrics(doc, content, textFont, symbolFont, size) {
+  let width = 0
+  let height = 0
+  currencySegments(content).forEach(segment => {
+    doc.font(segment === '₹' ? symbolFont : textFont).fontSize(size)
+    width += doc.widthOfString(segment)
+    height = Math.max(height, doc.currentLineHeight())
+  })
+  return { width, height }
+}
+
+function fitMixedCurrencySize(doc, content, textFont, symbolFont, width, height, maxSize, minSize) {
+  let size = maxSize
+  while (size > minSize) {
+    const measured = mixedCurrencyMetrics(doc, content, textFont, symbolFont, size)
+    if (measured.width <= width && measured.height <= height) break
+    size -= 0.18
   }
   return Math.max(size, minSize)
 }
 
 function textBox(doc, text, x, y, width, height, options = {}) {
+  const content = String(text ?? '')
+  if (!content) return { size: options.size || 0, height: 0 }
   const fonts = doc._invoiceFonts
-  const paddingX = options.paddingX ?? 2
-  const paddingY = options.paddingY ?? 1.5
+  const paddingX = options.paddingX ?? 1.8
+  const paddingY = options.paddingY ?? 1.1
   const font = options.bold ? fonts.bold : fonts.regular
+  const symbolFont = options.bold ? fonts.currencyBold : fonts.currencyRegular
+  const mixedCurrency = content.includes('₹') && options.singleLine
   const usableWidth = Math.max(1, width - paddingX * 2)
   const usableHeight = Math.max(1, height - paddingY * 2)
-  const size = fitFontSize(doc, text, font, usableWidth, usableHeight, options.size || 7.5, options.minSize || 5.2, options.singleLine)
-  doc.fillColor(BLACK).font(font).fontSize(size).text(String(text ?? ''), x + paddingX, y + paddingY, {
+  const size = mixedCurrency
+    ? fitMixedCurrencySize(doc, content, font, symbolFont, usableWidth, usableHeight, options.size || 8.8, options.minSize || 5.4)
+    : fitFontSize(doc, content, font, usableWidth, usableHeight, options.size || 8.8, options.minSize || 5.4, options.singleLine)
+  doc.font(font).fontSize(size)
+  const measuredHeight = mixedCurrency
+    ? mixedCurrencyMetrics(doc, content, font, symbolFont, size).height
+    : (options.singleLine ? doc.currentLineHeight() : doc.heightOfString(content, { width: usableWidth, lineGap: 0 }))
+  let textY = y + paddingY
+  if (options.valign === 'center') textY = y + Math.max(paddingY, (height - measuredHeight) / 2 - 0.25)
+  if (options.valign === 'bottom') textY = y + Math.max(paddingY, height - measuredHeight - paddingY)
+  doc.save().rect(x, y, width, height).clip()
+  if (mixedCurrency) {
+    const measuredWidth = mixedCurrencyMetrics(doc, content, font, symbolFont, size).width
+    let textX = x + paddingX
+    if (options.align === 'right') textX += Math.max(0, usableWidth - measuredWidth)
+    if (options.align === 'center') textX += Math.max(0, (usableWidth - measuredWidth) / 2)
+    currencySegments(content).forEach(segment => {
+      const segmentFont = segment === '₹' ? symbolFont : font
+      doc.font(segmentFont).fontSize(size).fillColor(BLACK).text(segment, textX, textY, { lineBreak: false })
+      textX += doc.widthOfString(segment)
+    })
+    doc.restore()
+    return { size, height: measuredHeight }
+  }
+  doc.fillColor(BLACK).text(content, x + paddingX, textY, {
     width: usableWidth,
     height: usableHeight,
     align: options.align || 'left',
     lineGap: 0,
+    characterSpacing: options.characterSpacing || 0,
     lineBreak: options.singleLine ? false : true
   })
-  return { size, height: doc.font(font).fontSize(size).heightOfString(String(text ?? ''), { width: usableWidth, lineGap: 0 }) }
+  doc.restore()
+  return { size, height: measuredHeight }
 }
 
 function normalizedOptionalName(value) {
@@ -314,21 +494,102 @@ function normalizedOptionalName(value) {
   return !optionalName || new Set(['-', '--', 'na', 'n/a', 'none', 'null', 'nil', 'notavailable', 'notapplicable', 'undefined']).has(placeholder) ? '' : optionalName
 }
 
-function drawClientDetails(doc, entity, x, y, width, height) {
-  textBox(doc, 'BILL TO:', x + 1, y + 1, width - 2, 13, { bold: true, size: 7.5, singleLine: true })
-  const insetX = x + 2
-  const contentWidth = width - 5
-  let cursor = y + 14
-  const legal = clean(entity.legal_entity_name)
-  const legalResult = textBox(doc, legal, insetX, cursor, contentWidth, 23, { bold: true, size: 7.2, minSize: 5.4 })
-  cursor += Math.min(23, legalResult.height + 1)
+function hasRounding(invoice) {
+  return Boolean(invoice.rounding_type && moneyToPaise(invoice.rounding_amount) > 0n)
+}
+
+function selectInvoiceLayout(invoice) {
+  const billing = BILLING_ENTITIES.has(invoice.billing_entity) ? invoice.billing_entity : 'FCS'
+  if (invoice.gst_component === 'CGST_SGST') return INVOICE_LAYOUTS[`${billing}_CGST_SGST`]
+  return INVOICE_LAYOUTS[`${billing}_IGST_${hasRounding(invoice) ? 'ROUND' : 'NO_ROUND'}`]
+}
+
+function layoutForInvoice(invoice) {
+  const selected = selectInvoiceLayout(invoice)
+  if (selected.tax !== 'CGST_SGST' || hasRounding(invoice)) return selected
+  const removedHeight = selected.y.totals.at(-1) - selected.y.totals[0]
+  const shiftedKeys = ['amountWords', 'summaryGroup', 'summaryHeader', 'summaryData', 'summaryBottom', 'taxWords', 'lowerBottom']
+  const y = { ...selected.y, totals: [selected.y.totals[0]] }
+  shiftedKeys.forEach(key => { if (typeof y[key] === 'number') y[key] -= removedHeight })
+  return { ...selected, id: `${selected.id}_NO_ROUND`, rounded: false, y }
+}
+
+function fillRule(doc, x, y, width, height) {
+  if (width <= 0 || height <= 0) return
+  doc.save().fillColor(BLACK).rect(x, y, width, height).fill().restore()
+}
+
+function drawInvoiceRules(doc, layout) {
+  const { x, y } = layout
+  const rule = layout.rule
+  const major = layout.majorRule
+  const fullWidth = x.right - x.left + major
+  fillRule(doc, x.left, y.top, major, y.bottom - y.top + major)
+  fillRule(doc, x.right, y.top, major, y.bottom - y.top + major)
+  const fullRules = [y.top, y.header, y.meta, y.details, y.serviceBottom, ...y.totals, y.amountWords, y.summaryHeader, y.summaryData, y.summaryBottom, y.taxWords, y.lowerBottom, y.bottom]
+  fullRules.forEach(ruleY => fillRule(doc, x.left, ruleY, fullWidth, major))
+  fillRule(doc, x.left, y.serviceHeader, fullWidth, layout.serviceHeaderRule || major)
+
+  const splitTop = layout.splitStartsAtTop ? y.top : y.header + major
+  fillRule(doc, x.split, splitTop, major, y.details - splitTop)
+  x.service.slice(1, -1).forEach(column => fillRule(doc, column, y.details + major, rule, y.serviceBottom - y.details - major))
+
+  if (layout.tax === 'IGST') {
+    x.summary.slice(1, -1).forEach(column => fillRule(doc, column, y.amountWords + major, rule, y.summaryBottom - y.amountWords - major))
+  } else {
+    ;[1, 2, 4, 6].forEach(index => fillRule(doc, x.summary[index], y.amountWords + major, rule, y.summaryBottom - y.amountWords - major))
+    ;[3, 5].forEach(index => fillRule(doc, x.summary[index], y.summaryGroup, rule, y.summaryBottom - y.summaryGroup))
+    fillRule(doc, x.summary[2] + rule, y.summaryGroup, x.summary[6] - x.summary[2], rule)
+  }
+  if (layout.roundingDivider && y.totals.length > 1) {
+    fillRule(doc, x.service[5], y.totals[0], rule, y.totals[1] - y.totals[0])
+  }
+  fillRule(doc, x.lowerSplit, y.taxWords + major, major, y.lowerBottom - y.taxWords - major)
+}
+
+let cachedInvoiceLogo
+function invoiceLogoBuffer() {
+  if (cachedInvoiceLogo) return cachedInvoiceLogo
+  const logoPath = path.join(__dirname, '../../assets/invoice-reference-logo.base64')
+  if (!fs.existsSync(logoPath)) return null
+  cachedInvoiceLogo = Buffer.from(fs.readFileSync(logoPath, 'utf8').trim(), 'base64')
+  return cachedInvoiceLogo
+}
+
+function drawHeader(doc, layout, entity, invoice, company) {
+  const { x, y } = layout
+  const logo = invoiceLogoBuffer()
+  if (logo) doc.image(logo, layout.logo.x, layout.logo.y, { fit: [layout.logo.width, layout.logo.height], align: 'left', valign: 'center' })
+  textBox(doc, 'TAX INVOICE', x.split, y.top, x.right - x.split, y.header - y.top, {
+    bold: true, size: layout.titleSize, minSize: layout.titleSize - 1.4, align: 'right', singleLine: true, valign: 'center', paddingX: 2.2
+  })
+  textBox(doc, `Invoice No.:  ${invoice.invoice_number}`, x.left, y.header, x.split - x.left, y.meta - y.header, {
+    bold: true, size: layout.metaSize, minSize: layout.metaSize - 1.5, singleLine: true, valign: 'center'
+  })
+  textBox(doc, `Dated:  ${dateDDMMYYYY(invoice.invoice_date)}`, x.split, y.header, x.right - x.split, y.meta - y.header, {
+    bold: true, size: layout.metaSize, minSize: layout.metaSize - 1.5, singleLine: true, valign: 'center'
+  })
+  drawClientDetails(doc, layout, entity)
+  drawIssuerDetails(doc, layout, company)
+}
+
+function drawClientDetails(doc, layout, entity) {
+  const { x, y } = layout
+  const left = x.left
+  const right = x.split
+  const width = right - left
+  const body = layout.bodySize
+  textBox(doc, 'BILL TO:', left, y.meta, width, 14, { bold: true, size: layout.metaSize, singleLine: true, valign: 'center' })
+  let cursor = y.meta + 15
+  const legalResult = textBox(doc, clean(entity.legal_entity_name), left, cursor, width, 22, { bold: true, size: layout.metaSize, minSize: body - 1.8 })
+  cursor += Math.max(13, Math.min(22, legalResult.height + 1.2))
   const optionalName = normalizedOptionalName(entity.optional_name)
   if (optionalName) {
-    const optionalResult = textBox(doc, optionalName, insetX, cursor, contentWidth, 12, { size: 7, minSize: 5.2 })
-    cursor += Math.min(12, optionalResult.height + 1)
+    const optionalResult = textBox(doc, optionalName, left, cursor, width, 15, { size: body, minSize: body - 1.8 })
+    cursor += Math.max(11, Math.min(15, optionalResult.height + 1))
+  } else {
+    cursor += 11.5
   }
-  const detailTop = y + 69
-  textBox(doc, clean(entity.address), insetX, cursor, contentWidth, Math.max(8, detailTop - cursor - 1), { size: 6.8, minSize: 5.2 })
 
   const rows = [
     ['PAN / IT No', entity.pan],
@@ -337,175 +598,163 @@ function drawClientDetails(doc, entity, x, y, width, height) {
     ['GSTIN', entity.gstin],
     ['Contact Person', entity.contact_person],
     ['Email', entity.email]
-  ]
-  const rowHeight = (height - (detailTop - y)) / rows.length
-  const labelWidth = 87
+  ].filter(([, value]) => clean(value))
+  const rowHeight = Math.max(11.2, Math.min(13.1, (y.details - y.meta - 68) / Math.max(1, rows.length)))
+  const rowsTop = y.details - layout.majorRule - rows.length * rowHeight - 2
+  textBox(doc, clean(entity.address), left, cursor, width, Math.max(12, rowsTop - cursor - 1), { size: body, minSize: body - 2.2 })
+  const labelWidth = Math.min(158, width * 0.51)
   rows.forEach(([label, value], index) => {
-    const rowY = detailTop + index * rowHeight
-    textBox(doc, label, insetX, rowY, labelWidth, rowHeight, { bold: true, size: 6.7, singleLine: true })
-    textBox(doc, clean(value), insetX + labelWidth, rowY, contentWidth - labelWidth, rowHeight, { size: 6.7, minSize: 4.8, singleLine: true })
+    const rowY = rowsTop + index * rowHeight
+    textBox(doc, label, left, rowY, labelWidth, rowHeight, { bold: true, size: body, minSize: body - 1.5, singleLine: true, valign: 'center' })
+    textBox(doc, clean(value), left + labelWidth, rowY, width - labelWidth, rowHeight, { size: body, minSize: 5.5, singleLine: true, valign: 'center' })
   })
 }
 
-function drawIssuerDetails(doc, company, x, y, width, height) {
-  const insetX = x + 3
-  const contentWidth = width - 6
-  const nameResult = textBox(doc, company.name, insetX, y + 2, contentWidth, 24, { bold: true, size: 7.5, minSize: 5.8 })
-  const cursor = y + 4 + Math.min(24, nameResult.height)
-  const details = [
-    `Regd Office: ${company.address.join(' ')}`,
+function drawIssuerDetails(doc, layout, company) {
+  const { x, y } = layout
+  const left = x.split
+  const width = x.right - left
+  const body = layout.bodySize
+  textBox(doc, 'FROM:', left, y.meta, width, 14, { bold: true, size: layout.metaSize, singleLine: true, valign: 'center' })
+  textBox(doc, company.name, left, y.meta + 15, width, 17, { bold: true, size: layout.metaSize, minSize: body - 1.2, singleLine: true, valign: 'center' })
+  const addressLines = [`Regd Office: ${company.address[0]}`, ...company.address.slice(1)]
+  const stateLines = company === COMPANY.FCAPL
+    ? [`State Code: ${company.stateCode}`, `State: ${company.state}`]
+    : [`State: ${company.state}`, `State Code: ${company.stateCode}`]
+  const issuerLines = [
+    ...addressLines,
     `Mobile: ${company.mobile}`,
-    `Tel: ${company.telephone}`,
+    company.name === COMPANY.FCS.name ? '' : null,
     `Email: ${company.email}`,
-    company.website,
-    `State: ${company.state}   State Code: ${company.stateCode}`,
-    company.gst
-  ].join('\n')
-  textBox(doc, details, insetX, cursor, contentWidth, y + height - cursor - 2, { size: 6.8, minSize: 5.2 })
+    ...stateLines,
+    `GSTIN: ${company.gstin}`,
+    company.cin ? `CIN: ${company.cin}` : null
+  ].filter(value => value !== null)
+  textBox(doc, issuerLines.join('\n'), left, y.meta + 31, width, y.details - y.meta - 33, { size: body, minSize: body - 2.1 })
 }
 
-function drawServiceTable(doc, entity, invoice, overrides, company, y, rounded) {
-  const x = 22.5
-  const right = 579
-  const columns = [22.5, 69, 263.5, 332, 416, 473.5, right]
-  const headerBottom = y + 20
-  const taxBottom = rounded ? 464 : 489
-  const taxRows = invoice.gst_component === 'CGST_SGST' ? 2 : 1
-  const taxRowHeight = 15
-  const taxTop = taxBottom - taxRows * taxRowHeight
-
-  rectangle(doc, x, y, right - x, taxBottom - y)
-  line(doc, x, headerBottom, right, headerBottom, 1.8)
-  columns.slice(1, -1).forEach(columnX => line(doc, columnX, y, columnX, taxBottom))
-  for (let row = 0; row < taxRows; row += 1) line(doc, x, taxTop + row * taxRowHeight, right, taxTop + row * taxRowHeight)
-
+function drawServiceTable(doc, layout, entity, invoice, overrides, company) {
+  const columns = layout.x.service
+  const top = layout.y.details
+  const headerBottom = layout.y.serviceHeader
+  const body = layout.bodySize
   const headers = ['SL.No', 'Description of Services', 'SAC', 'GST Rate', '%', 'Amount']
-  headers.forEach((label, index) => textBox(doc, label, columns[index], y, columns[index + 1] - columns[index], 20, { bold: true, size: 7.4, align: index === 1 ? 'center' : index === 5 ? 'right' : 'center', singleLine: true }))
+  headers.forEach((label, index) => textBox(doc, label, columns[index], top, columns[index + 1] - columns[index], headerBottom - top, {
+    bold: true, size: body, minSize: body - 1.5, align: index === 5 ? 'right' : 'center', singleLine: true, valign: 'center'
+  }))
 
-  textBox(doc, '1', columns[0], headerBottom, columns[1] - columns[0], 16, { size: 7.2, align: 'center', singleLine: true })
+  const itemTop = headerBottom + (layout.serviceHeaderRule || layout.majorRule)
+  const itemHeight = 17
+  textBox(doc, '1', columns[0], itemTop, columns[1] - columns[0], itemHeight, { size: body, align: 'center', singleLine: true, valign: 'center' })
   const feeText = normalizeInvoiceText(overrides.professional_fee_text || entity.professional_fee_text || '')
-  textBox(doc, [company.feeLabel, feeText].filter(Boolean).join('\n'), columns[1], headerBottom, columns[2] - columns[1], Math.min(62, taxTop - headerBottom), { size: 7.2, minSize: 5.5 })
-  textBox(doc, clean(entity.sac || invoice.sac || '998512'), columns[2], headerBottom, columns[3] - columns[2], 16, { size: 7.2, align: 'center', singleLine: true })
-  textBox(doc, formatRs(invoice.taxable_amount), columns[5], headerBottom, columns[6] - columns[5], 16, { size: 7.2, align: 'right', singleLine: true })
+  textBox(doc, [company.feeLabel, feeText].filter(Boolean).join('\n'), columns[1], itemTop, columns[2] - columns[1], 44, { bold: layout.lineItemBold, size: body, minSize: body - 2 })
+  textBox(doc, clean(entity.sac || invoice.sac || '998512'), columns[2], itemTop, columns[3] - columns[2], itemHeight, { size: body, align: 'center', singleLine: true, valign: 'center' })
+  textBox(doc, formatMoney(invoice.taxable_amount, false), columns[5], itemTop, columns[6] - columns[5], itemHeight, { size: body, align: 'right', singleLine: true, valign: 'center' })
 
-  const taxRowsData = invoice.gst_component === 'CGST_SGST'
+  const taxRows = invoice.gst_component === 'CGST_SGST'
     ? [['Central Tax (CGST)', invoice.cgst_rate, invoice.cgst_amount], ['State Tax (SGST)', invoice.sgst_rate, invoice.sgst_amount]]
     : [['Integrated GST (IGST)', invoice.igst_rate, invoice.igst_amount]]
-  taxRowsData.forEach(([label, rate, amount], index) => {
-    const rowY = taxTop + index * taxRowHeight
-    textBox(doc, label, columns[1], rowY, columns[2] - columns[1], taxRowHeight, { size: 7.2, singleLine: true })
-    textBox(doc, clean(rate), columns[3], rowY, columns[4] - columns[3], taxRowHeight, { size: 7.2, align: 'center', singleLine: true })
-    textBox(doc, '%', columns[4], rowY, columns[5] - columns[4], taxRowHeight, { size: 7.2, align: 'center', singleLine: true })
-    textBox(doc, formatRs(amount), columns[5], rowY, columns[6] - columns[5], taxRowHeight, { size: 7.2, align: 'right', singleLine: true })
+  taxRows.forEach(([label, rate, amount], index) => {
+    const rowY = layout.taxTextY[index]
+    const rowHeight = body + 4.2
+    textBox(doc, label, columns[1], rowY, columns[2] - columns[1], rowHeight, { bold: layout.taxBold, size: body, minSize: body - 1.5, align: 'right', singleLine: true, valign: 'center' })
+    textBox(doc, clean(rate), columns[3], rowY, columns[4] - columns[3], rowHeight, { size: body, align: 'center', singleLine: true, valign: 'center' })
+    textBox(doc, '%', columns[4], rowY, columns[5] - columns[4], rowHeight, { size: body, align: 'center', singleLine: true, valign: 'center' })
+    textBox(doc, formatMoney(amount, false), columns[5], rowY, columns[6] - columns[5], rowHeight, { size: body, align: 'right', singleLine: true, valign: 'center' })
   })
-  return taxBottom
 }
 
-function drawTotals(doc, invoice, y) {
-  const rounded = Boolean(invoice.rounding_type && moneyToPaise(invoice.rounding_amount) > 0n)
-  const rowHeight = 15
-  if (rounded) {
-    rectangle(doc, 22.5, y, 556.5, rowHeight)
-    textBox(doc, 'Total before Rounding Off', 22.5, y, 420, rowHeight, { size: 7.2, singleLine: true })
-    textBox(doc, formatRs(invoice.total_before_rounding), 473.5, y, 105.5, rowHeight, { size: 7.2, align: 'right', singleLine: true })
-    y += rowHeight
-    rectangle(doc, 22.5, y, 556.5, rowHeight)
-    textBox(doc, 'More: ROUNDING OFF', 22.5, y, 420, rowHeight, { size: 7.2, singleLine: true })
-    const sign = invoice.rounding_type === 'MORE' ? '(+)' : '(-)'
-    textBox(doc, `${sign}${formatRs(invoice.rounding_amount)}`, 473.5, y, 105.5, rowHeight, { size: 7.2, align: 'right', singleLine: true })
-    y += rowHeight
-  }
-  const finalHeight = rounded ? 15 : 16
-  rectangle(doc, 22.5, y, 556.5, finalHeight)
-  textBox(doc, 'Total', 22.5, y, 420, finalHeight, { bold: true, size: 7.4, singleLine: true })
-  textBox(doc, formatRs(invoice.grand_total), 473.5, y, 105.5, finalHeight, { bold: true, size: 7.4, align: 'right', singleLine: true })
-  return y + finalHeight
+function drawTotals(doc, layout, invoice) {
+  const rounded = hasRounding(invoice)
+  const rows = rounded
+    ? [
+        ['Total before Rounding Off', formatRs(invoice.total_before_rounding)],
+        ['More: ROUNDING OFF', `${invoice.rounding_type === 'MORE' ? '(+)' : '(-)'}${formatRs(invoice.rounding_amount)}`],
+        ['Total', formatRs(invoice.grand_total)]
+      ]
+    : [['Total', formatRs(invoice.grand_total)]]
+  let top = layout.y.serviceBottom
+  const amountX = layout.x.service[5]
+  rows.forEach(([label, amount], index) => {
+    const bottom = layout.y.totals[index]
+    textBox(doc, label, layout.x.left, top, amountX - layout.x.left, bottom - top, { bold: true, size: layout.bodySize, minSize: layout.bodySize - 1.3, singleLine: true, valign: 'center' })
+    textBox(doc, amount, amountX, top, layout.x.right - amountX, bottom - top, { bold: index === rows.length - 1, size: layout.bodySize, minSize: layout.bodySize - 1.3, align: 'right', singleLine: true, valign: 'center' })
+    top = bottom
+  })
 }
 
-function drawAmountWords(doc, invoice, y) {
-  const height = 14
-  rectangle(doc, 22.5, y, 556.5, height)
-  textBox(doc, `Amount Chargeable (in words): ${invoice.amount_in_words}`, 22.5, y, 556.5, height, { bold: true, size: 7.1, minSize: 5.5, singleLine: true })
-  return y + height
+function drawAmountWords(doc, layout, invoice) {
+  const top = layout.y.totals.at(-1)
+  textBox(doc, `Amount Chargeable (in words): ${invoice.amount_in_words}`, layout.x.left, top, layout.x.right - layout.x.left, layout.y.amountWords - top, {
+    bold: true, size: layout.bodySize, minSize: 6.2, singleLine: true, valign: 'center'
+  })
 }
 
-function drawTaxSummary(doc, invoice, sac, y) {
-  const x = 22.5
-  const right = 579
+function drawTaxSummary(doc, layout, invoice, sac) {
+  const columns = layout.x.summary
+  const top = layout.y.amountWords
+  const body = layout.bodySize
   if (invoice.gst_component === 'IGST') {
-    const columns = [x, 69, 195.5, 473.5, right]
-    const headerHeight = 22
-    const rowHeight = 14
-    const bottom = y + headerHeight + rowHeight * 2
-    rectangle(doc, x, y, right - x, bottom - y)
-    columns.slice(1, -1).forEach(columnX => line(doc, columnX, y, columnX, bottom))
-    line(doc, x, y + headerHeight, right, y + headerHeight)
-    line(doc, x, y + headerHeight + rowHeight, right, y + headerHeight + rowHeight)
-    const headers = ['SAC', 'Taxable Value', 'Integrated GST (IGST) – Rate', 'IGST Amount']
-    headers.forEach((label, index) => textBox(doc, label, columns[index], y, columns[index + 1] - columns[index], headerHeight, { bold: true, size: 7, align: 'center' }))
+    const headers = ['SAC', 'Taxable Value', 'Integrated GST (IGST) - Rate', 'IGST Amount']
+    headers.forEach((label, index) => textBox(doc, label, columns[index], top, columns[index + 1] - columns[index], layout.y.summaryHeader - top, { bold: true, size: body, minSize: body - 1.7, align: 'center', singleLine: true, valign: 'center' }))
     const values = [sac, formatRs(invoice.taxable_amount), `${clean(invoice.igst_rate)}%`, formatRs(invoice.igst_amount)]
-    values.forEach((value, index) => textBox(doc, value, columns[index], y + headerHeight, columns[index + 1] - columns[index], rowHeight, { size: 7, align: index === 1 || index === 3 ? 'right' : 'center', singleLine: true }))
     const totals = ['Total', formatRs(invoice.taxable_amount), '', formatRs(invoice.igst_amount)]
-    totals.forEach((value, index) => textBox(doc, value, columns[index], y + headerHeight + rowHeight, columns[index + 1] - columns[index], rowHeight, { bold: true, size: 7, align: index === 1 || index === 3 ? 'right' : 'center', singleLine: true }))
-    return bottom
+    ;[values, totals].forEach((row, rowIndex) => {
+      const rowTop = rowIndex === 0 ? layout.y.summaryHeader : layout.y.summaryData
+      const rowBottom = rowIndex === 0 ? layout.y.summaryData : layout.y.summaryBottom
+      row.forEach((value, index) => textBox(doc, value, columns[index], rowTop, columns[index + 1] - columns[index], rowBottom - rowTop, { bold: rowIndex === 1, size: body, minSize: body - 1.7, align: [1, 3].includes(index) ? 'right' : 'center', singleLine: true, valign: 'center' }))
+    })
+    return
   }
 
-  const groupHeight = 13
-  const headerHeight = 27
-  const rowHeight = 14
-  const bottom = y + headerHeight + rowHeight * 2
-  rectangle(doc, x, y, right - x, bottom - y)
-  ;[69, 195.5, 332, 473.5].forEach(columnX => line(doc, columnX, y, columnX, bottom))
-  ;[263.5, 416].forEach(columnX => line(doc, columnX, y + groupHeight, columnX, bottom))
-  line(doc, 195.5, y + groupHeight, 473.5, y + groupHeight)
-  line(doc, x, y + headerHeight, right, y + headerHeight)
-  line(doc, x, y + headerHeight + rowHeight, right, y + headerHeight + rowHeight)
-  textBox(doc, 'SAC', x, y, 46.5, headerHeight, { bold: true, size: 7, align: 'center' })
-  textBox(doc, 'Taxable Value', 69, y, 126.5, headerHeight, { bold: true, size: 7, align: 'center' })
-  textBox(doc, 'Central Tax (CGST)', 195.5, y, 136.5, groupHeight, { bold: true, size: 6.8, align: 'center', singleLine: true })
-  textBox(doc, 'State Tax (SGST)', 332, y, 141.5, groupHeight, { bold: true, size: 6.8, align: 'center', singleLine: true })
-  textBox(doc, 'Total Tax Amount', 473.5, y, 105.5, headerHeight, { bold: true, size: 6.8, align: 'center' })
-  ;[[195.5, 'Rate'], [263.5, 'Amount'], [332, 'Rate'], [416, 'Amount']].forEach(([columnX, label], index) => {
-    const nextX = [263.5, 332, 416, 473.5][index]
-    textBox(doc, label, columnX, y + groupHeight, nextX - columnX, headerHeight - groupHeight, { bold: true, size: 6.8, align: 'center', singleLine: true })
-  })
+  textBox(doc, 'SAC', columns[0], top, columns[1] - columns[0], layout.y.summaryHeader - top, { bold: true, size: body, align: 'center', singleLine: true, valign: 'center' })
+  textBox(doc, 'Taxable Value', columns[1], top, columns[2] - columns[1], layout.y.summaryHeader - top, { bold: true, size: body, minSize: body - 1.3, align: 'center', singleLine: true, valign: 'center' })
+  textBox(doc, 'Central Tax (CGST)', columns[2], top, columns[4] - columns[2], layout.y.summaryGroup - top, { bold: true, size: body, minSize: body - 1.5, align: 'center', singleLine: true, valign: 'center' })
+  textBox(doc, 'State Tax (SGST)', columns[4], top, columns[6] - columns[4], layout.y.summaryGroup - top, { bold: true, size: body, minSize: body - 1.5, align: 'center', singleLine: true, valign: 'center' })
+  textBox(doc, 'Total Tax Amount', columns[6], top, columns[7] - columns[6], layout.y.summaryHeader - top, { bold: true, size: body, minSize: body - 1.5, align: 'center', singleLine: true, valign: 'center' })
+  ;[[2, 'Rate'], [3, 'Amount'], [4, 'Rate'], [5, 'Amount']].forEach(([index, label]) => textBox(doc, label, columns[index], layout.y.summaryGroup, columns[index + 1] - columns[index], layout.y.summaryHeader - layout.y.summaryGroup, { bold: true, size: body, minSize: body - 1.4, align: 'center', singleLine: true, valign: 'center' }))
   const values = [sac, formatRs(invoice.taxable_amount), `${clean(invoice.cgst_rate)}%`, formatRs(invoice.cgst_amount), `${clean(invoice.sgst_rate)}%`, formatRs(invoice.sgst_amount), formatRs(invoice.total_tax_amount)]
-  const totalValues = ['Total', formatRs(invoice.taxable_amount), '', formatRs(invoice.cgst_amount), '', formatRs(invoice.sgst_amount), formatRs(invoice.total_tax_amount)]
-  const cellStarts = [x, 69, 195.5, 263.5, 332, 416, 473.5]
-  const cellEnds = [69, 195.5, 263.5, 332, 416, 473.5, right]
-  ;[values, totalValues].forEach((row, rowIndex) => row.forEach((value, index) => textBox(doc, value, cellStarts[index], y + headerHeight + rowHeight * rowIndex, cellEnds[index] - cellStarts[index], rowHeight, { bold: rowIndex === 1, size: 6.8, align: [1, 3, 5, 6].includes(index) ? 'right' : 'center', singleLine: true })))
-  return bottom
+  const totals = ['Total', formatRs(invoice.taxable_amount), '', formatRs(invoice.cgst_amount), '', formatRs(invoice.sgst_amount), formatRs(invoice.total_tax_amount)]
+  ;[values, totals].forEach((row, rowIndex) => {
+    const rowTop = rowIndex === 0 ? layout.y.summaryHeader : layout.y.summaryData
+    const rowBottom = rowIndex === 0 ? layout.y.summaryData : layout.y.summaryBottom
+    row.forEach((value, index) => textBox(doc, value, columns[index], rowTop, columns[index + 1] - columns[index], rowBottom - rowTop, { bold: rowIndex === 1, size: body, minSize: body - 1.8, align: [1, 3, 5, 6].includes(index) ? 'right' : 'center', singleLine: true, valign: 'center' }))
+  })
 }
 
-function drawLowerDetails(doc, company, y, bottom) {
-  const splitX = 332
-  const detailsHeight = 80
-  const detailsBottom = Math.min(bottom - 88, y + detailsHeight)
-  rectangle(doc, 22.5, y, 556.5, detailsBottom - y)
-  line(doc, splitX, y, splitX, detailsBottom, 1.8)
-
-  textBox(doc, 'Description of Services', 23.5, y + 2, splitX - 24.5, 13, { bold: true, size: 7.2, singleLine: true })
-  textBox(doc, 'Permanent placement services, other than executive search services', 23.5, y + 15, splitX - 24.5, 25, { size: 6.8, minSize: 5.5 })
-  textBox(doc, `Company's PAN: ${company.pan}`, 23.5, detailsBottom - 29, splitX - 24.5, 13, { bold: true, size: 6.8, singleLine: true })
-  textBox(doc, company.reverseCharge, 23.5, detailsBottom - 15, splitX - 24.5, 13, { size: 6.5, minSize: 5.2, singleLine: true })
+function drawLowerDetails(doc, layout, company, taxWords) {
+  const { x, y } = layout
+  const body = layout.bodySize
+  textBox(doc, `Tax Amount (in words): ${taxWords}`, x.left, y.summaryBottom, x.right - x.left, y.taxWords - y.summaryBottom, { bold: layout.taxWordsBold !== false, size: body, minSize: 6.1, singleLine: true, valign: 'center' })
+  const lowerTop = y.taxWords
+  const leftWidth = x.lowerSplit - x.left
+  textBox(doc, 'Description of Services', x.left, lowerTop, leftWidth, 14, { bold: true, size: body, singleLine: true, valign: 'center' })
+  const serviceDescription = layout.descriptionBreak
+    ? 'Permanent placement services, other\nthan executive search services'
+    : 'Permanent placement services, other than executive search services'
+  textBox(doc, serviceDescription, x.left, lowerTop + 13, leftWidth, 28, { size: body, minSize: body - 1.8 })
+  textBox(doc, `Company's PAN: ${company.pan}`, x.left, y.lowerBottom - 29, leftWidth, 14, { size: body, minSize: body - 1.5, singleLine: true, valign: 'center' })
+  textBox(doc, company.reverseCharge, x.left, y.lowerBottom - 15, leftWidth, 14, { bold: layout.reverseBold !== false, size: body, minSize: 5.8, singleLine: true, valign: 'center' })
 
   const bankRows = [
     ['Bank Name', company.bank.name],
     ['IFSC Code', company.bank.ifsc],
     ['A/c No.', String(company.bank.account)],
-    ['Branch', company.bank.branch]
+    ['Branch', layout.branchLines || company.bank.branch]
   ]
-  const rowHeight = (detailsBottom - y) / bankRows.length
-  const labelWidth = 66
+  const bankLeft = x.lowerSplit
+  const bankWidth = x.right - bankLeft
+  const rowHeight = (y.lowerBottom - lowerTop) / (bankRows.length + 1)
+  const labelWidth = Math.min(82, bankWidth * 0.34)
   bankRows.forEach(([label, value], index) => {
-    const rowY = y + index * rowHeight
-    textBox(doc, label, splitX + 1, rowY, labelWidth, rowHeight, { bold: true, size: 6.7, singleLine: true })
-    textBox(doc, value, splitX + 1 + labelWidth, rowY, 579 - splitX - 2 - labelWidth, rowHeight, { size: 6.7, minSize: 4.9 })
+    const rowY = lowerTop + index * rowHeight
+    const valueHeight = index === bankRows.length - 1 ? rowHeight * 2 : rowHeight
+    textBox(doc, label, bankLeft, rowY, labelWidth, valueHeight, { bold: true, size: body, minSize: body - 1.3, singleLine: true, valign: index === bankRows.length - 1 ? 'top' : 'center' })
+    textBox(doc, value, bankLeft + labelWidth, rowY, bankWidth - labelWidth, valueHeight, { size: body, minSize: body - 1.9, valign: index === bankRows.length - 1 ? 'top' : 'center' })
   })
 
-  line(doc, 22.5, detailsBottom, 579, detailsBottom, 1.8)
-  textBox(doc, `For ${company.name}`, splitX + 4, detailsBottom + 6, 579 - splitX - 8, 16, { bold: true, size: 7, minSize: 5.5, align: 'right', singleLine: true })
-  textBox(doc, 'Authorized Signatory', splitX + 4, bottom - 17, 579 - splitX - 8, 14, { size: 7, align: 'right', singleLine: true })
+  textBox(doc, `For ${company.name}`, x.lowerSplit, y.lowerBottom + layout.majorRule, x.right - x.lowerSplit, 18, { bold: true, size: body, minSize: 6.2, align: 'right', singleLine: true, valign: 'center', paddingX: 0.6 })
+  textBox(doc, 'Authorized Signatory', x.lowerSplit, y.bottom - 17, x.right - x.lowerSplit, 15, { bold: true, size: body, minSize: body - 1.3, align: 'right', singleLine: true, valign: 'center', paddingX: 0.6 })
 }
 
 async function createInvoicePdf(data) {
@@ -514,52 +763,33 @@ async function createInvoicePdf(data) {
 
 function renderInvoicePdf({ entity, invoice, overrides = {} }) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'LETTER', margin: 0, autoFirstPage: true, compress: true })
+    const doc = new PDFDocument({
+      size: [A4_WIDTH, A4_HEIGHT], margin: 0, autoFirstPage: true, compress: true,
+      info: { Title: `Tax Invoice ${clean(invoice.invoice_number)}`, Author: 'FyndBridge', Creator: 'FyndBridge ATS', Producer: 'PDFKit' }
+    })
     const chunks = []
     let pageCount = 1
     doc.on('data', chunk => chunks.push(chunk))
     doc.on('pageAdded', () => { pageCount += 1 })
     doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), pageCount }))
     doc.on('error', reject)
-    doc._invoiceFonts = setupFonts(doc)
-
-    const company = COMPANY[invoice.billing_entity]
-    if (!company) return reject(new Error('Invalid billing entity'))
-    const outer = { x: 22.5, y: 22, right: 579, bottom: 764 }
-    const splitX = 332
-    const headerBottom = 67
-    const metaBottom = 85
-    const detailsBottom = 238
-    const logo = path.join(__dirname, '../../../public/assets/fyndbridge-official-logo.png')
-
-    rectangle(doc, outer.x, outer.y, outer.right - outer.x, outer.bottom - outer.y, 1.8)
-    line(doc, outer.x, headerBottom, outer.right, headerBottom, 1.8)
-    if (fs.existsSync(logo)) doc.image(logo, 28, 29, { width: 190 })
-    textBox(doc, 'TAX INVOICE', 443, 31, 132, 25, { bold: true, size: 14, minSize: 11, align: 'right', singleLine: true })
-
-    line(doc, outer.x, metaBottom, outer.right, metaBottom, 1.8)
-    line(doc, splitX, headerBottom, splitX, detailsBottom, 1.8)
-    textBox(doc, 'Invoice No.:', 23.5, 69, 62, 14, { bold: true, size: 7.4, singleLine: true })
-    textBox(doc, invoice.invoice_number, 84, 69, splitX - 87, 14, { size: 7.4, minSize: 5.4, singleLine: true })
-    textBox(doc, 'Dated:', splitX + 2, 69, 42, 14, { bold: true, size: 7.4, singleLine: true })
-    textBox(doc, dateDDMMYYYY(invoice.invoice_date), splitX + 43, 69, outer.right - splitX - 45, 14, { size: 7.4, singleLine: true })
-
-    line(doc, outer.x, detailsBottom, outer.right, detailsBottom, 1.8)
-    drawClientDetails(doc, entity, outer.x, metaBottom, splitX - outer.x, detailsBottom - metaBottom)
-    drawIssuerDetails(doc, company, splitX, metaBottom, outer.right - splitX, detailsBottom - metaBottom)
-
-    const rounded = Boolean(invoice.rounding_type && moneyToPaise(invoice.rounding_amount) > 0n)
-    let y = drawServiceTable(doc, entity, invoice, overrides, company, detailsBottom, rounded)
-    y = drawTotals(doc, invoice, y)
-    y = drawAmountWords(doc, invoice, y)
-    y = drawTaxSummary(doc, invoice, clean(entity.sac || invoice.sac || '998512'), y)
-
-    const taxWordsHeight = 14
-    rectangle(doc, outer.x, y, outer.right - outer.x, taxWordsHeight)
-    textBox(doc, `Tax Amount (in words): ${invoice.tax_amount_in_words}`, outer.x, y, outer.right - outer.x, taxWordsHeight, { bold: true, size: 6.9, minSize: 5.2, singleLine: true })
-    y += taxWordsHeight
-    drawLowerDetails(doc, company, y, outer.bottom)
-    doc.end()
+    try {
+      doc._invoiceFonts = setupFonts(doc)
+      const company = COMPANY[invoice.billing_entity]
+      if (!company) throw new Error('Invalid billing entity')
+      const layout = layoutForInvoice(invoice)
+      if (!layout) throw new Error('Unsupported invoice layout')
+      drawInvoiceRules(doc, layout)
+      drawHeader(doc, layout, entity, invoice, company)
+      drawServiceTable(doc, layout, entity, invoice, overrides, company)
+      drawTotals(doc, layout, invoice)
+      drawAmountWords(doc, layout, invoice)
+      drawTaxSummary(doc, layout, invoice, clean(entity.sac || invoice.sac || '998512'))
+      drawLowerDetails(doc, layout, company, invoice.tax_amount_in_words)
+      doc.end()
+    } catch (error) {
+      reject(error)
+    }
   })
 }
 
@@ -574,6 +804,9 @@ module.exports = {
   GST_COMPONENTS,
   BILLING_ENTITIES,
   COMPANY,
+  A4_WIDTH,
+  A4_HEIGHT,
+  INVOICE_LAYOUTS,
   clean,
   financialYear,
   normalizeStateCode,
@@ -581,6 +814,7 @@ module.exports = {
   calculateInvoice,
   roundInvoiceTotalPaise,
   normalizedOptionalName,
+  selectInvoiceLayout,
   amountWords,
   formatRs,
   createInvoicePdf,

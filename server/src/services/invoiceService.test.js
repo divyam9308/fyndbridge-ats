@@ -1,14 +1,18 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const {
+  A4_HEIGHT,
+  A4_WIDTH,
   COMPANY,
+  INVOICE_LAYOUTS,
   calculateInvoice,
   createInvoicePdf,
   detectGstComponent,
   formatRs,
   normalizedOptionalName,
   renderInvoicePdf,
-  roundInvoiceTotalPaise
+  roundInvoiceTotalPaise,
+  selectInvoiceLayout
 } = require('./invoiceService')
 
 const baseInput = {
@@ -112,7 +116,23 @@ test('issuer bank accounts remain exact strings', () => {
   assert.doesNotMatch(COMPANY.FCS.bank.account, /e\+/i)
 })
 
-test('all eight layout combinations render as one US Letter page with long dynamic text', async () => {
+test('six explicit reference cases select six distinct layout profiles', () => {
+  assert.equal(Object.keys(INVOICE_LAYOUTS).length, 6)
+  const cases = [
+    ['FCAPL', '09', '560000', 'FCAPL_IGST_NO_ROUND'],
+    ['FCAPL', '09', '558720', 'FCAPL_IGST_ROUND'],
+    ['FCAPL', '07', '558720', 'FCAPL_CGST_SGST'],
+    ['FCS', '09', '560000', 'FCS_IGST_NO_ROUND'],
+    ['FCS', '09', '558720', 'FCS_IGST_ROUND'],
+    ['FCS', '07', '558720', 'FCS_CGST_SGST']
+  ]
+  for (const [billing_entity, state_code, others_amount, expected] of cases) {
+    const invoice = { ...calculateInvoice({ ...baseInput, billing_entity, state_code, others_amount }), billing_entity }
+    assert.equal(selectInvoiceLayout(invoice).id, expected)
+  }
+})
+
+test('all tax and rounding combinations render as one A4 page with long dynamic text', async () => {
   const entityBase = {
     legal_entity_name: 'A VERY LONG LEGAL ENTITY NAME FOR PDF OVERFLOW VERIFICATION AND ACCOUNTING RECORDS',
     optional_name: '(A genuine and fairly long optional display name)',
@@ -126,7 +146,7 @@ test('all eight layout combinations render as one US Letter page with long dynam
   }
   for (const billing_entity of ['FCAPL', 'FCS']) {
     for (const [state_code, state] of [['07', 'Delhi'], ['09', 'Uttar Pradesh']]) {
-      for (const others_amount of ['560000', '558720']) {
+      for (const others_amount of ['560000', '558720', '800.01']) {
         const entity = { ...entityBase, state_code, state }
         const input = { ...baseInput, ...entity, billing_entity, others_amount, professional_fee_text: 'Recruitment fee for the selected candidate under the agreed professional services engagement.' }
         const invoice = {
@@ -139,7 +159,7 @@ test('all eight layout combinations render as one US Letter page with long dynam
         const rendered = await renderInvoicePdf({ entity, invoice, overrides: input })
         assert.equal(rendered.pageCount, 1)
         assert.ok(rendered.buffer.length > 50000)
-        assert.match(rendered.buffer.toString('latin1'), /\/MediaBox\s*\[0 0 612 792\]/)
+        assert.match(rendered.buffer.toString('latin1'), new RegExp(`/MediaBox\\s*\\[0 0 ${A4_WIDTH} ${A4_HEIGHT}\\]`))
         const publicBuffer = await createInvoicePdf({ entity, invoice, overrides: input })
         assert.ok(publicBuffer.equals(rendered.buffer) || publicBuffer.length > 50000)
       }

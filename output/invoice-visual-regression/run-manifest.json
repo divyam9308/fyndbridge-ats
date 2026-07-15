@@ -1,0 +1,455 @@
+{
+  "generated_at": "2026-07-15T11:44:06.366Z",
+  "target_page": {
+    "name": "A4",
+    "width_points": 595.28,
+    "height_points": 841.89
+  },
+  "source_normalization": {
+    "horizontal_scale": 0.9726725335800654,
+    "method": "case-specific piecewise A4 mapping from FORENSIC_MEASUREMENTS.md",
+    "note": "pixel diffs are diagnostic because elastic-zone raster warping distorts glyphs and source PDFs contain numeric defects"
+  },
+  "dpi": 300,
+  "pixel_tolerance": 12,
+  "max_diff_percent": 0.1,
+  "cases": [
+    {
+      "id": "fcapl-igst-no-rounding",
+      "entity": "FCAPL",
+      "tax_type": "IGST",
+      "rounding": false,
+      "reference_file": "FCAPL NOROUNDING (1).pdf",
+      "reference_pdf": "/Users/divyamaggarwal/Downloads/FCAPL NOROUNDING (1).pdf",
+      "reference_sha256": "9e9a3d81573f5ffcb15a6adc7cb91fcc35c5452d6d3a3341b96de565a6b8d746",
+      "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcapl-igst-no-rounding.pdf",
+      "generated_sha256": "557d6e349771bd6f4688ab51d53da0c82d3987062b7fe389965f27c7bcd6bf60",
+      "renderer_reported_page_count": 1,
+      "expected_text": [
+        "FCAPL/26-27/001",
+        "M/S SMT SHAKUNTLA EDUCATIONAL & WELFARE SOCIETY",
+        "Integrated GST (IGST)",
+        "INR Six Lakh Sixty Thousand Eight Hundred Only",
+        "One Lakh Eight Hundred Rupees Only"
+      ],
+      "a4_profile": {
+        "source_y_points": [
+          21.6,
+          68.42,
+          87.14,
+          253.73,
+          274.25,
+          455.83,
+          470.95,
+          485.35,
+          508.39,
+          522.79,
+          537.19,
+          551.59,
+          627.94,
+          720.34
+        ],
+        "target_x_points": [
+          21.01,
+          68.4,
+          179.07,
+          247.61,
+          324.67,
+          408.94,
+          466.86,
+          572.16
+        ],
+        "target_y_points": [
+          21.01,
+          66.55,
+          84.76,
+          246.8,
+          266.76,
+          490.78,
+          505.49,
+          519.5,
+          541.91,
+          555.91,
+          569.92,
+          583.92,
+          658.19,
+          772.19
+        ],
+        "rule_thickness_points": [
+          0.93,
+          1.75
+        ],
+        "body_font_size": 8.87,
+        "metadata_font_size": 9.34,
+        "title_font_size": 14.94
+      }
+    },
+    {
+      "id": "fcapl-igst-rounding",
+      "entity": "FCAPL",
+      "tax_type": "IGST",
+      "rounding": true,
+      "reference_file": "FCAPL WITH ROUNDOFF.pdf",
+      "reference_pdf": "/Users/divyamaggarwal/Downloads/FCAPL WITH ROUNDOFF.pdf",
+      "reference_sha256": "6cb4f5108ec41642626003e6901c6fa2db1e7d93cdfbcebd343a2a9aa81413d5",
+      "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcapl-igst-rounding.pdf",
+      "generated_sha256": "00d327733b20058c116a12665db84adaf2e7ba4e5b47592fb35b2086b6098e08",
+      "renderer_reported_page_count": 1,
+      "expected_text": [
+        "FCAPL/26-27/001",
+        "M/S SMT SHAKUNTLA EDUCATIONAL & WELFARE SOCIETY",
+        "Integrated GST (IGST)",
+        "INR Six Lakh Fifty Nine Thousand Two Hundred Ninety Only",
+        "One Lakh Five Hundred Sixty Nine Rupees and Sixty Paise Only"
+      ],
+      "a4_profile": {
+        "source_y_points": [
+          21.72,
+          66.98,
+          85.1,
+          243.77,
+          263.45,
+          473.95,
+          488.59,
+          503.23,
+          517.87,
+          531.79,
+          554.11,
+          568.03,
+          581.95,
+          595.87,
+          668.74,
+          756.58
+        ],
+        "target_x_points": [
+          21.13,
+          67,
+          174.17,
+          250.76,
+          326.89,
+          408.47,
+          464.65,
+          569.48
+        ],
+        "target_y_points": [
+          21.13,
+          65.15,
+          82.77,
+          237.11,
+          256.25,
+          511.47,
+          525.71,
+          539.95,
+          554.19,
+          567.73,
+          589.44,
+          602.98,
+          616.52,
+          630.06,
+          700.94,
+          807.44
+        ],
+        "rule_thickness_points": [
+          0.82,
+          1.75
+        ],
+        "body_font_size": 8.64,
+        "metadata_font_size": 9.1,
+        "title_font_size": 14.47
+      }
+    },
+    {
+      "id": "fcapl-cgst-sgst",
+      "entity": "FCAPL",
+      "tax_type": "CGST_SGST",
+      "rounding": true,
+      "reference_file": "FCAPL CGST SGST.pdf",
+      "reference_pdf": "/Users/divyamaggarwal/Downloads/FCAPL CGST SGST.pdf",
+      "reference_sha256": "399959f4093eb5fbbba1216ac4980307cdb06e3559c30b25571b11dc45730160",
+      "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcapl-cgst-sgst.pdf",
+      "generated_sha256": "2c3cf9d8bc371760ff1c18e440ac6a4027703dca1f0693a5842e8d31a0b4cbc6",
+      "renderer_reported_page_count": 1,
+      "expected_text": [
+        "FCAPL/26-27/001",
+        "M/S SMT SHAKUNTLA EDUCATIONAL & WELFARE SOCIETY",
+        "Central Tax (CGST)",
+        "INR Six Lakh Fifty Nine Thousand Two Hundred Ninety Only",
+        "One Lakh Five Hundred Sixty Nine Rupees and Sixty Paise Only"
+      ],
+      "a4_profile": {
+        "source_y_points": [
+          21.72,
+          66.98,
+          85.1,
+          237.65,
+          257.81,
+          410.09,
+          424.75,
+          439.39,
+          454.03,
+          467.95,
+          481.87,
+          495.79,
+          509.71,
+          523.63,
+          537.55,
+          610.42,
+          698.26
+        ],
+        "target_x_points": [
+          21.13,
+          67,
+          181.05,
+          255.32,
+          328.64,
+          410.22,
+          466.4,
+          568.43
+        ],
+        "target_y_points": [
+          21.13,
+          65.15,
+          82.77,
+          231.16,
+          250.76,
+          444.25,
+          458.51,
+          472.75,
+          486.99,
+          500.53,
+          514.07,
+          527.61,
+          541.15,
+          554.69,
+          568.23,
+          639.1,
+          750.71
+        ],
+        "rule_thickness_points": [
+          0.82
+        ],
+        "body_font_size": 8.64,
+        "metadata_font_size": 9.1,
+        "title_font_size": 14.47
+      }
+    },
+    {
+      "id": "fcs-igst-no-rounding",
+      "entity": "FCS",
+      "tax_type": "IGST",
+      "rounding": false,
+      "reference_file": "FCS NoRounding.pdf",
+      "reference_pdf": "/Users/divyamaggarwal/Downloads/FCS NoRounding.pdf",
+      "reference_sha256": "86dc5b67dd043c281719db223cc854375a1709170a9b81d7128927d1f91388b3",
+      "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcs-igst-no-rounding.pdf",
+      "generated_sha256": "447088f11babd8f31dc0e1c0435ed570e790cb037a04f86c9268b3a6c7f84e99",
+      "renderer_reported_page_count": 1,
+      "expected_text": [
+        "FB/26-27/012",
+        "M/S SMT SHAKUNTLA EDUCATIONAL & WELFARE SOCIETY",
+        "Integrated GST (IGST)",
+        "INR Six Lakh Sixty Thousand Eight Hundred Only",
+        "One Lakh Eight Hundred Rupees Only"
+      ],
+      "a4_profile": {
+        "source_y_points": [
+          21.12,
+          68.3,
+          87.14,
+          241.13,
+          262.25,
+          498.79,
+          514.03,
+          528.55,
+          552.31,
+          566.83,
+          580.87,
+          595.39,
+          663.7,
+          766.06
+        ],
+        "target_x_points": [
+          20.54,
+          68.87,
+          184.91,
+          254.15,
+          328.64,
+          413.73,
+          472.23,
+          570.53
+        ],
+        "target_y_points": [
+          20.54,
+          66.43,
+          84.76,
+          234.54,
+          255.08,
+          535.09,
+          549.91,
+          564.03,
+          587.14,
+          601.27,
+          614.92,
+          629.05,
+          695.49,
+          816.66
+        ],
+        "rule_thickness_points": [
+          0.93,
+          1.87
+        ],
+        "body_font_size": 8.99,
+        "metadata_font_size": 9.45,
+        "title_font_size": 15.06
+      }
+    },
+    {
+      "id": "fcs-igst-rounding",
+      "entity": "FCS",
+      "tax_type": "IGST",
+      "rounding": true,
+      "reference_file": "FCS with roundoff.pdf",
+      "reference_pdf": "/Users/divyamaggarwal/Downloads/FCS with roundoff.pdf",
+      "reference_sha256": "3aac4fca7eef75a067c365cfc62bd446ee3ab96a6fa8639900a4484e9b007a8f",
+      "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcs-igst-rounding.pdf",
+      "generated_sha256": "775c40227197ffb5bbe3d7606494baca8286e8c71ab2f8a8c23d674da79c4fa3",
+      "renderer_reported_page_count": 1,
+      "expected_text": [
+        "FB/26-27/012",
+        "M/S SMT SHAKUNTLA EDUCATIONAL & WELFARE SOCIETY",
+        "Integrated GST (IGST)",
+        "INR Six Lakh Fifty Nine Thousand Two Hundred Ninety Only",
+        "One Lakh Five Hundred Sixty Nine Rupees and Sixty Paise Only"
+      ],
+      "a4_profile": {
+        "source_y_points": [
+          21.6,
+          67.22,
+          85.46,
+          243.89,
+          264.29,
+          476.83,
+          491.59,
+          506.35,
+          521.11,
+          535.27,
+          557.83,
+          571.99,
+          586.15,
+          600.34,
+          674.86,
+          763.42
+        ],
+        "target_x_points": [
+          21.01,
+          67.46,
+          188.41,
+          266.17,
+          336.92,
+          419.47,
+          476.2,
+          570.06
+        ],
+        "target_y_points": [
+          21.01,
+          65.38,
+          83.12,
+          237.23,
+          257.07,
+          514.29,
+          528.65,
+          543.01,
+          557.36,
+          571.14,
+          593.08,
+          606.85,
+          620.63,
+          634.43,
+          706.91,
+          814.09
+        ],
+        "rule_thickness_points": [
+          0.93
+        ],
+        "body_font_size": 8.75,
+        "metadata_font_size": 9.1,
+        "title_font_size": 14.59
+      }
+    },
+    {
+      "id": "fcs-cgst-sgst",
+      "entity": "FCS",
+      "tax_type": "CGST_SGST",
+      "rounding": true,
+      "reference_file": "FCS_CGST_SGST.pdf",
+      "reference_pdf": "/Users/divyamaggarwal/Downloads/FCS_CGST_SGST.pdf",
+      "reference_sha256": "68ebde5ec11b1a91d7b225e485e81397c3e9e2a235f9da4236dac0d9ed38c187",
+      "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcs-cgst-sgst.pdf",
+      "generated_sha256": "40339761770988c865f4379b9c69f9b9e17716383499e7dd460fb8bdfd246835",
+      "renderer_reported_page_count": 1,
+      "expected_text": [
+        "FB/26-27/012",
+        "M/S SMT SHAKUNTLA EDUCATIONAL & WELFARE SOCIETY",
+        "Central Tax (CGST)",
+        "INR Six Lakh Fifty Nine Thousand Two Hundred Ninety Only",
+        "One Lakh Five Hundred Sixty Nine Rupees and Sixty Paise Only"
+      ],
+      "a4_profile": {
+        "source_y_points": [
+          21.6,
+          68.78,
+          87.62,
+          241.61,
+          262.73,
+          421.63,
+          436.87,
+          452.11,
+          467.35,
+          481.87,
+          496.39,
+          510.91,
+          525.43,
+          539.95,
+          554.47,
+          622.78,
+          727.66
+        ],
+        "target_x_points": [
+          21.01,
+          68.87,
+          168.56,
+          237.81,
+          322.57,
+          407.66,
+          466.16,
+          572.63
+        ],
+        "target_y_points": [
+          21.01,
+          66.9,
+          85.23,
+          235.01,
+          255.55,
+          453.2,
+          468.02,
+          482.85,
+          497.67,
+          511.79,
+          525.92,
+          540.04,
+          554.16,
+          568.29,
+          582.41,
+          648.85,
+          779.31
+        ],
+        "rule_thickness_points": [
+          0.93
+        ],
+        "body_font_size": 8.99,
+        "metadata_font_size": 9.45,
+        "title_font_size": 15.06
+      }
+    }
+  ]
+}

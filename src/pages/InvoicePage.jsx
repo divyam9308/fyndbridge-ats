@@ -7,7 +7,7 @@ import {
   fetchNextInvoiceNumber, lookupGstin, previewInvoicePdf, updateInvoiceEntity
 } from '../services/invoiceApi'
 import { useAdminAccess } from '../hooks/useAdminAccess'
-import { EMPTY_INVOICE, INVOICE_MODELS, calculateInvoicePreview } from '../utils/invoiceModels'
+import { EMPTY_INVOICE, INVOICE_MODELS, calculateInvoicePreview, detectInvoiceGstComponent } from '../utils/invoiceModels'
 import '../styles/Shared.css'
 import './InvoicePage.css'
 
@@ -22,8 +22,7 @@ const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000
 const number = value => Number(String(value ?? '').replace(/₹|â‚¹|Rs\.?|,/gi, '').trim() || 0)
 const money = value => `₹${number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const display = value => String(value ?? '').trim() || '-'
-const isDelhi = form => /\b(new\s+delhi|delhi|south east delhi|north delhi|south delhi|east delhi|west delhi|central delhi)\b/i.test([form.address, form.state, form.place_of_supply].join(' '))
-const withAutoGst = form => ({ ...form, gst_component: isDelhi(form) ? 'CGST_SGST' : 'IGST' })
+const withAutoGst = form => ({ ...form, gst_component: detectInvoiceGstComponent(form) })
 
 function Field({ label, children, full = false }) {
   return <div className={`form-group${full ? ' full' : ''}`}><label className="form-label">{label}</label>{children}</div>
@@ -62,7 +61,7 @@ function EntityModal({ initial, onClose, onSave }) {
   const [lookupLoading, setLookupLoading] = useState(false)
   const update = event => {
     const { name, value } = event.target
-    setForm(current => ['address', 'state', 'place_of_supply'].includes(name) ? withAutoGst({ ...current, [name]: value }) : { ...current, [name]: value })
+    setForm(current => ['address', 'state', 'state_code', 'place_of_supply'].includes(name) ? withAutoGst({ ...current, [name]: value }) : { ...current, [name]: value })
   }
   const searchGstin = async () => {
     if (!form.gstin) return
@@ -89,7 +88,7 @@ function EntityModal({ initial, onClose, onSave }) {
       </div></section>
       <section className="invoice-form-section"><h3>Tax Details</h3><div className="form-grid-2">
         <Field label="SAC"><Input name="sac" value={form.sac} update={update} /></Field>
-        <Field label="GST Component"><select className="form-control" name="gst_component" value={form.gst_component} onChange={update}><option value="IGST">IGST</option><option value="CGST_SGST">CGST + SGST</option></select></Field>
+        <Field label="GST Component"><select className="form-control" name="gst_component" value={form.gst_component} disabled title="Derived from State Code, State, Place of Supply, and Address"><option value="IGST">IGST</option><option value="CGST_SGST">CGST + SGST</option></select></Field>
         {form.gst_component === 'IGST' ? <Field label="IGST Rate"><Input name="igst_rate" value={form.igst_rate} update={update} inputMode="decimal" /></Field> : <><Field label="CGST Rate"><Input name="cgst_rate" value={form.cgst_rate} update={update} inputMode="decimal" /></Field><Field label="SGST Rate"><Input name="sgst_rate" value={form.sgst_rate} update={update} inputMode="decimal" /></Field></>}
       </div></section>
     </div><div className="modal-footer"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save Entity'}</button></div>
@@ -109,7 +108,7 @@ function CreateInvoiceModal({ entities, onClose, onCreated }) {
   const select = event => {
     const entity = entities.find(item => item.id === event.target.value)
     setSelectedId(event.target.value); setResult(null)
-    if (entity) setForm(current => ({ ...current, billing_entity: entity.billing_entity || 'FCS', sac: entity.sac || '998512', gst_component: entity.gst_component || 'IGST', igst_rate: entity.igst_rate ?? 18, cgst_rate: entity.cgst_rate ?? 9, sgst_rate: entity.sgst_rate ?? 9 }))
+    if (entity) setForm(current => ({ ...current, billing_entity: entity.billing_entity || 'FCS', sac: entity.sac || '998512', gst_component: detectInvoiceGstComponent(entity), igst_rate: entity.igst_rate ?? 18, cgst_rate: entity.cgst_rate ?? 9, sgst_rate: entity.sgst_rate ?? 9 }))
   }
   const preview = async () => {
     if (!selected) return setError('Select an entity.')
@@ -120,9 +119,9 @@ function CreateInvoiceModal({ entities, onClose, onCreated }) {
     setSaving(true); setError('')
     try {
       const saved = await commitInvoicePreview({ ...form, invoice_entity_id: selected.id, invoice_number: result.data.invoice_number })
-      const bytes = Uint8Array.from(atob(result.pdfBase64), char => char.charCodeAt(0))
+      const bytes = Uint8Array.from(atob(saved.pdfBase64), char => char.charCodeAt(0))
       const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-      const link = document.createElement('a'); link.href = url; link.download = result.fileName; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0)
+      const link = document.createElement('a'); link.href = url; link.download = saved.fileName; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0)
       await onCreated(saved.data); onClose()
     } catch (err) { setError(err.message); setSaving(false) }
   }
@@ -138,7 +137,7 @@ function CreateInvoiceModal({ entities, onClose, onCreated }) {
         <Field label="Model"><select className="form-control" name="model" value={form.model} onChange={update}>{INVOICE_MODELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
         <Field label="Professional Fee Text" full><textarea className="form-control" name="professional_fee_text" value={form.professional_fee_text} onChange={update} rows={3} /></Field>
         <ModelFields form={form} update={update} />
-        <Field label="SAC"><Input name="sac" value={form.sac} update={update} /></Field><Field label="GST Component"><select className="form-control" name="gst_component" value={form.gst_component} onChange={update}><option value="IGST">IGST</option><option value="CGST_SGST">CGST + SGST</option></select></Field>
+        <Field label="SAC"><Input name="sac" value={form.sac} update={update} /></Field><Field label="GST Component"><select className="form-control" name="gst_component" value={form.gst_component} disabled title="Derived from the selected entity's place and state"><option value="IGST">IGST</option><option value="CGST_SGST">CGST + SGST</option></select></Field>
         {form.gst_component === 'IGST' ? <Field label="IGST Rate"><Input name="igst_rate" value={form.igst_rate} update={update} /></Field> : <><Field label="CGST Rate"><Input name="cgst_rate" value={form.cgst_rate} update={update} /></Field><Field label="SGST Rate"><Input name="sgst_rate" value={form.sgst_rate} update={update} /></Field></>}
       </div></section>
       <section className="invoice-form-section"><h3>Calculation Preview</h3><div className="invoice-preview"><span>Taxable<b>{money(calc.taxable)}</b></span><span>IGST<b>{money(calc.igst)}</b></span><span>CGST<b>{money(calc.cgst)}</b></span><span>SGST<b>{money(calc.sgst)}</b></span><span>Grand Total<b>{money(calc.grand)}</b></span></div></section>

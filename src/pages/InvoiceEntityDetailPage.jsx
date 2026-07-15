@@ -5,7 +5,7 @@ import { ChevronLeft, Download, FileText, LoaderCircle, Pencil, Trash2, X } from
 import { deleteInvoicePdfVersion, fetchInvoiceEntity, previewRegeneratedInvoice, regenerateInvoice } from '../services/invoiceApi'
 import { isValidStoragePath, openProtectedDocumentPath } from '../services/apiClient'
 import { ModelFields } from './InvoicePage'
-import { EMPTY_INVOICE, INVOICE_MODEL_LABELS, INVOICE_MODELS, calculateInvoicePreview } from '../utils/invoiceModels'
+import { EMPTY_INVOICE, INVOICE_MODEL_LABELS, INVOICE_MODELS, calculateInvoicePreview, detectInvoiceGstComponent } from '../utils/invoiceModels'
 import '../styles/Shared.css'
 import './InvoicePage.css'
 
@@ -15,8 +15,8 @@ const money = value => `₹${number(value).toLocaleString('en-IN', { minimumFrac
 function Field({ label, children, full = false }) { return <div className={`form-group${full ? ' full' : ''}`}><label className="form-label">{label}</label>{children}</div> }
 function Input({ name, value, update, ...props }) { return <input className="form-control" name={name} value={value ?? ''} onChange={update} {...props} /> }
 
-function EditInvoiceModal({ invoice, onClose, onSaved }) {
-  const [form, setForm] = useState({ ...EMPTY_INVOICE, ...invoice })
+function EditInvoiceModal({ invoice, entity, onClose, onSaved }) {
+  const [form, setForm] = useState({ ...EMPTY_INVOICE, ...invoice, gst_component: detectInvoiceGstComponent(entity) })
   const [preview, setPreview] = useState(null)
   const [saved, setSaved] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -45,7 +45,7 @@ function EditInvoiceModal({ invoice, onClose, onSaved }) {
       <Field label="Model"><select className="form-control" name="model" value={form.model} onChange={update}>{INVOICE_MODELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
       <Field label="Professional Fee Text" full><textarea className="form-control" name="professional_fee_text" value={form.professional_fee_text || ''} onChange={update} rows={3} /></Field>
       <ModelFields form={form} update={update} />
-      <Field label="SAC"><Input name="sac" value={form.sac} update={update} /></Field><Field label="GST Component"><select className="form-control" name="gst_component" value={form.gst_component} onChange={update}><option value="IGST">IGST</option><option value="CGST_SGST">CGST + SGST</option></select></Field>
+      <Field label="SAC"><Input name="sac" value={form.sac} update={update} /></Field><Field label="GST Component"><select className="form-control" name="gst_component" value={form.gst_component} disabled title="Derived from the entity's place and state"><option value="IGST">IGST</option><option value="CGST_SGST">CGST + SGST</option></select></Field>
       {form.gst_component === 'IGST' ? <Field label="IGST Rate"><Input name="igst_rate" value={form.igst_rate} update={update} /></Field> : <><Field label="CGST Rate"><Input name="cgst_rate" value={form.cgst_rate} update={update} /></Field><Field label="SGST Rate"><Input name="sgst_rate" value={form.sgst_rate} update={update} /></Field></>}
     </div></section><section className="invoice-form-section"><h3>Updated Total</h3><div className="invoice-preview"><span>Taxable<b>{money(calc.taxable)}</b></span><span>Grand Total<b>{money(calc.grand)}</b></span></div></section>
     {(saved || preview) && <section className="invoice-form-section"><h3>{saved ? 'Regenerated Invoice Saved' : 'Regenerated Invoice Preview'}</h3><div className="invoice-pdf-preview"><iframe title="Regenerated invoice preview" src={`data:application/pdf;base64,${(saved || preview).pdfBase64}`} /></div></section>}
@@ -98,6 +98,6 @@ export default function InvoiceEntityDetailPage() {
       {data.invoices.map(invoice => <tr key={invoice.id}><td><span className="invoice-id">{invoice.invoice_display_id || invoice.invoice_number}</span></td><td>{show(invoice.consultant_name)}</td><td>{show(invoice.candidate_name)}</td><td>{details(invoice)}</td><td><div className="invoice-version-list">{(invoice.pdf_versions || []).map((version, index) => <span className="invoice-version" key={version.id}><button className="invoice-document-button" onClick={() => openInvoice(version)} title={`Open PDF version ${invoice.pdf_versions.length - index}`}>{opening === version.id ? <LoaderCircle size={16} /> : <FileText size={16} />}<small>v{invoice.pdf_versions.length - index}</small></button><button className="invoice-version-delete" onClick={() => deleteVersion(version)} title="Delete this PDF version"><Trash2 size={12} /></button></span>)}{!invoice.pdf_versions?.length ? '-' : null}</div></td><td><button className="row-action-btn" onClick={() => setEditing(invoice)} aria-label="Edit invoice"><Pencil size={14} /></button></td></tr>)}
       {!data.invoices.length && <tr><td className="invoice-empty-cell" colSpan={6}>No invoices generated for this entity.</td></tr>}
     </tbody></table></div></div>
-    {editing && <EditInvoiceModal invoice={editing} onClose={() => setEditing(null)} onSaved={load} />}
+    {editing && <EditInvoiceModal invoice={editing} entity={entity} onClose={() => setEditing(null)} onSaved={load} />}
   </div>
 }
