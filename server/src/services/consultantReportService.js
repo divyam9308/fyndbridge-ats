@@ -5,6 +5,7 @@ const attendanceService = require('./attendanceService')
 const { getFinancialYearForDate, localDate, addDays } = require('./attendanceUtils')
 const {
   buildConsultantReportFacts,
+  consultantMatches,
   paginateReportRows,
   parseReportRequest,
   toConversionRow
@@ -131,12 +132,7 @@ async function fetchAssociations(jobIds) {
 async function loadFacts(params, access) {
   const jobs = await fetchJobs(params.startDate, params.endDate)
   const assignedJobIds = jobs
-    .filter((job) => {
-      const consultantNames = Array.isArray(job.consultants) ? job.consultants : []
-      const target = access.target.name.trim().toLowerCase()
-      return consultantNames.some((name) => String(name || '').trim().toLowerCase() === target)
-        || String(job.team_lead || '').trim().toLowerCase() === target
-    })
+    .filter((job) => consultantMatches(job, access.target.name))
     .map((job) => job.id)
   const associations = await fetchAssociations(assignedJobIds)
   const facts = buildConsultantReportFacts({

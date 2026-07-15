@@ -109,7 +109,7 @@ function parseReportRequest(query = {}, kind = 'main', today = localDate()) {
 }
 
 function consultantMatches(job, consultantName) {
-  return parseList(job.consultants).some((name) => same(name, consultantName)) || same(job.team_lead, consultantName)
+  return parseList(job.consultants).some((name) => same(name, consultantName))
 }
 
 function mandateDate(job) {

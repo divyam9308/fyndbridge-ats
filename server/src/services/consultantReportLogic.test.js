@@ -7,6 +7,7 @@ const {
   buildCandidatePipeline,
   buildConsultantReportFacts,
   canonicalMandateStatus,
+  consultantMatches,
   paginateReportRows,
   parseReportRequest
 } = require('./consultantReportLogic')
@@ -79,6 +80,36 @@ test('report uses exactly the shared eleven candidate statuses and three mandate
   assert.equal(canonicalMandateStatus('Filled'), 'Completed')
   assert.equal(canonicalMandateStatus('scrap'), 'Scrapped')
   assert.equal(canonicalMandateStatus('unknown'), '')
+})
+
+test('report includes only consultant-owned mandates and excludes team-lead-only mandates everywhere', () => {
+  const consultantMandate = job({
+    id: 'consultant-owned',
+    consultants: ['  ASHA RAO  '],
+    team_lead: 'Another Lead'
+  })
+  const teamLeadOnlyMandate = job({
+    id: 'team-lead-only',
+    consultants: ['Another Consultant'],
+    team_lead: 'Asha Rao'
+  })
+  const result = facts(
+    [consultantMandate, teamLeadOnlyMandate],
+    [
+      association('consultant-owned', 'Interested'),
+      association('team-lead-only', 'Hired')
+    ]
+  )
+
+  assert.equal(consultantMatches(consultantMandate, CONSULTANT.name), true)
+  assert.equal(consultantMatches(teamLeadOnlyMandate, CONSULTANT.name), false)
+  assert.deepEqual(result.mandateSummary, { total: 1, ongoing: 1, completed: 0, scrapped: 0 })
+  assert.equal(result.candidateOverview.total, 1)
+  assert.equal(result.candidateOverview.counts.Interested, 1)
+  assert.equal(result.candidateOverview.counts.Hired, 0)
+  assert.deepEqual(result.mandates.map((row) => row.key), ['consultant-owned'])
+  assert.deepEqual(result.recentMandates.map((row) => row.key), ['consultant-owned'])
+  assert.deepEqual(result.recentConversions.map((row) => row.key), ['consultant-owned'])
 })
 
 test('candidate aggregation counts association rows at mandate grain and reconciles all eleven statuses', () => {
