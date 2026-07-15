@@ -4,6 +4,7 @@ const { localDate } = require('./attendanceUtils')
 
 const PAGE_SIZES = new Set([5, 10, 25, 50])
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const OVERALL_CONSULTANT_KEY = 'overall'
 const REJECTED_STATUSES = new Set(['Not Interested', 'Rejected by Recruiter', 'Rejected by Client'])
 const SUBMISSION_EVIDENCE_STATUSES = new Set(['Client Submission', 'Interview', 'Offered', 'Hired'])
 const INTERVIEW_EVIDENCE_STATUSES = new Set(['Interview', 'Offered', 'Hired'])
@@ -12,6 +13,21 @@ const STAGES = Object.freeze([
   { key: 'interview', field: 'interview_at', label: 'Mandate → First Interview', tone: 'purple' },
   { key: 'offer', field: 'offered_at', label: 'Mandate → First Offer', tone: 'amber' },
   { key: 'hire', field: 'hired_at', label: 'Mandate → First Hire', tone: 'green' }
+])
+const EMPTY_EXCEPTION_METRICS = Object.freeze([
+  { key: 'withoutCandidates', label: 'Mandates without candidates', tone: 'neutral' },
+  { key: 'withoutClientSubmission', label: 'Mandates with candidates but no Client Submission', tone: 'blue' },
+  { key: 'withoutInterview', label: 'Mandates with Client Submission but no Interview', tone: 'purple' },
+  { key: 'allRejected', label: 'Mandates where every candidate is Not Interested, Rejected by Recruiter or Rejected by Client', tone: 'red' },
+  { key: 'ageing', label: 'Ongoing mandates older than 45 days', tone: 'amber' }
+])
+const EMPTY_POSITIVE_OUTCOME_METRICS = Object.freeze([
+  { key: 'hiredCandidates', label: 'Hired Candidates', tone: 'green' },
+  { key: 'offeredCandidates', label: 'Offered Candidates', tone: 'amber' },
+  { key: 'completedMandates', label: 'Completed Mandates', tone: 'blue' },
+  { key: 'mandatesWithHire', label: 'Mandates with at least one Hire', tone: 'teal' },
+  { key: 'clientSubmissions', label: 'Total Client Submissions', tone: 'cyan' },
+  { key: 'interviews', label: 'Total Interviews', tone: 'purple' }
 ])
 
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
@@ -68,8 +84,10 @@ function parseInteger(value, label, fallback) {
 }
 
 function parseReportRequest(query = {}, kind = 'main', today = localDate()) {
-  const consultantUserId = clean(query.consultant_user_id)
-  if (!UUID_PATTERN.test(consultantUserId)) throw bad('Select a valid consultant.')
+  const scope = clean(query.scope).toLowerCase() || 'consultant'
+  if (!['consultant', OVERALL_CONSULTANT_KEY].includes(scope)) throw bad('Select a valid report scope.')
+  const consultantUserId = scope === OVERALL_CONSULTANT_KEY ? OVERALL_CONSULTANT_KEY : clean(query.consultant_user_id)
+  if (scope === 'consultant' && !UUID_PATTERN.test(consultantUserId)) throw bad('Select a valid consultant.')
 
   const requestedStartDate = clean(query.start_date)
   const requestedEndDate = clean(query.end_date)
@@ -82,6 +100,7 @@ function parseReportRequest(query = {}, kind = 'main', today = localDate()) {
 
   const parsed = {
     consultantUserId,
+    scope,
     startDate: requestedStartDate,
     endDate,
     requestedEndDate,
@@ -108,12 +127,21 @@ function parseReportRequest(query = {}, kind = 'main', today = localDate()) {
   return { ...parsed, search, status, page, pageSize, sort, sortDirection }
 }
 
-function consultantMatches(job, consultantName) {
-  return parseList(job.consultants).some((name) => same(name, consultantName))
+function consultantMatches(job, consultant) {
+  const assigned = parseList(job.consultants)
+  if (consultant?.isOverall) {
+    return assigned.some((name) => (consultant.consultants || []).some((employee) => same(name, employee.name)))
+  }
+  const consultantName = typeof consultant === 'object' ? consultant?.name : consultant
+  return assigned.some((name) => same(name, consultantName))
 }
 
 function candidateAssociationMatches(association, consultant) {
   const associationUserId = clean(association?.consultant_user_id)
+  if (consultant?.isOverall) {
+    if (associationUserId) return (consultant.consultants || []).some((employee) => clean(employee.user_id) === associationUserId)
+    return (consultant.consultants || []).some((employee) => same(association?.consultant_name, employee.name))
+  }
   const consultantUserId = clean(consultant?.user_id)
   if (associationUserId) return Boolean(consultantUserId && associationUserId === consultantUserId)
   return same(association?.consultant_name, consultant?.name)
@@ -249,7 +277,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
   const candidateRows = candidateAssociations === undefined ? associations : candidateAssociations
 
   for (const job of jobs) {
-    if (!consultantMatches(job, consultant.name)) continue
+    if (!consultantMatches(job, consultant)) continue
     const allocationDate = mandateDate(job)
     if (!allocationDate) {
       warnings.add('missing_mandate_date', 'Some assigned mandates have no allocation or created date and were excluded.')
@@ -334,8 +362,10 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
     scrapped: mandateRows.filter((row) => row.status === 'Scrapped').length
   }
 
+  const conversionTotals = {}
   const conversionSummary = STAGES.map((stage) => {
     const durations = mandateRows.map((row) => row._conversion[stage.key].days).filter(Number.isFinite)
+    conversionTotals[stage.key] = { totalDays: durations.reduce((total, value) => total + value, 0), trackedMandates: durations.length }
     const averageDays = durations.length ? rounded(durations.reduce((total, value) => total + value, 0) / durations.length) : null
     return {
       key: stage.key,
@@ -411,7 +441,83 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
     mandates: publicRows,
     recentMandates: publicRows.slice(0, 5),
     recentConversions: publicRows.slice(0, 5).map(toConversionRow),
-    warnings: warnings.values()
+    warnings: warnings.values(),
+    _conversionTotals: conversionTotals
+  }
+}
+
+function aggregateMetricItems(entries, field, fallbackItems) {
+  const template = entries.find((entry) => entry.facts?.[field]?.length)?.facts[field] || fallbackItems
+  return template.map((item) => ({
+    ...item,
+    value: entries.reduce((total, entry) => {
+      const match = entry.facts?.[field]?.find((candidate) => candidate.key === item.key)
+      return total + (Number(match?.value) || 0)
+    }, 0)
+  }))
+}
+
+function aggregateConsultantReportFacts(entries = []) {
+  const scopedEntries = (entries || []).filter((entry) => entry?.consultant && entry?.facts)
+  const mandateSummary = scopedEntries.reduce((summary, entry) => {
+    for (const key of ['total', 'ongoing', 'completed', 'scrapped']) summary[key] += Number(entry.facts.mandateSummary?.[key]) || 0
+    return summary
+  }, { total: 0, ongoing: 0, completed: 0, scrapped: 0 })
+
+  const conversionTotals = {}
+  const conversionSummary = STAGES.map((stage) => {
+    const totals = scopedEntries.reduce((result, entry) => {
+      const tracked = Number(entry.facts._conversionTotals?.[stage.key]?.trackedMandates)
+        || Number(entry.facts.conversionSummary?.find((item) => item.key === stage.key)?.trackedMandates)
+        || 0
+      const totalDays = Number(entry.facts._conversionTotals?.[stage.key]?.totalDays)
+      const average = Number(entry.facts.conversionSummary?.find((item) => item.key === stage.key)?.averageDays)
+      result.trackedMandates += tracked
+      result.totalDays += Number.isFinite(totalDays) ? totalDays : (Number.isFinite(average) ? average * tracked : 0)
+      return result
+    }, { totalDays: 0, trackedMandates: 0 })
+    conversionTotals[stage.key] = totals
+    const averageDays = totals.trackedMandates ? rounded(totals.totalDays / totals.trackedMandates) : null
+    return {
+      key: stage.key,
+      label: stage.label,
+      averageDays,
+      displayValue: numberLabel(averageDays),
+      trackedMandates: totals.trackedMandates,
+      untrackedMandates: scopedEntries.reduce((total, entry) => total + (Number(entry.facts.conversionSummary?.find((item) => item.key === stage.key)?.untrackedMandates) || 0), 0),
+      tone: stage.tone
+    }
+  })
+
+  const candidateCounts = emptyStatusCounts()
+  for (const entry of scopedEntries) {
+    for (const status of CANDIDATE_STATUSES) candidateCounts[status] += Number(entry.facts.candidateOverview?.counts?.[status]) || 0
+  }
+  const candidateOverview = {
+    total: Object.values(candidateCounts).reduce((total, value) => total + value, 0),
+    counts: candidateCounts
+  }
+
+  const warningMap = new Map()
+  for (const entry of scopedEntries) {
+    for (const warning of entry.facts.warnings || []) {
+      const current = warningMap.get(warning.code)
+      warningMap.set(warning.code, { ...warning, count: (current?.count || 0) + (Number(warning.count) || 1) })
+    }
+  }
+
+  return {
+    mandateSummary,
+    conversionSummary,
+    candidateOverview,
+    candidatePipeline: buildCandidatePipeline(candidateOverview),
+    exceptions: aggregateMetricItems(scopedEntries, 'exceptions', EMPTY_EXCEPTION_METRICS),
+    positiveOutcomes: aggregateMetricItems(scopedEntries, 'positiveOutcomes', EMPTY_POSITIVE_OUTCOME_METRICS),
+    mandates: [],
+    recentMandates: [],
+    recentConversions: [],
+    warnings: [...warningMap.values()],
+    _conversionTotals: conversionTotals
   }
 }
 
@@ -462,6 +568,7 @@ module.exports = {
   CANDIDATE_STATUSES,
   MANDATE_STATUSES,
   STAGES,
+  aggregateConsultantReportFacts,
   buildConsultantReportFacts,
   buildCandidatePipeline,
   candidateAssociationDate,

@@ -1,5 +1,7 @@
 const supabase = require('./supabaseAdmin')
-const { isAdmin } = require('./adminAccess')
+const { getPageViewPermission, isAdmin, isSuperAdmin } = require('./adminAccess')
+const { allowsPageView } = require('./pageViewPermissionPolicy')
+const { canViewOverallConsultantReport, getOverallConsultantReportAudience } = require('./consultantReportAccess')
 
 const KEY = 'dashboard_restrict_non_admin_to_self'
 const LOW_MANDATE_AUDIENCE_KEY = 'low_mandate_notification_audience'
@@ -11,14 +13,19 @@ function normalizeLowMandateAudience(value) {
 }
 
 async function getDashboardAccess(user) {
-  const [admin, setting, profile] = await Promise.all([
+  const [admin, superAdmin, setting, profile, overallReportAudience, reportPagePermission] = await Promise.all([
     isAdmin(user),
+    isSuperAdmin(user),
     supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle(),
-    supabase.from('user_profiles').select('name').eq('user_id', user?.id).maybeSingle()
+    supabase.from('user_profiles').select('name').eq('user_id', user?.id).maybeSingle(),
+    getOverallConsultantReportAudience(),
+    getPageViewPermission('report', { fresh: true })
   ])
   const restricted = setting.error || setting.data?.value !== false
   const consultantName = String(profile.data?.name || '').trim()
-  return { isAdmin: admin, restrictedToSelf: !admin && restricted, consultantName }
+  const canViewOverallReport = canViewOverallConsultantReport({ admin, superAdmin }, overallReportAudience)
+    && allowsPageView(reportPagePermission, { isAdmin: admin, isSuperAdmin: superAdmin })
+  return { isAdmin: admin, isSuperAdmin: superAdmin, restrictedToSelf: !admin && restricted, consultantName, canViewOverallReport }
 }
 
 async function getDashboardVisibility() {

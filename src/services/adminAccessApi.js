@@ -32,6 +32,16 @@ export async function updateDashboardVisibility(settings) {
   return result
 }
 
+export async function updateOverallConsultantReportAudience(audience) {
+  const result = await json(await apiFetch('/api/admin/consultant-report-visibility', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audience })
+  }))
+  invalidateApiJsonCache('/api/admin')
+  return result
+}
+
 export async function fetchAdminUsers() {
   return cachedApiJson('/api/admin/users', {}, { ttlMs: 30000 })
 }

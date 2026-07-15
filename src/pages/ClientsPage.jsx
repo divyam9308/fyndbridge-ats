@@ -19,7 +19,7 @@ import { supabase } from '../services/supabaseClient'
 import { normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, isValidStoragePath } from '../services/apiClient'
 import { STORAGE_BUCKETS } from '../utils/storageBuckets'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
-import { highlightText, keywordFilters } from '../utils/aiFilterUi'
+import { highlightText } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 import { ConsultantPill } from '../components/ConsultantPill'
@@ -155,7 +155,6 @@ const storeClientColumns = (value) => {
     // Ignore storage failures; backend preference remains the source of truth.
   }
 }
-const CLIENT_AI_SEARCH_FIELDS = ['client_id', 'client_name', 'location', 'region', 'consultant', 'contact_person', 'mobile', 'email', 'linkedin', 'sector', 'connected_on_date', 'comments', 'follow_up_date', 'status', 'terms_signed', 'value', 'billing_entity', 'gstin', 'pan', 'address_on_invoice', 'designation', 'contract_signed', 'contract_document']
 const CLIENT_PERMISSION_BY_COLUMN = {
   clientId: 'client_display_id',
   clientName: 'client_name',
@@ -179,32 +178,6 @@ const CLIENT_PERMISSION_BY_COLUMN = {
   addressOnInvoice: 'address_on_invoice',
   contractPdf: 'contract_document'
 }
-const CLIENT_PERMISSION_BY_AI_FIELD = {
-  client_id: 'client_display_id',
-  client_name: 'client_name',
-  location: 'location',
-  region: 'region',
-  consultant: 'consultant_name',
-  contact_person: 'contact_person',
-  mobile: 'mobile',
-  email: 'email',
-  linkedin: 'linkedin',
-  sector: 'sector',
-  connected_on_date: 'connected_on_date',
-  comments: 'comments',
-  follow_up_date: 'follow_up_date',
-  status: 'status',
-  terms_signed: 'terms_signed_type',
-  value: 'terms_value',
-  billing_entity: 'terms_value',
-  gstin: 'gstin',
-  pan: 'pan',
-  address_on_invoice: 'address_on_invoice',
-  designation: 'designation',
-  contract_signed: 'contract_signed',
-  contract_document: 'contract_document'
-}
-
 const getCurrentUser = () => {
   if (typeof window === 'undefined') return {}
   try {
@@ -212,6 +185,18 @@ const getCurrentUser = () => {
   } catch {
     return {}
   }
+}
+
+const notifyAiQuota = (message) => {
+  if (message === 'AI quota reached') {
+    window.dispatchEvent(new CustomEvent('ai-quota-reached', { detail: 'AI quota reached' }))
+  }
+}
+
+const isSupportedIntentFilter = (filters) => {
+  const mode = String(filters?.mode || '').trim().toLowerCase()
+  if (['ast', 'structured', 'hybrid'].includes(mode)) return Boolean(filters?.root)
+  return mode === 'keyword' && typeof filters?.search_text === 'string' && Boolean(filters.search_text.trim())
 }
 
 const getCanonicalClients = (clients) => {
@@ -273,6 +258,7 @@ export default function ClientsPage() {
   const [allClients, setAllClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [listError, setListError] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
@@ -337,6 +323,10 @@ export default function ClientsPage() {
   const contactSavingRef = useRef({})
   const pendingRealtimeRefreshRef = useRef(false)
   const suppressRealtimeUntilRef = useRef(0)
+  const aiFilterRequestRef = useRef(0)
+  const aiFilterAbortRef = useRef(null)
+  const clientListRequestRef = useRef(0)
+  const clientListAbortRef = useRef(null)
 
   const focusPopup = useCallback((ref) => {
     window.requestAnimationFrame(() => {
@@ -361,8 +351,13 @@ export default function ClientsPage() {
   }, [])
 
   const fetchClients = useCallback(async ({ showLoading = true } = {}) => {
+    const requestId = ++clientListRequestRef.current
+    clientListAbortRef.current?.abort()
+    const controller = new AbortController()
+    clientListAbortRef.current = controller
     try {
       if (showLoading) setLoading(true)
+      setListError('')
       const params = new URLSearchParams()
       params.set('page', String(page))
       params.set('limit', String(pageSize))
@@ -374,20 +369,33 @@ export default function ClientsPage() {
       if (dashboardFilters?.consultant) params.set('consultant', dashboardFilters.consultant)
       if (dashboardFilters?.period) params.set('period', dashboardFilters.period)
       if (aiFilters) params.set('ai_filters', JSON.stringify(aiFilters))
-      const res = await fetch(`/api/clients${params.toString() ? `?${params.toString()}` : ''}`)
-      if (!res.ok) throw new Error('Failed to fetch clients from server.')
-      const data = await res.json()
+      const res = await fetch(`/api/clients${params.toString() ? `?${params.toString()}` : ''}`, { signal: controller.signal })
+      const data = await res.json().catch(() => ({}))
+      if (requestId !== clientListRequestRef.current || controller.signal.aborted) return
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch clients from server.')
       setClients(data.data || [])
       setTotalClients(Number(data.total) || 0)
       setPage(Number(data.page) || 1)
       if (import.meta.env.DEV && aiFilters) console.debug('Clients AI filter', { filters: aiFilters, matched: Number(data.total) || 0 })
       setError(null)
+      setListError('')
     } catch (err) {
-      setError(err.message)
+      if (requestId !== clientListRequestRef.current || controller.signal.aborted || err?.name === 'AbortError') return
+      setListError(err.message || 'Failed to fetch clients from server.')
     } finally {
-      if (showLoading) setLoading(false)
+      if (clientListAbortRef.current === controller) clientListAbortRef.current = null
+      if (requestId === clientListRequestRef.current) setLoading(false)
     }
   }, [aiFilters, dashboardFilters, effectiveStatusFilter, page, pageSize, sortDirection, sortField])
+
+  useEffect(() => () => {
+    clientListRequestRef.current += 1
+    clientListAbortRef.current?.abort()
+    clientListAbortRef.current = null
+    aiFilterRequestRef.current += 1
+    aiFilterAbortRef.current?.abort()
+    aiFilterAbortRef.current = null
+  }, [])
 
   const refreshClientsRealtime = useCallback(() => {
     if (Date.now() < suppressRealtimeUntilRef.current) return
@@ -483,10 +491,13 @@ export default function ClientsPage() {
     })
   }, [clients, selectedContacts])
 
+  const hasActiveClientFilters = effectiveStatusFilter !== 'All' || Boolean(aiFilters) || Boolean(
+    dashboardFilters && Object.values(dashboardFilters).some(value => String(value || '').trim())
+  )
+
   const activeColumns = CLIENT_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key) && !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_COLUMN[column.key], isAdmin))
   const availableColumns = CLIENT_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_COLUMN[column.key], isAdmin))
   const clientTableMinWidth = activeColumns.reduce((sum, column) => sum + (column.width || 140), 0)
-  const visibleAiFields = CLIENT_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'clients', CLIENT_PERMISSION_BY_AI_FIELD[field], isAdmin))
   const clientFieldPermission = {
     client_display_id: 'client_display_id',
     consultant_name: 'consultant_name',
@@ -1191,32 +1202,46 @@ export default function ClientsPage() {
       clearFilters()
       return
     }
+    const requestId = ++aiFilterRequestRef.current
+    aiFilterAbortRef.current?.abort()
+    const controller = new AbortController()
+    aiFilterAbortRef.current = controller
     setAiFilterLoading(true)
     setAiFilterError('')
     try {
       const res = await fetch('/api/clients/ai-filter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
+        body: JSON.stringify({ prompt }),
+        signal: controller.signal
       })
       const data = await res.json().catch(() => ({}))
+      if (requestId !== aiFilterRequestRef.current || controller.signal.aborted) return
       if (!res.ok) throw new Error(data.error || 'Could not parse Clients filter.')
-      setAiFilters(data.filters || null)
+      if (!isSupportedIntentFilter(data.filters)) {
+        throw new Error("I couldn't confidently understand this filter. Try specifying a client field, condition, and value.")
+      }
+      setAiFilters(data.filters)
       setPage(1)
-    } catch {
-      setAiFilters(keywordFilters('clients', prompt, visibleAiFields))
-      setAiFilterError('')
-      setPage(1)
+    } catch (err) {
+      if (requestId !== aiFilterRequestRef.current || controller.signal.aborted || err?.name === 'AbortError') return
+      notifyAiQuota(err.message)
+      setAiFilterError(err.message || "I couldn't confidently understand this filter. Try specifying a client field, condition, and value.")
     } finally {
-      setAiFilterLoading(false)
+      if (aiFilterAbortRef.current === controller) aiFilterAbortRef.current = null
+      if (requestId === aiFilterRequestRef.current) setAiFilterLoading(false)
     }
   }
 
   const clearFilters = () => {
+    aiFilterRequestRef.current += 1
+    aiFilterAbortRef.current?.abort()
+    aiFilterAbortRef.current = null
     setStatusFilter('All')
     setAiFilterText('')
     setAiFilters(null)
     setAiFilterError('')
+    setListError('')
     setAiFilterLoading(false)
     setPage(1)
   }
@@ -1442,7 +1467,14 @@ export default function ClientsPage() {
           <input
             className="filter-input candidate-ai-filter-input"
             value={aiFilterText}
-            onChange={e => { setAiFilterText(e.target.value); setAiFilterError('') }}
+            onChange={e => {
+              aiFilterRequestRef.current += 1
+              aiFilterAbortRef.current?.abort()
+              aiFilterAbortRef.current = null
+              setAiFilterLoading(false)
+              setAiFilterText(e.target.value)
+              setAiFilterError('')
+            }}
             id="filter-ai-clients"
           />
           <button className="btn-secondary" type="submit" disabled={aiFilterLoading} style={{ height:34, padding:'0 12px' }}>
@@ -1478,6 +1510,16 @@ export default function ClientsPage() {
           {aiFilterError}
         </div>
       )}
+      {listError && clients.length > 0 && (
+        <div className="form-error" style={{ display:'block', marginBottom:12 }} role="alert">
+          {listError} Previous client results are still shown.
+        </div>
+      )}
+      {!loading && !error && !listError && !aiFilterError && hasActiveClientFilters && clients.length === 0 && (
+        <div className="form-error" style={{ display:'block', marginBottom:12 }} role="alert">
+          No clients match your filters. Try changing or clearing the filters.
+        </div>
+      )}
       {statusUpdateError && (
         <div className="form-error" style={{ display:'block', marginBottom:12 }}>
           {statusUpdateError}
@@ -1505,11 +1547,29 @@ export default function ClientsPage() {
             <div className="empty-state-title">Error loading data</div>
             <div className="empty-state-desc">{error}</div>
           </div>
-        ) : clients.length === 0 ? (
+        ) : listError && clients.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon"><Building2 size={28} color="var(--gold)" strokeWidth={1.5} /></div>
-            <div className="empty-state-title">No clients yet</div>
-            <div className="empty-state-desc">Add your first client to get started.</div>
+            <div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div>
+            <div className="empty-state-title">Error loading data</div>
+            <div className="empty-state-desc">{listError}</div>
+          </div>
+        ) : clients.length === 0 ? (
+          <div className="table-wrapper candidates-table-scroll">
+            <table className="data-table fb-theme-table candidates-master-table candidates-table table-empty-table" aria-label="Clients" style={{ minWidth: clientTableMinWidth }}>
+              <colgroup>{activeColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}</colgroup>
+              <thead><tr>{activeColumns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead>
+              <tbody>
+                <tr className="table-empty-row">
+                  <td className="table-empty-cell" colSpan={Math.max(activeColumns.length, 1)}>
+                    <div className="empty-state" role="status">
+                      <div className="empty-state-icon"><Building2 size={28} color="var(--gold)" strokeWidth={1.5} /></div>
+                      <div className="empty-state-title">{hasActiveClientFilters ? 'No clients match your filters' : 'No clients yet'}</div>
+                      <div className="empty-state-desc">{hasActiveClientFilters ? 'Try changing or clearing the filters to see more clients.' : 'Add your first client to get started.'}</div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="table-wrapper candidates-table-scroll">

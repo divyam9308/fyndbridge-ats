@@ -8,6 +8,10 @@ const migrationPath = path.resolve(
   '../../../supabase/migrations/20260714210227_consultant_report_stage_tracking.sql'
 )
 const migration = fs.readFileSync(migrationPath, 'utf8')
+const overallAudienceMigration = fs.readFileSync(
+  path.resolve(__dirname, '../../../supabase/migrations/20260715185553_overall_consultant_report_audience.sql'),
+  'utf8'
+)
 
 const stageColumns = [
   ['Client Submission', 'client_submission_at'],
@@ -56,4 +60,14 @@ test('Report permission seed is idempotent and preserves an existing administrat
 
 test('migration does not duplicate indexes already present in the deployed schema', () => {
   assert.doesNotMatch(migration, /create\s+(?:unique\s+)?index/i)
+})
+
+test('Overall Consultants audience migration idempotently seeds admins without changing database privileges', () => {
+  assert.match(
+    overallAudienceMigration,
+    /insert into public\.app_settings\s*\(\s*key\s*,\s*value\s*\)[\s\S]*?values\s*\(\s*'overall_consultant_report_audience'\s*,\s*'"admins"'::jsonb\s*\)/i
+  )
+  assert.match(overallAudienceMigration, /on conflict\s*\(\s*key\s*\)\s*do nothing/i)
+  assert.doesNotMatch(overallAudienceMigration, /\b(?:grant|revoke)\b/i)
+  assert.doesNotMatch(overallAudienceMigration, /\b(?:create|alter|drop)\s+policy\b/i)
 })

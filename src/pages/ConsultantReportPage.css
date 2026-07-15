@@ -441,6 +441,11 @@
 
 .attendance-metric-grid { display: grid; grid-template-columns: repeat(6, minmax(125px, 1fr)); gap: 11px; }
 .report-leave-balance { width: min(280px, 100%); }
+.report-attendance-breakdown { margin-top: 24px; }
+.report-attendance-breakdown-scroll { margin-top: 12px; }
+.report-attendance-breakdown-table { min-width: 1480px; }
+.report-attendance-breakdown-table th:not(:first-child),
+.report-attendance-breakdown-table td:not(:first-child) { text-align: center; }
 
 .report-load-state {
   min-height: 100%;

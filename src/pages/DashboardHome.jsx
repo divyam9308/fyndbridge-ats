@@ -6,6 +6,7 @@ import {
   Briefcase,
   Building2,
   ChevronDown,
+  ChartNoAxesCombined,
   Clock,
   Loader2,
   TrendingUp,
@@ -33,6 +34,7 @@ import {
   dashboardFinancialYearForDate,
   dashboardFinancialYearMonths,
   dashboardMonthPeriod,
+  dashboardPeriodDateRange,
   dashboardPeriodLabel,
   dashboardQuarterPeriod,
   useDashboardStats
@@ -613,6 +615,18 @@ export default function DashboardHome() {
   const financialYearPeriodSelected = period === financialYear
   const monthPeriodSelected = period === dashboardMonthPeriod(selectedMonth)
   const periodLabel = dashboardPeriodLabel(period)
+  const overallReportRange = useMemo(() => dashboardPeriodDateRange(period), [period])
+  const overallReportRangeValid = Boolean(overallReportRange && overallReportRange.startDate <= overallReportRange.endDate)
+
+  const openOverallReport = () => {
+    if (!overallReportRangeValid) return
+    const params = new URLSearchParams({
+      scope: 'overall',
+      start_date: overallReportRange.startDate,
+      end_date: overallReportRange.endDate
+    })
+    navigate(`/dashboard/reports/consultant?${params.toString()}`)
+  }
 
   const consultantOptionSource = data?.consultantOptions || EMPTY_ARRAY
   const consultantOptions = useMemo(() => {
@@ -770,6 +784,18 @@ export default function DashboardHome() {
               </div>
             ) : null}
           </div>}
+
+          {consultant === OVERALL && dashboardAccess?.canViewOverallReport && (
+            <button
+              className="ats-dashboard-report-button"
+              type="button"
+              disabled={!overallReportRangeValid}
+              title={overallReportRangeValid ? `Generate report for ${periodLabel}` : 'This future period has no reportable dates yet.'}
+              onClick={openOverallReport}
+            >
+              <ChartNoAxesCombined size={15} />Generate Overall Report
+            </button>
+          )}
 
           <div className="ats-dashboard-periods">
             <select

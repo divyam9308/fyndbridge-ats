@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BriefcaseBusiness, CalendarCheck2, ChevronDown, FileDown, Play, UsersRound } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import FormattedDateInput from '../components/FormattedDateInput'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
@@ -39,6 +40,23 @@ function initialDateRange() {
 }
 
 const INITIAL_DATES = initialDateRange()
+
+function validReportDate(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return false
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+  return date.getUTCFullYear() === Number(match[1])
+    && date.getUTCMonth() === Number(match[2]) - 1
+    && date.getUTCDate() === Number(match[3])
+}
+
+function initialDateRangeFromParams(searchParams) {
+  const fromDate = searchParams.get('start_date')
+  const toDate = searchParams.get('end_date')
+  return validReportDate(fromDate) && validReportDate(toDate) && fromDate <= toDate
+    ? { fromDate, toDate }
+    : INITIAL_DATES
+}
 
 function generatedLabel(value) {
   if (!value) return '—'
@@ -111,6 +129,7 @@ function trackedDetail(item) {
 }
 
 function MandatesReport({ report, openModal }) {
+  const isOverall = Boolean(report?.consultant?.isOverall)
   const summary = report.mandateSummary || {}
   const summaryCards = [
     { label: 'Total Mandates', value: summary.total ?? 0, tone: 'navy' },
@@ -125,20 +144,20 @@ function MandatesReport({ report, openModal }) {
   return (
     <div className="report-tab-panel">
       <section className="report-section">
-        <ReportSectionHeader title="Mandate Summary" description="Current mandate distribution for the selected consultant and report period." />
+        <ReportSectionHeader title="Mandate Summary" description={isOverall ? 'Combined mandate distribution across all consultants for the report period.' : 'Current mandate distribution for the selected consultant and report period.'} />
         <div className="report-kpi-grid is-four">
           {summaryCards.map((item) => <ReportKpiCard key={item.label} {...item} />)}
         </div>
       </section>
 
-      <section className="report-section report-table-section">
+      {!isOverall && <section className="report-section report-table-section">
         <ReportSectionHeader
           title="Recent Mandates"
           description="The five most recently allocated mandates and their complete candidate status split."
           action={<button className="report-text-button" type="button" onClick={() => openModal('mandates')}>View All Mandates</button>}
         />
         <RecentMandatesTable rows={recentMandates} />
-      </section>
+      </section>}
 
       <section className="report-section">
         <ReportSectionHeader title="Average Conversion Time" description="Average time taken to reach each tracked mandate milestone." />
@@ -155,26 +174,27 @@ function MandatesReport({ report, openModal }) {
             ))}
           </div>
         ) : <div className="report-empty-state report-inline-empty">No tracked conversion milestones are available for this period.</div>}
-        <div className="report-subsection-heading">
+        {!isOverall && <><div className="report-subsection-heading">
           <div>
             <h3>Mandate Conversion & Ageing</h3>
             <p>Latest five mandates. Ongoing mandates older than 45 days are softly highlighted.</p>
           </div>
           <button className="report-text-button" type="button" onClick={() => openModal('conversion')}>View All</button>
         </div>
-        <MandateConversionTable rows={recentConversions} />
+        <MandateConversionTable rows={recentConversions} /></>}
       </section>
     </div>
   )
 }
 
 function CandidatesReport({ report }) {
+  const isOverall = Boolean(report?.consultant?.isOverall)
   const overview = report.candidateOverview || { total: 0, counts: {} }
   const pipeline = Array.isArray(report.candidatePipeline) ? report.candidatePipeline : []
   return (
     <div className="report-tab-panel">
       <section className="report-section">
-        <ReportSectionHeader title="Candidate Overview" description={`Current status distribution for ${overview.total ?? 0} valid-status candidate additions owned by this consultant during the report period. Unset or unsupported statuses are excluded.`} />
+        <ReportSectionHeader title="Candidate Overview" description={`Current status distribution for ${overview.total ?? 0} valid-status candidate additions ${isOverall ? 'owned across all consultants' : 'owned by this consultant'} during the report period. Unset or unsupported statuses are excluded.`} />
         <CandidateOverview overview={overview} />
       </section>
       <section className="report-section">
@@ -192,7 +212,53 @@ function leaveBalanceValue(leaveBalance) {
   return String(value)
 }
 
+function attendanceMetric(metrics, key) {
+  return (Array.isArray(metrics) ? metrics : []).find((item) => item.key === key)?.value ?? '—'
+}
+
+function OverallAttendanceTable({ rows = [] }) {
+  return (
+    <div className="report-table-scroll report-attendance-breakdown-scroll">
+      <table className="report-table report-attendance-breakdown-table">
+        <thead>
+          <tr>
+            <th>Consultant</th>
+            <th>Working Days</th>
+            <th>Present Days</th>
+            <th>Leave Days</th>
+            <th>Half-Day Leave</th>
+            <th>Unmarked Days</th>
+            <th>Corrected Attendance</th>
+            <th>Pending Corrections</th>
+            <th>Total Worked Hours</th>
+            <th>Available Leave Balance</th>
+            <th>Attendance %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length ? rows.map((row) => (
+            <tr key={row.consultant?.key || row.consultant?.name}>
+              <td><strong>{row.consultant?.name || 'Consultant'}</strong></td>
+              <td>{attendanceMetric(row.metrics, 'workingDays')}</td>
+              <td>{attendanceMetric(row.metrics, 'presentDays')}</td>
+              <td>{attendanceMetric(row.metrics, 'leaveDays')}</td>
+              <td>{attendanceMetric(row.metrics, 'halfDayLeave')}</td>
+              <td>{attendanceMetric(row.metrics, 'unmarkedDays')}</td>
+              <td>{attendanceMetric(row.metrics, 'correctedAttendance')}</td>
+              <td>{attendanceMetric(row.metrics, 'pendingCorrections')}</td>
+              <td>{attendanceMetric(row.metrics, 'workedTime')}</td>
+              <td>{leaveBalanceValue(row.leaveBalance)}</td>
+              <td>{attendanceMetric(row.metrics, 'attendancePercentage')}</td>
+            </tr>
+          )) : <tr><td className="report-table-empty" colSpan="11">No consultants are included in Team Attendance.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function OutcomesReport({ report }) {
+  const isOverall = Boolean(report?.consultant?.isOverall)
   const exceptions = Array.isArray(report.exceptions) ? report.exceptions : []
   const positiveOutcomes = Array.isArray(report.positiveOutcomes) ? report.positiveOutcomes : []
   const attendance = report.attendance || { available: false, metrics: [] }
@@ -205,7 +271,7 @@ function OutcomesReport({ report }) {
   return (
     <div className="report-tab-panel">
       <section className="report-section">
-        <ReportSectionHeader title="Exceptions" description="Number-only indicators that may need follow-up within the selected period." />
+        <ReportSectionHeader title="Exceptions" description={isOverall ? 'Combined number-only indicators across all consultants that may need follow-up within the selected period.' : 'Number-only indicators that may need follow-up within the selected period.'} />
         {exceptions.length ? (
           <div className="report-kpi-grid is-five">
             {exceptions.map((item) => <ReportKpiCard key={item.key || item.label} label={item.label} value={item.value ?? 0} tone={item.tone || 'blue'} compact />)}
@@ -221,7 +287,7 @@ function OutcomesReport({ report }) {
         ) : <div className="report-empty-state report-inline-empty">No positive outcome metrics are available for this period.</div>}
       </section>
       <section className="report-section">
-        <ReportSectionHeader title="Attendance Snapshot" description="Attendance and combined leave-balance indicators from the ATS attendance service." />
+        <ReportSectionHeader title="Attendance Snapshot" description={isOverall ? 'Overall attendance totals for consultants included in Team Attendance.' : 'Attendance and leave-balance indicators from the ATS attendance service.'} />
         {attendance.available ? (
           <>
             {attendanceMetrics.length ? (
@@ -236,8 +302,19 @@ function OutcomesReport({ report }) {
               </div>
             </div>
             <div className="report-leave-balance">
-              <ReportKpiCard label="Available Leave Balance" value={leaveBalanceValue(attendance.leaveBalance)} tone="green" compact />
+              <ReportKpiCard label={isOverall ? 'Combined Available Leave Balance' : 'Available Leave Balance'} value={leaveBalanceValue(attendance.leaveBalance)} tone="green" compact />
             </div>
+            {isOverall && (
+              <div className="report-attendance-breakdown">
+                <div className="report-subsection-heading">
+                  <div>
+                    <h3>Attendance by Consultant</h3>
+                    <p>Only active consultants included in Team Attendance are listed.</p>
+                  </div>
+                </div>
+                <OverallAttendanceTable rows={Array.isArray(attendance.consultants) ? attendance.consultants : []} />
+              </div>
+            )}
           </>
         ) : (
           <div className="report-empty-state report-inline-empty">
@@ -251,6 +328,9 @@ function OutcomesReport({ report }) {
 
 export default function ConsultantReportPage() {
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialOverallRequested = useRef(searchParams.get('scope') === 'overall')
+  const [initialRequestedDates] = useState(() => initialDateRangeFromParams(searchParams))
   const [options, setOptions] = useState([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsError, setOptionsError] = useState('')
@@ -259,8 +339,8 @@ export default function ConsultantReportPage() {
   const [consultantMenuOpen, setConsultantMenuOpen] = useState(false)
   const [highlightedConsultantIndex, setHighlightedConsultantIndex] = useState(-1)
   const consultantControlRef = useRef(null)
-  const [draftFromDate, setDraftFromDate] = useState(INITIAL_DATES.fromDate)
-  const [draftToDate, setDraftToDate] = useState(INITIAL_DATES.toDate)
+  const [draftFromDate, setDraftFromDate] = useState(initialRequestedDates.fromDate)
+  const [draftToDate, setDraftToDate] = useState(initialRequestedDates.toDate)
   const [requestFilters, setRequestFilters] = useState(null)
   const [appliedFilters, setAppliedFilters] = useState(null)
   const [report, setReport] = useState(null)
@@ -320,7 +400,8 @@ export default function ConsultantReportPage() {
           (Array.isArray(result?.options) ? result.options : []).map(normalizeOption).filter((option) => option.key)
         )
         if (!nextOptions.length) throw new Error('No consultants are available for reporting.')
-        const defaultKey = result?.defaultConsultantKey || result?.default_consultant_key
+        const requestedDefaultKey = initialOverallRequested.current && nextOptions.some((option) => option.key === 'overall') ? 'overall' : ''
+        const defaultKey = requestedDefaultKey || result?.defaultConsultantKey || result?.default_consultant_key
         const defaultOption = nextOptions.find((option) => option.key === defaultKey) || nextOptions[0]
         setOptions(nextOptions)
         setDraftConsultantName(defaultOption.inputLabel)
@@ -328,8 +409,8 @@ export default function ConsultantReportPage() {
         setReportError('')
         setRequestFilters({
           consultantUserId: defaultOption.key,
-          startDate: INITIAL_DATES.fromDate,
-          endDate: INITIAL_DATES.toDate
+          startDate: initialRequestedDates.fromDate,
+          endDate: initialRequestedDates.toDate
         })
       })
       .catch((requestError) => {
@@ -342,7 +423,7 @@ export default function ConsultantReportPage() {
       })
 
     return () => controller.abort()
-  }, [optionsRetryKey])
+  }, [initialRequestedDates, optionsRetryKey])
 
   useEffect(() => {
     if (!requestFilters) return undefined
@@ -403,6 +484,11 @@ export default function ConsultantReportPage() {
     announceOnLoad.current = true
     setReportLoading(true)
     setReportError('')
+    setSearchParams(match.key === 'overall' ? {
+      scope: 'overall',
+      start_date: draftFromDate,
+      end_date: draftToDate
+    } : {}, { replace: true })
     setRequestFilters({ consultantUserId: match.key, startDate: draftFromDate, endDate: draftToDate })
   }
 
@@ -442,7 +528,8 @@ export default function ConsultantReportPage() {
   const closeModal = useCallback(() => setModal(''), [])
 
   const warnings = Array.isArray(report?.meta?.warnings) ? report.meta.warnings : []
-  const status = displayEmployeeStatus(consultant?.employeeStatus || consultant?.employee_status)
+  const isOverall = Boolean(consultant?.isOverall || consultant?.key === 'overall')
+  const status = isOverall ? '' : displayEmployeeStatus(consultant?.employeeStatus || consultant?.employee_status)
   const avatarInitials = consultant?.initials || initials(consultant?.name)
 
   return (
@@ -542,7 +629,7 @@ export default function ConsultantReportPage() {
             <div>
               <div className="consultant-name-row">
                 <h2>{consultant.name}</h2>
-                <span className={`employee-status-chip${status === 'On Leave' ? ' is-leave' : ''}`}>{status}</span>
+                {!isOverall && <span className={`employee-status-chip${status === 'On Leave' ? ' is-leave' : ''}`}>{status}</span>}
               </div>
               {consultant.email && <a href={`mailto:${consultant.email}`}>{consultant.email}</a>}
             </div>

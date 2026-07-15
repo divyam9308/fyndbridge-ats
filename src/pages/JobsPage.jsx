@@ -18,7 +18,7 @@ import { apiFetch, isValidStoragePath, openProtectedDocumentPath } from '../serv
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
-import { highlightText, keywordFilters } from '../utils/aiFilterUi'
+import { highlightText } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 import { ConsultantPill, ConsultantPillGroup } from '../components/ConsultantPill'
@@ -28,7 +28,6 @@ const SORT_OPTIONS = [
   { field: 'job_id', label: 'Job ID' },
   { field: 'role', label: 'Alphabetic order' }
 ]
-const MANDATE_AI_SEARCH_FIELDS = ['job_id', 'consultant', 'team_lead', 'client_id', 'client_name', 'role', 'location', 'budget', 'experience', 'vertical', 'date_of_allocation', 'mandate_status', 'comments', 'jd']
 const MANDATE_PERMISSION_BY_COLUMN = {
   jobId: 'job_display_id',
   consultant: 'consultants',
@@ -40,22 +39,6 @@ const MANDATE_PERMISSION_BY_COLUMN = {
   mandateStatus: 'mandate_status',
   sector: 'vertical',
   allocationDate: 'allocation_date',
-  jd: 'jd_storage_path'
-}
-const MANDATE_PERMISSION_BY_AI_FIELD = {
-  job_id: 'job_display_id',
-  consultant: 'consultants',
-  team_lead: 'team_lead',
-  client_id: 'client_id',
-  client_name: 'client_name',
-  role: 'title',
-  location: 'city',
-  budget: 'budget',
-  experience: 'experience',
-  vertical: 'vertical',
-  date_of_allocation: 'allocation_date',
-  mandate_status: 'mandate_status',
-  comments: 'comments',
   jd: 'jd_storage_path'
 }
 const MANDATE_TABLE_COLUMNS = [
@@ -149,6 +132,18 @@ const normalizeConsultantFields = (values) => {
   return real.length ? real : ['-']
 }
 
+const notifyAiQuota = (message) => {
+  if (message === 'AI quota reached') {
+    window.dispatchEvent(new CustomEvent('ai-quota-reached', { detail: 'AI quota reached' }))
+  }
+}
+
+const isSupportedIntentFilter = (filters) => {
+  const mode = String(filters?.mode || '').trim().toLowerCase()
+  if (['ast', 'structured', 'hybrid'].includes(mode)) return Boolean(filters?.root)
+  return mode === 'keyword' && typeof filters?.search_text === 'string' && Boolean(filters.search_text.trim())
+}
+
 export default function JobsPage() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -162,6 +157,7 @@ export default function JobsPage() {
   const { staff: allUserOptions, selectableStaff: userOptions } = useStaffDirectory()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [listError, setListError] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [editingJob, setEditingJob] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -210,10 +206,19 @@ export default function JobsPage() {
   const columnsDropdownRef = useRef(null)
   const pendingRealtimeRefreshRef = useRef(false)
   const handledRouteActionRef = useRef('')
+  const aiFilterRequestRef = useRef(0)
+  const aiFilterAbortRef = useRef(null)
+  const mandateListRequestRef = useRef(0)
+  const mandateListAbortRef = useRef(null)
 
   const fetchData = useCallback(async () => {
+    const requestId = ++mandateListRequestRef.current
+    mandateListAbortRef.current?.abort()
+    const controller = new AbortController()
+    mandateListAbortRef.current = controller
     try {
       setLoading(true)
+      setListError('')
       const params = new URLSearchParams()
       params.set('page', String(page))
       params.set('limit', String(pageSize))
@@ -228,20 +233,33 @@ export default function JobsPage() {
         params.set('sortField', sortField)
         params.set('sortDirection', sortDirection)
       }
-      const jobsRes = await fetch(`/api/jobs?${params.toString()}`)
-      if (!jobsRes.ok) throw new Error('Failed to fetch mandates.')
-      const jobsData = await jobsRes.json()
+      const jobsRes = await fetch(`/api/jobs?${params.toString()}`, { signal: controller.signal })
+      const jobsData = await jobsRes.json().catch(() => ({}))
+      if (requestId !== mandateListRequestRef.current || controller.signal.aborted) return
+      if (!jobsRes.ok) throw new Error(jobsData.error || 'Failed to fetch mandates.')
       setJobs(jobsData.data || [])
       setTotalJobs(Number(jobsData.total) || 0)
       setPage(Number(jobsData.page) || 1)
       if (import.meta.env.DEV && aiFilters) console.debug('Mandates AI filter', { filters: aiFilters, matched: Number(jobsData.total) || 0 })
       setError(null)
+      setListError('')
     } catch (err) {
-      setError(err.message)
+      if (requestId !== mandateListRequestRef.current || controller.signal.aborted || err?.name === 'AbortError') return
+      setListError(err.message || 'Failed to fetch mandates.')
     } finally {
-      setLoading(false)
+      if (mandateListAbortRef.current === controller) mandateListAbortRef.current = null
+      if (requestId === mandateListRequestRef.current) setLoading(false)
     }
   }, [aiFilters, dashboardFilters, page, pageSize, sortDirection, sortField])
+
+  useEffect(() => () => {
+    mandateListRequestRef.current += 1
+    mandateListAbortRef.current?.abort()
+    mandateListAbortRef.current = null
+    aiFilterRequestRef.current += 1
+    aiFilterAbortRef.current?.abort()
+    aiFilterAbortRef.current = null
+  }, [])
 
   const openDocument = useCallback(async (key, path) => {
     setOpeningDocument(key)
@@ -514,7 +532,9 @@ export default function JobsPage() {
     ? availableColumns
     : availableColumns.filter(column => visibleColumns.includes(column.key))
   const mandateTableMinWidth = activeColumns.reduce((sum, column) => sum + (column.width || 140), 0)
-  const visibleAiFields = MANDATE_AI_SEARCH_FIELDS.filter(field => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_AI_FIELD[field], isAdmin))
+  const hasActiveMandateFilters = Boolean(aiFilters) || Boolean(
+    dashboardFilters && Object.values(dashboardFilters).some(value => String(value || '').trim())
+  )
   const jobFieldPermission = {
     job_display_id: 'job_display_id',
     allocation_date: 'allocation_date',
@@ -712,35 +732,50 @@ export default function JobsPage() {
 
   const applyAiFilter = async (event) => {
     event.preventDefault()
-    setAiError('')
-    if (!aiText.trim()) return
+    const prompt = aiText.trim()
+    if (!prompt) {
+      clearFilters()
+      return
+    }
+    const requestId = ++aiFilterRequestRef.current
+    aiFilterAbortRef.current?.abort()
+    const controller = new AbortController()
+    aiFilterAbortRef.current = controller
     setAiLoading(true)
+    setAiError('')
     try {
       const res = await fetch('/api/jobs/ai-filter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: aiText })
+        body: JSON.stringify({ prompt }),
+        signal: controller.signal
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setAiFilters(keywordFilters('mandates', aiText, visibleAiFields))
-        setPage(1)
-        return
+      if (requestId !== aiFilterRequestRef.current || controller.signal.aborted) return
+      if (!res.ok) throw new Error(data.error || 'Could not parse Mandates filter.')
+      if (!isSupportedIntentFilter(data.filters)) {
+        throw new Error("I couldn't confidently understand this filter. Try specifying a mandate field, condition, and value.")
       }
       setAiFilters(data.filters)
       setPage(1)
-    } catch {
-      setAiFilters(keywordFilters('mandates', aiText, visibleAiFields))
-      setPage(1)
+    } catch (err) {
+      if (requestId !== aiFilterRequestRef.current || controller.signal.aborted || err?.name === 'AbortError') return
+      notifyAiQuota(err.message)
+      setAiError(err.message || "I couldn't confidently understand this filter. Try specifying a mandate field, condition, and value.")
     } finally {
-      setAiLoading(false)
+      if (aiFilterAbortRef.current === controller) aiFilterAbortRef.current = null
+      if (requestId === aiFilterRequestRef.current) setAiLoading(false)
     }
   }
 
   const clearFilters = () => {
+    aiFilterRequestRef.current += 1
+    aiFilterAbortRef.current?.abort()
+    aiFilterAbortRef.current = null
     setAiText('')
     setAiFilters(null)
     setAiError('')
+    setListError('')
     setAiLoading(false)
     setPage(1)
   }
@@ -954,7 +989,18 @@ export default function JobsPage() {
       <div className="filter-bar candidates-filter-bar candidates-toolbar">
         <form onSubmit={applyAiFilter} className="candidate-ai-filter-form">
           <span className="filter-label">AI Filter</span>
-          <input className="filter-input candidate-ai-filter-input" value={aiText} onChange={e => { setAiText(e.target.value); setAiError('') }} />
+          <input
+            className="filter-input candidate-ai-filter-input"
+            value={aiText}
+            onChange={e => {
+              aiFilterRequestRef.current += 1
+              aiFilterAbortRef.current?.abort()
+              aiFilterAbortRef.current = null
+              setAiLoading(false)
+              setAiText(e.target.value)
+              setAiError('')
+            }}
+          />
           <button className="btn-secondary" type="submit" disabled={aiLoading} style={{ height: 34, padding: '0 12px' }}>
             {aiLoading ? <Loader2 size={14} className="spin" /> : <Search size={14} />}
             Apply
@@ -981,6 +1027,16 @@ export default function JobsPage() {
         <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalJobs / pageSize))} onPageChange={setPage} loading={loading} />
       </div>
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}
+      {listError && jobs.length > 0 && (
+        <div className="form-error" style={{ display: 'block', marginBottom: 12 }} role="alert">
+          {listError} Previous mandate results are still shown.
+        </div>
+      )}
+      {!loading && !error && !listError && !aiError && hasActiveMandateFilters && jobs.length === 0 && (
+        <div className="form-error" style={{ display: 'block', marginBottom: 12 }} role="alert">
+          No mandates match your filters. Try changing or clearing the filters.
+        </div>
+      )}
 
       <div className="table-card table-card-popovers candidates-table-card" style={{ minWidth: `max(100%, ${mandateTableMinWidth}px)` }}>
         {loading ? (
@@ -999,8 +1055,26 @@ export default function JobsPage() {
           </div>
         ) : error ? (
           <div className="empty-state"><div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div><div className="empty-state-title">Error loading data</div><div className="empty-state-desc">{error}</div></div>
+        ) : listError && jobs.length === 0 ? (
+          <div className="empty-state"><div className="empty-state-icon"><AlertCircle size={28} color="var(--danger)" /></div><div className="empty-state-title">Error loading data</div><div className="empty-state-desc">{listError}</div></div>
         ) : jobs.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-title">No mandates found</div><div className="empty-state-desc">Create a mandate to get started.</div></div>
+          <div className="table-wrapper candidates-table-scroll">
+            <table className="data-table fb-theme-table candidates-master-table candidates-table table-empty-table" aria-label="Mandates" style={{ minWidth: mandateTableMinWidth }}>
+              <colgroup>{activeColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}</colgroup>
+              <thead><tr>{activeColumns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead>
+              <tbody>
+                <tr className="table-empty-row">
+                  <td className="table-empty-cell" colSpan={Math.max(activeColumns.length, 1)}>
+                    <div className="empty-state" role="status">
+                      <div className="empty-state-icon"><FileText size={28} color="var(--gold)" strokeWidth={1.5} /></div>
+                      <div className="empty-state-title">{hasActiveMandateFilters ? 'No mandates match your filters' : 'No mandates found'}</div>
+                      <div className="empty-state-desc">{hasActiveMandateFilters ? 'Try changing or clearing the filters to see more mandates.' : 'Create a mandate to get started.'}</div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div className="table-wrapper candidates-table-scroll">
             <table className="data-table fb-theme-table candidates-master-table candidates-table" aria-label="Mandates" style={{ minWidth: mandateTableMinWidth }}>

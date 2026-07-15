@@ -21,7 +21,8 @@ async function request(path, { signal } = {}) {
 
 function reportParams({ consultantUserId, startDate, endDate }) {
   const params = new URLSearchParams()
-  if (consultantUserId) params.set('consultant_user_id', consultantUserId)
+  if (consultantUserId === 'overall') params.set('scope', 'overall')
+  else if (consultantUserId) params.set('consultant_user_id', consultantUserId)
   if (startDate) params.set('start_date', startDate)
   if (endDate) params.set('end_date', endDate)
   return params

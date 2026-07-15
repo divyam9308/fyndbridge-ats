@@ -19,6 +19,10 @@ const {
 } = require('../services/adminAccess')
 const { getDashboardVisibility, setDashboardVisibility } = require('../services/dashboardAccess')
 const { getPermissions: getPerformancePermissions } = require('../services/performanceReview')
+const {
+  getOverallConsultantReportAudience,
+  setOverallConsultantReportAudience
+} = require('../services/consultantReportAccess')
 
 function sendError(res, err) {
   return res.status(err.statusCode || 500).json({ error: err.message || 'Internal server error' })
@@ -132,11 +136,12 @@ async function lockedRecordList() {
 
 async function bootstrap(req, res) {
   try {
-    const [{ admins, profiles }, locks, visibility, performancePermissions] = await Promise.all([
+    const [{ admins, profiles }, locks, visibility, performancePermissions, overallConsultantReportAudience] = await Promise.all([
       serializedUsers(req),
       lockedRecordList(),
       getDashboardVisibility(),
-      getPerformancePermissions()
+      getPerformancePermissions(),
+      getOverallConsultantReportAudience()
     ])
     return res.json({
       data: {
@@ -144,7 +149,8 @@ async function bootstrap(req, res) {
         lockedRecords: locks,
         profileOptions: profiles,
         dashboardVisibility: visibility,
-        performancePermissions
+        performancePermissions,
+        overallConsultantReportAudience
       }
     })
   } catch (err) {
@@ -260,6 +266,18 @@ async function dashboardVisibility(req, res) {
   } catch (err) { return sendError(res, err) }
 }
 
+async function consultantReportVisibility(req, res) {
+  try {
+    if (req.method === 'PATCH') {
+      const audience = await setOverallConsultantReportAudience(req.body?.audience)
+      return res.json({ overallConsultantReportAudience: audience })
+    }
+    return res.json({ overallConsultantReportAudience: await getOverallConsultantReportAudience() })
+  } catch (err) {
+    return sendError(res, err)
+  }
+}
+
 async function updateColumnPermission(req, res) {
   try {
     const { tableName, columnKey, accessMode } = req.body
@@ -326,6 +344,7 @@ module.exports = {
   columnPermissions,
   pageViewPermissions,
   dashboardVisibility,
+  consultantReportVisibility,
   updateColumnPermission,
   lockedRecords,
   setLock

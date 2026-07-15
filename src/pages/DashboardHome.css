@@ -168,6 +168,7 @@
 }
 
 .ats-dashboard-select > button,
+.ats-dashboard-report-button,
 .ats-dashboard-periods button,
 .ats-dashboard-periods select {
   display: inline-flex;
@@ -191,10 +192,39 @@
 }
 
 .ats-dashboard-select > button:hover,
+.ats-dashboard-report-button:hover,
 .ats-dashboard-periods button:hover,
 .ats-dashboard-periods select:hover {
   border-color: rgba(var(--brand-gold-rgb), 0.5);
   box-shadow: 0 4px 12px rgba(var(--brand-blue-rgb), 0.08);
+}
+
+.ats-dashboard-report-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--navy);
+  border-radius: 10px;
+  background: var(--navy);
+  color: #fff;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 750;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.ats-dashboard-report-button:hover {
+  background: #102273;
+  box-shadow: 0 5px 14px rgba(var(--brand-blue-rgb), .18);
+  transform: translateY(-1px);
+}
+
+.ats-dashboard-report-button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+  transform: none;
 }
 
 .ats-dashboard-select-menu {
@@ -1704,6 +1734,7 @@
 
   .ats-dashboard-select,
   .ats-dashboard-select > button,
+  .ats-dashboard-report-button,
   .ats-dashboard-periods {
     width: 100%;
   }

@@ -3,11 +3,11 @@ const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
 const { uploadDocument } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, normalizeStoragePath } = require('../services/storageBuckets')
 const fs = require('fs/promises')
-const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
-const { parseAiFilters } = require('../services/aiFilterParser')
-const { applyQueryFilters } = require('../services/queryFilters')
+const { mandateAiFilter, MANDATE_FILTER_PERMISSION_KEYS } = require('../services/mandateAiFilter')
+const { parseMandateIntent, validateMandateIntent, mandateExecutionFilter } = require('../services/mandateIntent')
+const { resolveEntityFilterReferences } = require('../services/entityFilterReferences')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
-const { isAdmin, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
+const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
@@ -26,15 +26,6 @@ const nullable = (value) => {
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
 const preferredUserName = (primaryName, secondaryName, email) => clean(primaryName) || clean(secondaryName) || displayNameFromEmail(email)
 const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clean(value))
-const compareDisplayIds = (a, b, prefix) => {
-  const aText = clean(a)
-  const bText = clean(b)
-  const pattern = new RegExp(`^${prefix}\\s*(\\d+)$`, 'i')
-  const aNumber = Number(aText.match(pattern)?.[1] || 0)
-  const bNumber = Number(bText.match(pattern)?.[1] || 0)
-  if (aNumber !== bNumber) return aNumber - bNumber
-  return aText.localeCompare(bText, undefined, { sensitivity: 'base' })
-}
 const normalizeMandateStatus = (value) => {
   const text = clean(value)
   if (text === 'Completed') return 'Completed'
@@ -154,11 +145,16 @@ function normalizeConsultants(value) {
   return [...new Set(values.map(clean).filter(item => item && item !== '-'))]
 }
 
+function stripMandateAiColumns(row) {
+  return Object.fromEntries(Object.entries(row || {}).filter(([key]) => !key.startsWith('ai_')))
+}
+
 function formatJob(row) {
-  const clientName = row.clients?.client_name || row.clients?.name || 'Unknown Client'
+  const cleanRow = stripMandateAiColumns(row)
+  const clientName = row.ai_client_name || row.ai_client_legacy_name || row.clients?.client_name || row.clients?.name || 'Unknown Client'
   const mandateStatus = normalizeMandateStatus(row.mandate_status || row.status || row.priority)
   return {
-    ...row,
+    ...cleanRow,
     id: row.id,
     mandate_id: row.id,
     client_id: row.client_id,
@@ -172,7 +168,7 @@ function formatJob(row) {
     allocation_date: row.allocation_date || (row.created_at ? row.created_at.slice(0, 10) : ''),
     jd_url: normalizeStoragePath(row.jd_storage_path || row.jd_url, STORAGE_BUCKETS.JD),
     jd_storage_path: normalizeStoragePath(row.jd_storage_path || row.jd_url, STORAGE_BUCKETS.JD),
-    client_display_id: row.clients?.client_display_id || '',
+    client_display_id: row.ai_client_display_id || row.clients?.client_display_id || '',
     client: clientName,
     client_name: clientName,
     mandate_status: mandateStatus,
@@ -250,48 +246,38 @@ async function assertAssignmentUsersExist(payload, existing = {}) {
   })
 }
 
-function jobFilterValue(row, field) {
-  return {
-    job_id: row.job_display_id,
-    consultant: row.consultants,
-    team_lead: row.team_lead,
-    client_id: row.client_display_id,
-    client_name: row.client_name,
-    role: row.role,
-    location: row.location,
-    budget: row.budget,
-    experience: row.experience,
-    mandate_status: row.mandate_status,
-    vertical: row.vertical,
-    comments: row.comments || row.notes,
-    date_of_allocation: row.allocation_date,
-    jd: row.jd_storage_path || row.jd_url
-  }[field]
-}
-
-const JOB_FILTER_MAPPING = {
-  job_id: [{ column: 'job_display_id', kind: 'text' }],
-  consultant: [{ column: 'consultants', kind: 'array' }],
-  team_lead: [{ column: 'team_lead', kind: 'text' }],
-  client_id: [{ column: 'clients.client_display_id', kind: 'text' }],
-  role: [{ column: 'title', kind: 'text' }],
-  location: [{ column: 'city', kind: 'text' }],
-  budget: [{ column: 'budget', kind: 'text' }],
-  experience: [{ column: 'experience', kind: 'number' }],
-  mandate_status: [{ column: 'mandate_status', kind: 'text' }],
-  vertical: [{ column: 'vertical', kind: 'text' }],
-  comments: [{ column: 'comments', kind: 'text' }, { column: 'notes', kind: 'text' }],
-  date_of_allocation: [{ column: 'allocation_date', kind: 'date' }],
-  jd: [{ column: 'jd_storage_path', kind: 'text' }, { column: 'jd_url', kind: 'text' }]
-}
-
 function parseJsonFilter(value) {
   if (!value) return null
   try {
     return typeof value === 'string' ? JSON.parse(value) : value
   } catch {
-    return null
+    throw Object.assign(new Error('Invalid Mandates AI filter.'), { statusCode: 400 })
   }
+}
+
+async function allowedMandateFilterFields(user) {
+  const publicFields = Object.keys(mandateAiFilter.registry).filter(name => !mandateAiFilter.registry[name].internal)
+  if (await isAdmin(user)) return publicFields
+  const permissions = await getColumnPermissions('jobs')
+  return publicFields.filter(name => {
+    const permissionKey = MANDATE_FILTER_PERMISSION_KEYS[name]
+    return !permissionKey || permissions[permissionKey] !== 'admin_hidden'
+  })
+}
+
+function validatePersistedMandateFilters(raw, allowedFields) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw Object.assign(new Error('Invalid Mandates AI filter.'), { statusCode: 400 })
+  }
+  return validateMandateIntent(raw, { allowedFields, requireAiConfidence: false })
+}
+
+const MANDATE_AI_SORT_COLUMNS = {
+  date_of_allocation: 'allocation_date',
+  job_id: 'ai_job_display_number',
+  role: 'title',
+  budget: 'ai_budget_ceiling_lpa',
+  experience: 'ai_experience_min_years'
 }
 
 async function listJobs(req, res) {
@@ -305,18 +291,30 @@ async function listJobs(req, res) {
       return res.json({ data: await stripHiddenFields('jobs', data || [], await isAdmin(req.user)) })
     }
 
-    const aiFilters = parseJsonFilter(req.query.ai_filters)
-    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.rankingHints || []).length || (aiFilters?.conditions || []).some(condition => ['consultant', 'budget'].includes(condition.field))
+    const rawAiFilters = parseJsonFilter(req.query.ai_filters)
+    const allowedFields = rawAiFilters ? await allowedMandateFilterFields(req.user) : null
+    const validatedAiFilters = rawAiFilters ? validatePersistedMandateFilters(rawAiFilters, allowedFields) : null
+    const executableAiFilters = validatedAiFilters
+      ? mandateExecutionFilter(validatedAiFilters, { allowedFields })
+      : null
+    const aiFilters = executableAiFilters
+      ? await resolveEntityFilterReferences('mandates', executableAiFilters)
+      : null
+    const aiActive = Boolean(aiFilters)
     const localConsultantFilter = clean(req.query.consultant)
     const sortField = clean(req.query.sortField)
     const sortDirection = clean(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
     const numericJobIdSort = sortField === 'job_id'
-    const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter && !localConsultantFilter && !numericJobIdSort
+    const useFilterView = aiActive || Boolean(localConsultantFilter) || numericJobIdSort
+    // Semantic filters and numeric display-ID ordering always remain bounded.
+    const paginate = useFilterView || String(req.query.all || '').toLowerCase() !== 'true'
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
     const to = from + limit - 1
-    let query = supabase.from('jobs').select('*, clients(name, client_name, client_display_id)', { count: paginate ? 'exact' : undefined })
+    let query = useFilterView
+      ? supabase.from('mandate_ai_filter_rows').select('*', { count: paginate ? 'exact' : undefined })
+      : supabase.from('jobs').select('*, clients(name, client_name, client_display_id)', { count: paginate ? 'exact' : undefined })
     if (req.query.client_id) query = query.eq('client_id', req.query.client_id)
     if (req.query.status) query = query.ilike('mandate_status', clean(req.query.status))
     if (req.query.teamLead) query = query.ilike('team_lead', clean(req.query.teamLead))
@@ -324,65 +322,51 @@ async function listJobs(req, res) {
     query = applyDashboardPeriod(query, 'allocation_date', clean(req.query.period), { dateOnly: true })
     if (req.query.clientName) {
       const name = clean(req.query.clientName)
-      const { data: matchingClients, error: matchingClientError } = await supabase
-        .from('clients')
-        .select('id')
-        .or(`client_name.ilike.%${name}%,name.ilike.%${name}%`)
-      if (matchingClientError) throw matchingClientError
-      const ids = (matchingClients || []).map(client => client.id)
-      query = ids.length ? query.in('client_id', ids) : query.eq('client_id', '__no_match__')
-    }
-    const clientNameConditions = (aiFilters?.conditions || []).filter((condition) => ['client_name', 'client'].includes(String(condition.field || '').toLowerCase()))
-    let matchedClientIds = null
-    if (clientNameConditions.length) {
-      const clientQuery = supabase.from('clients').select('id')
-      for (const condition of clientNameConditions) {
-        const value = clean(condition.value)
-        if (!value) continue
-        if (condition.operator === 'equals') clientQuery.or(`client_name.ilike.${value},name.ilike.${value}`)
-        else clientQuery.or(`client_name.ilike.%${value}%,name.ilike.%${value}%`)
-      }
-      const { data: clientRows, error: clientError } = await clientQuery
-      if (clientError) throw clientError
-      matchedClientIds = [...new Set((clientRows || []).map((row) => row.id))]
-      if (!matchedClientIds.length && aiFilters?.mode !== 'any') {
-return res.json({ data: [], total: 0, page, totalPages: 1, limit })
+      if (useFilterView) {
+        const clientRoot = mandateAiFilter.validateFilter({
+          root: { type: 'condition', field: 'client_name', operator: 'contains', value: name }
+        }, { allowedFields: ['client_name'] }).root
+        query = query.or(mandateAiFilter.compileAst(clientRoot))
+      } else {
+        const { data: matchingClients, error: matchingClientError } = await supabase
+          .from('clients')
+          .select('id')
+          .or(`client_name.ilike.%${name}%,name.ilike.%${name}%`)
+        if (matchingClientError) throw matchingClientError
+        const ids = (matchingClients || []).map(client => client.id)
+        query = ids.length ? query.in('client_id', ids) : query.eq('client_id', '__no_match__')
       }
     }
-    const filtered = localAiFilter ? { query } : applyQueryFilters(query, 'mandates', aiFilters, JOB_FILTER_MAPPING, {
-      applyCondition(nextQuery, condition) {
-        if (condition.field !== 'client_name') return nextQuery
-        if (!matchedClientIds?.length) return nextQuery.eq('client_id', '__no_match__')
-        return nextQuery.in('client_id', matchedClientIds)
-      },
-      orClauses(normalized) {
-        if (!matchedClientIds?.length) return []
-        return normalized.some((condition) => condition.field === 'client_name') ? [`client_id.in.(${matchedClientIds.join(',')})`] : []
-      }
-    })
-    query = filtered.query
-    if (sortField === 'job_id') query = query.order('job_display_id', { ascending: sortDirection !== 'desc' })
+
+    if (localConsultantFilter) {
+      const normalizedName = localConsultantFilter.toLowerCase()
+      const assignmentRoot = mandateAiFilter.validateFilter({
+        root: {
+          type: 'group', combinator: 'OR', children: [
+            { type: 'condition', field: 'consultant', operator: 'contains', value: normalizedName },
+            { type: 'condition', field: 'team_lead', operator: 'equals', value: normalizedName }
+          ]
+        }
+      }, { allowedFields: ['consultant', 'team_lead'] }).root
+      query = query.or(mandateAiFilter.compileAst(assignmentRoot))
+    }
+    if (aiFilters?.root) query = query.or(mandateAiFilter.compileAst(aiFilters.root))
+
+    const aiSort = validatedAiFilters?.sort?.[0]
+    if (numericJobIdSort) query = query.order('ai_job_display_number', { ascending: sortDirection !== 'desc', nullsFirst: false })
     else if (req.query.sortField === 'role') query = query.order('title', { ascending: req.query.sortDirection !== 'desc' })
+    else if (aiSort && MANDATE_AI_SORT_COLUMNS[aiSort.field]) query = query.order(MANDATE_AI_SORT_COLUMNS[aiSort.field], { ascending: aiSort.direction !== 'desc', nullsFirst: false })
     else query = query.order('created_at', { ascending: false })
+    query = query.order('id', { ascending: true })
     if (paginate) query = query.range(from, to)
     const { data, error, count } = await query
     if (error) throw error
-    let rows = (data || []).map(formatJob)
-    if (!paginate) rows = applySharedFilters('mandates', rows, aiFilters, jobFilterValue)
-    if (localConsultantFilter) {
-      const expected = localConsultantFilter.toLowerCase()
-      rows = rows.filter(row => [...(row.consultants || []), row.team_lead]
-        .some(value => clean(value).toLowerCase() === expected))
-    }
-    const filteredTotal = rows.length
-    if (numericJobIdSort) {
-      rows.sort((a, b) => compareDisplayIds(a.job_display_id, b.job_display_id, 'JB') * (sortDirection === 'desc' ? -1 : 1))
-    }
-    if (localAiFilter || localConsultantFilter || numericJobIdSort) rows = rows.slice(from, to + 1)
-    const total = paginate ? count || 0 : filteredTotal
+    const rows = (data || []).map(formatJob)
+    const total = paginate ? count || 0 : rows.length
     const totalPages = Math.max(1, Math.ceil(total / limit))
-return res.json({ data: await stripHiddenFields('jobs', rows, await isAdmin(req.user)), total, page, totalPages, limit })
+    return res.json({ data: await stripHiddenFields('jobs', rows, await isAdmin(req.user)), total, page, totalPages, limit })
   } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'listJobs', err)
   }
 }
@@ -606,10 +590,13 @@ async function buildJobFilters(req, res) {
   try {
     const prompt = clean(req.body.prompt)
     if (!prompt) return res.status(400).json({ error: 'prompt is required' })
-    return res.json(await parseAiFilters('mandates', prompt))
+    const allowedFields = await allowedMandateFilterFields(req.user)
+    const result = await parseMandateIntent(prompt, { allowedFields })
+    const executable = mandateExecutionFilter(result.filters, { allowedFields })
+    await resolveEntityFilterReferences('mandates', executable)
+    return res.json(result)
   } catch (err) {
-    const fallback = validateAiFilters('mandates', null, req.body.prompt)
-    if (fallback) return res.json({ filters: fallback, fallback: true })
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'buildJobFilters', err)
   }
 }

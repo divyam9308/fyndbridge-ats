@@ -304,6 +304,10 @@
   grid-template-columns: minmax(240px, 1fr) minmax(420px, auto);
 }
 
+.admin-overall-report-visibility {
+  grid-template-columns: minmax(240px, 1fr) minmax(420px, auto);
+}
+
 .admin-ios-switch.is-on { background: #25a768; border-color: #25a768; }
 .admin-ios-switch.is-on span { transform: translateX(20px); }
 .admin-ios-switch:disabled { cursor: wait; opacity: .6; }

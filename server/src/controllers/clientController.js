@@ -3,11 +3,11 @@ const supabase = require('../services/supabaseAdmin')
 const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
 const { STORAGE_BUCKETS, normalizeStoragePath } = require('../services/storageBuckets')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
-const { validateAiFilters, applyFilters: applySharedFilters } = require('../services/filterEngine')
-const { parseAiFilters } = require('../services/aiFilterParser')
-const { applyQueryFilters } = require('../services/queryFilters')
+const { clientAiFilter, CLIENT_FILTER_PERMISSION_KEYS } = require('../services/clientAiFilter')
+const { parseClientIntent, validateClientIntent, clientExecutionFilter } = require('../services/clientIntent')
+const { resolveEntityFilterReferences } = require('../services/entityFilterReferences')
 const { createConsultantAssignmentNotification, createClientFollowUpDueNotification } = require('../services/assignmentNotifications')
-const { isAdmin, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
+const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
 
 const CLIENT_STATUSES = [
@@ -131,31 +131,6 @@ function nextFreeDisplayId(rows, prefix, includeReservations = false) {
 
 const SORT_FIELDS = new Set(['client_id', 'client_name'])
 const SORT_DIRECTIONS = new Set(['asc', 'desc'])
-const CLIENT_FILTER_MAPPING = {
-  client_id: [{ column: 'client_display_id', kind: 'text' }],
-  client_name: [{ column: 'client_name', kind: 'text' }, { column: 'name', kind: 'text' }],
-  location: [{ column: 'location', kind: 'text' }, { column: 'city', kind: 'text' }, { column: 'address_on_invoice', kind: 'text' }],
-  region: [{ column: 'region', kind: 'text' }, { column: 'state', kind: 'text' }],
-  consultant: [{ column: 'consultant_name', kind: 'text' }, { column: 'consultant', kind: 'text' }],
-  contact_person: [{ column: 'contact_person', kind: 'text' }, { column: 'contact', kind: 'text' }],
-  mobile: [{ column: 'mobile', kind: 'text' }, { column: 'phone', kind: 'text' }],
-  email: [{ column: 'email', kind: 'text' }],
-  linkedin: [{ column: 'linkedin', kind: 'text' }],
-  sector: [{ column: 'sector', kind: 'text' }],
-  connected_on_date: [{ column: 'connected_on_date', kind: 'date' }],
-  comments: [{ column: 'comments', kind: 'text' }, { column: 'notes', kind: 'text' }],
-  follow_up_date: [{ column: 'follow_up_date', kind: 'date' }],
-  status: [{ column: 'status', kind: 'text' }],
-  terms_signed: [{ column: 'terms_signed_type', kind: 'text' }, { column: 'terms_signed_custom', kind: 'text' }],
-  value: [{ column: 'terms_value', kind: 'text' }],
-  billing_entity: [{ column: 'billing_entity', kind: 'text' }],
-  gstin: [{ column: 'gstin', kind: 'text' }],
-  pan: [{ column: 'pan', kind: 'text' }],
-  address_on_invoice: [{ column: 'address_on_invoice', kind: 'text' }],
-  designation: [{ column: 'designation', kind: 'text' }],
-  contract_signed: [{ column: 'contract_signed', kind: 'boolean' }],
-  contract_document: [{ column: 'contract_document', kind: 'text' }, { column: 'contract_pdf_url', kind: 'text' }, { column: 'contract_pdf_storage_path', kind: 'text' }]
-}
 
 function normalizeSort(query) {
   const field = clean(query.sortField)
@@ -213,38 +188,39 @@ async function nextClientDisplayId() {
 function parseJsonFilter(value) {
   if (!value) return null
   try {
-    return JSON.parse(value)
+    return typeof value === 'string' ? JSON.parse(value) : value
   } catch {
-    return null
+    throw Object.assign(new Error('Invalid Clients AI filter.'), { statusCode: 400 })
   }
 }
 
-function clientFilterValue(row, field) {
-  return {
-    client_id: row.client_display_id,
-    client_name: row.client_name || row.name,
-    location: [row.location, row.city, row.address_on_invoice].filter(Boolean).join(' '),
-    region: row.region || row.state,
-    consultant: row.consultant_name || row.consultant,
-    contact_person: row.contact_person || row.contact,
-    mobile: row.mobile || row.phone,
-    email: row.email,
-    linkedin: row.linkedin,
-    sector: row.sector,
-    connected_on_date: row.connected_on_date,
-    comments: row.comments || row.notes,
-    follow_up_date: row.follow_up_date,
-    status: row.status,
-    terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
-    value: row.terms_value,
-    billing_entity: row.billing_entity,
-    gstin: row.gstin,
-    pan: row.pan,
-    address_on_invoice: row.address_on_invoice,
-    designation: row.designation,
-    contract_signed: row.contract_signed,
-    contract_document: row.contract_document || row.contract_pdf_url || row.contract_pdf_storage_path
-  }[field]
+async function allowedClientFilterFields(user) {
+  const publicFields = Object.keys(clientAiFilter.registry).filter(name => !clientAiFilter.registry[name].internal)
+  if (await isAdmin(user)) return publicFields
+  const permissions = await getColumnPermissions('clients')
+  return publicFields.filter(name => {
+    const permissionKey = CLIENT_FILTER_PERMISSION_KEYS[name]
+    return !permissionKey || permissions[permissionKey] !== 'admin_hidden'
+  })
+}
+
+function validatePersistedClientFilters(raw, allowedFields) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw Object.assign(new Error('Invalid Clients AI filter.'), { statusCode: 400 })
+  }
+  return validateClientIntent(raw, { allowedFields, requireAiConfidence: false })
+}
+
+function stripClientAiColumns(row) {
+  return Object.fromEntries(Object.entries(row || {}).filter(([key]) => !key.startsWith('ai_')))
+}
+
+const CLIENT_AI_SORT_COLUMNS = {
+  created_at: 'created_at',
+  client_id: 'ai_client_display_number',
+  client_name: 'client_name',
+  value: 'ai_terms_value_amount',
+  next_follow_up_date: 'ai_next_follow_up_date'
 }
 
 async function isClientDisplayIdAvailable(displayId) {
@@ -718,15 +694,25 @@ async function listClients(req, res) {
     }
 
     const sort = normalizeSort(req.query)
-    const aiFilters = parseJsonFilter(req.query.ai_filters)
-    const localAiFilter = aiFilters?.mode === 'keyword' || (aiFilters?.rankingHints || []).length || (aiFilters?.conditions || []).some(condition => ['consultant', 'value', 'follow_up_date'].includes(condition.field))
-    const paginate = String(req.query.all || '').toLowerCase() !== 'true' && !localAiFilter
+    const rawAiFilters = parseJsonFilter(req.query.ai_filters)
+    const allowedFields = rawAiFilters ? await allowedClientFilterFields(req.user) : null
+    const validatedAiFilters = rawAiFilters ? validatePersistedClientFilters(rawAiFilters, allowedFields) : null
+    const executableAiFilters = validatedAiFilters
+      ? clientExecutionFilter(validatedAiFilters, { allowedFields })
+      : null
+    const aiFilters = executableAiFilters
+      ? await resolveEntityFilterReferences('clients', executableAiFilters)
+      : null
+    const aiActive = Boolean(aiFilters)
+    // AI-filtered queries always stay bounded, even if a caller supplies all=true.
+    const paginate = aiActive || String(req.query.all || '').toLowerCase() !== 'true'
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100)
     const from = (page - 1) * limit
     const to = from + limit - 1
 
-    let query = supabase.from('clients').select('*', { count: paginate ? 'exact' : undefined })
+    const sourceTable = aiActive ? 'client_ai_filter_rows' : 'clients'
+    let query = supabase.from(sourceTable).select('*', { count: paginate ? 'exact' : undefined })
     if (req.query.consultant) query = query.ilike('consultant_name', clean(req.query.consultant))
     query = applyDashboardPeriod(query, 'connected_on_date', clean(req.query.period), { fallbackColumn: 'created_at', dateOnly: true })
     if (req.query.search) {
@@ -749,21 +735,44 @@ async function listClients(req, res) {
         query = query.ilike('status', clean(req.query.status))
       }
     }
-    if (!localAiFilter) {
-      const appliedAi = applyQueryFilters(query, 'clients', aiFilters, CLIENT_FILTER_MAPPING)
-      query = appliedAi.query
-    }
-    if (sort.field === 'client_id') query = query.order('created_at', { ascending: sort.direction !== 'desc' })
+    if (aiFilters?.root) query = query.or(clientAiFilter.compileAst(aiFilters.root))
+
+    const aiSort = validatedAiFilters?.sort?.[0]
+    if (sort.field === 'client_id') query = query.order(aiActive ? 'ai_client_display_number' : 'created_at', { ascending: sort.direction !== 'desc', nullsFirst: false })
     else if (sort.field === 'client_name') query = query.order('client_name', { ascending: sort.direction !== 'desc' }).order('name', { ascending: sort.direction !== 'desc' })
+    else if (aiSort && CLIENT_AI_SORT_COLUMNS[aiSort.field]) query = query.order(CLIENT_AI_SORT_COLUMNS[aiSort.field], { ascending: aiSort.direction !== 'desc', nullsFirst: false })
     else query = query.order('created_at', { ascending: false })
+    query = query.order('id', { ascending: true })
     if (paginate) query = query.range(from, to)
     const { data, error, count } = await query
     if (error) throw error
-    const pagedData = !paginate ? sortClientRows(data || [], sort) : (data || [])
 
-    const clientIds = pagedData.map((client) => client.id)
+    let pagedData = (data || []).map(stripClientAiColumns)
+    if (aiActive && pagedData.length) {
+      const groupOrder = new Map(pagedData.map((row, index) => [row.client_group_id || row.id, index]))
+      const groupIds = [...groupOrder.keys()]
+      const { data: contacts, error: contactsError } = await supabase
+        .from('clients')
+        .select('*')
+        .in('client_group_id', groupIds)
+        .order('created_at', { ascending: true })
+      if (contactsError) throw contactsError
+      const byGroup = new Map()
+      for (const row of contacts || []) {
+        const groupId = row.client_group_id || row.id
+        if (!byGroup.has(groupId)) byGroup.set(groupId, [])
+        byGroup.get(groupId).push(row)
+      }
+      pagedData = groupIds.flatMap(groupId => byGroup.get(groupId) || pagedData.filter(row => (row.client_group_id || row.id) === groupId))
+    } else if (!paginate) {
+      pagedData = sortClientRows(pagedData, sort)
+    }
+
+    const clientIds = [...new Set(pagedData.map((client) => client.id).filter(Boolean))]
+    const selectedGroupIds = [...new Set(pagedData.map((client) => client.client_group_id || client.id).filter(Boolean))]
     const jobsQuery = supabase.from('jobs').select('client_id, status, mandate_status')
-    const { data: jobs, error: jobsError } = clientIds.length ? await jobsQuery.in('client_id', clientIds) : { data: [], error: null }
+    const jobClientIds = [...new Set([...clientIds, ...selectedGroupIds])]
+    const { data: jobs, error: jobsError } = jobClientIds.length ? await jobsQuery.in('client_id', jobClientIds) : { data: [], error: null }
     if (jobsError) throw jobsError
 
     const activeJobsMap = {}
@@ -774,9 +783,8 @@ async function listClients(req, res) {
       jobsByClient[job.client_id].push(job)
     })
 
-    const groupIds = [...new Set(pagedData.map((client) => client.client_group_id || client.id).filter(Boolean))]
-    const { data: groupRows, error: groupRowsError } = groupIds.length
-      ? await supabase.from('clients').select('id, client_group_id').in('client_group_id', groupIds)
+    const { data: groupRows, error: groupRowsError } = selectedGroupIds.length
+      ? await supabase.from('clients').select('id, client_group_id').in('client_group_id', selectedGroupIds)
       : { data: [], error: null }
     if (groupRowsError) throw groupRowsError
     const clientIdsByGroup = (groupRows || []).reduce((map, row) => {
@@ -785,30 +793,32 @@ async function listClients(req, res) {
       map[key].push(row.id)
       return map
     }, {})
-    const followUpsMap = await loadFollowUps([...new Set([...clientIds, ...groupIds, ...(groupRows || []).map((row) => row.id)])])
+    const followUpsMap = await loadFollowUps([...new Set([...clientIds, ...selectedGroupIds, ...(groupRows || []).map((row) => row.id)])])
     const rows = pagedData.map((client) => {
       const groupId = client.client_group_id || client.id
       const scopeIds = [...new Set([groupId, client.id, ...(clientIdsByGroup[groupId] || [])].filter(Boolean))]
       return normalizeClient(client, activeJobsMap[client.id] || 0, mergeFollowUps(followUpsMap, scopeIds), jobsByClient[client.id] || [])
     })
-    const filteredRows = paginate ? rows : applySharedFilters('clients', rows, aiFilters, clientFilterValue)
-    const dataRows = localAiFilter ? filteredRows.slice(from, to + 1) : filteredRows
-    const total = paginate ? count || 0 : filteredRows.length
+    const total = paginate ? count || 0 : aiActive ? selectedGroupIds.length : rows.length
     const totalPages = Math.max(1, Math.ceil(total / limit))
-return res.json({ data: await stripHiddenFields('clients', dataRows, await isAdmin(req.user)), total, page, totalPages, limit })
+    return res.json({ data: await stripHiddenFields('clients', rows, await isAdmin(req.user)), total, page, totalPages, limit })
   } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'listClients', err)
   }
 }
 
 async function buildClientFilters(req, res) {
-  const prompt = clean(req.body.prompt)
-  if (!prompt) return res.status(400).json({ error: 'prompt is required' })
   try {
-    return res.json(await parseAiFilters('clients', prompt))
+    const prompt = clean(req.body.prompt)
+    if (!prompt) return res.status(400).json({ error: 'prompt is required' })
+    const allowedFields = await allowedClientFilterFields(req.user)
+    const result = await parseClientIntent(prompt, { allowedFields })
+    const executable = clientExecutionFilter(result.filters, { allowedFields })
+    await resolveEntityFilterReferences('clients', executable)
+    return res.json(result)
   } catch (err) {
-    const fallback = validateAiFilters('clients', null, prompt)
-    if (fallback) return res.json({ filters: fallback, fallback: true })
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'buildClientFilters', err)
   }
 }

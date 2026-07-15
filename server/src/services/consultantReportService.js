@@ -3,7 +3,16 @@ const { isAdmin, isSuperAdmin } = require('./adminAccess')
 const { listEmployeeDirectory } = require('./employeeStatus')
 const attendanceService = require('./attendanceService')
 const { getFinancialYearForDate, localDate, addDays } = require('./attendanceUtils')
+const { buildAttendancePeriodSummary } = require('./attendancePeriodSummary')
+const { buildActiveProfiles } = require('./teamAttendanceToday')
+const { aggregateAttendance, attendancePayload } = require('./consultantReportAttendance')
 const {
+  OVERALL_CONSULTANT_KEY,
+  canViewOverallConsultantReport,
+  getOverallConsultantReportAudience
+} = require('./consultantReportAccess')
+const {
+  aggregateConsultantReportFacts,
   buildConsultantReportFacts,
   consultantMatches,
   paginateReportRows,
@@ -32,6 +41,16 @@ function employeeStatusLabel(status) {
 }
 
 function publicConsultant(employee) {
+  if (employee?.isOverall) {
+    return {
+      key: OVERALL_CONSULTANT_KEY,
+      name: 'Overall Consultants',
+      email: '',
+      employeeStatus: '',
+      initials: 'OC',
+      isOverall: true
+    }
+  }
   return {
     key: employee.user_id,
     name: employee.name,
@@ -41,10 +60,50 @@ function publicConsultant(employee) {
   }
 }
 
-function resolveReportAccess({ user, requestedConsultantUserId = '', directory = [], admin = false, superAdmin = false }) {
+function resolveReportAccess({
+  user,
+  requestedConsultantUserId = '',
+  directory = [],
+  admin = false,
+  superAdmin = false,
+  overallAudience = 'admins'
+}) {
+  if (requestedConsultantUserId === OVERALL_CONSULTANT_KEY) {
+    if (!canViewOverallConsultantReport({ admin, superAdmin }, overallAudience)) {
+      throw forbidden('You do not have permission to view the Overall Consultants report.')
+    }
+    const consultants = directory.filter((employee) => employee.status !== 'inactive')
+    return {
+      target: {
+        user_id: OVERALL_CONSULTANT_KEY,
+        name: 'Overall Consultants',
+        status: 'active',
+        consultants,
+        isOverall: true
+      },
+      directory,
+      isAdmin: admin,
+      isSuperAdmin: superAdmin,
+      canViewOverall: true,
+      overallAudience,
+      scope: 'overall'
+    }
+  }
   const currentEmployee = directory.find((employee) => employee.user_id === user?.id)
-  const consultantUserId = requestedConsultantUserId || currentEmployee?.user_id || ''
+  const fallbackEmployee = admin ? directory.find((employee) => employee.status !== 'inactive') : null
+  const consultantUserId = requestedConsultantUserId || currentEmployee?.user_id || fallbackEmployee?.user_id || ''
   const target = directory.find((employee) => employee.user_id === consultantUserId)
+
+  if (!target && !requestedConsultantUserId && canViewOverallConsultantReport({ admin, superAdmin }, overallAudience)) {
+    return resolveReportAccess({
+      user,
+      requestedConsultantUserId: OVERALL_CONSULTANT_KEY,
+      directory,
+      admin,
+      superAdmin,
+      overallAudience
+    })
+  }
 
   if (!admin && consultantUserId !== user?.id) throw forbidden('You can only view your own consultant report.')
   if (!target) {
@@ -60,17 +119,20 @@ function resolveReportAccess({ user, requestedConsultantUserId = '', directory =
     directory,
     isAdmin: admin,
     isSuperAdmin: superAdmin,
+    canViewOverall: canViewOverallConsultantReport({ admin, superAdmin }, overallAudience),
+    overallAudience,
     scope: superAdmin ? 'super_admin' : admin ? 'admin' : 'self'
   }
 }
 
 async function reportAccess(user, requestedConsultantUserId = '') {
-  const [directory, admin, superAdmin] = await Promise.all([
+  const [directory, admin, superAdmin, overallAudience] = await Promise.all([
     listEmployeeDirectory(),
     isAdmin(user),
-    isSuperAdmin(user)
+    isSuperAdmin(user),
+    getOverallConsultantReportAudience()
   ])
-  return resolveReportAccess({ user, requestedConsultantUserId, directory, admin, superAdmin })
+  return resolveReportAccess({ user, requestedConsultantUserId, directory, admin, superAdmin, overallAudience })
 }
 
 async function fetchEveryPage(queryFactory) {
@@ -143,6 +205,8 @@ async function fetchCandidateAssociations(startDate, endDate, consultant) {
     .order('created_at', { ascending: true })
     .order('id', { ascending: true })
 
+  if (consultant.isOverall) return fetchEveryPage(queryFactory)
+
   const [owned, legacyUnlinked] = await Promise.all([
     fetchEveryPage(() => queryFactory().eq('consultant_user_id', consultant.user_id)),
     fetchEveryPage(() => queryFactory().is('consultant_user_id', null))
@@ -157,17 +221,16 @@ async function loadFacts(params, access) {
     fetchCandidateAssociations(params.startDate, params.endDate, access.target)
   ])
   const assignedJobIds = jobs
-    .filter((job) => consultantMatches(job, access.target.name))
+    .filter((job) => consultantMatches(job, access.target))
     .map((job) => job.id)
   const associations = await fetchAssociations(assignedJobIds)
-  const facts = buildConsultantReportFacts({
-    jobs,
-    associations,
-    candidateAssociations,
-    consultant: access.target,
-    startDate: params.startDate,
-    endDate: params.endDate
-  })
+  const factInput = { jobs, associations, candidateAssociations, startDate: params.startDate, endDate: params.endDate }
+  const facts = access.target.isOverall
+    ? aggregateConsultantReportFacts(access.target.consultants.map((consultant) => ({
+      consultant,
+      facts: buildConsultantReportFacts({ ...factInput, consultant })
+    })))
+    : buildConsultantReportFacts({ ...factInput, consultant: access.target })
   facts.warnings.forEach((warning) => {
     console.warn('[consultant-report:data-quality]', {
       code: warning.code,
@@ -180,45 +243,101 @@ async function loadFacts(params, access) {
   return facts
 }
 
-function workedTimeLabel(totalMinutes) {
-  const minutes = Math.max(0, Number(totalMinutes) || 0)
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+function groupByUserId(rows = []) {
+  const grouped = new Map()
+  for (const row of rows || []) {
+    const key = String(row.user_id || '')
+    if (!grouped.has(key)) grouped.set(key, [])
+    grouped.get(key).push(row)
+  }
+  return grouped
 }
 
-function attendancePayload(period, balance) {
-  const summary = period.kpis
-  const availableBalance = Number(balance.available_balance) || 0
-  return {
-    available: true,
-    metrics: [
-      { key: 'workingDays', label: 'Working Days', value: summary.working_days, tone: 'blue' },
-      { key: 'presentDays', label: 'Present Days', value: summary.present, tone: 'green' },
-      { key: 'leaveDays', label: 'Leave Days', value: summary.leave, tone: 'purple' },
-      { key: 'halfDayLeave', label: 'Half-Day Leave', value: summary.half_day_leave, tone: 'amber' },
-      { key: 'unmarkedDays', label: 'Unmarked Days', value: summary.unmarked, tone: 'red' },
-      { key: 'correctedAttendance', label: 'Corrected Attendance', value: summary.corrected_attendance, tone: 'cyan' },
-      { key: 'pendingCorrections', label: 'Pending Corrections', value: summary.pending_corrections, tone: 'amber' },
-      { key: 'workedTime', label: 'Total Worked Hours', value: workedTimeLabel(summary.total_minutes), numericValue: summary.total_minutes, tone: 'navy' },
-      { key: 'leaveBalance', label: 'Leave Balance', value: `${availableBalance} days`, numericValue: availableBalance, tone: 'teal' },
-      { key: 'attendancePercentage', label: 'Attendance Percentage', value: `${summary.attendance_percentage}%`, numericValue: summary.attendance_percentage, tone: 'green' }
-    ],
-    leaveBalance: {
-      financialYear: balance.financial_year,
-      annualEntitlement: Number(balance.annual_entitlement) || 0,
-      openingCarryForward: Number(balance.opening_carry_forward) || 0,
-      accruedLeave: Number(balance.accrued_leave) || 0,
-      usedLeave: Number(balance.used_leave) || 0,
-      pendingLeave: Number(balance.pending_leave) || 0,
-      availableBalance,
-      projectedBalance: Number(balance.projected_balance) || 0,
-      lossOfPayExposure: Number(balance.loss_of_pay_exposure) || 0
+async function mapWithConcurrency(values, limit, mapper) {
+  const result = new Array(values.length)
+  let nextIndex = 0
+  async function worker() {
+    while (nextIndex < values.length) {
+      const index = nextIndex
+      nextIndex += 1
+      result[index] = await mapper(values[index], index)
     }
   }
+  await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker))
+  return result
 }
 
-async function loadAttendance(user, targetUserId, params) {
+async function loadOverallAttendance(params) {
+  const today = localDate()
+  await attendanceService.expireOpenClockIns(today)
+  const [profilesResult, statusesResult, adminsResult] = await Promise.all([
+    supabase.from('user_profiles').select('user_id,name,email').not('name', 'is', null).order('name'),
+    supabase.from('employee_statuses').select('user_id,status'),
+    supabase.from('admin_users').select('user_id,email,role,is_super_admin')
+  ])
+  for (const result of [profilesResult, statusesResult, adminsResult]) if (result.error) throw result.error
+  const profiles = buildActiveProfiles(profilesResult.data, statusesResult.data, adminsResult.data)
+  if (!profiles.length) return aggregateAttendance([])
+
+  const userIds = profiles.map((profile) => profile.user_id)
+  const [records, leaveRequests, correctionRequests, holidayRows] = await Promise.all([
+    fetchEveryPage(() => supabase
+      .from('attendance_records')
+      .select('id,user_id,attendance_date,status,clock_in_at,clock_out_at,worked_minutes')
+      .in('user_id', userIds)
+      .gte('attendance_date', params.startDate)
+      .lte('attendance_date', params.endDate)
+      .order('attendance_date', { ascending: true })
+      .order('id', { ascending: true })),
+    fetchEveryPage(() => supabase
+      .from('leave_requests')
+      .select('id,user_id,start_date,end_date,duration_type,half_day_session,status')
+      .in('user_id', userIds)
+      .in('status', ['pending', 'approved', 'rejected'])
+      .lte('start_date', params.endDate)
+      .gte('end_date', params.startDate)
+      .order('start_date', { ascending: true })
+      .order('id', { ascending: true })),
+    fetchEveryPage(() => supabase
+      .from('attendance_correction_requests')
+      .select('id,user_id,attendance_date,status')
+      .in('user_id', userIds)
+      .gte('attendance_date', params.startDate)
+      .lte('attendance_date', params.endDate)
+      .order('attendance_date', { ascending: true })
+      .order('id', { ascending: true })),
+    attendanceService.holidays(params.startDate, params.endDate)
+  ])
+
+  const recordsByUser = groupByUserId(records)
+  const leavesByUser = groupByUserId(leaveRequests)
+  const correctionsByUser = groupByUserId(correctionRequests)
+  const financialYear = getFinancialYearForDate(today)
+  const rows = await mapWithConcurrency(profiles, 4, async (profile) => {
+    const period = buildAttendancePeriodSummary({
+      start: params.startDate,
+      end: params.endDate,
+      records: recordsByUser.get(String(profile.user_id)) || [],
+      holidayRows,
+      leaveRequests: leavesByUser.get(String(profile.user_id)) || [],
+      correctionRequests: correctionsByUser.get(String(profile.user_id)) || [],
+      today
+    })
+    const balance = await attendanceService.leaveBalanceSummary(profile.user_id, financialYear, today)
+    return {
+      consultant: publicConsultant({ ...profile, status: 'active' }),
+      period,
+      balance
+    }
+  })
+  return aggregateAttendance(rows)
+}
+
+async function loadAttendance(user, target, params) {
+  const targetUserId = target.user_id
   const today = localDate()
   try {
+    if (target.isOverall) return { attendance: await loadOverallAttendance(params), warnings: [] }
     const period = await attendanceService.periodSummary(user, targetUserId, params.startDate, params.endDate)
     const financialYear = getFinancialYearForDate(today)
     const balance = await attendanceService.leaveBalanceSummary(targetUserId, financialYear, today)
@@ -272,10 +391,12 @@ async function getConsultantOptions(user) {
     ? access.directory.filter((employee) => employee.status !== 'inactive')
     : [access.target]
   const options = allowed.map(publicConsultant)
+  if (access.canViewOverall) options.unshift(publicConsultant({ isOverall: true }))
   const currentAllowed = options.find((option) => option.key === user.id)
   return {
     options,
-    defaultConsultantKey: currentAllowed?.key || options[0]?.key || ''
+    defaultConsultantKey: currentAllowed?.key || options[0]?.key || '',
+    overallConsultantAccess: access.overallAudience
   }
 }
 
@@ -284,7 +405,7 @@ async function getConsultantReport(user, query) {
   const access = await reportAccess(user, params.consultantUserId)
   const [facts, attendanceResult] = await Promise.all([
     loadFacts(params, access),
-    loadAttendance(user, access.target.user_id, params)
+    loadAttendance(user, access.target, params)
   ])
   const warnings = [...facts.warnings, ...attendanceResult.warnings]
   if (params.endDateWasCapped) warnings.push({ code: 'future_end_date_capped', count: 1, message: 'The To date was capped at today.' })

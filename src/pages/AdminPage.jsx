@@ -13,7 +13,8 @@ import {
   updateColumnPermission,
   setRecordLock,
   updatePageViewPermission,
-  updateDashboardVisibility
+  updateDashboardVisibility,
+  updateOverallConsultantReportAudience
 } from '../services/adminAccessApi'
 import AdminPermissionPicker from '../components/admin/AdminPermissionPicker'
 import PageViewPermissions from '../components/admin/PageViewPermissions'
@@ -43,6 +44,10 @@ const LOW_MANDATE_AUDIENCE_OPTIONS = [
   { value: 'everyone', label: 'Everyone', Icon: Eye },
   { value: 'admins', label: 'Admins', Icon: ShieldCheck },
   { value: 'super_admins', label: 'Super Admins', Icon: Lock }
+]
+const OVERALL_REPORT_AUDIENCE_OPTIONS = [
+  { value: 'admins', label: 'Admins & Super Admins', Icon: ShieldCheck },
+  { value: 'super_admins', label: 'Super Admins Only', Icon: Lock }
 ]
 
 const TYPE_META = {
@@ -269,6 +274,8 @@ export default function AdminPage() {
   const [savedDashboardRestricted, setSavedDashboardRestricted] = useState(true)
   const [lowMandateAudience, setLowMandateAudience] = useState('super_admins')
   const [savedLowMandateAudience, setSavedLowMandateAudience] = useState('super_admins')
+  const [overallReportAudience, setOverallReportAudience] = useState('admins')
+  const [savedOverallReportAudience, setSavedOverallReportAudience] = useState('admins')
   const [performancePermissions, setPerformancePermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
   const { permissions: pageViewPermissions, loading: pageViewPermissionsLoading } = usePageViewPermissions()
   const [savedPageViewPermissions, setSavedPageViewPermissions] = useState(() => ({ ...PAGE_VIEW_DEFAULTS }))
@@ -293,6 +300,11 @@ export default function AdminPage() {
       : 'super_admins'
     setLowMandateAudience(audience)
     setSavedLowMandateAudience(audience)
+    const reportAudience = ['admins', 'super_admins'].includes(data.overallConsultantReportAudience)
+      ? data.overallConsultantReportAudience
+      : 'admins'
+    setOverallReportAudience(reportAudience)
+    setSavedOverallReportAudience(reportAudience)
     if (data.performancePermissions) {
       setPerformancePermissions({ ...DEFAULT_PERFORMANCE_PERMISSIONS, ...data.performancePermissions })
     }
@@ -386,9 +398,10 @@ export default function AdminPage() {
 
   const dashboardVisibilityDirty = dashboardRestricted !== savedDashboardRestricted
   const lowMandateAudienceDirty = lowMandateAudience !== savedLowMandateAudience
+  const overallReportAudienceDirty = overallReportAudience !== savedOverallReportAudience
   const pageViewPermissionsDirty = !isSamePermissions(savedPageViewPermissions, draftPageViewPermissions)
   const attendancePermissionsDirty = !isSamePermissions(savedAttendancePermissions, draftAttendancePermissions)
-  const permissionChangesDirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty || lowMandateAudienceDirty || pageViewPermissionsDirty || attendancePermissionsDirty
+  const permissionChangesDirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty || lowMandateAudienceDirty || overallReportAudienceDirty || pageViewPermissionsDirty || attendancePermissionsDirty
   const dirty = permissionChangesDirty || employeeManagementDirty
   const availableTabs = isSuperAdmin ? [...TABS, PERFORMANCE_TAB] : TABS
   const columnSource = activeTab === PERFORMANCE_TABLE_KEY ? PERFORMANCE_COLUMNS : (columns[activeTab] || [])
@@ -450,6 +463,7 @@ export default function AdminPage() {
     setDraftAttendancePermissions(savedAttendancePermissions)
     setDashboardRestricted(savedDashboardRestricted)
     setLowMandateAudience(savedLowMandateAudience)
+    setOverallReportAudience(savedOverallReportAudience)
     employeeManagementRef.current?.cancelChanges()
     setError('')
   }
@@ -458,7 +472,7 @@ export default function AdminPage() {
     const changes = changedPermissions(savedPermissions, draftPermissions)
     const performanceChanged = isSuperAdmin && !isSamePermissions(savedPermissions?.[PERFORMANCE_TABLE_KEY], draftPermissions?.[PERFORMANCE_TABLE_KEY])
     const pageViewChanges = Object.entries(draftPageViewPermissions).filter(([pageKey, viewPermission]) => savedPageViewPermissions?.[pageKey] !== viewPermission)
-    if (!changes.length && !dashboardVisibilityDirty && !lowMandateAudienceDirty && !performanceChanged && !pageViewChanges.length && !attendancePermissionsDirty && !employeeManagementDirty) return
+    if (!changes.length && !dashboardVisibilityDirty && !lowMandateAudienceDirty && !overallReportAudienceDirty && !performanceChanged && !pageViewChanges.length && !attendancePermissionsDirty && !employeeManagementDirty) return
     setSavingPermissions(true)
     setError('')
     try {
@@ -473,6 +487,12 @@ export default function AdminPage() {
         const audience = ['everyone', 'admins', 'super_admins'].includes(data.lowMandateNotificationAudience) ? data.lowMandateNotificationAudience : 'super_admins'
         setLowMandateAudience(audience)
         setSavedLowMandateAudience(audience)
+      }
+      if (overallReportAudienceDirty) {
+        const data = await updateOverallConsultantReportAudience(overallReportAudience)
+        const audience = ['admins', 'super_admins'].includes(data.overallConsultantReportAudience) ? data.overallConsultantReportAudience : 'admins'
+        setOverallReportAudience(audience)
+        setSavedOverallReportAudience(audience)
       }
       if (performanceChanged) {
         const data = await savePerformancePermissions(draftPermissions?.[PERFORMANCE_TABLE_KEY])
@@ -645,6 +665,23 @@ export default function AdminPage() {
         <div className="admin-advanced-card admin-low-mandate-audience">
           <div><h3>Less than 5 mandates notifications</h3><p>Choose whether these allocation warnings are sent to everyone, all Admins, or only Super Admins.</p></div>
           <AdminPermissionPicker value={lowMandateAudience} options={LOW_MANDATE_AUDIENCE_OPTIONS} disabled={savingPermissions} onChange={setLowMandateAudience} toneForValue={value => value === 'everyone' ? 'is-everyone' : value === 'admins' ? 'is-disabled' : 'is-hidden'} />
+        </div>
+      </Section>
+
+      <Section title="Overall Consultant Report Visibility" description="Control which administrator role can generate the combined consultant report." icon={ShieldCheck}>
+        <div className="admin-advanced-card admin-overall-report-visibility">
+          <div>
+            <h3>Overall Consultants report</h3>
+            <p>Choose whether all Admins and Super Admins, or only Super Admins, can see and generate the overall report.</p>
+          </div>
+          <AdminPermissionPicker
+            value={overallReportAudience}
+            options={OVERALL_REPORT_AUDIENCE_OPTIONS}
+            disabled={!isSuperAdmin || savingPermissions}
+            onChange={setOverallReportAudience}
+            toneForValue={value => value === 'admins' ? 'is-disabled' : 'is-hidden'}
+          />
+          {!isSuperAdmin && <small>Only Super Admins can change this setting.</small>}
         </div>
       </Section>
 

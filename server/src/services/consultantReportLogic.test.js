@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const {
   CANDIDATE_STATUSES,
   MANDATE_STATUSES,
+  aggregateConsultantReportFacts,
   buildCandidatePipeline,
   buildConsultantReportFacts,
   canonicalMandateStatus,
@@ -13,6 +14,7 @@ const {
 } = require('./consultantReportLogic')
 
 const CONSULTANT = { user_id: '11111111-1111-4111-8111-111111111111', name: 'Asha Rao' }
+const SECOND_CONSULTANT = { user_id: '22222222-2222-4222-8222-222222222222', name: 'Bina Shah' }
 const START = '2026-07-01'
 const END = '2026-07-15'
 
@@ -510,4 +512,84 @@ test('report request parser validates IDs, dates, filters, pagination, sort and 
     { status: modal.status, page: modal.page, pageSize: modal.pageSize, search: modal.search, sort: modal.sort, sortDirection: modal.sortDirection },
     { status: 'Completed', page: 2, pageSize: 25, search: 'Acme', sort: 'submission', sortDirection: 'asc' }
   )
+})
+
+test('report request parser accepts the explicit overall scope without a consultant UUID', () => {
+  const parsed = parseReportRequest({
+    scope: ' overall ',
+    consultant_user_id: 'not-a-uuid',
+    start_date: START,
+    end_date: END
+  }, 'main', END)
+
+  assert.equal(parsed.scope, 'overall')
+  assert.equal(parsed.consultantUserId, 'overall')
+  assert.equal(parsed.startDate, START)
+  assert.equal(parsed.endDate, END)
+})
+
+test('overall facts sum each consultant report and weight conversions by tracked mandates', () => {
+  const shared = job({
+    id: 'shared',
+    title: 'Shared Role',
+    consultants: [CONSULTANT.name, SECOND_CONSULTANT.name]
+  })
+  const ashaOnly = job({
+    id: 'asha-only',
+    title: 'Asha Role',
+    consultants: [CONSULTANT.name],
+    mandate_status: 'Completed',
+    allocation_date: '2026-07-02'
+  })
+  const binaOnlyOne = job({
+    id: 'bina-only-one',
+    title: 'Bina Role One',
+    consultants: [SECOND_CONSULTANT.name],
+    mandate_status: 'Scrapped',
+    allocation_date: '2026-07-03'
+  })
+  const binaOnlyTwo = job({
+    id: 'bina-only-two',
+    title: 'Bina Role Two',
+    consultants: [SECOND_CONSULTANT.name],
+    allocation_date: '2026-07-04'
+  })
+  const jobs = [shared, ashaOnly, binaOnlyOne, binaOnlyTwo]
+  const associations = [
+    association('shared', 'Client Submission', {
+      client_submission_at: '2026-07-03T12:00:00.000Z'
+    }),
+    association('asha-only', 'Client Submission', {
+      client_submission_at: '2026-07-08T12:00:00.000Z'
+    }),
+    association('bina-only-one', 'Client Submission', {
+      consultant_name: SECOND_CONSULTANT.name,
+      consultant_user_id: SECOND_CONSULTANT.user_id,
+      client_submission_at: '2026-07-13T12:00:00.000Z'
+    }),
+    association('bina-only-two', 'Client Submission', {
+      consultant_name: SECOND_CONSULTANT.name,
+      consultant_user_id: SECOND_CONSULTANT.user_id,
+      client_submission_at: '2026-07-14T12:00:00.000Z'
+    })
+  ]
+  const entries = [CONSULTANT, SECOND_CONSULTANT].map((consultant) => ({
+    consultant,
+    facts: buildConsultantReportFacts({ jobs, associations, consultant, startDate: START, endDate: END })
+  }))
+
+  const result = aggregateConsultantReportFacts(entries)
+  const submission = result.conversionSummary.find((stage) => stage.key === 'clientSubmission')
+
+  assert.deepEqual(result.mandateSummary, { total: 5, ongoing: 3, completed: 1, scrapped: 1 })
+  assert.equal(result.candidateOverview.total, 4)
+  assert.equal(result.candidateOverview.counts['Client Submission'], 4)
+  assert.equal(submission.trackedMandates, 5)
+  assert.equal(submission.untrackedMandates, 0)
+  assert.equal(submission.averageDays, 6)
+  assert.equal(submission.displayValue, '6 days')
+  assert.deepEqual(result._conversionTotals.clientSubmission, { totalDays: 30, trackedMandates: 5 })
+  assert.deepEqual(result.mandates, [])
+  assert.deepEqual(result.recentMandates, [])
+  assert.deepEqual(result.recentConversions, [])
 })
