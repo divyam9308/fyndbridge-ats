@@ -12,8 +12,8 @@ import {
   updateAdminUserRole,
   updateColumnPermission,
   setRecordLock,
-  updatePageViewPermission
-  ,updateDashboardVisibility
+  updatePageViewPermission,
+  updateDashboardVisibility
 } from '../services/adminAccessApi'
 import AdminPermissionPicker from '../components/admin/AdminPermissionPicker'
 import PageViewPermissions from '../components/admin/PageViewPermissions'
@@ -39,6 +39,11 @@ const TABS = [
 ]
 
 const PERFORMANCE_TAB = [PERFORMANCE_TABLE_KEY, 'Performance', BarChart3]
+const LOW_MANDATE_AUDIENCE_OPTIONS = [
+  { value: 'everyone', label: 'Everyone', Icon: Eye },
+  { value: 'admins', label: 'Admins', Icon: ShieldCheck },
+  { value: 'super_admins', label: 'Super Admins', Icon: Lock }
+]
 
 const TYPE_META = {
   Client: { key: 'clients', label: 'Clients', Icon: Building2 },
@@ -262,6 +267,8 @@ export default function AdminPage() {
   const [lockModalType, setLockModalType] = useState('')
   const [dashboardRestricted, setDashboardRestricted] = useState(true)
   const [savedDashboardRestricted, setSavedDashboardRestricted] = useState(true)
+  const [lowMandateAudience, setLowMandateAudience] = useState('super_admins')
+  const [savedLowMandateAudience, setSavedLowMandateAudience] = useState('super_admins')
   const [performancePermissions, setPerformancePermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
   const { permissions: pageViewPermissions, loading: pageViewPermissionsLoading } = usePageViewPermissions()
   const [savedPageViewPermissions, setSavedPageViewPermissions] = useState(() => ({ ...PAGE_VIEW_DEFAULTS }))
@@ -281,6 +288,11 @@ export default function AdminPage() {
     const value = data.dashboardVisibility?.restrictNonAdminToSelf !== false
     setDashboardRestricted(value)
     setSavedDashboardRestricted(value)
+    const audience = ['everyone', 'admins', 'super_admins'].includes(data.dashboardVisibility?.lowMandateNotificationAudience)
+      ? data.dashboardVisibility.lowMandateNotificationAudience
+      : 'super_admins'
+    setLowMandateAudience(audience)
+    setSavedLowMandateAudience(audience)
     if (data.performancePermissions) {
       setPerformancePermissions({ ...DEFAULT_PERFORMANCE_PERMISSIONS, ...data.performancePermissions })
     }
@@ -373,9 +385,10 @@ export default function AdminPage() {
   })
 
   const dashboardVisibilityDirty = dashboardRestricted !== savedDashboardRestricted
+  const lowMandateAudienceDirty = lowMandateAudience !== savedLowMandateAudience
   const pageViewPermissionsDirty = !isSamePermissions(savedPageViewPermissions, draftPageViewPermissions)
   const attendancePermissionsDirty = !isSamePermissions(savedAttendancePermissions, draftAttendancePermissions)
-  const permissionChangesDirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty || pageViewPermissionsDirty || attendancePermissionsDirty
+  const permissionChangesDirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty || lowMandateAudienceDirty || pageViewPermissionsDirty || attendancePermissionsDirty
   const dirty = permissionChangesDirty || employeeManagementDirty
   const availableTabs = isSuperAdmin ? [...TABS, PERFORMANCE_TAB] : TABS
   const columnSource = activeTab === PERFORMANCE_TABLE_KEY ? PERFORMANCE_COLUMNS : (columns[activeTab] || [])
@@ -436,6 +449,7 @@ export default function AdminPage() {
     setDraftPageViewPermissions(savedPageViewPermissions)
     setDraftAttendancePermissions(savedAttendancePermissions)
     setDashboardRestricted(savedDashboardRestricted)
+    setLowMandateAudience(savedLowMandateAudience)
     employeeManagementRef.current?.cancelChanges()
     setError('')
   }
@@ -444,18 +458,21 @@ export default function AdminPage() {
     const changes = changedPermissions(savedPermissions, draftPermissions)
     const performanceChanged = isSuperAdmin && !isSamePermissions(savedPermissions?.[PERFORMANCE_TABLE_KEY], draftPermissions?.[PERFORMANCE_TABLE_KEY])
     const pageViewChanges = Object.entries(draftPageViewPermissions).filter(([pageKey, viewPermission]) => savedPageViewPermissions?.[pageKey] !== viewPermission)
-    if (!changes.length && !dashboardVisibilityDirty && !performanceChanged && !pageViewChanges.length && !attendancePermissionsDirty && !employeeManagementDirty) return
+    if (!changes.length && !dashboardVisibilityDirty && !lowMandateAudienceDirty && !performanceChanged && !pageViewChanges.length && !attendancePermissionsDirty && !employeeManagementDirty) return
     setSavingPermissions(true)
     setError('')
     try {
       for (const change of changes) {
         await updateColumnPermission(change.tableName, change.columnKey, change.accessMode)
       }
-      if (dashboardVisibilityDirty) {
-        const data = await updateDashboardVisibility(dashboardRestricted)
+      if (dashboardVisibilityDirty || lowMandateAudienceDirty) {
+        const data = await updateDashboardVisibility({ restrictNonAdminToSelf: dashboardRestricted, lowMandateNotificationAudience: lowMandateAudience })
         const value = data.restrictNonAdminToSelf !== false
         setDashboardRestricted(value)
         setSavedDashboardRestricted(value)
+        const audience = ['everyone', 'admins', 'super_admins'].includes(data.lowMandateNotificationAudience) ? data.lowMandateNotificationAudience : 'super_admins'
+        setLowMandateAudience(audience)
+        setSavedLowMandateAudience(audience)
       }
       if (performanceChanged) {
         const data = await savePerformancePermissions(draftPermissions?.[PERFORMANCE_TABLE_KEY])
@@ -620,10 +637,14 @@ export default function AdminPage() {
         </div>
       </Section>
 
-      <Section title="Dashboard Consultant Visibility" description="Control whether non-admin users can view only their own dashboard." icon={Shield}>
+      <Section title="Dashboard Consultant Visibility" description="Control consultant dashboard scope and low-mandate notification recipients." icon={Shield}>
         <div className="admin-advanced-card admin-dashboard-visibility">
           <div><h3>Restrict dashboard to own consultant data for non-admin users</h3><p>When enabled, only Admins/Super Admins can view Overall dashboard and other consultants’ dashboards.</p></div>
           <button className={`admin-ios-switch${dashboardRestricted ? ' is-on' : ''}`} type="button" role="switch" aria-checked={dashboardRestricted} aria-label="Restrict dashboard to own consultant data for non-admin users" disabled={savingPermissions} onClick={() => setDashboardRestricted(current => !current)}><span /></button>
+        </div>
+        <div className="admin-advanced-card admin-low-mandate-audience">
+          <div><h3>Less than 5 mandates notifications</h3><p>Choose whether these allocation warnings are sent to everyone, all Admins, or only Super Admins.</p></div>
+          <AdminPermissionPicker value={lowMandateAudience} options={LOW_MANDATE_AUDIENCE_OPTIONS} disabled={savingPermissions} onChange={setLowMandateAudience} toneForValue={value => value === 'everyone' ? 'is-everyone' : value === 'admins' ? 'is-disabled' : 'is-hidden'} />
         </div>
       </Section>
 

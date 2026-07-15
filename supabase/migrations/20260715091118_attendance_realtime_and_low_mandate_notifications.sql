@@ -18,6 +18,15 @@ end $$;
 -- jobs table stores those assignments by profile name in jobs.consultants.
 -- Members of admin_users (Admins and Super Admins) are not low-allocation
 -- consultants, and team-lead-only assignments are intentionally not counted.
+insert into public.app_settings (key, value)
+values ('low_mandate_notification_audience', '"super_admins"'::jsonb)
+on conflict (key) do nothing;
+
+update public.notifications
+set action_url = '/dashboard/jobs'
+where action_type = 'low_mandate_allocation'
+  and action_url = '/dashboard/mandates';
+
 create table if not exists public.low_mandate_allocation_state (
   consultant_user_id uuid primary key references auth.users(id) on delete cascade,
   active_mandate_count integer not null default 0 check (active_mandate_count >= 0),
@@ -40,44 +49,61 @@ create unique index if not exists notifications_low_mandate_active_unique_idx
   where action_type = 'low_mandate_allocation'
     and cleared_at is null;
 
-create or replace function public.low_mandate_active_super_admins()
+create or replace function public.low_mandate_notification_recipients()
 returns table (recipient_user_id uuid)
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select distinct resolved.recipient_user_id
-  from (
-    select
-      admin_user.role,
-      admin_user.is_super_admin,
-      coalesce(
-        admin_user.user_id,
-        case
-          when profile.user_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-            then profile.user_id::uuid
-          else null
+  with audience as (
+    select coalesce(
+      (
+        select case
+          when setting.value #>> '{}' in ('everyone', 'admins', 'super_admins') then setting.value #>> '{}'
+          else 'super_admins'
         end
-      ) as recipient_user_id
-    from public.admin_users admin_user
-    left join public.user_profiles profile
-      on admin_user.user_id::text = profile.user_id
-      or (
-        admin_user.user_id is null
-        and lower(btrim(coalesce(admin_user.email, ''))) = lower(btrim(coalesce(profile.email, '')))
-      )
-  ) resolved
-  join auth.users auth_user
-    on auth_user.id = resolved.recipient_user_id
+        from public.app_settings setting
+        where setting.key = 'low_mandate_notification_audience'
+      ),
+      'super_admins'
+    ) as value
+  )
+  select auth_user.id as recipient_user_id
+  from auth.users auth_user
+  join public.user_profiles profile
+    on profile.user_id = auth_user.id::text
   left join public.employee_statuses employee_status
-    on employee_status.user_id = resolved.recipient_user_id::text
-  where (resolved.role = 'super_admin' or resolved.is_super_admin is true)
-    and resolved.recipient_user_id is not null
-    and coalesce(employee_status.status, 'active') <> 'inactive';
+    on employee_status.user_id = auth_user.id::text
+  cross join audience
+  where coalesce(employee_status.status, 'active') <> 'inactive'
+    and (
+      audience.value = 'everyone'
+      or (
+        audience.value = 'admins'
+        and exists (
+          select 1
+          from public.admin_users admin_user
+          where admin_user.user_id = auth_user.id
+            or lower(btrim(coalesce(admin_user.email, ''))) = lower(btrim(coalesce(auth_user.email, '')))
+        )
+      )
+      or (
+        audience.value = 'super_admins'
+        and exists (
+          select 1
+          from public.admin_users admin_user
+          where (
+            admin_user.user_id = auth_user.id
+            or lower(btrim(coalesce(admin_user.email, ''))) = lower(btrim(coalesce(auth_user.email, '')))
+          )
+          and (admin_user.role = 'super_admin' or admin_user.is_super_admin is true)
+        )
+      )
+    );
 $$;
 
-revoke all on function public.low_mandate_active_super_admins() from public, anon, authenticated;
+revoke all on function public.low_mandate_notification_recipients() from public, anon, authenticated;
 
 create or replace function public.sync_low_mandate_notifications_for_recipient(
   p_recipient_user_id uuid,
@@ -91,7 +117,7 @@ as $$
 begin
   if p_recipient_user_id is null or not exists (
     select 1
-    from public.low_mandate_active_super_admins() recipient
+    from public.low_mandate_notification_recipients() recipient
     where recipient.recipient_user_id = p_recipient_user_id
   ) then
     return;
@@ -122,7 +148,7 @@ begin
     'low_mandate_allocation',
     'consultant',
     state.consultant_user_id,
-    '/dashboard/mandates',
+    '/dashboard/jobs',
     'low_mandate_allocation:' || state.consultant_user_id || ':' || state.episode_id || ':' || p_recipient_user_id || ':' || coalesce(nullif(p_key_suffix, ''), 'current')
   from public.low_mandate_allocation_state state
   join public.user_profiles profile
@@ -143,6 +169,90 @@ end;
 $$;
 
 revoke all on function public.sync_low_mandate_notifications_for_recipient(uuid, text) from public, anon, authenticated;
+
+create or replace function public.reconcile_low_mandate_notification_audience()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.key <> 'low_mandate_notification_audience' then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' then
+    if old.value is not distinct from new.value then
+      return new;
+    end if;
+  end if;
+
+  update public.notifications notification
+  set status = 'read',
+      read_at = coalesce(notification.read_at, now()),
+      cleared_at = coalesce(notification.cleared_at, now())
+  where notification.action_type = 'low_mandate_allocation'
+    and notification.cleared_at is null
+    and not exists (
+      select 1
+      from public.low_mandate_notification_recipients() recipient
+      where recipient.recipient_user_id = notification.recipient_user_id
+    );
+
+  insert into public.notifications (
+    recipient_user_id,
+    role_type,
+    title,
+    message,
+    status,
+    action_type,
+    entity_type,
+    entity_id,
+    action_url,
+    idempotency_key
+  )
+  select
+    recipient.recipient_user_id,
+    'system',
+    'Low mandate allocation',
+    case state.active_mandate_count
+      when 0 then btrim(profile.name) || ' currently has no active mandates assigned. Consider assigning additional mandates.'
+      when 1 then btrim(profile.name) || ' currently has only 1 active mandate assigned. Consider assigning additional mandates.'
+      else btrim(profile.name) || ' currently has only ' || state.active_mandate_count || ' active mandates assigned. Consider assigning additional mandates.'
+    end,
+    'pending',
+    'low_mandate_allocation',
+    'consultant',
+    state.consultant_user_id,
+    '/dashboard/jobs',
+    'low_mandate_allocation:' || state.consultant_user_id || ':' || state.episode_id || ':' || recipient.recipient_user_id || ':audience:' || gen_random_uuid()
+  from public.low_mandate_allocation_state state
+  join public.user_profiles profile
+    on profile.user_id = state.consultant_user_id::text
+  cross join public.low_mandate_notification_recipients() recipient
+  where state.condition_active
+    and state.active_mandate_count < 5
+    and not exists (
+      select 1
+      from public.notifications existing
+      where existing.recipient_user_id = recipient.recipient_user_id
+        and existing.entity_id = state.consultant_user_id
+        and existing.action_type = 'low_mandate_allocation'
+        and existing.cleared_at is null
+    )
+  on conflict do nothing;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.reconcile_low_mandate_notification_audience() from public, anon, authenticated;
+
+drop trigger if exists app_settings_reconcile_low_mandate_audience on public.app_settings;
+create trigger app_settings_reconcile_low_mandate_audience
+  after insert or update of value
+  on public.app_settings
+  for each row
+  execute function public.reconcile_low_mandate_notification_audience();
 
 create or replace function public.reconcile_low_mandate_allocation(p_consultant_user_id uuid)
 returns void
@@ -273,9 +383,9 @@ begin
       'low_mandate_allocation',
       'consultant',
       p_consultant_user_id,
-      '/dashboard/mandates',
+      '/dashboard/jobs',
       'low_mandate_allocation:' || p_consultant_user_id || ':' || v_episode_id || ':' || recipient.recipient_user_id || ':current'
-    from public.low_mandate_active_super_admins() recipient
+    from public.low_mandate_notification_recipients() recipient
     where not exists (
       select 1
       from public.notifications existing
@@ -409,8 +519,6 @@ as $$
 declare
   v_old_user_id uuid;
   v_new_user_id uuid;
-  v_old_super_admin boolean := false;
-  v_new_super_admin boolean := false;
 begin
   if tg_op in ('UPDATE', 'DELETE') then
     v_old_user_id := old.user_id;
@@ -426,7 +534,6 @@ begin
         and profile.user_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
       limit 1;
     end if;
-    v_old_super_admin := old.role = 'super_admin' or old.is_super_admin is true;
   end if;
 
   if tg_op in ('INSERT', 'UPDATE') then
@@ -443,33 +550,46 @@ begin
         and profile.user_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
       limit 1;
     end if;
-    v_new_super_admin := new.role = 'super_admin' or new.is_super_admin is true;
   end if;
 
   -- Admin membership also changes whether this user is eligible for a
-  -- low-allocation warning. Reconcile before syncing Super Admin recipients so
-  -- a newly promoted Super Admin cannot receive a warning about themselves.
+  -- low-allocation warning. Reconcile the subject first, then independently
+  -- apply the configured recipient audience to the affected account.
   if v_old_user_id is not null then
     perform public.reconcile_low_mandate_allocation(v_old_user_id);
+    if exists (
+      select 1
+      from public.low_mandate_notification_recipients() recipient
+      where recipient.recipient_user_id = v_old_user_id
+    ) then
+      perform public.sync_low_mandate_notifications_for_recipient(v_old_user_id, gen_random_uuid()::text);
+    else
+      update public.notifications
+      set status = 'read',
+          read_at = coalesce(read_at, now()),
+          cleared_at = coalesce(cleared_at, now())
+      where recipient_user_id = v_old_user_id
+        and action_type = 'low_mandate_allocation'
+        and cleared_at is null;
+    end if;
   end if;
   if v_new_user_id is not null and v_new_user_id is distinct from v_old_user_id then
     perform public.reconcile_low_mandate_allocation(v_new_user_id);
-  end if;
-
-  if v_old_super_admin and v_old_user_id is not null
-    and (not v_new_super_admin or v_new_user_id is distinct from v_old_user_id) then
-    update public.notifications
-    set status = 'read',
-        read_at = coalesce(read_at, now()),
-        cleared_at = coalesce(cleared_at, now())
-    where recipient_user_id = v_old_user_id
-      and action_type = 'low_mandate_allocation'
-      and cleared_at is null;
-  end if;
-
-  if v_new_super_admin and v_new_user_id is not null
-    and (not v_old_super_admin or v_new_user_id is distinct from v_old_user_id) then
-    perform public.sync_low_mandate_notifications_for_recipient(v_new_user_id, gen_random_uuid()::text);
+    if exists (
+      select 1
+      from public.low_mandate_notification_recipients() recipient
+      where recipient.recipient_user_id = v_new_user_id
+    ) then
+      perform public.sync_low_mandate_notifications_for_recipient(v_new_user_id, gen_random_uuid()::text);
+    else
+      update public.notifications
+      set status = 'read',
+          read_at = coalesce(read_at, now()),
+          cleared_at = coalesce(cleared_at, now())
+      where recipient_user_id = v_new_user_id
+        and action_type = 'low_mandate_allocation'
+        and cleared_at is null;
+    end if;
   end if;
 
   if tg_op = 'DELETE' then
@@ -489,7 +609,7 @@ create trigger admin_users_reconcile_low_mandate_allocation
   execute function public.reconcile_low_mandates_after_admin_change();
 
 -- One set-based initial evaluation. Existing low-allocation consultants receive
--- one warning per currently active Super Admin without an application N+1 scan.
+-- one warning per currently configured recipient without an application N+1 scan.
 with active_consultants as (
   select case
     when profile.user_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
@@ -608,12 +728,12 @@ select
   'low_mandate_allocation',
   'consultant',
   state.consultant_user_id,
-  '/dashboard/mandates',
+  '/dashboard/jobs',
   'low_mandate_allocation:' || state.consultant_user_id || ':' || state.episode_id || ':' || recipient.recipient_user_id || ':current'
 from public.low_mandate_allocation_state state
 join public.user_profiles profile
   on profile.user_id = state.consultant_user_id::text
-cross join public.low_mandate_active_super_admins() recipient
+cross join public.low_mandate_notification_recipients() recipient
 where state.condition_active
   and state.active_mandate_count < 5
   and not exists (

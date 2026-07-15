@@ -25,6 +25,9 @@ const isVisibleNotification = (item) => (
   !String(item.title || '').startsWith('[cleared] ') &&
   (item.action_type !== 'client_follow_up_due' || String(item.follow_up_date || '') === todayIndia())
 )
+const notificationActionUrl = (value) => String(value || '')
+  .replace(/^\/dashboard\/mandates(?=\/|\?|$)/, '/dashboard/jobs')
+  .replace(/^\/attendance(?=\/|\?|$)/, '/dashboard/attendance')
 
 function playPing() {
   try {
@@ -54,6 +57,7 @@ export default function NotificationBell() {
   const [toast, setToast] = useState(null)
   const [toastPaused, setToastPaused] = useState(false)
   const [clearingRead, setClearingRead] = useState(false)
+  const [actionError, setActionError] = useState('')
   const rootRef = useRef(null)
   const toastedIdsRef = useRef(new Set())
 
@@ -67,14 +71,16 @@ export default function NotificationBell() {
 
   const loadNotifications = useCallback(async () => {
     if (!isAuthenticated) return
-    const res = await apiFetch('/api/notifications')
-    const data = await res.json().catch(() => ({}))
-    if (res.ok) {
+    try {
+      const res = await apiFetch('/api/notifications')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Unable to load notifications.')
       const rows = data.data || []
+      setActionError('')
       setNotifications(rows)
-      rows
-        .filter(item => item.action_type === 'client_follow_up_due')
-        .forEach(showNotificationToast)
+      rows.filter(item => item.action_type === 'client_follow_up_due').forEach(showNotificationToast)
+    } catch (error) {
+      setActionError(error.message || 'Unable to load notifications.')
     }
   }, [isAuthenticated, showNotificationToast])
 
@@ -144,14 +150,19 @@ export default function NotificationBell() {
     const optimistic = { ...notification, status: 'read', read_at: readAt }
     setNotifications(current => current.map(item => item.id === notification.id ? { ...item, ...optimistic } : item))
     if (toast?.id === notification.id) setToast(null)
-    const res = await apiFetch(`/api/notifications/${notification.id}/read`, { method: 'PATCH' })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
+    setActionError('')
+    try {
+      const res = await apiFetch(`/api/notifications/${notification.id}/read`, { method: 'PATCH' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Unable to mark this notification as read.')
+      const next = data.data || optimistic
+      setNotifications(current => current.map(item => item.id === notification.id ? { ...item, ...next } : item))
+      return true
+    } catch (error) {
       setNotifications(previous)
-      return
+      setActionError(error.message || 'Unable to mark this notification as read.')
+      return false
     }
-    const next = data.data || optimistic
-    setNotifications(current => current.map(item => item.id === notification.id ? { ...item, ...next } : item))
   }
 
   const clearRead = async () => {
@@ -160,13 +171,15 @@ export default function NotificationBell() {
     const previous = notifications
     setNotifications([])
     setClearingRead(true)
+    setActionError('')
     try {
       const res = await apiFetch('/api/notifications/read', { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to clear notifications.')
       setOpen(false)
-    } catch {
+    } catch (error) {
       setNotifications(previous)
+      setActionError(error.message || 'Unable to clear notifications.')
     } finally {
       setClearingRead(false)
     }
@@ -174,7 +187,8 @@ export default function NotificationBell() {
 
   const openNotification = async (notification) => {
     if (notification.status === 'pending') await markRead(notification)
-    if (notification.action_url) navigate(notification.action_url.replace(/^\/attendance/, '/dashboard/attendance'))
+    const actionUrl = notificationActionUrl(notification.action_url)
+    if (actionUrl) navigate(actionUrl)
     setOpen(false)
   }
 
@@ -195,6 +209,7 @@ export default function NotificationBell() {
               {clearingRead ? 'Clearing...' : 'Clear All'}
             </button>
           </div>
+          {actionError && <div className="notification-action-error" role="status">{actionError}</div>}
           {notifications.length ? notifications.map(item => (
             <div className={`notification-item ${item.status === 'read' ? 'is-read' : ''}`} key={item.id} onClick={() => openNotification(item)} role={item.action_url ? 'button' : undefined} tabIndex={item.action_url ? 0 : undefined}>
               <div className="notification-item-title">{item.title || 'Notification'}</div>

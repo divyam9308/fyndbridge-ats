@@ -80,7 +80,7 @@ test('job and employee changes trigger recalculation and initial evaluation is s
   assert.match(migration, /after insert or delete or update of consultants, mandate_status, status[\s\S]*on public\.jobs/i)
   assert.match(migration, /after insert or update of status[\s\S]*on public\.employee_statuses/i)
   assert.match(migration, /employee_status\.status = 'active'/)
-  assert.match(migration, /cross join public\.low_mandate_active_super_admins\(\)/)
+  assert.match(migration, /cross join public\.low_mandate_notification_recipients\(\)/)
   assert.match(migration, /with active_consultants as \([\s\S]*active_counts as \(/)
   assert.match(migration, /active_consultants as \([\s\S]*not exists \([\s\S]*from public\.admin_users admin_user/)
   assert.match(migration, /Admin membership also changes whether this user is eligible/)

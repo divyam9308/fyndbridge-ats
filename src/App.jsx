@@ -69,11 +69,15 @@ function App() {
             <Route path="cvs" element={<Navigate to="/dashboard/candidates" replace />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="profile" element={<ProfileSettingsPage />} />
+            <Route path="mandates" element={<Navigate to="/dashboard/jobs" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
           <Route path="/invoice" element={<RequireAuth><Suspense fallback={<AuthenticatedShellSkeleton />}><AuthenticatedShell /></Suspense></RequireAuth>}>
             <Route index element={<PageViewGuard pageKey="invoice"><InvoicePage /></PageViewGuard>} />
             <Route path="entities/:entityId" element={<PageViewGuard pageKey="invoice"><InvoiceEntityDetailPage /></PageViewGuard>} />
+            <Route path="*" element={<Navigate to="/invoice" replace />} />
           </Route>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

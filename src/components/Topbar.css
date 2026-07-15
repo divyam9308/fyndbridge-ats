@@ -177,6 +177,17 @@
   background: rgba(0, 18, 100, 0.06);
 }
 
+.notification-action-error {
+  margin: 0 4px 8px;
+  border: 1px solid #f4c7c3;
+  border-radius: 10px;
+  background: #fff4f2;
+  color: #b42318;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .notification-item {
   border: 1px solid #EEF1F6;
   border-radius: 12px;
@@ -269,4 +280,3 @@
     display: none;
   }
 }
-

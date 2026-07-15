@@ -25,8 +25,9 @@ export async function updatePageViewPermission(pageKey, viewPermission) {
 }
 
 export async function fetchDashboardVisibility() { return cachedApiJson('/api/admin/dashboard-visibility', {}, { ttlMs: 30000 }) }
-export async function updateDashboardVisibility(restrictNonAdminToSelf) {
-  const result = await json(await apiFetch('/api/admin/dashboard-visibility', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ restrictNonAdminToSelf }) }))
+export async function updateDashboardVisibility(settings) {
+  const body = typeof settings === 'object' && settings !== null ? settings : { restrictNonAdminToSelf: settings }
+  const result = await json(await apiFetch('/api/admin/dashboard-visibility', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }))
   invalidateApiJsonCache('/api/admin')
   return result
 }

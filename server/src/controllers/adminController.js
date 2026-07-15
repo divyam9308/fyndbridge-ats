@@ -255,7 +255,7 @@ async function pageViewPermissions(req, res) {
 async function dashboardVisibility(req, res) {
   try {
     if (!(await isAdmin(req.user))) return res.status(403).json({ error: 'Admin required' })
-    if (req.method === 'PATCH') return res.json(await setDashboardVisibility(req.body?.restrictNonAdminToSelf))
+    if (req.method === 'PATCH') return res.json(await setDashboardVisibility(req.body || {}))
     return res.json(await getDashboardVisibility())
   } catch (err) { return sendError(res, err) }
 }
