@@ -723,6 +723,9 @@ export default function CandidatesPage() {
   const ensureCandidateClient = async (candidate) => candidate
 
   const filtered = candidates
+  const hasActiveCandidateFilters = filterJob !== 'All' || Boolean(aiFilters) || Boolean(
+    dashboardFilters && Object.values(dashboardFilters).some(value => String(value || '').trim())
+  )
 
   const visibleCandidates = useMemo(() => {
     const mobileGroups = {}
@@ -2221,10 +2224,34 @@ export default function CandidatesPage() {
             </table>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon"><Users size={28} color="var(--gold)" strokeWidth={1.5} /></div>
-            <div className="empty-state-title">No candidates match your filters</div>
-            <div className="empty-state-desc">Try adjusting your filters or add a new candidate.</div>
+          <div className="table-wrapper candidates-table-scroll">
+            <table className="data-table candidates-master-table candidates-table table-empty-table" aria-label="Candidates" style={{ minWidth: candidateTableMinWidth }}>
+              <colgroup>
+                {activeColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}
+              </colgroup>
+              <thead>
+                <tr>
+                  {activeColumns.map(column => <th key={column.key}>{column.label}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="table-empty-row">
+                  <td className="table-empty-cell" colSpan={Math.max(activeColumns.length, 1)}>
+                    <div className="empty-state" role="status">
+                      <div className="empty-state-icon"><Users size={28} color="var(--gold)" strokeWidth={1.5} /></div>
+                      <div className="empty-state-title">
+                        {hasActiveCandidateFilters ? 'No candidates match your filters' : 'No candidates found'}
+                      </div>
+                      <div className="empty-state-desc">
+                        {hasActiveCandidateFilters
+                          ? 'Try changing or clearing the filters to see more candidates.'
+                          : 'Add a candidate to get started.'}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="table-wrapper candidates-table-scroll">

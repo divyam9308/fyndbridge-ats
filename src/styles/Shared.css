@@ -772,10 +772,8 @@
   height: auto;
   overflow: visible;
 }
-.candidates-table-card > .empty-state {
-  min-height: calc(620px - 2px);
-}
-.table-loading-table {
+.table-loading-table,
+.table-empty-table {
   height: calc(620px - 2px);
 }
 .data-table .table-loading-cell {
@@ -784,6 +782,14 @@
   border-bottom: 0;
 }
 .data-table .table-loading-row:hover {
+  background: transparent;
+}
+.data-table .table-empty-cell {
+  height: 100%;
+  padding: 0;
+  border-bottom: 0;
+}
+.data-table .table-empty-row:hover {
   background: transparent;
 }
 .table-inline-loader {

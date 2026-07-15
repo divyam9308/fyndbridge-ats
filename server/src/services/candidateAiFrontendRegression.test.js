@@ -40,3 +40,13 @@ test('stale or failed candidate requests cannot erase a newer successful result 
   assert.doesNotMatch(load, /setCandidates\(\[\]\)/)
   assert.doesNotMatch(load, /setTotalCandidates\(0\)/)
 })
+
+test('an empty candidate result keeps the table visible and shows a full-width message row', () => {
+  const emptyBranch = between(') : filtered.length === 0 ? (', ') : (')
+  assert.match(emptyBranch, /<table[\s\S]*aria-label="Candidates"/)
+  assert.match(emptyBranch, /<thead>[\s\S]*activeColumns\.map/)
+  assert.match(emptyBranch, /<tbody>[\s\S]*className="table-empty-row"/)
+  assert.match(emptyBranch, /colSpan=\{Math\.max\(activeColumns\.length, 1\)\}/)
+  assert.match(emptyBranch, /No candidates match your filters/)
+  assert.match(emptyBranch, /No candidates found/)
+})
