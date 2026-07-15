@@ -1,0 +1,67 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const root = path.resolve(__dirname, '../../..')
+const clientController = fs.readFileSync(path.join(root, 'server/src/controllers/clientController.js'), 'utf8')
+const mandateController = fs.readFileSync(path.join(root, 'server/src/controllers/jobController.js'), 'utf8')
+const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20260715184934_client_mandate_ai_filter_views.sql'), 'utf8')
+
+function functionSource(source, name, nextName) {
+  const start = source.indexOf(`async function ${name}`)
+  const functionEnd = source.indexOf(`async function ${nextName}`, start + 1)
+  const end = functionEnd >= 0 ? functionEnd : source.indexOf(nextName, start + 1)
+  assert.ok(start >= 0 && end > start, `${name} must precede ${nextName}`)
+  return source.slice(start, end)
+}
+
+test('Client persisted intent is permission-scoped, revalidated, resolved and compiled before exact pagination', () => {
+  const source = functionSource(clientController, 'listClients', 'buildClientFilters')
+  assert.match(source, /allowedClientFilterFields\(req\.user\)/)
+  assert.match(source, /validatePersistedClientFilters\(rawAiFilters, allowedFields\)/)
+  assert.match(source, /clientExecutionFilter\(validatedAiFilters, \{ allowedFields \}\)/)
+  assert.match(source, /resolveEntityFilterReferences\('clients'/)
+  assert.match(source, /client_ai_filter_rows/)
+  assert.match(source, /select\('\*', \{ count: paginate \? 'exact'/)
+  assert.ok(source.indexOf('clientAiFilter.compileAst') < source.indexOf('query.range(from, to)'))
+  assert.ok(source.indexOf('query.range(from, to)') < source.indexOf('await query'))
+  assert.match(source, /\.in\('client_group_id', groupIds\)/)
+  assert.doesNotMatch(source, /applySharedFilters|applyQueryFilters|localAiFilter/)
+})
+
+test('Mandate persisted intent preserves exact consultant arrays and semantic range filtering before pagination', () => {
+  const source = functionSource(mandateController, 'listJobs', 'getJob')
+  assert.match(source, /allowedMandateFilterFields\(req\.user\)/)
+  assert.match(source, /validatePersistedMandateFilters\(rawAiFilters, allowedFields\)/)
+  assert.match(source, /mandateExecutionFilter\(validatedAiFilters, \{ allowedFields \}\)/)
+  assert.match(source, /resolveEntityFilterReferences\('mandates'/)
+  assert.match(source, /mandate_ai_filter_rows/)
+  assert.ok(source.indexOf('mandateAiFilter.compileAst(aiFilters.root)') < source.indexOf('query.range(from, to)'))
+  assert.ok(source.indexOf('query.range(from, to)') < source.indexOf('await query'))
+  assert.doesNotMatch(source, /applySharedFilters|applyQueryFilters|localAiFilter|rows\.slice\(/)
+})
+
+test('Client and Mandate POST endpoints use their one-call v2 parsers and validate reference executability', () => {
+  const clients = functionSource(clientController, 'buildClientFilters', 'notifyClientConsultantAssignment')
+  const mandates = functionSource(mandateController, 'buildJobFilters', 'module.exports')
+  assert.match(clients, /parseClientIntent\(prompt, \{ allowedFields \}\)/)
+  assert.match(clients, /clientExecutionFilter/)
+  assert.match(clients, /resolveEntityFilterReferences\('clients'/)
+  assert.match(mandates, /parseMandateIntent\(prompt, \{ allowedFields \}\)/)
+  assert.match(mandates, /mandateExecutionFilter/)
+  assert.match(mandates, /resolveEntityFilterReferences\('mandates'/)
+  assert.doesNotMatch(`${clients}\n${mandates}`, /parseAiFilters|validateAiFilters/)
+})
+
+test('backend-only filter projections are security-invoker, service-role-only and index exact array/date paths', () => {
+  assert.match(migration, /client_ai_filter_rows\s*\nwith \(security_invoker = true\)/)
+  assert.match(migration, /mandate_ai_filter_rows\s*\nwith \(security_invoker = true\)/)
+  assert.match(migration, /where client\.id = client\.client_group_id/)
+  assert.match(migration, /range_agg\(daterange/)
+  assert.match(migration, /jobs_consultants_gin_idx[\s\S]*using gin \(consultants\)/)
+  assert.match(migration, /revoke all on public\.client_ai_filter_rows from public, anon, authenticated/)
+  assert.match(migration, /grant select on public\.mandate_ai_filter_rows to service_role/)
+  assert.doesNotMatch(migration, /item\.email\b/)
+  assert.match(migration, /to_jsonb\(item\) ->> 'email'/)
+})

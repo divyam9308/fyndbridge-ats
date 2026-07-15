@@ -44,12 +44,12 @@ select
 from public.clients as client
 left join lateral (
   select
-    string_agg(distinct nullif(btrim(coalesce(item.contact_person, item.contact, '')), ''), ' ') as contact_person_search,
-    string_agg(distinct nullif(btrim(coalesce(item.mobile, item.phone, '')), ''), ' ') as mobile_search,
-    string_agg(distinct nullif(btrim(coalesce(item.email, item.email_id, '')), ''), ' ') as email_search,
-    string_agg(distinct nullif(btrim(coalesce(item.linkedin, '')), ''), ' ') as linkedin_search,
-    string_agg(distinct nullif(btrim(coalesce(item.designation, '')), ''), ' ') as designation_search,
-    string_agg(distinct nullif(btrim(coalesce(item.comments, item.notes, '')), ''), ' ') as comments_search
+    string_agg(distinct nullif(btrim(coalesce(to_jsonb(item) ->> 'contact_person', to_jsonb(item) ->> 'contact', '')), ''), ' ') as contact_person_search,
+    string_agg(distinct nullif(btrim(coalesce(to_jsonb(item) ->> 'mobile', to_jsonb(item) ->> 'phone', '')), ''), ' ') as mobile_search,
+    string_agg(distinct nullif(btrim(coalesce(to_jsonb(item) ->> 'email', to_jsonb(item) ->> 'email_id', '')), ''), ' ') as email_search,
+    string_agg(distinct nullif(btrim(coalesce(to_jsonb(item) ->> 'linkedin', '')), ''), ' ') as linkedin_search,
+    string_agg(distinct nullif(btrim(coalesce(to_jsonb(item) ->> 'designation', '')), ''), ' ') as designation_search,
+    string_agg(distinct nullif(btrim(coalesce(to_jsonb(item) ->> 'comments', to_jsonb(item) ->> 'notes', '')), ''), ' ') as comments_search
   from public.clients as item
   where item.client_group_id = client.id
 ) as contact_values on true

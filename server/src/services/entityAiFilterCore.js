@@ -10,6 +10,7 @@ const NODE_KEYS = Object.freeze({
   condition: new Set(['type', 'field', 'operator', 'value']),
   group: new Set(['type', 'combinator', 'children'])
 })
+const FIELD_TYPES = new Set(['text', 'email', 'phone', 'identifier', 'enum', 'number', 'money', 'date', 'boolean', 'availability', 'array', 'numeric_range'])
 
 const TEXT_OPERATORS = ['equals', 'not_equals', 'contains', 'not_contains', 'starts_with', 'ends_with', 'in', 'not_in', 'is_empty', 'is_not_empty']
 const ENUM_OPERATORS = ['equals', 'not_equals', 'in', 'not_in', 'is_empty', 'is_not_empty']
@@ -380,8 +381,11 @@ function createEntityFilter(config) {
   const label = clean(config.label) || 'entity'
   const aliasToField = new Map()
   for (const [name, meta] of Object.entries(registry)) {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || !meta || typeof meta !== 'object' || !Array.isArray(meta.operators)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || !meta || typeof meta !== 'object' || !FIELD_TYPES.has(meta.type) || !Array.isArray(meta.aliases) || !Array.isArray(meta.operators)) {
       throw new TypeError(`Invalid ${label} field registry entry: ${name}`)
+    }
+    if (meta.type === 'enum' && (!Array.isArray(meta.values) || !meta.values.length || meta.values.some(value => typeof value !== 'string' || !clean(value)))) {
+      throw new TypeError(`Invalid ${label} enum values configured for ${name}.`)
     }
     if (meta.type !== 'numeric_range' && (!Array.isArray(meta.columns) || !meta.columns.length)) {
       throw new TypeError(`No ${label} filter columns configured for ${name}.`)
@@ -461,7 +465,13 @@ function createEntityFilter(config) {
       if (raw && typeof raw === 'object' && !Array.isArray(raw)) throw invalid(label, `Invalid ${label} filter values.`)
       const source = Array.isArray(raw) ? raw : String(raw ?? '').split(',')
       if (!source.length || source.length > MAX_LIST_VALUES || (operator === 'between' && source.length !== 2)) throw invalid(label, `Invalid ${label} filter values.`)
-      const values = source.map(item => normalizeValue(meta, fieldName, operator === 'between' ? 'equals' : meta.type === 'array' ? 'contains' : 'equals', item, now))
+      const values = source.map((item, index) => {
+        if (operator === 'between' && meta.type === 'date' && typeof item === 'string') {
+          const period = relativeDateRange(item, now)
+          if (period) return period[index === 0 ? 0 : 1]
+        }
+        return normalizeValue(meta, fieldName, operator === 'between' ? 'equals' : meta.type === 'array' ? 'contains' : 'equals', item, now)
+      })
       if (values.some(item => item === null || item === '')) throw invalid(label, `Invalid ${label} filter values.`)
       if (operator === 'between' && values[0] > values[1]) throw invalid(label, `Invalid ${label} filter range.`)
       return values

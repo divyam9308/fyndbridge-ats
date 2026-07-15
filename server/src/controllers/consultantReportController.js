@@ -22,6 +22,14 @@ async function report(req, res) {
   }
 }
 
+async function exportPreview(req, res) {
+  try {
+    return res.json({ data: await reportService.getConsultantReportExport(req.user, req.query) })
+  } catch (error) {
+    return sendError(res, error)
+  }
+}
+
 async function mandates(req, res) {
   try {
     return res.json({ data: await reportService.getConsultantMandates(req.user, req.query) })
@@ -38,4 +46,4 @@ async function conversions(req, res) {
   }
 }
 
-module.exports = { conversions, mandates, options, report }
+module.exports = { conversions, exportPreview, mandates, options, report }

@@ -140,7 +140,7 @@ const notifyAiQuota = (message) => {
 
 const isSupportedIntentFilter = (filters) => {
   const mode = String(filters?.mode || '').trim().toLowerCase()
-  if (['ast', 'structured', 'hybrid'].includes(mode)) return Boolean(filters?.root)
+  if (['ast', 'structured', 'hybrid'].includes(mode)) return Boolean(filters?.root) || (mode === 'structured' && Array.isArray(filters?.sort) && filters.sort.length > 0)
   return mode === 'keyword' && typeof filters?.search_text === 'string' && Boolean(filters.search_text.trim())
 }
 

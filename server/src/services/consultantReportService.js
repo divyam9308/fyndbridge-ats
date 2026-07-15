@@ -6,6 +6,7 @@ const { getFinancialYearForDate, localDate, addDays } = require('./attendanceUti
 const { buildAttendancePeriodSummary } = require('./attendancePeriodSummary')
 const { buildActiveProfiles } = require('./teamAttendanceToday')
 const { aggregateAttendance, attendancePayload } = require('./consultantReportAttendance')
+const { buildConsultantReportWorkbook } = require('./consultantReportWorkbook')
 const {
   OVERALL_CONSULTANT_KEY,
   canViewOverallConsultantReport,
@@ -407,6 +408,10 @@ async function getConsultantReport(user, query) {
     loadFacts(params, access),
     loadAttendance(user, access.target, params)
   ])
+  return buildReportResponse({ params, access, user, facts, attendanceResult })
+}
+
+function buildReportResponse({ params, access, user, facts, attendanceResult }) {
   const warnings = [...facts.warnings, ...attendanceResult.warnings]
   if (params.endDateWasCapped) warnings.push({ code: 'future_end_date_capped', count: 1, message: 'The To date was capped at today.' })
   const generatedAt = new Date().toISOString()
@@ -425,6 +430,26 @@ async function getConsultantReport(user, query) {
     positiveOutcomes: facts.positiveOutcomes,
     attendance: attendanceResult.attendance,
     warnings
+  }
+}
+
+async function getConsultantReportExport(user, query) {
+  const params = parseReportRequest(query, 'main')
+  const access = await reportAccess(user, params.consultantUserId)
+  const [facts, attendanceResult] = await Promise.all([
+    loadFacts(params, access),
+    loadAttendance(user, access.target, params)
+  ])
+  const report = buildReportResponse({ params, access, user, facts, attendanceResult })
+  const workbook = await buildConsultantReportWorkbook({
+    report,
+    mandates: access.target.isOverall ? [] : facts.mandates
+  })
+  return {
+    fileName: workbook.fileName,
+    mimeType: workbook.mimeType,
+    contentBase64: workbook.buffer.toString('base64'),
+    preview: workbook.preview
   }
 }
 
@@ -447,6 +472,7 @@ module.exports = {
   getConsultantConversions,
   getConsultantMandates,
   getConsultantOptions,
+  getConsultantReportExport,
   getConsultantReport,
   reportAccess,
   resolveReportAccess

@@ -37,6 +37,11 @@ export function getConsultantReport(filters, { signal } = {}) {
   return request(`?${params.toString()}`, { signal })
 }
 
+export function getConsultantReportExportPreview(filters, { signal } = {}) {
+  const params = reportParams(filters)
+  return request(`/export-preview?${params.toString()}`, { signal })
+}
+
 export function getConsultantReportRows(kind, filters, { signal } = {}) {
   const endpoint = kind === 'conversion' ? '/conversions' : '/mandates'
   const params = reportParams(filters)

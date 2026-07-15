@@ -9,8 +9,9 @@ function isUuid(value) {
 }
 
 function matchingProfile(profiles, value, label = 'Consultant') {
+  if (isUuid(value)) throw referenceError(`${label} must be entered by name.`)
   const wanted = normalizeWords(value)
-  if (!wanted || isUuid(wanted)) throw referenceError(`${label} must be entered by name.`)
+  if (!wanted) throw referenceError(`${label} must be entered by name.`)
   const available = (profiles || []).filter(profile => clean(profile.name))
   const exact = available.filter(profile => normalizeWords(profile.name) === wanted)
   const matches = exact.length

@@ -8,6 +8,7 @@ router.use(requirePageViewPermission('report'))
 router.get('/consultant/options', controller.options)
 router.get('/consultant/mandates', controller.mandates)
 router.get('/consultant/conversions', controller.conversions)
+router.get('/consultant/export-preview', controller.exportPreview)
 router.get('/consultant', controller.report)
 
 module.exports = router
