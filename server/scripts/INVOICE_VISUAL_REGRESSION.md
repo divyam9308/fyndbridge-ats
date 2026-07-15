@@ -45,7 +45,8 @@ uses the measured A4 adaptation encoded in the six fixture profiles:
 
 The hard gate checks one-page A4 structure, the case's measured major x/y rule
 coordinates, rule thicknesses, title/metadata/body font sizes, embedded fonts,
-logo resolution, selectable text, rupee glyphs, expected fixture text, stable
+logo resolution, selectable text, rupee glyphs, mixed-font currency baseline
+alignment, expected fixture text, stable
 text-anchor coordinates (including client values and issuer-detail rows),
 per-anchor font sizes, off-page or overlapping text, and off-page drawings.
 The complete client email is fitted into its cell instead of reproducing the

@@ -189,6 +189,7 @@ def span_matching(spans: list[dict], needle: str) -> dict | None:
 
 def extract_text_spans(page: fitz.Page) -> list[dict]:
     spans = []
+    line_index = 0
     for block in page.get_text("dict").get("blocks", []):
         if block.get("type") != 0:
             continue
@@ -199,8 +200,42 @@ def extract_text_spans(page: fitz.Page) -> list[dict]:
                     "font": span.get("font", ""),
                     "size": span.get("size", 0),
                     "bbox": list(span.get("bbox", (0, 0, 0, 0))),
+                    "origin": list(span.get("origin", (0, 0))),
+                    "line_index": line_index,
                 })
+            line_index += 1
     return spans
+
+
+def currency_baseline_assertions(spans: list[dict]) -> dict:
+    lines = {}
+    for span in spans:
+        lines.setdefault(span["line_index"], []).append(span)
+
+    checks = []
+    for line_index, line_spans in lines.items():
+        if not any("₹" in span["text"] for span in line_spans):
+            continue
+        visible_spans = [span for span in line_spans if span["text"].strip()]
+        baselines = [span["origin"][1] for span in visible_spans]
+        checks.append({
+            "line_index": line_index,
+            "text": "".join(span["text"] for span in visible_spans),
+            "span_baselines": baselines,
+            "max_error_points": max(baselines) - min(baselines) if baselines else None,
+        })
+
+    tolerance = 0.05
+    return {
+        "tolerance_points": tolerance,
+        "line_count": len(checks),
+        "max_error_points": max((item["max_error_points"] for item in checks), default=None),
+        "checks": checks,
+        "passed": bool(checks) and all(
+            item["max_error_points"] is not None and item["max_error_points"] <= tolerance
+            for item in checks
+        ),
+    }
 
 
 def map_reference_y_to_a4(value: float, profile: dict) -> float:
@@ -383,6 +418,13 @@ def inspect_pdf(pdf_path: Path, expected_text: list[str], dpi: int) -> tuple[dic
             "out_of_page_drawings": 0,
             "drawing_profile": {"vertical_points": [], "horizontal_points": [], "thickness_points": []},
             "text_spans": [],
+            "currency_baseline_assertions": {
+                "tolerance_points": 0.05,
+                "line_count": 0,
+                "max_error_points": None,
+                "checks": [],
+                "passed": False,
+            },
         }, Image.new("RGB", (1, 1), "white")
 
     rect = page.rect
@@ -406,6 +448,7 @@ def inspect_pdf(pdf_path: Path, expected_text: list[str], dpi: int) -> tuple[dic
 
     outside_text = 0
     text_spans = extract_text_spans(page)
+    currency_baselines = currency_baseline_assertions(text_spans)
     for span in text_spans:
         x0, y0, x1, y1 = span["bbox"]
         if x0 < -0.5 or y0 < -0.5 or x1 > rect.width + 0.5 or y1 > rect.height + 0.5:
@@ -450,6 +493,7 @@ def inspect_pdf(pdf_path: Path, expected_text: list[str], dpi: int) -> tuple[dic
         "out_of_page_drawings": outside_drawings,
         "drawing_profile": drawing_profile(page),
         "text_spans": text_spans,
+        "currency_baseline_assertions": currency_baselines,
     }
     return inspection, render_page(page, dpi)
 
@@ -511,8 +555,8 @@ def write_markdown(report: dict, output_path: Path) -> None:
         "",
         f"Target: A4 (595.28 x 841.89 pt), {report['dpi']} DPI",
         "",
-        "| Case | Page | Rule X error | Rule Y error | Text max error | Checked font max error | Diagnostic diff % | Structural result |",
-        "|---|---:|---:|---:|---:|---:|---:|---|",
+        "| Case | Page | Rule X error | Rule Y error | Text max error | Checked font max error | ₹ baseline error | Diagnostic diff % | Structural result |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for case in report["cases"]:
         structure = case["generated_structure"]
@@ -523,8 +567,9 @@ def write_markdown(report: dict, output_path: Path) -> None:
             case["text_anchor_assertions"]["max_y_error_points"] or 0,
         )
         font_error = case["text_anchor_assertions"]["max_checked_font_size_error_points"] or 0
+        currency_error = structure["currency_baseline_assertions"]["max_error_points"] or 0
         rows.append(
-            "| {id} | {width:.2f} x {height:.2f} | {x_error} | {y_error} | {text_error:.3f} | {font_error:.3f} | {percent:.6f}% | {result} |".format(
+            "| {id} | {width:.2f} x {height:.2f} | {x_error} | {y_error} | {text_error:.3f} | {font_error:.3f} | {currency_error:.3f} | {percent:.6f}% | {result} |".format(
                 id=case["id"],
                 width=structure["page_width_points"],
                 height=structure["page_height_points"],
@@ -532,6 +577,7 @@ def write_markdown(report: dict, output_path: Path) -> None:
                 y_error=f"{y_error:.3f}" if y_error is not None else "n/a",
                 text_error=text_error,
                 font_error=font_error,
+                currency_error=currency_error,
                 percent=case["pixel_difference"]["changed_percent"],
                 result="PASS" if case["passed"] else "FAIL",
             )
@@ -603,6 +649,7 @@ def main(args: argparse.Namespace) -> int:
             and generated_structure["largest_image_pixels"][1] >= 70
             and generated_structure["selectable_text_length"] > 0
             and generated_structure["has_rupee_symbol"]
+            and generated_structure["currency_baseline_assertions"]["passed"]
             and not generated_structure["missing_expected_text"]
             and generated_structure["out_of_page_text_spans"] == 0
             and not generated_structure["overlapping_text_pairs"]

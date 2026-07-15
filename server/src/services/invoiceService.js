@@ -500,9 +500,14 @@ function textBox(doc, text, x, y, width, height, options = {}) {
     let textX = x + paddingX
     if (options.align === 'right') textX += Math.max(0, usableWidth - measuredWidth)
     if (options.align === 'center') textX += Math.max(0, (usableWidth - measuredWidth) / 2)
+    doc.font(font).fontSize(size)
+    const baselineY = textY + (doc._font.ascender / 1000) * size
     currencySegments(content).forEach(segment => {
       const segmentFont = segment === '₹' ? symbolFont : font
-      doc.font(segmentFont).fontSize(size).fillColor(BLACK).text(segment, textX, textY, { lineBreak: false })
+      doc.font(segmentFont).fontSize(size).fillColor(BLACK).text(segment, textX, baselineY, {
+        lineBreak: false,
+        baseline: 'alphabetic'
+      })
       textX += doc.widthOfString(segment)
     })
     doc.restore()

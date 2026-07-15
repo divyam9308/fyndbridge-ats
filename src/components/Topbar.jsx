@@ -10,6 +10,7 @@ const pageTitles = {
   '/dashboard/candidates': { title: 'Candidates',  crumb: 'Home / Candidates' },
   '/dashboard/performance': { title: 'PMS', crumb: 'Home / PMS' },
   '/dashboard/attendance': { title: 'Attendance', crumb: 'Home / Attendance' },
+  '/dashboard/reports/consultant': { title: 'Report', crumb: 'Home / Report' },
   '/dashboard/user-manual': { title: 'User Manual', crumb: 'Home / User Manual' },
   '/dashboard/admin':      { title: 'Admin Panel', crumb: 'Home / Admin Panel' },
   '/dashboard/settings':   { title: 'Settings',    crumb: 'Home / Settings' },
