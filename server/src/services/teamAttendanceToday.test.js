@@ -41,12 +41,12 @@ test('today summary creates three mutually exclusive effective attendance catego
     ]
   })
 
-  assert.deepEqual(summary.present.map(row => row.user_id), ['present', 'corrected', 'pending-present'])
+  assert.deepEqual(summary.present.map(row => row.user_id), ['present', 'corrected', 'pending-present', 'clocked-in'])
   assert.deepEqual(summary.leave.map(row => [row.user_id, row.status]), [['leave', 'Leave'], ['half', 'Half Day Leave']])
   assert.deepEqual(summary.unmarked.map(row => row.user_id), ['unmarked', 'pending-unmarked'])
   const allIds = [...summary.present, ...summary.leave, ...summary.unmarked].map(row => row.user_id)
   assert.equal(new Set(allIds).size, allIds.length)
-  assert.ok(!allIds.includes('clocked-in'))
+  assert.ok(allIds.includes('clocked-in'))
 })
 
 test('holiday and weekly off are never classified as unmarked', () => {

@@ -57,7 +57,7 @@ function buildTodayAttendanceSummary({ date, profiles, attendanceRecords = [], a
     const leave = leaveByUserId.get(userId)
     const correction = correctionByUserId.get(userId)
 
-    if (['present', 'corrected'].includes(recordStatus)) {
+    if (['present', 'corrected', 'clocked in'].includes(recordStatus)) {
       summary.present.push(personFromProfile(profile, 'Present'))
       continue
     }

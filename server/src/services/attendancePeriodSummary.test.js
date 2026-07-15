@@ -98,3 +98,22 @@ test('attendance percentage has a safe zero denominator', () => {
   assert.equal(summary.kpis.attendance_percentage, 0)
   assert.ok(Number.isFinite(summary.kpis.attendance_percentage))
 })
+
+test('open clock-ins are present today and become not marked after midnight', () => {
+  const summary = buildAttendancePeriodSummary({
+    start: '2026-07-14',
+    end: '2026-07-15',
+    today: '2026-07-15',
+    records: [
+      { attendance_date: '2026-07-14', status: 'clocked_in', clock_in_at: '2026-07-14T04:00:00Z', clock_out_at: null, worked_minutes: 0 },
+      { attendance_date: '2026-07-15', status: 'clocked_in', clock_in_at: '2026-07-15T04:00:00Z', clock_out_at: null, worked_minutes: 0 }
+    ]
+  })
+
+  assert.equal(summary.kpis.present, 1)
+  assert.equal(summary.kpis.unmarked, 1)
+  assert.equal(summary.kpis.attendance_percentage, 50)
+  assert.equal(summary.records.find((record) => record.attendance_date === '2026-07-14').status, 'not_marked')
+  assert.equal(summary.records.find((record) => record.attendance_date === '2026-07-15').status, 'clocked_in')
+  assert.equal(summary.days.find((day) => day.date === '2026-07-14').record.clock_in_at, '2026-07-14T04:00:00Z')
+})

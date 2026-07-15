@@ -57,6 +57,7 @@ test('low mandate count is database-side, consultant-only, and serialized per co
     migration.indexOf('create or replace function public.reconcile_low_mandates_after_job_change')
   )
   assert.doesNotMatch(reconcile, /team_lead/)
+  assert.match(reconcile, /not exists \([\s\S]*from public\.admin_users admin_user/)
   assert.match(migration, /notifications_low_mandate_active_unique_idx/)
   assert.match(migration, /on conflict do nothing/i)
 })
@@ -81,6 +82,8 @@ test('job and employee changes trigger recalculation and initial evaluation is s
   assert.match(migration, /employee_status\.status = 'active'/)
   assert.match(migration, /cross join public\.low_mandate_active_super_admins\(\)/)
   assert.match(migration, /with active_consultants as \([\s\S]*active_counts as \(/)
+  assert.match(migration, /active_consultants as \([\s\S]*not exists \([\s\S]*from public\.admin_users admin_user/)
+  assert.match(migration, /Admin membership also changes whether this user is eligible/)
   assert.match(migration, /group by consultant\.consultant_user_id/)
 })
 

@@ -16,7 +16,8 @@ end $$;
 
 -- The assignment UI sources consultants from active, named user_profiles. The
 -- jobs table stores those assignments by profile name in jobs.consultants.
--- Team-lead-only assignments are intentionally not counted.
+-- Members of admin_users (Admins and Super Admins) are not low-allocation
+-- consultants, and team-lead-only assignments are intentionally not counted.
 create table if not exists public.low_mandate_allocation_state (
   consultant_user_id uuid primary key references auth.users(id) on delete cascade,
   active_mandate_count integer not null default 0 check (active_mandate_count >= 0),
@@ -184,6 +185,12 @@ begin
     on employee_status.user_id = profile.user_id
   where profile.user_id = p_consultant_user_id::text
     and nullif(btrim(coalesce(profile.name, '')), '') is not null
+    and not exists (
+      select 1
+      from public.admin_users admin_user
+      where admin_user.user_id = p_consultant_user_id
+        or lower(btrim(coalesce(admin_user.email, ''))) = lower(btrim(coalesce(profile.email, '')))
+    )
   limit 1;
 
   if not found or v_employee_status <> 'active' then
@@ -439,6 +446,16 @@ begin
     v_new_super_admin := new.role = 'super_admin' or new.is_super_admin is true;
   end if;
 
+  -- Admin membership also changes whether this user is eligible for a
+  -- low-allocation warning. Reconcile before syncing Super Admin recipients so
+  -- a newly promoted Super Admin cannot receive a warning about themselves.
+  if v_old_user_id is not null then
+    perform public.reconcile_low_mandate_allocation(v_old_user_id);
+  end if;
+  if v_new_user_id is not null and v_new_user_id is distinct from v_old_user_id then
+    perform public.reconcile_low_mandate_allocation(v_new_user_id);
+  end if;
+
   if v_old_super_admin and v_old_user_id is not null
     and (not v_new_super_admin or v_new_user_id is distinct from v_old_user_id) then
     update public.notifications
@@ -488,6 +505,12 @@ with active_consultants as (
    and employee_status.status = 'active'
   where profile.user_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     and nullif(btrim(coalesce(profile.name, '')), '') is not null
+    and not exists (
+      select 1
+      from public.admin_users admin_user
+      where admin_user.user_id::text = profile.user_id
+        or lower(btrim(coalesce(admin_user.email, ''))) = lower(btrim(coalesce(profile.email, '')))
+    )
 ), active_counts as (
   select
     consultant.consultant_user_id,
@@ -542,7 +565,23 @@ where not exists (
    and employee_status.status = 'active'
   where profile.user_id = state.consultant_user_id::text
     and nullif(btrim(coalesce(profile.name, '')), '') is not null
+    and not exists (
+      select 1
+      from public.admin_users admin_user
+      where admin_user.user_id = state.consultant_user_id
+        or lower(btrim(coalesce(admin_user.email, ''))) = lower(btrim(coalesce(profile.email, '')))
+    )
 );
+
+update public.notifications notification
+set status = 'read',
+    read_at = coalesce(notification.read_at, now()),
+    cleared_at = coalesce(notification.cleared_at, now())
+from public.low_mandate_allocation_state state
+where notification.action_type = 'low_mandate_allocation'
+  and notification.entity_id = state.consultant_user_id
+  and not state.condition_active
+  and notification.cleared_at is null;
 
 insert into public.notifications (
   recipient_user_id,
