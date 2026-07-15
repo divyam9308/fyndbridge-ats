@@ -178,6 +178,7 @@ function formatJob(row) {
     mandate_status: mandateStatus,
     status: mandateStatus,
     priority: mandateStatus,
+    duplicate_confirmed: undefined,
     clients: undefined
   }
 }
@@ -191,10 +192,28 @@ async function findDuplicateMandate(clientId, title) {
   if (!clientId || !normalizedTitle) return null
   const { data, error } = await supabase
     .from('jobs')
-    .select('id, title, job_display_id')
+    .select('*, clients(name, client_name, client_display_id)')
     .eq('client_id', clientId)
   if (error) throw error
   return (data || []).find(job => clean(job.title).toLowerCase() === normalizedTitle) || null
+}
+
+function isMandateTitleUniqueError(error) {
+  if (error?.code !== '23505') return false
+  const detail = `${error.constraint || ''} ${error.message || ''} ${error.details || ''}`.toLowerCase()
+  return detail.includes('jobs_client_normalized_title_primary_unique') || detail.includes('jobs_client_normalized_title_unique')
+}
+
+async function sendDuplicateMandateResponse(req, res, duplicate) {
+  const existing = duplicate
+    ? await stripHiddenFields('jobs', formatJob(duplicate), await isAdmin(req.user))
+    : null
+  return res.status(409).json({
+    duplicate: true,
+    allowAddDuplicate: true,
+    error: 'A mandate with the same role already exists for this client.',
+    existing
+  })
 }
 
 async function assertClientExists(clientId) {
@@ -439,7 +458,12 @@ async function createJob(req, res) {
   try {
     const payload = await payloadFromBody(req.body)
     await assertClientExists(payload.client_id)
-    await assertNoDuplicateMandate(payload.client_id, payload.title)
+    const duplicateAction = clean(req.body.duplicate_action)
+    const duplicate = await findDuplicateMandate(payload.client_id, payload.title)
+    if (duplicate && duplicateAction !== 'add_duplicate') {
+      return await sendDuplicateMandateResponse(req, res, duplicate)
+    }
+    payload.duplicate_confirmed = Boolean(duplicate && duplicateAction === 'add_duplicate')
     await assertAssignmentUsersExist({ ...payload, consultant_user_ids: req.body.consultant_user_ids, team_lead_user_id: req.body.team_lead_user_id })
     if (req.file) {
       const jd = await uploadDocument(req.file, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
@@ -471,6 +495,14 @@ async function createJob(req, res) {
     if (isDisplayIdUniqueError(err, 'job_display_id')) {
       return res.status(400).json({ error: 'Could not allocate unique Job ID. Please try again.' })
     }
+    if (isMandateTitleUniqueError(err)) {
+      try {
+        const duplicate = await findDuplicateMandate(req.body.client_id, req.body.role || req.body.title)
+        return await sendDuplicateMandateResponse(req, res, duplicate)
+      } catch (duplicateError) {
+        return logAndSendInternal(res, 'createJob duplicate lookup', duplicateError)
+      }
+    }
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'createJob', err)
   } finally {
@@ -492,7 +524,8 @@ async function updateJob(req, res) {
     const nextClientId = payload.client_id || currentJob.client_id
     const nextTitle = Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : currentJob.title
     await assertClientExists(nextClientId)
-    await assertNoDuplicateMandate(nextClientId, nextTitle, req.params.id)
+    const duplicateIdentityChanged = nextClientId !== currentJob.client_id || clean(nextTitle).toLowerCase() !== clean(currentJob.title).toLowerCase()
+    if (duplicateIdentityChanged) await assertNoDuplicateMandate(nextClientId, nextTitle, req.params.id)
     await assertAssignmentUsersExist(
       { ...payload, consultant_user_ids: req.body.consultant_user_ids, team_lead_user_id: req.body.team_lead_user_id },
       { consultants: currentJob.consultants, team_lead: currentJob.team_lead }

@@ -167,6 +167,9 @@ export default function JobsPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const [mandateDuplicate, setMandateDuplicate] = useState(null)
+  const [duplicateBypass, setDuplicateBypass] = useState(false)
+  const [duplicateMoreOpen, setDuplicateMoreOpen] = useState(false)
   const [aiText, setAiText] = useState('')
   const [aiFilters, setAiFilters] = useState(null)
   const [aiError, setAiError] = useState('')
@@ -201,6 +204,7 @@ export default function JobsPage() {
   const [consultantSearch, setConsultantSearch] = useState({})
   const [consultantPickerOpen, setConsultantPickerOpen] = useState({})
   const modalRef = useRef(null)
+  const duplicateModalRef = useRef(null)
   const roleInputRef = useRef(null)
   const sortRef = useRef(null)
   const columnsDropdownRef = useRef(null)
@@ -336,6 +340,14 @@ export default function JobsPage() {
     return () => { document.body.style.overflow = previous }
   }, [isOpen])
 
+  useEffect(() => {
+    if (!mandateDuplicate) return
+    window.requestAnimationFrame(() => {
+      const target = duplicateModalRef.current?.querySelector('button:not([disabled])')
+      ;(target || duplicateModalRef.current)?.focus({ preventScroll: true })
+    })
+  }, [mandateDuplicate])
+
   const getFreshActiveConsultantName = useCallback(async () => {
     const profile = await loadProfile().catch(() => null)
     const nextName = String(profile?.name || '').trim()
@@ -353,6 +365,9 @@ export default function JobsPage() {
   const openModal = useCallback(async () => {
     setEditingJob(null)
     setErrors({})
+    setMandateDuplicate(null)
+    setDuplicateBypass(false)
+    setDuplicateMoreOpen(false)
     setForm({ ...EMPTY_FORM, consultants: ['-'], team_lead: '-', team_lead_user_id: '', job_display_id: 'Loading...', allocation_date: todayLocal() })
     setClientSearch('')
     setRoleSearch('')
@@ -404,6 +419,9 @@ export default function JobsPage() {
     const teamLeadValue = displayUserLabel(job.team_lead) || '-'
     setEditingJob(job)
     setErrors({})
+    setMandateDuplicate(null)
+    setDuplicateBypass(false)
+    setDuplicateMoreOpen(false)
     setForm({
       id: job.id,
       job_display_id: job.job_display_id || '',
@@ -583,6 +601,49 @@ export default function JobsPage() {
     return next
   }
 
+  const closeMandateModal = () => {
+    setIsOpen(false)
+    setMandateDuplicate(null)
+    setDuplicateBypass(false)
+    setDuplicateMoreOpen(false)
+  }
+
+  const resolveMandateDuplicate = (duplicateAction) => {
+    if (!mandateDuplicate) return
+    if (duplicateAction === 'add_duplicate') {
+      setDuplicateBypass(true)
+      setMandateDuplicate(null)
+      setDuplicateMoreOpen(false)
+      return
+    }
+    const existing = mandateDuplicate.existing
+    setMandateDuplicate(null)
+    setDuplicateMoreOpen(false)
+    if (existing) editJob(existing)
+  }
+
+  const duplicateMandateValue = (row, key) => {
+    switch (key) {
+      case 'jobId': return row.job_display_id || '-'
+      case 'consultant': return Array.isArray(row.consultants) && row.consultants.length ? row.consultants.join(', ') : '-'
+      case 'teamLead': return row.team_lead || '-'
+      case 'clientId': return row.client_display_id || '-'
+      case 'clientName': return row.client_name || row.client || '-'
+      case 'role': return row.role || row.title || '-'
+      case 'budget': return row.budget || '-'
+      case 'mandateStatus': return row.mandate_status || row.status || '-'
+      case 'sector': return row.vertical || '-'
+      case 'allocationDate': return formatDateDDMMYYYY(row.allocation_date)
+      case 'jd': return row.jd_storage_path || row.jd_url || row.jd_file ? 'JD' : '-'
+      default: return '-'
+    }
+  }
+
+  const duplicateMandateValuesDiffer = (existing, incoming, key) => (
+    String(duplicateMandateValue(existing, key) ?? '').replace(/\s+/g, ' ').trim() !==
+    String(duplicateMandateValue(incoming, key) ?? '').replace(/\s+/g, ' ').trim()
+  )
+
   const saveJob = async () => {
     const nextErrors = validate()
     if (Object.keys(nextErrors).length) {
@@ -612,14 +673,32 @@ export default function JobsPage() {
       }
       const body = new FormData()
       Object.entries(payload).forEach(([key, value]) => body.append(key, Array.isArray(value) ? value.join(',') : value ?? ''))
+      if (!editingJob && duplicateBypass) body.append('duplicate_action', 'add_duplicate')
       if (jdFile) body.append('jd_file', jdFile)
       const res = await apiFetch(editingJob ? `/api/jobs/${editingJob.id}` : '/api/jobs', {
         method: editingJob ? 'PATCH' : 'POST',
         body
       })
       const data = await res.json().catch(() => ({}))
+      if (res.status === 409 && data.duplicate) {
+        const selectedClient = clientOptions.find(client => client.id === form.client_id)
+        setMandateDuplicate({
+          existing: data.existing,
+          allowAddDuplicate: data.allowAddDuplicate !== false,
+          message: data.error,
+          mandate: {
+            ...payload,
+            job_display_id: form.job_display_id,
+            client_name: clientSearch,
+            client_display_id: selectedClient?.client_display_id || '',
+            jd_file: jdFile?.name || ''
+          }
+        })
+        setDuplicateBypass(false)
+        return
+      }
       if (!res.ok) throw new Error(data.error || 'Failed to save mandate.')
-      setIsOpen(false)
+      closeMandateModal()
       setEditingJob(null)
       await fetchData()
       await refreshClientOptions()
@@ -977,7 +1056,7 @@ export default function JobsPage() {
           <div className="modal-card modal-card-lg" ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingJob ? 'Edit Mandate' : 'Add Mandate'}>
             <div className="modal-header">
               <span className="modal-title">{editingJob ? 'Edit Mandate' : 'Add Mandate'}</span>
-              <button className="modal-close" onClick={() => setIsOpen(false)} aria-label="Close"><X size={16} /></button>
+              <button className="modal-close" onClick={closeMandateModal} aria-label="Close"><X size={16} /></button>
             </div>
             <div className="modal-body">
               {errors.form && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{errors.form}</div>}
@@ -1204,8 +1283,86 @@ export default function JobsPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setIsOpen(false)} disabled={saving}>Cancel</button>
+              <button className="btn-secondary" onClick={closeMandateModal} disabled={saving}>Cancel</button>
               <button className="btn-primary" onClick={saveJob} disabled={saving}>{saving ? 'Saving...' : 'Save Mandate'}</button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {mandateDuplicate && createPortal((
+        <div className="modal-overlay">
+          <div className="modal-card" ref={duplicateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Duplicate Mandate">
+            <div className="modal-header">
+              <span className="modal-title">Duplicate Mandate</span>
+              <button className="modal-close" onClick={() => setMandateDuplicate(null)} aria-label="Close"><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="review-banner">
+                <AlertCircle size={16} />
+                {mandateDuplicate.message || 'A mandate with the same role already exists for this client.'}
+              </div>
+              <div className="duplicate-compare-grid">
+                <div className="duplicate-compare-card">
+                  <div className="form-section-title">Existing Mandate</div>
+                  <div className="name-text">{mandateDuplicate.existing?.role || mandateDuplicate.existing?.title || '-'}</div>
+                  <div className="sub-text">{mandateDuplicate.existing?.client_name || mandateDuplicate.existing?.client || '-'}</div>
+                  <div className="sub-text">{mandateDuplicate.existing?.job_display_id || '-'}</div>
+                </div>
+                <div className="duplicate-compare-card">
+                  <div className="form-section-title">New Mandate</div>
+                  <div className="name-text">{mandateDuplicate.mandate?.role || '-'}</div>
+                  <div className="sub-text">{mandateDuplicate.mandate?.client_name || '-'}</div>
+                  <div className="sub-text">{mandateDuplicate.mandate?.job_display_id || '-'}</div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setDuplicateMoreOpen(true)} disabled={saving}>View More</button>
+              <button className="btn-secondary" onClick={() => { setMandateDuplicate(null); setDuplicateMoreOpen(false) }} disabled={saving}>Cancel</button>
+              {mandateDuplicate.allowAddDuplicate !== false && (
+                <button className="btn-secondary" onClick={() => resolveMandateDuplicate('add_duplicate')} disabled={saving}>Add Duplicate</button>
+              )}
+              <button className="btn-primary" onClick={() => resolveMandateDuplicate('update_current')} disabled={saving}>Update Existing</button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {mandateDuplicate && duplicateMoreOpen && createPortal((
+        <div className="modal-overlay">
+          <div className="modal-card modal-card-xl" role="dialog" aria-modal="true" aria-label="Duplicate Mandate Details">
+            <div className="modal-header">
+              <span className="modal-title">Duplicate Mandate Details</span>
+              <button className="modal-close" onClick={() => setDuplicateMoreOpen(false)} aria-label="Close"><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="duplicate-details-scroll">
+                <table className="data-table duplicate-details-table">
+                  <thead>
+                    <tr>
+                      <th>Field Name</th>
+                      <th>Existing Mandate</th>
+                      <th>New Mandate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {MANDATE_TABLE_COLUMNS.filter(column => column.key !== 'action').map(column => {
+                      const changed = duplicateMandateValuesDiffer(mandateDuplicate.existing || {}, mandateDuplicate.mandate || {}, column.key)
+                      return (
+                        <tr key={column.key} className={changed ? 'is-different' : ''}>
+                          <td className="field-name">{column.label}</td>
+                          <td className={changed ? 'diff-cell' : ''}>{duplicateMandateValue(mandateDuplicate.existing || {}, column.key)}</td>
+                          <td className={changed ? 'diff-cell' : ''}>{duplicateMandateValue(mandateDuplicate.mandate || {}, column.key)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setDuplicateMoreOpen(false)}>Close</button>
             </div>
           </div>
         </div>
