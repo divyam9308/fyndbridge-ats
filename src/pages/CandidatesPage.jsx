@@ -2199,6 +2199,11 @@ export default function CandidatesPage() {
           {aiFilterError}
         </div>
       )}
+      {!loadingCandidates && !apiError && !aiFilterError && hasActiveCandidateFilters && filtered.length === 0 && (
+        <div className="form-error" style={{ display:'block', marginBottom:12 }} role="alert">
+          No candidates match your filters. Try changing or clearing the filters.
+        </div>
+      )}
 
 
       {/* Table */}

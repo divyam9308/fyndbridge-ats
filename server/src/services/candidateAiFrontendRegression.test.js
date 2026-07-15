@@ -50,3 +50,8 @@ test('an empty candidate result keeps the table visible and shows a full-width m
   assert.match(emptyBranch, /No candidates match your filters/)
   assert.match(emptyBranch, /No candidates found/)
 })
+
+test('a completed filtered request with no matches also shows the red alert above the table', () => {
+  assert.match(source, /!loadingCandidates && !apiError && !aiFilterError && hasActiveCandidateFilters && filtered\.length === 0/)
+  assert.match(source, /className="form-error"[\s\S]*role="alert"[\s\S]*No candidates match your filters\. Try changing or clearing the filters\./)
+})
