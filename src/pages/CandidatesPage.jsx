@@ -69,6 +69,11 @@ const notifyAiQuota = (message) => {
     window.dispatchEvent(new CustomEvent('ai-quota-reached', { detail: 'AI quota reached' }))
   }
 }
+const isSupportedCandidateFilter = (filters) => {
+  const mode = String(filters?.mode || '').trim().toLowerCase()
+  if (['ast', 'structured', 'hybrid'].includes(mode)) return Boolean(filters?.root)
+  return mode === 'keyword' && typeof filters?.search_text === 'string' && Boolean(filters.search_text.trim())
+}
 const formatMonth = formatDateDDMMYYYY
 const avatarColorsFor = (value) => {
   const text = String(value || '').trim()
@@ -327,6 +332,8 @@ export default function CandidatesPage() {
   const assignmentSourceRef = useRef(null)
   const nextCandidateIdRequestRef = useRef(0)
   const aiFilterRequestRef = useRef(0)
+  const candidateListRequestRef = useRef(0)
+  const candidateListAbortRef = useRef(null)
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -344,7 +351,6 @@ export default function CandidatesPage() {
   const [filterJob, setFilterJob]       = useState('All')
   const [aiFilterText, setAiFilterText] = useState('')
   const [aiFilters, setAiFilters] = useState(null)
-  const [aiAppliedPrompt, setAiAppliedPrompt] = useState('')
   const [aiFilterLoading, setAiFilterLoading] = useState(false)
   const [aiFilterError, setAiFilterError] = useState('')
   const [sortField, setSortField] = useState('')
@@ -503,7 +509,11 @@ export default function CandidatesPage() {
   }, [selectedCandidate, focusPopup])
 
   const loadCandidates = useCallback(async (nextPage = page, { showLoading = true } = {}) => {
-    if (showLoading) setLoadingCandidates(true)
+    const requestId = ++candidateListRequestRef.current
+    candidateListAbortRef.current?.abort()
+    const controller = new AbortController()
+    candidateListAbortRef.current = controller
+    setLoadingCandidates(Boolean(showLoading))
     try {
       const params = new URLSearchParams({
         page: String(nextPage),
@@ -522,11 +532,11 @@ export default function CandidatesPage() {
       }
       if (aiFilters) {
         params.set('ai_filters', JSON.stringify(aiFilters))
-        if (aiAppliedPrompt) params.set('ai_prompt', aiAppliedPrompt)
       }
 
-      const response = await fetch(`/api/candidates?${params.toString()}`)
+      const response = await fetch(`/api/candidates?${params.toString()}`, { signal: controller.signal })
       const payload = await response.json().catch(() => ({}))
+      if (requestId !== candidateListRequestRef.current || controller.signal.aborted) return
 
       if (!response.ok) {
         throw new Error(payload.error || 'Unable to load candidates.')
@@ -538,13 +548,19 @@ export default function CandidatesPage() {
       if (import.meta.env.DEV && aiFilters) console.debug('Candidates AI filter', { filters: aiFilters, matched: Number(payload.total) || 0 })
       setApiError('')
     } catch (err) {
+      if (requestId !== candidateListRequestRef.current || controller.signal.aborted || err?.name === 'AbortError') return
       setApiError(err.message)
-      setCandidates([])
-      setTotalCandidates(0)
     } finally {
-      if (showLoading) setLoadingCandidates(false)
+      if (candidateListAbortRef.current === controller) candidateListAbortRef.current = null
+      if (requestId === candidateListRequestRef.current) setLoadingCandidates(false)
     }
-  }, [aiAppliedPrompt, aiFilters, dashboardFilters, filterJob, page, pageSize, sortDirection, sortField])
+  }, [aiFilters, dashboardFilters, filterJob, page, pageSize, sortDirection, sortField])
+
+  useEffect(() => () => {
+    candidateListRequestRef.current += 1
+    candidateListAbortRef.current?.abort()
+    candidateListAbortRef.current = null
+  }, [])
 
   const openDocument = useCallback(async (key, path) => {
     setOpeningDocument(key)
@@ -769,19 +785,19 @@ export default function CandidatesPage() {
 
   const clearFilters = () => {
     aiFilterRequestRef.current += 1
+    setAiFilterLoading(false)
     setFilterJob('All')
     setAiFilterText('')
     setAiFilters(null)
-    setAiAppliedPrompt('')
     setAiFilterError('')
     setPage(1)
   }
 
   const clearAiFilter = () => {
     aiFilterRequestRef.current += 1
+    setAiFilterLoading(false)
     setAiFilterText('')
     setAiFilters(null)
-    setAiAppliedPrompt('')
     setAiFilterError('')
     setPage(1)
   }
@@ -1102,10 +1118,9 @@ export default function CandidatesPage() {
         throw new Error(payload.error || 'AI filter failed.')
       }
       if (requestId !== aiFilterRequestRef.current) return
-      if (!payload.filters?.root) throw new Error("I couldn't confidently understand this filter. Try specifying a candidate field, condition, and value.")
+      if (!isSupportedCandidateFilter(payload.filters)) throw new Error("I couldn't confidently understand this filter. Try specifying a candidate field, condition, and value.")
 
       setAiFilters(payload.filters)
-      setAiAppliedPrompt(prompt)
       setPage(1)
     } catch (err) {
       if (requestId !== aiFilterRequestRef.current) return
@@ -2143,7 +2158,7 @@ export default function CandidatesPage() {
           <input
             className="filter-input candidate-ai-filter-input"
             value={aiFilterText}
-            onChange={e => { setAiFilterText(e.target.value); setAiFilterError('') }}
+            onChange={e => { aiFilterRequestRef.current += 1; setAiFilterLoading(false); setAiFilterText(e.target.value); setAiFilterError('') }}
             id="filter-ai-candidates"
           />
           <button className="btn-secondary" type="submit" disabled={aiFilterLoading} style={{ height:34, padding:'0 12px' }}>

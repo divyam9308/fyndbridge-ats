@@ -18,10 +18,10 @@ const providers = {
   SECONDARY: createModel(GEMINI_API_KEY_SECONDARY)
 }
 
-function validateAiConfig() {
+function validateAiConfig({ primaryOnly = false } = {}) {
   const missing = []
   if (!GEMINI_API_KEY_PRIMARY) missing.push('GEMINI_API_KEY_PRIMARY')
-  if (!GEMINI_API_KEY_SECONDARY) missing.push('GEMINI_API_KEY_SECONDARY')
+  if (!primaryOnly && !GEMINI_API_KEY_SECONDARY) missing.push('GEMINI_API_KEY_SECONDARY')
   if (!GEMINI_MODEL) missing.push('GEMINI_MODEL')
   if (missing.length) throw new Error(`AI configuration missing: ${missing.join(', ')}`)
 }
@@ -90,8 +90,8 @@ async function withTimeout(promise) {
   }
 }
 
-async function requestProvider(providerName, fullPrompt, temperature, started) {
-const result = await withTimeout(providers[providerName].generateContent({
+async function requestProvider(providerName, fullPrompt, temperature) {
+  const result = await withTimeout(providers[providerName].generateContent({
     contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
     generationConfig: {
       temperature,
@@ -100,13 +100,12 @@ const result = await withTimeout(providers[providerName].generateContent({
   }))
 
   const text = result.response.text().trim()
-  const usage = result.response.usageMetadata
-if (!text) throw new Error('Gemini returned an empty response')
+  if (!text) throw new Error('Gemini returned an empty response')
   return text
 }
 
-async function generateAIResponse(prompt, { temperature = 0.1, schema = null, schemaName = 'ats_json' } = {}) {
-  validateAiConfig()
+async function generateAIResponse(prompt, { temperature = 0.1, schema = null, schemaName = 'ats_json', primaryOnly = false } = {}) {
+  validateAiConfig({ primaryOnly })
 
   const started = Date.now()
   const fullPrompt = [
@@ -117,8 +116,20 @@ async function generateAIResponse(prompt, { temperature = 0.1, schema = null, sc
   ].filter(Boolean).join('\n\n')
 
   try {
-    return await requestProvider('PRIMARY', fullPrompt, temperature, started)
+    return await requestProvider('PRIMARY', fullPrompt, temperature)
   } catch (err) {
+    if (primaryOnly) {
+      if (isQuotaError(err)) throw quotaReachedError()
+      const normalized = normalizeGeminiError(err)
+      console.error('aiProvider failure:', {
+        provider: 'PRIMARY',
+        model: GEMINI_MODEL,
+        durationMs: Date.now() - started,
+        statusCode: normalized.statusCode,
+        code: normalized.code || 'AI_PROVIDER_ERROR'
+      })
+      throw normalized
+    }
     if (!isQuotaError(err)) {
       const normalized = normalizeGeminiError(err)
       console.error('aiProvider failure:', {
@@ -135,13 +146,13 @@ async function generateAIResponse(prompt, { temperature = 0.1, schema = null, sc
     console.warn('[Gemini] Fallback Activated')
 
     try {
-      return await requestProvider('SECONDARY', fullPrompt, temperature, started)
+      return await requestProvider('SECONDARY', fullPrompt, temperature)
     } catch (secondaryErr) {
       if (isQuotaError(secondaryErr)) {
         console.warn('[Gemini] Quota Exceeded on Secondary')
         console.warn('[Gemini] Provider: PRIMARY')
         try {
-          return await requestProvider('PRIMARY', fullPrompt, temperature, started)
+          return await requestProvider('PRIMARY', fullPrompt, temperature)
         } catch (primaryRetryErr) {
           if (isQuotaError(primaryRetryErr)) {
             throw quotaReachedError()
@@ -170,8 +181,8 @@ async function generateAIResponse(prompt, { temperature = 0.1, schema = null, sc
   }
 }
 
-async function callAiJson({ prompt, schema, temperature = 0.1, schemaName = 'ats_json', returnRaw = false }) {
-  const rawText = await generateAIResponse(prompt, { schema, temperature, schemaName })
+async function callAiJson({ prompt, schema, temperature = 0.1, schemaName = 'ats_json', returnRaw = false, primaryOnly = false }) {
+  const rawText = await generateAIResponse(prompt, { schema, temperature, schemaName, primaryOnly })
   const jsonText = extractJsonText(rawText)
 
   try {
@@ -191,4 +202,3 @@ module.exports = {
   validateAiConfig,
   GEMINI_MODEL
 }
-

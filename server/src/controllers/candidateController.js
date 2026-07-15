@@ -8,8 +8,11 @@ const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
 const { parseResume } = require('../services/resumeParser')
 const { RESUME_BUCKET, prepareUploadedCv, prepareLinkedCv, checkUploadedCvDuplicate, checkLinkedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
 const { parseAiFilters } = require('../services/aiFilterParser')
-const { FIELD_REGISTRY, validateCandidateFilter, nodeDomain, flattenConditions } = require('../services/candidateAiFilter')
-const { applyCandidateAstQuery } = require('../services/candidateFilterQuery')
+const { FIELD_REGISTRY, validateCandidateFilter, flattenConditions, compileCandidateAst } = require('../services/candidateAiFilter')
+const { validateCandidateIntent } = require('../services/candidateIntent')
+const { buildCandidateKeywordFilter } = require('../services/candidateKeywordFilter')
+const { MAX_MATCH_IDS, createCandidateAstQueryPlan, applyCandidateAstPlan } = require('../services/candidateFilterQuery')
+const { resolveCandidateFilterReferences } = require('../services/candidateFilterReferences')
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { createConsultantAssignmentNotification } = require('../services/assignmentNotifications')
 const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
@@ -61,58 +64,96 @@ const CANDIDATE_FILTER_PERMISSION_KEYS = {
   candidate_id: 'candidate_display_id', candidate_name: 'full_name', email: 'email', mobile: 'mobile_number',
   designation: 'current_designation', organisation: 'current_organisation', experience: 'experience_years',
   current_location: 'location', notice_period: 'notice_period', open_to_relocate: 'open_to_relocate', skills: 'skills',
-  linkedin: 'linkedin_url', cv: 'cv_link', created_date: 'created_at', consultant: 'consultant_name', consultant_user_id: 'consultant_name',
+  education: 'education', linkedin: 'linkedin_url', cv: 'cv_link', source: 'cv_link', created_date: 'created_at', updated_date: 'created_at', consultant: 'consultant_name',
   client_id: 'client_id', client_name: 'client_name', job_id: 'job_id', role: 'job_title', status: 'status', current_ctc: 'current_salary',
   expected_ctc: 'expected_salary', offered_ctc: 'current_salary', date_of_joining: 'created_at', comments: 'notes'
 }
 
 async function allowedCandidateFilterFields(user) {
-  if (await isAdmin(user)) return Object.keys(FIELD_REGISTRY)
+  const publicFields = Object.keys(FIELD_REGISTRY).filter(field => !FIELD_REGISTRY[field].internal)
+  if (await isAdmin(user)) return publicFields
   const permissions = await getColumnPermissions('candidates')
-  return Object.keys(FIELD_REGISTRY).filter(field => permissions[CANDIDATE_FILTER_PERMISSION_KEYS[field]] !== 'hidden')
+  return publicFields.filter(field => {
+    const permissionKey = CANDIDATE_FILTER_PERMISSION_KEYS[field]
+    return !permissionKey || permissions[permissionKey] !== 'hidden'
+  })
 }
 
-async function resolveCandidateFilterReferences(filters) {
-  const conditions = flattenConditions(filters.root)
-  const needsConsultants = conditions.some(item => item.field === 'consultant' && ['equals', 'not_equals'].includes(item.operator))
-  const profiles = needsConsultants
-    ? await supabase.from('user_profiles').select('user_id, name').not('name', 'is', null).order('name')
-    : { data: [], error: null }
-  if (profiles.error) throw profiles.error
-
-  async function visit(node) {
-    if (node.type === 'group') return { ...node, children: await Promise.all(node.children.map(visit)) }
-    if (node.field === 'consultant' && ['equals', 'not_equals'].includes(node.operator)) {
-      const wanted = cleanText(node.value).toLowerCase()
-      const rows = (profiles.data || []).filter(row => cleanText(row.name).toLowerCase() === wanted)
-      const matches = rows.length ? rows : (profiles.data || []).filter(row => cleanText(row.name).toLowerCase().includes(wanted))
-      if (matches.length > 1) throw Object.assign(new Error(`Consultant name "${node.value}" is ambiguous. Please enter the full name.`), { statusCode: 400 })
-      if (!matches.length) throw Object.assign(new Error(`No consultant matched "${node.value}".`), { statusCode: 400 })
-      if (node.operator === 'not_equals') return node
-      return {
-        type: 'group', combinator: 'OR', children: [
-          { type: 'condition', field: 'consultant_user_id', operator: 'equals', value: matches[0].user_id },
-          node
-        ]
-      }
-    }
-    if (node.field === 'job_id' && node.operator === 'equals' && /^JB\d+$/i.test(cleanText(node.value))) {
-      const { data, error } = await supabase.from('jobs').select('id').ilike('job_display_id', cleanText(node.value)).limit(2)
-      if (error) throw error
-      if (data?.length !== 1) throw Object.assign(new Error(`No unique mandate matched "${node.value}".`), { statusCode: 400 })
-      return { ...node, value: data[0].id }
-    }
-    if (node.field === 'client_id' && node.operator === 'equals' && /^CL\d+$/i.test(cleanText(node.value))) {
-      const { data, error } = await supabase.from('clients').select('id').ilike('client_display_id', cleanText(node.value)).limit(2)
-      if (error) throw error
-      if (data?.length !== 1) throw Object.assign(new Error(`No unique client matched "${node.value}".`), { statusCode: 400 })
-      return { ...node, value: data[0].id }
-    }
-    return node
+function validatePersistedCandidateFilters(raw, allowedFields) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw Object.assign(new Error('Invalid Candidates AI filter.'), { statusCode: 400 })
   }
+  if (raw.version === 2 || ['structured', 'hybrid', 'keyword'].includes(cleanText(raw.mode).toLowerCase())) {
+    return validateCandidateIntent(raw, { allowedFields, requireAiConfidence: false })
+  }
+  if (raw.mode === 'ast') return validateCandidateFilter(raw, { allowedFields })
+  throw Object.assign(new Error('Invalid Candidates AI filter.'), { statusCode: 400 })
+}
 
-  const root = await visit(filters.root)
+function candidateExecutionFilter(filters, allowedFields) {
+  const keyword = filters.search_text
+    ? buildCandidateKeywordFilter(filters.search_text, { allowedFields })
+    : null
+  const root = filters.root && keyword?.root
+    ? { type: 'group', combinator: 'AND', children: [filters.root, keyword.root] }
+    : filters.root || keyword?.root || null
+  if (!root) throw Object.assign(new Error('Invalid Candidates AI filter.'), { statusCode: 400 })
   return { ...filters, root, conditions: flattenConditions(root) }
+}
+
+function buildSafeCandidateSearchRoot(search, allowedFields) {
+  const allowed = new Set(allowedFields || [])
+  const value = cleanText(search)
+  const fields = ['candidate_name', 'email', 'current_location', 'designation', 'organisation']
+    .filter(field => allowed.has(field))
+  const mobile = normalizeMobile(value).replace(/\D/g, '')
+  if (mobile.length >= 4 && allowed.has('mobile')) fields.push('mobile')
+  if (!fields.length) return null
+  const children = fields.map(field => ({ type: 'condition', field, operator: 'contains', value }))
+  const root = children.length === 1 ? children[0] : { type: 'group', combinator: 'OR', children }
+  return validateCandidateFilter({ root }, { allowedFields }).root
+}
+
+function applyCandidateBaseListFilters(query, req, allowedFields, referencedTable = null) {
+  const column = name => referencedTable ? `${referencedTable}.${name}` : name
+  let next = query
+  if (req.query.experience_min) next = next.gte(column('experience_years'), Number(req.query.experience_min))
+  if (req.query.experience_max) next = next.lte(column('experience_years'), Number(req.query.experience_max))
+  if (req.query.city) next = next.ilike(column('city'), `%${cleanText(req.query.city)}%`)
+  if (req.query.state) next = next.ilike(column('state'), `%${cleanText(req.query.state)}%`)
+  if (req.query.search) {
+    const searchRoot = buildSafeCandidateSearchRoot(cleanText(req.query.search), allowedFields)
+    if (searchRoot) {
+      next = referencedTable
+        ? next.or(compileCandidateAst(searchRoot), { referencedTable })
+        : next.or(compileCandidateAst(searchRoot))
+    }
+  }
+  return next
+}
+
+function completeBoundedRows(result) {
+  if (result.error) throw result.error
+  const rows = result.data || []
+  if (rows.length > MAX_MATCH_IDS || (Number.isFinite(result.count) && result.count !== rows.length)) {
+    throw Object.assign(new Error('This AI filter is too broad. Add another condition to narrow the results.'), {
+      statusCode: 400,
+      code: 'CANDIDATE_FILTER_TOO_BROAD'
+    })
+  }
+  return rows
+}
+
+function sortCandidateResultRows(rows, sortField, sortDirection) {
+  const field = sortField === 'candidate_name' ? 'full_name' : 'created_at'
+  const ascending = sortField ? sortDirection !== 'desc' : false
+  return [...rows].sort((left, right) => {
+    const a = cleanText(left[field]).toLowerCase()
+    const b = cleanText(right[field]).toLowerCase()
+    const compared = a.localeCompare(b, undefined, { numeric: true })
+    if (compared) return ascending ? compared : -compared
+    return cleanText(left.id).localeCompare(cleanText(right.id))
+  })
 }
 
 function logAndSendInternal(res, routeName, err) {
@@ -954,25 +995,118 @@ async function listCandidates(req, res) {
     const sortField = cleanText(req.query.sortField)
     const sortDirection = cleanText(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
     const rawAiFilters = parseJsonFilter(req.query.ai_filters)
-    if (req.query.ai_filters && rawAiFilters?.mode !== 'ast') {
-      throw Object.assign(new Error('Invalid Candidates AI filter.'), { statusCode: 400 })
-    }
-    const aiFilters = rawAiFilters?.mode === 'ast'
-      ? await resolveCandidateFilterReferences(validateCandidateFilter(rawAiFilters, { allowedFields: await allowedCandidateFilterFields(req.user) }))
-      : rawAiFilters
-    const astDomain = aiFilters?.mode === 'ast' ? nodeDomain(aiFilters.root) : ''
-    const aiAssociationFilter = astDomain === 'association'
-
-    const hasAssocFilters = req.query.job_title || 
+    const hasAssocFilters = req.query.job_title ||
                             req.query.job_id ||
                             req.query.client_id ||
-                            req.query.client_name || 
+                            req.query.client_name ||
                             req.query.status ||
                             req.query.consultant ||
                             req.query.period ||
-                            req.query.salary_min || 
-                            req.query.salary_max || 
-                            aiAssociationFilter
+                            req.query.salary_min ||
+                            req.query.salary_max
+    let aiFilters = null
+    let aiPlan = null
+    let allowedFields = null
+    if (req.query.ai_filters) {
+      allowedFields = await allowedCandidateFilterFields(req.user)
+      const validated = validatePersistedCandidateFilters(rawAiFilters, allowedFields)
+      aiFilters = await resolveCandidateFilterReferences(candidateExecutionFilter(validated, allowedFields))
+      aiPlan = await createCandidateAstQueryPlan(supabase, aiFilters.root, { forceAssociationRows: Boolean(hasAssocFilters) })
+    }
+    const aiAssociationRows = aiPlan?.rowMode === 'association'
+    const aiMixedRows = aiPlan?.rowMode === 'mixed'
+
+    if (aiMixedRows) {
+      let associationQuery = aiPlan.associationIds.length
+        ? supabase
+          .from('candidate_associations')
+          .select('*, candidates!inner(*)', { count: 'exact' })
+          .in('id', aiPlan.associationIds)
+        : null
+      if (associationQuery) {
+        associationQuery = applyCandidateBaseListFilters(associationQuery, req, allowedFields, 'candidates')
+          .limit(MAX_MATCH_IDS + 1)
+      }
+
+      let candidateQuery = aiPlan.candidateOnlyIds.length
+        ? supabase
+          .from('candidates')
+          .select('*', { count: 'exact' })
+          .in('id', aiPlan.candidateOnlyIds)
+        : null
+      if (candidateQuery) {
+        candidateQuery = applyCandidateBaseListFilters(candidateQuery, req, allowedFields)
+          .limit(MAX_MATCH_IDS + 1)
+      }
+
+      const [associationResult, candidateResult] = await Promise.all([
+        associationQuery || Promise.resolve({ data: [], error: null, count: 0 }),
+        candidateQuery || Promise.resolve({ data: [], error: null, count: 0 })
+      ])
+      const associationRows = completeBoundedRows(associationResult).map(flattenAssociation)
+      const candidateRows = completeBoundedRows(candidateResult).map(flattenCandidateOnly)
+      const enriched = await enrichCandidateRows([...associationRows, ...candidateRows])
+      const sorted = sortCandidateResultRows(enriched, sortField, sortDirection)
+      const total = sorted.length
+      const safeRows = await stripHiddenFields('candidates', sorted.slice(from, to + 1), await isAdmin(req.user))
+      return res.json({
+        data: safeRows,
+        total,
+        page,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        limit
+      })
+    }
+
+    if (aiAssociationRows) {
+      let query = supabase
+        .from(aiPlan.table)
+        .select(aiPlan.select, { count: 'exact' })
+      query = applyCandidateAstPlan(query, aiPlan)
+
+      if (sortField === 'candidate_id') {
+        query = query.order('candidates(created_at)', { ascending: sortDirection !== 'desc' })
+      } else if (sortField === 'candidate_name') {
+        query = query.order('candidates(full_name)', { ascending: sortDirection !== 'desc' })
+      } else {
+        query = query.order('created_at', { ascending: false })
+      }
+
+      if (req.query.job_title) query = query.ilike('job_title', `%${cleanText(req.query.job_title)}%`)
+      if (req.query.job_id) query = query.eq('job_id', cleanText(req.query.job_id))
+      if (req.query.client_name) query = query.ilike('client_name', `%${cleanText(req.query.client_name)}%`)
+      if (req.query.client_id) query = query.eq('client_id', cleanText(req.query.client_id))
+      if (req.query.consultant) query = query.ilike('consultant_name', cleanText(req.query.consultant))
+
+      query = applyDashboardPeriod(query, 'created_at', cleanText(req.query.period))
+
+      if (req.query.status) {
+        const statuses = String(req.query.status).split(',').map(status => status.trim()).filter(Boolean)
+        if (statuses.length === 1 && statuses[0] === '-') {
+          query = query.or('status.is.null,status.eq.-,status.match.^\\s*$')
+        } else {
+          query = statuses.length === 1 ? query.ilike('status', statuses[0]) : query.in('status', statuses)
+        }
+      }
+
+      if (req.query.salary_min) query = query.gte('current_salary', Number(req.query.salary_min))
+      if (req.query.salary_max) query = query.lte('current_salary', Number(req.query.salary_max))
+      query = applyCandidateBaseListFilters(query, req, allowedFields, 'candidates')
+
+      query = query.range(from, to)
+      const { data, error, count } = await query
+      if (error) throw error
+      const flattened = await enrichCandidateRows((data || []).map(flattenAssociation))
+      const safeRows = await stripHiddenFields('candidates', flattened, await isAdmin(req.user))
+      const total = count || 0
+      return res.json({
+        data: safeRows,
+        total,
+        page,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        limit
+      })
+    }
 
     let relationSelect = 'candidate_associations(*)'
     if (hasAssocFilters) {
@@ -1064,9 +1198,7 @@ async function listCandidates(req, res) {
       )
     }
 
-    if (aiFilters?.mode === 'ast') {
-      query = (await applyCandidateAstQuery(supabase, query, aiFilters.root)).query
-    }
+    if (aiPlan) query = applyCandidateAstPlan(query, aiPlan)
     query = query.range(from, to)
     const { data, error, count } = await query
 
@@ -1601,7 +1733,7 @@ async function buildAiCandidateFilters(req, res) {
 
     const allowedFields = await allowedCandidateFilterFields(req.user)
     const result = await parseAiFilters('candidates', prompt, { allowedFields })
-    await resolveCandidateFilterReferences(result.filters)
+    await resolveCandidateFilterReferences(candidateExecutionFilter(result.filters, allowedFields))
     return res.json(result)
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })

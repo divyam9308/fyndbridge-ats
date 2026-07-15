@@ -2,12 +2,8 @@ const path = require('node:path')
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 
 const { callAiJson, GEMINI_MODEL } = require('../src/services/aiProvider')
-const {
-  FIELD_REGISTRY,
-  buildCandidateFilterPrompt,
-  candidateFilterSchema,
-  validateCandidateFilter
-} = require('../src/services/candidateAiFilter')
+const { FIELD_REGISTRY } = require('../src/services/candidateAiFilter')
+const { buildCandidateIntentPrompt, candidateIntentSchema, validateCandidateIntent } = require('../src/services/candidateIntent')
 
 const cases = [
   ['show me all candidates whose status is -', ['status']],
@@ -55,12 +51,13 @@ const cases = [
 async function evaluate([query, expectedFields]) {
   try {
     const parsed = await callAiJson({
-      prompt: buildCandidateFilterPrompt(query, Object.keys(FIELD_REGISTRY)),
-      schema: candidateFilterSchema(),
-      schemaName: 'candidate_filter_ast_live_evaluation',
-      temperature: 0
+      prompt: buildCandidateIntentPrompt(query, Object.keys(FIELD_REGISTRY)),
+      schema: candidateIntentSchema(Object.keys(FIELD_REGISTRY)),
+      schemaName: 'candidate_intent_v2_live_evaluation',
+      temperature: 0,
+      primaryOnly: true
     })
-    const validated = parsed?.unsupported ? null : validateCandidateFilter(parsed)
+    const validated = validateCandidateIntent(parsed)
     const fields = [...new Set((validated?.conditions || []).map(item => item.field).filter(field => !FIELD_REGISTRY[field]?.internal))]
     const passed = expectedFields.every(field => fields.includes(field))
     return { query, passed, fields, error: passed ? '' : `expected ${expectedFields.join(', ')}` }
@@ -70,13 +67,17 @@ async function evaluate([query, expectedFields]) {
 }
 
 async function main() {
-  const results = []
-  for (let index = 0; index < cases.length; index += 4) {
-    results.push(...await Promise.all(cases.slice(index, index + 4).map(evaluate)))
+  if (process.env.ALLOW_LIVE_CANDIDATE_AI_EVALUATION !== 'true') {
+    throw new Error('Live candidate AI evaluation is disabled. Use the mocked test suite instead.')
   }
+  const results = []
+  for (const item of cases) results.push(await evaluate(item))
   const failed = results.filter(item => !item.passed)
   console.log(JSON.stringify({ model: GEMINI_MODEL, prompts: results.length, passed: results.length - failed.length, failed }, null, 2))
   if (failed.length) process.exitCode = 1
 }
 
-main()
+main().catch(error => {
+  console.error(error.message)
+  process.exitCode = 1
+})
