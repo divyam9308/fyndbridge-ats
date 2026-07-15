@@ -34,8 +34,13 @@ function job(overrides = {}) {
 
 function association(jobId, status, overrides = {}) {
   return {
+    id: `${jobId}-${String(status || 'unset')}`,
+    candidate_id: `${jobId}-${String(status || 'unset')}`,
     job_id: jobId,
     status,
+    consultant_name: CONSULTANT.name,
+    consultant_user_id: CONSULTANT.user_id,
+    created_at: `${START}T06:30:00.000Z`,
     client_submission_at: null,
     interview_at: null,
     offered_at: null,
@@ -48,6 +53,7 @@ function facts(jobs, associations, overrides = {}) {
   return buildConsultantReportFacts({
     jobs,
     associations,
+    candidateAssociations: overrides.candidateAssociations,
     consultant: CONSULTANT,
     startDate: overrides.startDate || START,
     endDate: overrides.endDate || END
@@ -82,7 +88,7 @@ test('report uses exactly the shared eleven candidate statuses and three mandate
   assert.equal(canonicalMandateStatus('unknown'), '')
 })
 
-test('report includes only consultant-owned mandates and excludes team-lead-only mandates everywhere', () => {
+test('mandate scope excludes team-lead-only mandates while candidate scope follows association ownership', () => {
   const consultantMandate = job({
     id: 'consultant-owned',
     consultants: ['  ASHA RAO  '],
@@ -104,9 +110,9 @@ test('report includes only consultant-owned mandates and excludes team-lead-only
   assert.equal(consultantMatches(consultantMandate, CONSULTANT.name), true)
   assert.equal(consultantMatches(teamLeadOnlyMandate, CONSULTANT.name), false)
   assert.deepEqual(result.mandateSummary, { total: 1, ongoing: 1, completed: 0, scrapped: 0 })
-  assert.equal(result.candidateOverview.total, 1)
+  assert.equal(result.candidateOverview.total, 2)
   assert.equal(result.candidateOverview.counts.Interested, 1)
-  assert.equal(result.candidateOverview.counts.Hired, 0)
+  assert.equal(result.candidateOverview.counts.Hired, 1)
   assert.deepEqual(result.mandates.map((row) => row.key), ['consultant-owned'])
   assert.deepEqual(result.recentMandates.map((row) => row.key), ['consultant-owned'])
   assert.deepEqual(result.recentConversions.map((row) => row.key), ['consultant-owned'])
@@ -137,7 +143,67 @@ test('candidate aggregation counts association rows at mandate grain and reconci
   assert.equal(result.candidateOverview.total, 12)
 })
 
-test('invalid candidate and mandate statuses are excluded consistently and produce structured warnings', () => {
+test('candidate overview follows association owner and added date independently from mandate scope', () => {
+  const result = facts(
+    [job({ id: 'in-period-mandate' })],
+    [association('in-period-mandate', 'Interview', { id: 'mandate-workload' })],
+    {
+      candidateAssociations: [
+        association('older-mandate', 'Interested', {
+          id: 'older-mandate-current-addition',
+          created_at: '2026-07-04T10:00:00.000Z'
+        }),
+        association('in-period-mandate', 'Hired', {
+          id: 'after-report-end',
+          created_at: '2026-07-15T20:00:00.000Z'
+        }),
+        association('in-period-mandate', 'Hired', {
+          id: 'different-owner',
+          consultant_user_id: '22222222-2222-4222-8222-222222222222',
+          consultant_name: 'Another Consultant'
+        }),
+        association('legacy-mandate', 'Offered', {
+          id: 'legacy-name-match',
+          consultant_user_id: null,
+          consultant_name: '  ASHA   RAO  '
+        }),
+        association('legacy-mandate', 'Interview', {
+          id: 'legacy-name-mismatch',
+          consultant_user_id: null,
+          consultant_name: 'Another Consultant'
+        }),
+        association(null, 'Client Submission', { id: 'missing-job-valid-addition' }),
+        association('older-mandate', '-', { id: 'unset-status' })
+      ]
+    }
+  )
+
+  assert.deepEqual(result.mandateSummary, { total: 1, ongoing: 1, completed: 0, scrapped: 0 })
+  assert.equal(result.mandates[0].candidatesAssigned, 1)
+  assert.equal(result.candidateOverview.total, 3)
+  assert.equal(result.candidateOverview.counts.Interested, 1)
+  assert.equal(result.candidateOverview.counts.Offered, 1)
+  assert.equal(result.candidateOverview.counts['Client Submission'], 1)
+  assert.equal(result.candidateOverview.counts.Hired, 0)
+  assert.equal(result.candidatePipeline.find((stage) => stage.key === 'total').count, 3)
+  assert.ok(result.warnings.some((warning) => warning.code === 'invalid_candidate_status' && warning.count === 1))
+})
+
+test('candidate added-date scope uses inclusive Asia/Kolkata calendar boundaries', () => {
+  const result = facts([], [], {
+    candidateAssociations: [
+      association('job', 'Interested', { id: 'before-start', created_at: '2026-06-30T18:29:59.999Z' }),
+      association('job', 'Interested', { id: 'at-start', created_at: '2026-06-30T18:30:00.000Z' }),
+      association('job', 'Interested', { id: 'at-end', created_at: '2026-07-15T18:29:59.999Z' }),
+      association('job', 'Interested', { id: 'after-end', created_at: '2026-07-15T18:30:00.000Z' })
+    ]
+  })
+
+  assert.equal(result.candidateOverview.total, 2)
+  assert.equal(result.candidateOverview.counts.Interested, 2)
+})
+
+test('candidate additions are not suppressed by an unsupported mandate status', () => {
   const result = facts(
     [job({ id: 'valid' }), job({ id: 'unknown', mandate_status: 'Mystery' })],
     [
@@ -150,9 +216,9 @@ test('invalid candidate and mandate statuses are excluded consistently and produ
 
   assert.equal(result.mandateSummary.total, 1)
   assert.deepEqual(result.mandateSummary, { total: 1, ongoing: 1, completed: 0, scrapped: 0 })
-  assert.equal(result.candidateOverview.total, 1)
-  assert.equal(result.candidateOverview.counts.Interested, 1)
-  assert.equal(Object.values(result.candidateOverview.counts).reduce((sum, count) => sum + count, 0), 1)
+  assert.equal(result.candidateOverview.total, 2)
+  assert.equal(result.candidateOverview.counts.Interested, 2)
+  assert.equal(Object.values(result.candidateOverview.counts).reduce((sum, count) => sum + count, 0), 2)
 
   const warnings = byKey(result.warnings.map((warning) => ({ ...warning, key: warning.code })))
   assert.equal(warnings.unknown_mandate_status.count, 1)

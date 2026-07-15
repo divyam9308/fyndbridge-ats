@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T11:44:06.366Z",
+  "generated_at": "2026-07-15T12:23:10.416Z",
   "target_page": {
     "name": "A4",
     "width_points": 595.28,
@@ -23,7 +23,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCAPL NOROUNDING (1).pdf",
       "reference_sha256": "9e9a3d81573f5ffcb15a6adc7cb91fcc35c5452d6d3a3341b96de565a6b8d746",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcapl-igst-no-rounding.pdf",
-      "generated_sha256": "557d6e349771bd6f4688ab51d53da0c82d3987062b7fe389965f27c7bcd6bf60",
+      "generated_sha256": "834c61f0e4ac2aed8878898e5be5b705f0ef162b9c09abdb294c0f553ed042ca",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FCAPL/26-27/001",
@@ -93,7 +93,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCAPL WITH ROUNDOFF.pdf",
       "reference_sha256": "6cb4f5108ec41642626003e6901c6fa2db1e7d93cdfbcebd343a2a9aa81413d5",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcapl-igst-rounding.pdf",
-      "generated_sha256": "00d327733b20058c116a12665db84adaf2e7ba4e5b47592fb35b2086b6098e08",
+      "generated_sha256": "93c9fa4835ee5cfb141ddbf2a74e395fcaf6684b6dcbb414681b6688cc8afaac",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FCAPL/26-27/001",
@@ -167,7 +167,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCAPL CGST SGST.pdf",
       "reference_sha256": "399959f4093eb5fbbba1216ac4980307cdb06e3559c30b25571b11dc45730160",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcapl-cgst-sgst.pdf",
-      "generated_sha256": "2c3cf9d8bc371760ff1c18e440ac6a4027703dca1f0693a5842e8d31a0b4cbc6",
+      "generated_sha256": "8b7a2799c3be700454bddbba2ee5fa299a9c674c8ef7f8b6d2515185639e70d2",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FCAPL/26-27/001",
@@ -242,7 +242,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCS NoRounding.pdf",
       "reference_sha256": "86dc5b67dd043c281719db223cc854375a1709170a9b81d7128927d1f91388b3",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcs-igst-no-rounding.pdf",
-      "generated_sha256": "447088f11babd8f31dc0e1c0435ed570e790cb037a04f86c9268b3a6c7f84e99",
+      "generated_sha256": "8dfb372eeba29ca60b8a7064cd3fc671fe050e0da458408f67dc8b61357f1f45",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FB/26-27/012",
@@ -312,7 +312,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCS with roundoff.pdf",
       "reference_sha256": "3aac4fca7eef75a067c365cfc62bd446ee3ab96a6fa8639900a4484e9b007a8f",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcs-igst-rounding.pdf",
-      "generated_sha256": "775c40227197ffb5bbe3d7606494baca8286e8c71ab2f8a8c23d674da79c4fa3",
+      "generated_sha256": "94ec965bc9d68caea19b6295ea2c81b77bebcfca72fa7d7136ac20fedbd57cc7",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FB/26-27/012",
@@ -385,7 +385,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCS_CGST_SGST.pdf",
       "reference_sha256": "68ebde5ec11b1a91d7b225e485e81397c3e9e2a235f9da4236dac0d9ed38c187",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcs-cgst-sgst.pdf",
-      "generated_sha256": "40339761770988c865f4379b9c69f9b9e17716383499e7dd460fb8bdfd246835",
+      "generated_sha256": "a8c8be03ad6dd855d05e40e66f8cacc53961f09d8f81611110c627c6c872a680",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FB/26-27/012",

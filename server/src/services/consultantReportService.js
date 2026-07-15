@@ -129,8 +129,33 @@ async function fetchAssociations(jobIds) {
   return groups.flat()
 }
 
+async function fetchCandidateAssociations(startDate, endDate, consultant) {
+  // created_at is timestamptz. Fetch a UTC guard band, then let the report
+  // logic apply the exact company-local inclusive date range.
+  const queryStart = addDays(startDate, -1)
+  const queryEnd = addDays(endDate, 2)
+  const select = 'id,candidate_id,job_id,status,consultant_name,consultant_user_id,created_at'
+  const queryFactory = () => supabase
+    .from('candidate_associations')
+    .select(select)
+    .gte('created_at', `${queryStart}T00:00:00.000Z`)
+    .lt('created_at', `${queryEnd}T00:00:00.000Z`)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+
+  const [owned, legacyUnlinked] = await Promise.all([
+    fetchEveryPage(() => queryFactory().eq('consultant_user_id', consultant.user_id)),
+    fetchEveryPage(() => queryFactory().is('consultant_user_id', null))
+  ])
+
+  return [...new Map([...owned, ...legacyUnlinked].map((association) => [association.id, association])).values()]
+}
+
 async function loadFacts(params, access) {
-  const jobs = await fetchJobs(params.startDate, params.endDate)
+  const [jobs, candidateAssociations] = await Promise.all([
+    fetchJobs(params.startDate, params.endDate),
+    fetchCandidateAssociations(params.startDate, params.endDate, access.target)
+  ])
   const assignedJobIds = jobs
     .filter((job) => consultantMatches(job, access.target.name))
     .map((job) => job.id)
@@ -138,6 +163,7 @@ async function loadFacts(params, access) {
   const facts = buildConsultantReportFacts({
     jobs,
     associations,
+    candidateAssociations,
     consultant: access.target,
     startDate: params.startDate,
     endDate: params.endDate
@@ -231,7 +257,7 @@ function metaFor(params, access, user, warnings, generatedAt) {
     dateConvention: 'Inclusive local calendar dates; future To dates are capped at today.',
     dateFields: {
       mandates: 'allocation_date, with created_at as the established fallback',
-      candidates: 'current candidate-association status under in-scope mandates',
+      candidates: 'candidate_associations.created_at, attributed by consultant_user_id with a legacy consultant_name fallback; current status as of report generation',
       attendance: 'attendance_date'
     },
     trackingLimitation: 'First-stage timestamps are tracked only after the stage-tracking migration; historical nulls are not estimated.',

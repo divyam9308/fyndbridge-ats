@@ -10,7 +10,11 @@ export const EMPTY_INVOICE = {
 }
 export function detectInvoiceGstComponent(location = {}) {
   const match = String(location.state_code ?? '').trim().match(/^0*(\d{1,2})$/)
-  if (match) return Number(match[1]) === 7 ? 'CGST_SGST' : 'IGST'
+  if (match) {
+    const stateCode = Number(match[1])
+    const isValidGstStateCode = (stateCode >= 1 && stateCode <= 38) || stateCode === 97 || stateCode === 99
+    if (isValidGstStateCode) return stateCode === 7 ? 'CGST_SGST' : 'IGST'
+  }
   const text = [location.address, location.state, location.place_of_supply].map(value => String(value ?? '')).join(' ')
   return /\b(new\s+delhi|delhi|south east delhi|north delhi|south delhi|east delhi|west delhi|central delhi)\b/i.test(text) ? 'CGST_SGST' : 'IGST'
 }

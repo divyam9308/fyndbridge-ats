@@ -174,11 +174,11 @@ function CandidatesReport({ report }) {
   return (
     <div className="report-tab-panel">
       <section className="report-section">
-        <ReportSectionHeader title="Candidate Overview" description={`Complete status distribution for all ${overview.total ?? 0} candidates in this report scope.`} />
+        <ReportSectionHeader title="Candidate Overview" description={`Current status distribution for ${overview.total ?? 0} valid-status candidate additions owned by this consultant during the report period. Unset or unsupported statuses are excluded.`} />
         <CandidateOverview overview={overview} />
       </section>
       <section className="report-section">
-        <ReportSectionHeader title="Candidate Pipeline" description="Progression through the primary recruitment stages, with every percentage calculated from total candidates." />
+        <ReportSectionHeader title="Candidate Pipeline" description="Current primary stages for candidate additions in the selected period, with every percentage calculated from total candidates." />
         <CandidatePipeline stages={pipeline} total={overview.total} />
       </section>
     </div>

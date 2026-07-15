@@ -112,6 +112,20 @@ function consultantMatches(job, consultantName) {
   return parseList(job.consultants).some((name) => same(name, consultantName))
 }
 
+function candidateAssociationMatches(association, consultant) {
+  const associationUserId = clean(association?.consultant_user_id)
+  const consultantUserId = clean(consultant?.user_id)
+  if (associationUserId) return Boolean(consultantUserId && associationUserId === consultantUserId)
+  return same(association?.consultant_name, consultant?.name)
+}
+
+function candidateAssociationDate(association) {
+  const createdAt = clean(association?.created_at)
+  if (!createdAt) return ''
+  const parsed = new Date(createdAt)
+  return Number.isNaN(parsed.getTime()) ? '' : localDate(parsed)
+}
+
 function mandateDate(job) {
   if (isValidDate(job.allocation_date)) return job.allocation_date
   const createdAt = clean(job.created_at)
@@ -229,9 +243,10 @@ function toConversionRow(row) {
   }
 }
 
-function buildConsultantReportFacts({ jobs = [], associations = [], consultant, startDate, endDate }) {
+function buildConsultantReportFacts({ jobs = [], associations = [], candidateAssociations, consultant, startDate, endDate }) {
   const warnings = warningCollector()
   const scopedJobs = []
+  const candidateRows = candidateAssociations === undefined ? associations : candidateAssociations
 
   for (const job of jobs) {
     if (!consultantMatches(job, consultant.name)) continue
@@ -254,9 +269,6 @@ function buildConsultantReportFacts({ jobs = [], associations = [], consultant, 
   for (const association of associations) {
     if (!scopedJobIds.has(association.job_id)) continue
     const status = canonicalCandidateStatus(association.status)
-    if (!status) {
-      warnings.add('invalid_candidate_status', 'Some candidate associations have a null or unsupported status and were excluded from current-status totals.')
-    }
     associationsByJob.get(association.job_id).push({ ...association, canonicalStatus: status || '' })
   }
 
@@ -337,7 +349,21 @@ function buildConsultantReportFacts({ jobs = [], associations = [], consultant, 
   })
 
   const candidateCounts = emptyStatusCounts()
-  mandateRows.forEach((row) => CANDIDATE_STATUSES.forEach((status) => { candidateCounts[status] += row.counts[status] }))
+  for (const association of candidateRows) {
+    if (!candidateAssociationMatches(association, consultant)) continue
+    const addedDate = candidateAssociationDate(association)
+    if (!addedDate) {
+      warnings.add('missing_candidate_added_date', 'Some candidate associations have no valid added date and were excluded from candidate totals.')
+      continue
+    }
+    if (addedDate < startDate || addedDate > endDate) continue
+    const status = canonicalCandidateStatus(association.status)
+    if (!status) {
+      warnings.add('invalid_candidate_status', 'Some candidate associations have a null or unsupported status and were excluded from current-status totals.')
+      continue
+    }
+    candidateCounts[status] += 1
+  }
   const candidateOverview = {
     total: Object.values(candidateCounts).reduce((total, value) => total + value, 0),
     counts: candidateCounts
@@ -438,6 +464,8 @@ module.exports = {
   STAGES,
   buildConsultantReportFacts,
   buildCandidatePipeline,
+  candidateAssociationDate,
+  candidateAssociationMatches,
   canonicalMandateStatus,
   consultantMatches,
   daysBetween,

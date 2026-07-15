@@ -162,3 +162,13 @@ test('report identity and attendance payload omit mock-only private fields and l
   assert.match(reportService, /attendanceService\.leaveBalanceSummary\(/)
   assert.doesNotMatch(reportService, /leaveTypes|leaveCategories|leave_type/)
 })
+
+test('candidate report facts use association ownership and added-date scope independently from mandates', () => {
+  assert.match(reportService, /function fetchCandidateAssociations\(startDate, endDate, consultant\)/)
+  assert.match(reportService, /\.gte\('created_at', `\$\{queryStart\}T00:00:00\.000Z`\)/)
+  assert.match(reportService, /\.lt\('created_at', `\$\{queryEnd\}T00:00:00\.000Z`\)/)
+  assert.match(reportService, /queryFactory\(\)\.eq\('consultant_user_id', consultant\.user_id\)/)
+  assert.match(reportService, /queryFactory\(\)\.is\('consultant_user_id', null\)/)
+  assert.match(reportService, /buildConsultantReportFacts\(\{[\s\S]*?candidateAssociations,[\s\S]*?consultant: access\.target/)
+  assert.match(reportService, /candidates: 'candidate_associations\.created_at, attributed by consultant_user_id with a legacy consultant_name fallback;/)
+})

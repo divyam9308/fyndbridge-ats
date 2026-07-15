@@ -187,6 +187,142 @@ def span_matching(spans: list[dict], needle: str) -> dict | None:
     return next((span for span in spans if needle in span["text"]), None)
 
 
+def extract_text_spans(page: fitz.Page) -> list[dict]:
+    spans = []
+    for block in page.get_text("dict").get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                spans.append({
+                    "text": span.get("text", ""),
+                    "font": span.get("font", ""),
+                    "size": span.get("size", 0),
+                    "bbox": list(span.get("bbox", (0, 0, 0, 0))),
+                })
+    return spans
+
+
+def map_reference_y_to_a4(value: float, profile: dict) -> float:
+    source_points = [0.0, *profile["source_y_points"], 792.0]
+    target_points = [0.0, *profile["target_y_points"], A4_HEIGHT_POINTS]
+    for source_top, source_bottom, target_top, target_bottom in zip(
+        source_points, source_points[1:], target_points, target_points[1:]
+    ):
+        if value <= source_bottom + 1e-6:
+            fraction = (value - source_top) / (source_bottom - source_top)
+            return target_top + fraction * (target_bottom - target_top)
+    return value
+
+
+def text_anchor_assertions(reference_page: fitz.Page, generated_spans: list[dict], profile: dict, case: dict) -> dict:
+    reference_spans = extract_text_spans(reference_page)
+    is_cgst = case["tax_type"] == "CGST_SGST"
+    is_fcapl = case["entity"] == "FCAPL"
+    issuer_name = "FyndBridge Consultants & Advisors Private Limited" if is_fcapl else "FyndBridge Consulting Services"
+    issuer_regd = "Regd Office: Second Floor, House No- A-34," if is_fcapl else "Regd Office: Ground Floor, 20, New Delhi,"
+    issuer_address = "Pocket A-8, Kalkaji Extension, Behind" if is_fcapl else "Okhla Industrial Estate Phase 3, New Delhi,"
+    issuer_gstin = "GSTIN: 07AAFCF8821L1ZA" if is_fcapl else "GSTIN: 07AAJFF1433D1ZV"
+    anchors = [
+        ("title", "TAX INVOICE", "TAX INVOICE", True),
+        ("invoice_number", "Invoice No.", "Invoice No.", False),
+        ("date", "Dated:", "Dated:", False),
+        ("bill_to", "BILL TO:", "BILL TO:", True),
+        ("client_name", "M/S SMT SHAKUNTLA EDUCATIONAL & WELFARE SOCIETY", "M/S SMT SHAKUNTLA EDUCATIONAL & WELFARE SOCIETY", True),
+        ("client_address", "PLOT NO. 1, KNOWLEDGE PARK II", "20, OKHLA INDUSTRIAL ESTATE" if is_cgst else "PLOT NO. 1, KNOWLEDGE PARK II", False),
+        ("client_pan_label", "PAN / IT No", "PAN / IT No", True),
+        ("client_pan_value", "AABTS7575D", "AABTS7575D", True),
+        ("place_of_supply_label", "Place of Supply", "Place of Supply", True),
+        ("place_of_supply_value", "Greater Noida", "New Delhi" if is_cgst else "Greater Noida", True),
+        ("client_state_label", "State", "State", True),
+        ("client_state_value", "Uttar Pradesh   Code: 09", "Delhi   Code: 07" if is_cgst else "Uttar Pradesh   Code: 09", True),
+        ("client_gstin_label", "GSTIN", "GSTIN", True),
+        ("client_gstin_value", "09AABTS7575D1Z6", "07AABTS7575D1Z6" if is_cgst else "09AABTS7575D1Z6", True),
+        ("contact_person_label", "Contact Person", "Contact Person", True),
+        ("contact_person_value", "Shilpi Chandra", "Shilpi Chandra", True),
+        ("client_email_label", "Email", "Email", True),
+        ("client_email_value", "shilpi.chandra@galgotiasuniversi", "shilpi.chandra@galgotiasuniversi", False),
+        ("from", "FROM:", "FROM:", True),
+        ("issuer_name", issuer_name, issuer_name, True),
+        ("issuer_registered_office", issuer_regd, issuer_regd, True),
+        ("issuer_address", issuer_address, issuer_address, True),
+        ("issuer_mobile", "Mobile: 9717773066", "Mobile: 9717773066", True),
+        ("issuer_email", "Email: partner@fyndbridge.in", "Email: partner@fyndbridge.in", True),
+        ("issuer_state", "State: Delhi", "State: Delhi", True),
+        ("issuer_state_code", "State Code: 07", "State Code: 07", True),
+        ("issuer_gstin", issuer_gstin, issuer_gstin, True),
+        *(([("issuer_cin", "CIN: U70200DL2024PTC429251", "CIN: U70200DL2024PTC429251", True)]) if is_fcapl else []),
+        ("service_header", "Description of Services", "Description of Services", True),
+        ("sac_header", "SAC", "SAC", True),
+        ("amount_words", "Amount Chargeable", "Amount Chargeable", False),
+        ("tax_words", "Tax Amount (in words)", "Tax Amount (in words)", False),
+        ("bank_name", "Bank Name", "Bank Name", True),
+        ("authorized_signatory", "Authorized Signatory", "Authorized Signatory", True),
+    ]
+
+    def pick(spans: list[dict], needle: str, exact: bool) -> dict | None:
+        matches = [
+            span for span in spans
+            if (span["text"].strip() == needle if exact else needle in span["text"])
+        ]
+        return min(matches, key=lambda span: span["bbox"][1], default=None)
+
+    checks = []
+    horizontal_scale = A4_WIDTH_POINTS / 612
+    for key, reference_needle, generated_needle, exact in anchors:
+        reference = pick(reference_spans, reference_needle, exact)
+        generated = pick(generated_spans, generated_needle, exact)
+        expected = None
+        actual = None
+        x_error = None
+        y_error = None
+        size_error = None
+        if reference:
+            expected = [
+                reference["bbox"][0] * horizontal_scale,
+                map_reference_y_to_a4(reference["bbox"][1], profile),
+                reference["size"] * horizontal_scale,
+            ]
+        if generated:
+            actual = [*generated["bbox"][:2], generated["size"]]
+        if expected and actual:
+            x_error = abs(actual[0] - expected[0])
+            y_error = abs(actual[1] - expected[1])
+            size_error = abs(actual[2] - expected[2])
+        checks.append({
+            "key": key,
+            "reference_needle": reference_needle,
+            "generated_needle": generated_needle,
+            "expected": expected,
+            "actual": actual,
+            "x_error_points": x_error,
+            "y_error_points": y_error,
+            "font_size_error_points": size_error,
+            "font_size_checked": key != "client_email_value",
+        })
+
+    tolerance = 2.25
+    font_size_tolerance = 1.5
+    numeric = [item for item in checks if item["x_error_points"] is not None and item["y_error_points"] is not None]
+    return {
+        "tolerance_points": tolerance,
+        "font_size_tolerance_points": font_size_tolerance,
+        "max_x_error_points": max((item["x_error_points"] for item in numeric), default=None),
+        "max_y_error_points": max((item["y_error_points"] for item in numeric), default=None),
+        "max_font_size_error_points": max((item["font_size_error_points"] for item in numeric), default=None),
+        "max_checked_font_size_error_points": max((
+            item["font_size_error_points"] for item in numeric if item["font_size_checked"]
+        ), default=None),
+        "checks": checks,
+        "passed": len(numeric) == len(checks) and all(
+            item["x_error_points"] <= tolerance
+            and item["y_error_points"] <= tolerance
+            and (not item["font_size_checked"] or item["font_size_error_points"] <= font_size_tolerance)
+            for item in numeric
+        ),
+    }
+
+
 def overlapping_text_pairs(spans: list[dict]) -> list[dict]:
     overlaps = []
     for index, first in enumerate(spans):
@@ -269,21 +405,11 @@ def inspect_pdf(pdf_path: Path, expected_text: list[str], dpi: int) -> tuple[dic
         })
 
     outside_text = 0
-    text_spans = []
-    for block in page.get_text("dict").get("blocks", []):
-        if block.get("type") != 0:
-            continue
-        for line in block.get("lines", []):
-            for span in line.get("spans", []):
-                x0, y0, x1, y1 = span.get("bbox", (0, 0, 0, 0))
-                text_spans.append({
-                    "text": span.get("text", ""),
-                    "font": span.get("font", ""),
-                    "size": span.get("size", 0),
-                    "bbox": [x0, y0, x1, y1],
-                })
-                if x0 < -0.5 or y0 < -0.5 or x1 > rect.width + 0.5 or y1 > rect.height + 0.5:
-                    outside_text += 1
+    text_spans = extract_text_spans(page)
+    for span in text_spans:
+        x0, y0, x1, y1 = span["bbox"]
+        if x0 < -0.5 or y0 < -0.5 or x1 > rect.width + 0.5 or y1 > rect.height + 0.5:
+            outside_text += 1
 
     outside_drawings = 0
     for drawing in page.get_drawings():
@@ -385,25 +511,38 @@ def write_markdown(report: dict, output_path: Path) -> None:
         "",
         f"Target: A4 (595.28 x 841.89 pt), {report['dpi']} DPI",
         "",
-        "| Case | Page | X max error | Y max error | Diagnostic diff % | Structural result |",
-        "|---|---:|---:|---:|---:|---|",
+        "| Case | Page | Rule X error | Rule Y error | Text max error | Checked font max error | Diagnostic diff % | Structural result |",
+        "|---|---:|---:|---:|---:|---:|---:|---|",
     ]
     for case in report["cases"]:
         structure = case["generated_structure"]
         x_error = case["profile_assertions"]["x_coordinates"]["max_error_points"]
         y_error = case["profile_assertions"]["y_coordinates"]["max_error_points"]
+        text_error = max(
+            case["text_anchor_assertions"]["max_x_error_points"] or 0,
+            case["text_anchor_assertions"]["max_y_error_points"] or 0,
+        )
+        font_error = case["text_anchor_assertions"]["max_checked_font_size_error_points"] or 0
         rows.append(
-            "| {id} | {width:.2f} x {height:.2f} | {x_error} | {y_error} | {percent:.6f}% | {result} |".format(
+            "| {id} | {width:.2f} x {height:.2f} | {x_error} | {y_error} | {text_error:.3f} | {font_error:.3f} | {percent:.6f}% | {result} |".format(
                 id=case["id"],
                 width=structure["page_width_points"],
                 height=structure["page_height_points"],
                 x_error=f"{x_error:.3f}" if x_error is not None else "n/a",
                 y_error=f"{y_error:.3f}" if y_error is not None else "n/a",
+                text_error=text_error,
+                font_error=font_error,
                 percent=case["pixel_difference"]["changed_percent"],
                 result="PASS" if case["passed"] else "FAIL",
             )
         )
-    rows.extend(["", f"Overall: {'PASS' if report['passed'] else 'FAIL'}", ""])
+    rows.extend([
+        "",
+        "The client-email anchor is position-gated but its fitted font size is diagnostic: the source PDFs clip the sample address, while the production PDF preserves the complete dynamic email inside its cell.",
+        "",
+        f"Overall: {'PASS' if report['passed'] else 'FAIL'}",
+        "",
+    ])
     output_path.write_text("\n".join(rows), encoding="utf-8")
 
 
@@ -453,6 +592,7 @@ def main(args: argparse.Namespace) -> int:
         reference_hash_matches = reference_digest == item["reference_sha256"]
         generated_hash_matches = generated_digest == item["generated_sha256"]
         profile_assertions = invoice_profile_assertions(generated_structure, item["a4_profile"])
+        anchor_assertions = text_anchor_assertions(reference_page, generated_structure["text_spans"], item["a4_profile"], item)
         structural_pass = (
             item["renderer_reported_page_count"] == 1
             and generated_structure["page_count"] == 1
@@ -471,6 +611,7 @@ def main(args: argparse.Namespace) -> int:
             and reference_hash_matches
             and generated_hash_matches
             and profile_assertions["passed"]
+            and anchor_assertions["passed"]
         )
         visual_within_advisory_threshold = metrics["changed_percent"] <= args.max_diff_percent
         case_report = {
@@ -493,6 +634,7 @@ def main(args: argparse.Namespace) -> int:
             "generated_cropped_nonwhite_pixels": cropped_generated_ink,
             "generated_structure": generated_structure,
             "profile_assertions": profile_assertions,
+            "text_anchor_assertions": anchor_assertions,
             "pixel_difference": rounded_metrics(metrics),
             "structural_pass": structural_pass,
             "visual_within_advisory_threshold": visual_within_advisory_threshold,

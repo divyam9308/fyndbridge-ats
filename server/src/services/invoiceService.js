@@ -101,6 +101,11 @@ const INVOICE_LAYOUTS = Object.freeze({
       summaryData: 541.15, summaryBottom: 554.69, taxWords: 568.23, lowerBottom: 639.10, bottom: 750.71
     },
     logo: { x: scaled(27.30), y: scaled(30.87), width: scaled(174.95), height: scaled(27.83) },
+    detailPaddingX: scaled(2.16), clientValueX: 183.16, clientNameY: 98.93, clientAddressY: 122.93, clientAddressLineGap: 0.81,
+    clientTextY: [164.18, 176.66, 189.14, 201.62, 214.10, 226.61].map(scaled),
+    clientValueTextY: [159.58, 171.72, 183.86, 196.00, 208.14, 220.31],
+    issuerLabelY: 84.10, issuerNameY: 98.93,
+    issuerTextY: [110.79, 122.93, 135.07, 147.21, 159.35, 171.49, 183.63, 195.77, 207.91, 220.07],
     taxTextY: [390.18, 405.48], splitStartsAtTop: true, descriptionBreak: true,
     branchLines: '233 Okhla Industrial Estate, New Delhi -\n110020'
   },
@@ -118,6 +123,11 @@ const INVOICE_LAYOUTS = Object.freeze({
       summaryBottom: 569.92, taxWords: 583.92, lowerBottom: 658.19, bottom: 772.19
     },
     logo: { x: scaled(27.484), y: scaled(31.171), width: scaled(180.75), height: scaled(28.759) },
+    detailPaddingX: scaled(2.28), clientValueX: 181.29, clientNameY: 101.64, clientAddressY: 126.57, clientAddressLineGap: 0.89,
+    clientTextY: [169.37, 182.33, 195.29, 208.25, 221.21, 238.28].map(scaled),
+    clientValueTextY: [164.62, 177.23, 189.84, 202.44, 215.05, 227.45],
+    issuerLabelY: 86.23, issuerNameY: 101.64,
+    issuerTextY: [113.97, 126.57, 139.18, 151.78, 164.39, 177.00, 189.60, 202.21, 214.81, 227.45],
     taxTextY: [433.72], descriptionBreak: true,
     branchLines: '233 OKHLA INDUSTRIAL ESTATE\nNew Delhi - 110020'
   },
@@ -135,6 +145,11 @@ const INVOICE_LAYOUTS = Object.freeze({
       summaryBottom: 616.52, taxWords: 630.06, lowerBottom: 700.94, bottom: 807.44
     },
     logo: { x: scaled(27.30), y: scaled(30.87), width: scaled(175.02), height: scaled(27.83) },
+    detailPaddingX: scaled(2.16), clientValueX: 176.27, clientNameY: 98.93, clientAddressY: 122.93, clientAddressLineGap: 0.81,
+    clientTextY: [164.18, 176.66, 189.14, 201.62, 214.10, 229.61].map(scaled),
+    clientValueTextY: [159.58, 171.72, 183.86, 196.00, 208.14, 223.22],
+    issuerLabelY: 84.10, issuerNameY: 98.93,
+    issuerTextY: [110.79, 122.93, 135.07, 147.21, 159.35, 171.48, 183.62, 195.76, 207.90, 220.07],
     taxTextY: [438.73], lineItemBold: true, taxBold: true, descriptionBreak: true,
     branchLines: '233 Okhla Industrial Estate, New Delhi -\n110020'
   },
@@ -152,6 +167,11 @@ const INVOICE_LAYOUTS = Object.freeze({
       summaryBottom: 614.92, taxWords: 629.05, lowerBottom: 695.49, bottom: 816.66
     },
     logo: { x: scaled(27.546), y: scaled(31.271), width: scaled(182.52), height: scaled(28.909) },
+    detailPaddingX: scaled(2.76), clientValueX: 187.12, clientNameY: 100.83, clientAddressY: 127.40, clientAddressLineGap: 0.87,
+    clientTextY: [170.58, 180.78, 190.86, 203.94, 217.02, 230.13].map(scaled),
+    clientValueTextY: [165.80, 175.72, 185.53, 198.25, 210.97, 223.72],
+    issuerLabelY: 86.71, issuerNameY: 100.83,
+    issuerTextY: [114.68, 127.40, 140.12, 152.84, 165.57, null, 185.29, 198.01, 210.74, 223.49],
     taxTextY: [468.13], taxWordsBold: false,
     branchLines: '233 Okhla Industrial Estate, New Delhi\n- 110020'
   },
@@ -169,6 +189,12 @@ const INVOICE_LAYOUTS = Object.freeze({
       summaryBottom: 620.63, taxWords: 634.43, lowerBottom: 706.91, bottom: 814.09
     },
     logo: { x: scaled(27.362), y: scaled(30.970), width: scaled(177.00), height: scaled(27.98) },
+    detailPaddingX: scaled(2.28), clientValueX: 190.63, clientNameY: 99.74, clientAddressY: 123.76, clientAddressLineGap: 0.78,
+    clientTextY: [165.51, 178.12, 190.71, 203.32, 215.91, 230.70].map(scaled),
+    clientValueTextY: [160.76, 173.02, 185.27, 197.53, 209.78, 224.17],
+    issuerLabelY: 84.69, issuerNameY: 99.74,
+    issuerTextY: [111.50, 123.76, 136.01, 148.27, 160.53, null, 185.04, 197.29, 210.18, 225.38],
+    issuerLineSizes: [null, null, null, null, null, null, null, null, 10.04, 10.04],
     taxTextY: [452.96], descriptionBreak: true,
     branchLines: '233 Okhla Industrial Estate, New\nDelhi - 110020'
   },
@@ -186,6 +212,11 @@ const INVOICE_LAYOUTS = Object.freeze({
       summaryData: 554.16, summaryBottom: 568.29, taxWords: 582.41, lowerBottom: 648.85, bottom: 779.31
     },
     logo: { x: scaled(27.546), y: scaled(31.271), width: scaled(182.59), height: scaled(28.909) },
+    detailPaddingX: scaled(2.28), clientValueX: 170.78, clientNameY: 100.83, clientAddressY: 127.40, clientAddressLineGap: 0.87,
+    clientTextY: [170.58, 180.78, 190.86, 203.94, 217.02, 230.13].map(scaled),
+    clientValueTextY: [165.80, 175.72, 185.53, 198.25, 210.97, 223.72],
+    issuerLabelY: 86.71, issuerNameY: 100.83,
+    issuerTextY: [114.68, 127.40, 140.12, 152.85, 165.57, null, 185.30, 198.02, 210.74, 223.49],
     taxTextY: [395.83, 411.36], reverseBold: false, roundingDivider: true,
     branchLines: '233 Okhla Industrial Estate, New Delhi -\n110020'
   }
@@ -402,14 +433,14 @@ function setupFonts(doc) {
   }
 }
 
-function fitFontSize(doc, text, font, width, height, maxSize, minSize, singleLine = false) {
+function fitFontSize(doc, text, font, width, height, maxSize, minSize, singleLine = false, lineGap = 0) {
   let size = maxSize
   const content = String(text ?? '')
   doc.font(font)
   while (size > minSize) {
     doc.fontSize(size)
     const tooWide = singleLine && doc.widthOfString(content) > width
-    const tooTall = !singleLine && doc.heightOfString(content, { width, lineGap: 0 }) > height
+    const tooTall = !singleLine && doc.heightOfString(content, { width, lineGap }) > height
     if (!tooWide && !tooTall) break
     size -= 0.18
   }
@@ -450,15 +481,16 @@ function textBox(doc, text, x, y, width, height, options = {}) {
   const font = options.bold ? fonts.bold : fonts.regular
   const symbolFont = options.bold ? fonts.currencyBold : fonts.currencyRegular
   const mixedCurrency = content.includes('₹') && options.singleLine
+  const lineGap = options.lineGap || 0
   const usableWidth = Math.max(1, width - paddingX * 2)
   const usableHeight = Math.max(1, height - paddingY * 2)
   const size = mixedCurrency
     ? fitMixedCurrencySize(doc, content, font, symbolFont, usableWidth, usableHeight, options.size || 8.8, options.minSize || 5.4)
-    : fitFontSize(doc, content, font, usableWidth, usableHeight, options.size || 8.8, options.minSize || 5.4, options.singleLine)
+    : fitFontSize(doc, content, font, usableWidth, usableHeight, options.size || 8.8, options.minSize || 5.4, options.singleLine, lineGap)
   doc.font(font).fontSize(size)
   const measuredHeight = mixedCurrency
     ? mixedCurrencyMetrics(doc, content, font, symbolFont, size).height
-    : (options.singleLine ? doc.currentLineHeight() : doc.heightOfString(content, { width: usableWidth, lineGap: 0 }))
+    : (options.singleLine ? doc.currentLineHeight() : doc.heightOfString(content, { width: usableWidth, lineGap }))
   let textY = y + paddingY
   if (options.valign === 'center') textY = y + Math.max(paddingY, (height - measuredHeight) / 2 - 0.25)
   if (options.valign === 'bottom') textY = y + Math.max(paddingY, height - measuredHeight - paddingY)
@@ -480,7 +512,7 @@ function textBox(doc, text, x, y, width, height, options = {}) {
     width: usableWidth,
     height: usableHeight,
     align: options.align || 'left',
-    lineGap: 0,
+    lineGap,
     characterSpacing: options.characterSpacing || 0,
     lineBreak: options.singleLine ? false : true
   })
@@ -579,13 +611,14 @@ function drawClientDetails(doc, layout, entity) {
   const right = x.split
   const width = right - left
   const body = layout.bodySize
-  textBox(doc, 'BILL TO:', left, y.meta, width, 14, { bold: true, size: layout.metaSize, singleLine: true, valign: 'center' })
-  let cursor = y.meta + 15
-  const legalResult = textBox(doc, clean(entity.legal_entity_name), left, cursor, width, 22, { bold: true, size: layout.metaSize, minSize: body - 1.8 })
+  const detailPaddingX = layout.detailPaddingX || 1.8
+  textBox(doc, 'BILL TO:', left, y.meta, width, 14, { bold: true, size: layout.metaSize, singleLine: true, valign: 'center', paddingX: detailPaddingX })
+  let cursor = layout.clientNameY ? layout.clientNameY - 1.1 : y.meta + 15
+  const legalResult = textBox(doc, clean(entity.legal_entity_name), left, cursor, width, 22, { bold: true, size: layout.metaSize, minSize: body - 1.8, paddingX: detailPaddingX })
   cursor += Math.max(13, Math.min(22, legalResult.height + 1.2))
   const optionalName = normalizedOptionalName(entity.optional_name)
   if (optionalName) {
-    const optionalResult = textBox(doc, optionalName, left, cursor, width, 15, { size: body, minSize: body - 1.8 })
+    const optionalResult = textBox(doc, optionalName, left, cursor, width, 15, { size: body, minSize: body - 1.8, paddingX: detailPaddingX })
     cursor += Math.max(11, Math.min(15, optionalResult.height + 1))
   } else {
     cursor += 11.5
@@ -598,15 +631,30 @@ function drawClientDetails(doc, layout, entity) {
     ['GSTIN', entity.gstin],
     ['Contact Person', entity.contact_person],
     ['Email', entity.email]
-  ].filter(([, value]) => clean(value))
+  ].map(([label, value], slot) => ({ label, value, slot })).filter(row => clean(row.value))
   const rowHeight = Math.max(11.2, Math.min(13.1, (y.details - y.meta - 68) / Math.max(1, rows.length)))
-  const rowsTop = y.details - layout.majorRule - rows.length * rowHeight - 2
-  textBox(doc, clean(entity.address), left, cursor, width, Math.max(12, rowsTop - cursor - 1), { size: body, minSize: body - 2.2 })
-  const labelWidth = Math.min(158, width * 0.51)
-  rows.forEach(([label, value], index) => {
-    const rowY = rowsTop + index * rowHeight
-    textBox(doc, label, left, rowY, labelWidth, rowHeight, { bold: true, size: body, minSize: body - 1.5, singleLine: true, valign: 'center' })
-    textBox(doc, clean(value), left + labelWidth, rowY, width - labelWidth, rowHeight, { size: body, minSize: 5.5, singleLine: true, valign: 'center' })
+  const rowsTop = layout.clientTextY?.[0] ? layout.clientTextY[0] - 2.2 : y.details - layout.majorRule - rows.length * rowHeight - 2
+  const addressY = !optionalName && layout.clientAddressY ? layout.clientAddressY - 1.1 : cursor
+  textBox(doc, clean(entity.address), left, addressY, width, Math.max(12, rowsTop - addressY - 1), {
+    size: body,
+    minSize: body - 2.2,
+    lineGap: !optionalName ? layout.clientAddressLineGap || 0 : 0,
+    paddingX: detailPaddingX
+  })
+  const valueCellX = layout.clientValueX ? layout.clientValueX - detailPaddingX : left + Math.min(158, width * 0.51)
+  const labelWidth = valueCellX - left
+  rows.forEach(({ label, value, slot }, index) => {
+    const explicitTextY = layout.clientTextY?.[slot]
+    const rowY = explicitTextY ? explicitTextY - 1.1 : rowsTop + index * rowHeight
+    const explicitValueTextY = layout.clientValueTextY?.[slot]
+    const valueRowY = explicitValueTextY ? explicitValueTextY - 1.1 : rowY
+    const nextTextY = layout.clientTextY?.[slot + 1]
+    const height = explicitTextY ? Math.max(body + 2.2, (nextTextY || y.details) - explicitTextY) : rowHeight
+    const valueHeight = explicitValueTextY ? Math.max(body + 2.2, y.details - explicitValueTextY) : height
+    const verticalOptions = explicitTextY ? {} : { valign: 'center' }
+    textBox(doc, label, left, rowY, labelWidth, height, { bold: true, size: body, minSize: body - 1.5, singleLine: true, paddingX: detailPaddingX, ...verticalOptions })
+    const displayedValue = label === 'State' ? value : clean(value)
+    textBox(doc, displayedValue, valueCellX, valueRowY, x.split - valueCellX, valueHeight, { size: body, minSize: 5.5, singleLine: true, paddingX: detailPaddingX, ...verticalOptions })
   })
 }
 
@@ -615,8 +663,15 @@ function drawIssuerDetails(doc, layout, company) {
   const left = x.split
   const width = x.right - left
   const body = layout.bodySize
-  textBox(doc, 'FROM:', left, y.meta, width, 14, { bold: true, size: layout.metaSize, singleLine: true, valign: 'center' })
-  textBox(doc, company.name, left, y.meta + 15, width, 17, { bold: true, size: layout.metaSize, minSize: body - 1.2, singleLine: true, valign: 'center' })
+  const detailPaddingX = layout.detailPaddingX || 1.8
+  const labelOptions = layout.issuerLabelY
+    ? { y: layout.issuerLabelY - 1.1, height: layout.metaSize + 3 }
+    : { y: y.meta, height: 14, valign: 'center' }
+  const nameOptions = layout.issuerNameY
+    ? { y: layout.issuerNameY - 1.1, height: layout.metaSize + 3 }
+    : { y: y.meta + 13, height: 17, valign: 'center' }
+  textBox(doc, 'FROM:', left, labelOptions.y, width, labelOptions.height, { bold: true, size: layout.metaSize, singleLine: true, paddingX: detailPaddingX, valign: labelOptions.valign })
+  textBox(doc, company.name, left, nameOptions.y, width, nameOptions.height, { bold: true, size: layout.metaSize, minSize: body - 1.2, singleLine: true, paddingX: detailPaddingX, valign: nameOptions.valign })
   const addressLines = [`Regd Office: ${company.address[0]}`, ...company.address.slice(1)]
   const stateLines = company === COMPANY.FCAPL
     ? [`State Code: ${company.stateCode}`, `State: ${company.state}`]
@@ -630,7 +685,21 @@ function drawIssuerDetails(doc, layout, company) {
     `GSTIN: ${company.gstin}`,
     company.cin ? `CIN: ${company.cin}` : null
   ].filter(value => value !== null)
-  textBox(doc, issuerLines.join('\n'), left, y.meta + 31, width, y.details - y.meta - 33, { size: body, minSize: body - 2.1 })
+  if (layout.issuerTextY) {
+    issuerLines.forEach((line, index) => {
+      if (!line) return
+      const size = layout.issuerLineSizes?.[index] || body
+      const anchorY = layout.issuerTextY[index]
+      textBox(doc, line, left, anchorY - 1.1, width, size + 3, {
+        size,
+        minSize: Math.max(5.5, size - 2.1),
+        singleLine: true,
+        paddingX: detailPaddingX
+      })
+    })
+    return
+  }
+  textBox(doc, issuerLines.join('\n'), left, y.meta + 27.2, width, y.details - y.meta - 29.2, { size: body, minSize: body - 2.1, lineGap: 2.1, paddingX: detailPaddingX })
 }
 
 function drawServiceTable(doc, layout, entity, invoice, overrides, company) {
