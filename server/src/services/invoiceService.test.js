@@ -1,5 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const pdfParse = require('pdf-parse')
 const {
   A4_HEIGHT,
   A4_WIDTH,
@@ -106,8 +107,49 @@ test('amount and tax words use final total and exact tax paise', () => {
 })
 
 test('optional-name placeholders are suppressed without suppressing real names', () => {
-  for (const value of ['-', ' ', null, undefined, 'N/A', 'NA', 'n.a.', 'Not Applicable']) assert.equal(normalizedOptionalName(value), '')
+  for (const value of ['-', ' ', null, undefined, 'N/A', '(N/A)', 'NA', 'n.a.', '()', 'Not Applicable']) assert.equal(normalizedOptionalName(value), '')
+  assert.equal(normalizedOptionalName('Galgotias University'), '(Galgotias University)')
   assert.equal(normalizedOptionalName(' (Galgotias University) '), '(Galgotias University)')
+  assert.equal(normalizedOptionalName('((Galgotias University))'), '(Galgotias University)')
+})
+
+test('optional name is rendered between the client legal name and address only when meaningful', async () => {
+  const renderClientText = async optional_name => {
+    const entity = {
+      legal_entity_name: 'OPTIONAL NAME TEST CLIENT',
+      optional_name,
+      address: '123 TEST STREET, NEW DELHI, 110020',
+      pan: 'AABTS7575D',
+      place_of_supply: 'New Delhi',
+      state: 'Uttar Pradesh',
+      state_code: '09',
+      gstin: '09AABTS7575D1Z6',
+      contact_person: 'Test Contact',
+      email: 'billing@example.com',
+      sac: '998312'
+    }
+    const input = {
+      ...baseInput,
+      ...entity,
+      billing_entity: 'FCAPL',
+      others_amount: '560000'
+    }
+    const invoice = {
+      ...calculateInvoice(input),
+      billing_entity: 'FCAPL',
+      invoice_number: 'FCAPL/26-27/OPTIONAL',
+      invoice_date: '2026-07-15',
+      sac: entity.sac
+    }
+    return (await pdfParse((await renderInvoicePdf({ entity, invoice, overrides: input })).buffer)).text
+  }
+
+  const namedText = await renderClientText('OPTIONAL NAME RENDER SENTINEL')
+  assert.match(namedText, /OPTIONAL NAME TEST CLIENT\s+\(OPTIONAL NAME RENDER SENTINEL\)\s+123 TEST STREET/)
+
+  const placeholderText = await renderClientText('Not Applicable')
+  assert.doesNotMatch(placeholderText, /Not Applicable/)
+  assert.match(placeholderText, /OPTIONAL NAME TEST CLIENT\s+123 TEST STREET/)
 })
 
 test('issuer bank accounts remain exact strings', () => {

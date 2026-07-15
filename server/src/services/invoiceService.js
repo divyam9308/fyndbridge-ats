@@ -526,9 +526,11 @@ function textBox(doc, text, x, y, width, height, options = {}) {
 }
 
 function normalizedOptionalName(value) {
-  const optionalName = clean(value)
+  let optionalName = clean(value)
+  while (optionalName.startsWith('(') && optionalName.endsWith(')')) optionalName = clean(optionalName.slice(1, -1))
   const placeholder = optionalName.toLowerCase().replace(/[.\s]/g, '')
-  return !optionalName || new Set(['-', '--', 'na', 'n/a', 'none', 'null', 'nil', 'notavailable', 'notapplicable', 'undefined']).has(placeholder) ? '' : optionalName
+  if (!optionalName || new Set(['-', '--', 'na', 'n/a', 'none', 'null', 'nil', 'notavailable', 'notapplicable', 'undefined']).has(placeholder)) return ''
+  return `(${optionalName})`
 }
 
 function hasRounding(invoice) {
