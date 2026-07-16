@@ -1,4 +1,5 @@
 const fs = require('fs/promises')
+const path = require('path')
 const pdfParse = require('pdf-parse')
 const { createWorker, PSM } = require('tesseract.js')
 const { extractFields } = require('./extractorUtils')
@@ -6,6 +7,8 @@ const { callAiJson, GEMINI_MODEL } = require('./aiProvider')
 
 const PDF_HEADER = '%PDF-'
 const PDF_OCR_RENDER_SCALE = 2
+const TESSERACT_LANGUAGE_PATH = path.resolve(__dirname, '../..')
+const TESSERACT_WORKER_PATH = require.resolve('tesseract.js/src/worker-script/node/index.js')
 
 const RESUME_AI_SCHEMA = {
   type: 'object',
@@ -216,8 +219,11 @@ async function extractTextWithOcr(fileBuffer, {
     }
 
     worker = await createWorkerImpl('eng', undefined, {
-      // Tesseract otherwise rethrows worker failures outside the recognition
-      // promise, which can terminate the whole bulk-upload request.
+      langPath: TESSERACT_LANGUAGE_PATH,
+      cachePath: TESSERACT_LANGUAGE_PATH,
+      cacheMethod: 'readOnly',
+      gzip: false,
+      workerPath: TESSERACT_WORKER_PATH,
       errorHandler(error) {
         workerError = error
       }
@@ -246,7 +252,7 @@ async function extractTextWithOcr(fileBuffer, {
 
     return pageTexts.join('\n')
   } catch (error) {
-    if (!error?.message && workerError) throw new Error(String(workerError))
+    if (!error?.message && workerError) throw new Error(String(workerError), { cause: error })
     throw error
   } finally {
     if (worker) await worker.terminate().catch(() => {})
@@ -304,5 +310,7 @@ module.exports = {
   parseResume,
   parseResumeText,
   PDF_OCR_RENDER_SCALE,
-  renderPdfPageToPng
+  renderPdfPageToPng,
+  TESSERACT_LANGUAGE_PATH,
+  TESSERACT_WORKER_PATH
 }

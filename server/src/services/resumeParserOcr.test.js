@@ -1,12 +1,19 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const { spawn } = require('node:child_process')
+const { createCanvas } = require('@napi-rs/canvas')
 const PDFDocument = require('pdfkit')
 const {
   extractTextWithOcr,
   isPdfBuffer,
   loadPdfDocument,
   PDF_OCR_RENDER_SCALE,
-  renderPdfPageToPng
+  renderPdfPageToPng,
+  TESSERACT_LANGUAGE_PATH,
+  TESSERACT_WORKER_PATH
 } = require('./resumeParser')
 
 function createPdfBuffer() {
@@ -19,6 +26,66 @@ function createPdfBuffer() {
     document.rect(0, 0, 240, 120).fill('#ffffff')
     document.fillColor('#111111').fontSize(18).text('Scanned resume page', 20, 45)
     document.end()
+  })
+}
+
+function createScannedResumeBuffer() {
+  return new Promise((resolve, reject) => {
+    const canvas = createCanvas(900, 360)
+    const context = canvas.getContext('2d')
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.fillStyle = '#111111'
+    context.font = 'bold 46px sans-serif'
+    context.fillText('ARJUN SAMPLE', 55, 80)
+    context.font = '28px sans-serif'
+    context.fillText('Chartered Accountant and ACCA finalist', 55, 135)
+    context.fillText('Experience in taxation, audit and financial reporting', 55, 190)
+    context.fillText('Mumbai | candidate@example.com | 9876543210', 55, 245)
+
+    const chunks = []
+    const document = new PDFDocument({ size: [900, 360], margin: 0 })
+    document.on('data', chunk => chunks.push(chunk))
+    document.on('end', () => resolve(Buffer.concat(chunks)))
+    document.on('error', reject)
+    document.image(canvas.toBuffer('image/png'), 0, 0, { width: 900, height: 360 })
+    document.end()
+  })
+}
+
+function runOcrChild(filePath, cwd) {
+  const modulePath = path.resolve(__dirname, 'resumeParser.js')
+  const script = `
+    const fs = require('node:fs')
+    const { extractTextWithOcr } = require(${JSON.stringify(modulePath)})
+    extractTextWithOcr(fs.readFileSync(${JSON.stringify(filePath)}))
+      .then(text => process.stdout.write(text))
+      .catch(error => {
+        console.error(error.stack || error.message || error)
+        process.exitCode = 1
+      })
+  `
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['-e', script], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    let stdout = ''
+    let stderr = ''
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      reject(new Error('OCR cold-start child timed out'))
+    }, 15000)
+
+    child.stdout.on('data', chunk => { stdout += chunk })
+    child.stderr.on('data', chunk => { stderr += chunk })
+    child.on('error', reject)
+    child.on('close', code => {
+      clearTimeout(timer)
+      if (code === 0) return resolve(stdout)
+      return reject(new Error(stderr || `OCR child exited with code ${code}`))
+    })
   })
 }
 
@@ -71,6 +138,11 @@ test('PDF OCR renders every page to an image before Tesseract recognition', asyn
   assert.equal(documentDestroyed, true)
   assert.equal(workerTerminated, true)
   assert.equal(typeof workerOptions.errorHandler, 'function')
+  assert.equal(workerOptions.langPath, TESSERACT_LANGUAGE_PATH)
+  assert.equal(workerOptions.cachePath, TESSERACT_LANGUAGE_PATH)
+  assert.equal(workerOptions.cacheMethod, 'readOnly')
+  assert.equal(workerOptions.gzip, false)
+  assert.equal(workerOptions.workerPath, TESSERACT_WORKER_PATH)
   assert.equal(workerParameters.preserve_interword_spaces, '1')
 })
 
@@ -175,4 +247,31 @@ test('installed PDF renderer produces a real PNG buffer', async () => {
   } finally {
     await document.destroy()
   }
+})
+
+test('image-only resume OCR uses bundled assets from a cold working directory', async () => {
+  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'fyndbridge-ocr-'))
+  const filePath = path.join(tempDirectory, 'scanned-resume.pdf')
+  fs.writeFileSync(filePath, await createScannedResumeBuffer())
+
+  try {
+    assert.equal(fs.existsSync(path.join(TESSERACT_LANGUAGE_PATH, 'eng.traineddata')), true)
+    assert.equal(fs.existsSync(TESSERACT_WORKER_PATH), true)
+    const text = await runOcrChild(filePath, tempDirectory)
+    assert.match(text, /ARJUN SAMPLE/i)
+    assert.match(text, /Chartered Accountant/i)
+    assert.match(text, /9876543210/)
+    assert.equal(fs.existsSync(path.join(tempDirectory, 'eng.traineddata')), false)
+  } finally {
+    fs.rmSync(tempDirectory, { recursive: true, force: true })
+  }
+})
+
+test('Vercel function bundle includes OCR runtime assets', () => {
+  const config = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../vercel.json'), 'utf8'))
+  const includeFiles = config.functions?.['api/index.js']?.includeFiles || ''
+  assert.match(includeFiles, /eng\.traineddata/)
+  assert.match(includeFiles, /tesseract\.js/)
+  assert.match(includeFiles, /tesseract\.js-core/)
+  assert.match(includeFiles, /pdf\.worker\.mjs/)
 })

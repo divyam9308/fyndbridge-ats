@@ -1,4 +1,5 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
@@ -7,7 +8,7 @@
     "api/index.js": {
       "memory": 1024,
       "maxDuration": 60,
-      "includeFiles": "server/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
+      "includeFiles": "server/{eng.traineddata,node_modules/{pdfjs-dist/legacy/build/pdf.worker.mjs,{tesseract.js,tesseract.js-core,node-fetch,is-url,regenerator-runtime,wasm-feature-detect,node-readable-to-web-readable-stream,@napi-rs/canvas*}/**/*}}"
     }
   },
   "rewrites": [
