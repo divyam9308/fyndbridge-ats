@@ -20,6 +20,8 @@ const migration = fs.readFileSync(
 const routes = fs.readFileSync(path.join(projectRoot, 'server/src/routes/admin.js'), 'utf8')
 const modal = fs.readFileSync(path.join(projectRoot, 'src/components/admin/RecordManagementModal.jsx'), 'utf8')
 const adminPage = fs.readFileSync(path.join(projectRoot, 'src/pages/AdminPage.jsx'), 'utf8')
+const adminPageCss = fs.readFileSync(path.join(projectRoot, 'src/pages/AdminPage.css'), 'utf8')
+const sharedCss = fs.readFileSync(path.join(projectRoot, 'src/styles/Shared.css'), 'utf8')
 const deletionService = fs.readFileSync(path.join(projectRoot, 'server/src/services/recordDeletion.js'), 'utf8')
 const displayIdSearchMigration = fs.readFileSync(
   path.join(projectRoot, 'supabase/migrations/20260716095921_record_management_display_id_search.sql'),
@@ -81,4 +83,18 @@ test('record selector searches and displays CA, JB and CL IDs', () => {
   assert.match(deletionService, /candidate: \/\^CA\\d\+\$\/i/)
   assert.match(deletionService, /mandate: \/\^JB\\d\+\$\/i/)
   assert.match(deletionService, /client: \/\^CL\\d\+\$\/i/)
+})
+
+test('impact confirmation renders above the record selection modal', () => {
+  const confirmationLayer = adminPageCss.match(
+    /\.admin-record-confirm-overlay\s*\{[\s\S]*?z-index:\s*(\d+)/
+  )
+  const modalCard = sharedCss.match(/\.modal-card\s*\{[\s\S]*?z-index:\s*(\d+)/)
+
+  assert.ok(confirmationLayer, 'confirmation overlay z-index is missing')
+  assert.ok(modalCard, 'shared modal card z-index is missing')
+  assert.ok(
+    Number(confirmationLayer[1]) > Number(modalCard[1]),
+    'confirmation overlay must render above the selection modal card'
+  )
 })

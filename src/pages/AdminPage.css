@@ -1362,7 +1362,11 @@
 }
 
 .admin-record-confirm-overlay {
-  z-index: 3010;
+  /*
+   * This overlay is nested beside the selection modal card. Shared.css gives
+   * modal cards z-index 100001, so the confirmation layer must sit above it.
+   */
+  z-index: 100002;
 }
 
 .admin-record-confirm-modal {
