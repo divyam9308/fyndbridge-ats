@@ -84,3 +84,13 @@ export const deleteInvoicePdfVersion = async (id) => {
   invalidateApiJsonCache('/api/invoice/entities')
   return result
 }
+export const cancelInvoice = async (entityId, id) => {
+  const result = await json(await apiFetch(`/api/invoice/entities/${entityId}/invoices/${id}/cancel`, { method: 'POST' }))
+  invalidateApiJsonCache('/api/invoice/entities')
+  return result
+}
+export const deleteInvoice = async (entityId, id) => {
+  const result = await json(await apiFetch(`/api/invoice/entities/${entityId}/invoices/${id}`, { method: 'DELETE' }))
+  invalidateApiJsonCache('/api/invoice/entities')
+  return result
+}

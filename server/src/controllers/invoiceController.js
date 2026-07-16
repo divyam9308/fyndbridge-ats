@@ -1,15 +1,41 @@
 const supabase = require('../services/supabaseAdmin')
 const { normalizeGstin } = require('../services/gstLookup')
-const { STORAGE_BUCKETS } = require('../services/storageBuckets')
+const { STORAGE_BUCKETS, normalizeStoragePath } = require('../services/storageBuckets')
 const {
   BILLING_ENTITIES, GST_COMPONENTS, MODELS, clean, financialYear,
   detectGstComponent, calculateInvoice, createInvoicePdf
 } = require('../services/invoiceService')
 
 const ENTITY_FIELDS = 'id, invoice_id, entity_display_id, legal_entity_name, optional_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, sac, billing_entity, gst_component, igst_rate, cgst_rate, sgst_rate, created_at, updated_at'
-const INVOICE_FIELDS = 'id, invoice_entity_id, invoice_display_id, invoice_number, invoice_date, consultant_name, candidate_name, professional_fee_text, model, ctc_lpa, model_percent, model_flat_fee, retainer_amount, project_amount, jra_adjustment_value, jra_base_value, jra_flat_fee, others_amount, sac, billing_entity, taxable_amount, gst_component, igst_rate, igst_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount, total_tax_amount, total_before_rounding, rounding_type, rounding_amount, grand_total, pdf_storage_path, created_at'
+const INVOICE_FIELDS = 'id, invoice_entity_id, invoice_display_id, invoice_number, financial_year, sequence_number, invoice_date, consultant_name, candidate_name, professional_fee_text, model, ctc_lpa, model_percent, model_flat_fee, retainer_amount, project_amount, jra_adjustment_value, jra_base_value, jra_flat_fee, others_amount, sac, billing_entity, taxable_amount, gst_component, igst_rate, igst_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount, total_tax_amount, total_before_rounding, rounding_type, rounding_amount, grand_total, pdf_storage_path, status, cancelled_at, cancelled_by, created_at'
 
-const sendError = (res, err) => res.status(err.statusCode || 500).json({ error: err.message || 'Internal server error' })
+const SAFE_ERROR_MESSAGES = [
+  /^Entity not found$/,
+  /^Invoice not found$/,
+  /^Invoice PDF version not found$/,
+  /^Amount fields must be numeric$/,
+  /^Calculation fields must be numeric and non-negative$/,
+  /^GST rates must be numeric and non-negative$/,
+  /^Taxable amount cannot be negative$/,
+  /^Invalid billing entity$/,
+  /^Stored invoice PDF is missing\.$/
+]
+function httpError(message, statusCode, code = '') {
+  return Object.assign(new Error(message), { statusCode, code })
+}
+function publicInvoiceError(err) {
+  if (err?.statusCode) return err
+  if (err?.message === 'INVOICE_NUMBER_CHANGED') return httpError('Invoice number changed. Return to edit and generate again.', 409, 'INVOICE_NUMBER_CHANGED')
+  if (err?.message === 'INVOICE_NOT_FOUND') return httpError('Invoice not found.', 404)
+  if (err?.code === '23505') return httpError('An invoice number conflict occurred. Please try again.', 409, 'INVOICE_NUMBER_CONFLICT')
+  if (SAFE_ERROR_MESSAGES.some(pattern => pattern.test(err?.message || ''))) return httpError(err.message, 400)
+  console.error('[invoice]', err)
+  return httpError('The invoice request could not be completed. Please try again.', 500)
+}
+const sendError = (res, err) => {
+  const safe = publicInvoiceError(err)
+  return res.status(safe.statusCode || 500).json({ error: safe.message, ...(safe.code ? { code: safe.code } : {}) })
+}
 const nullable = value => clean(value) || null
 function numberOrNull(value) {
   if (value === '' || value === null || value === undefined) return null
@@ -52,6 +78,7 @@ function entityPayload(body) {
 
 const decorateInvoice = row => ({ ...row })
 const decoratePdfVersion = row => ({ ...row })
+const rpcRow = data => Array.isArray(data) ? data[0] : data
 
 async function listEntities(req, res) {
   try {
@@ -111,10 +138,14 @@ async function deleteEntity(req, res) {
 
 async function nextNumberParts(billingEntity, invoiceDate) {
   const fy = financialYear(invoiceDate)
-  const { data, error } = await supabase.from('invoices').select('sequence_number').eq('billing_entity', billingEntity).eq('financial_year', fy).order('sequence_number', { ascending: false }).limit(1)
+  const { data, error } = await supabase.rpc('next_available_invoice_number', {
+    p_billing_entity: billingEntity,
+    p_financial_year: fy
+  })
   if (error) throw error
-  const sequence = Number(data?.[0]?.sequence_number || 0) + 1
-  return { financialYear: fy, sequence, invoiceNumber: `${billingEntity === 'FCAPL' ? 'FCAPL' : 'FB'}/${fy}/${String(sequence).padStart(3, '0')}` }
+  const next = rpcRow(data)
+  if (!next?.sequence_number || !next?.invoice_number) throw new Error('Invoice number allocation failed')
+  return { financialYear: next.financial_year, sequence: Number(next.sequence_number), invoiceNumber: next.invoice_number }
 }
 
 async function nextNumber(req, res) {
@@ -171,25 +202,40 @@ async function preview(req, res) {
 }
 
 async function createStoredInvoice(body, expectedNumber = '') {
-  const { entity, input, invoiceDate, billing, calc } = await invoiceInput(body)
-  const parts = await nextNumberParts(billing, invoiceDate)
-  if (expectedNumber && parts.invoiceNumber !== clean(expectedNumber)) throw Object.assign(new Error('Invoice number changed. Return to edit and generate again.'), { statusCode: 409 })
-  const payload = invoicePayload(entity, input, invoiceDate, parts, calc)
+  const { entity, input, invoiceDate, calc } = await invoiceInput(body)
+  const payload = invoicePayload(entity, input, invoiceDate, {
+    invoiceNumber: '',
+    financialYear: financialYear(invoiceDate),
+    sequence: null
+  }, calc)
   payload.invoice_display_id = await nextInvoiceDisplayId()
-  const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: payload, overrides: input })
-  payload.pdf_storage_path = await uploadInvoicePdf(entity.id, payload.invoice_display_id, pdf)
-  const { data, error } = await supabase.from('invoices').insert(payload).select(INVOICE_FIELDS).single()
-  if (error) {
-    await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([payload.pdf_storage_path])
-    throw error
+  const allocation = await supabase.rpc('create_invoice_with_lowest_sequence', {
+    p_invoice: payload,
+    p_expected_invoice_number: clean(expectedNumber) || null
+  })
+  if (allocation.error) throw allocation.error
+  const allocated = rpcRow(allocation.data)
+  if (!allocated?.id) throw new Error('Invoice number allocation failed')
+
+  let storagePath = ''
+  try {
+    const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: allocated, overrides: input })
+    storagePath = await uploadInvoicePdf(entity.id, allocated.invoice_display_id, pdf)
+    const attached = await supabase.rpc('attach_invoice_pdf', {
+      p_invoice_id: allocated.id,
+      p_storage_path: storagePath
+    })
+    if (attached.error) throw attached.error
+    return { record: decorateInvoice(rpcRow(attached.data)), pdf }
+  } catch (err) {
+    if (storagePath) {
+      const cleanPath = normalizeStoragePath(storagePath, STORAGE_BUCKETS.INVOICE)
+      if (cleanPath) await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([cleanPath])
+    }
+    const cleanup = await supabase.from('invoices').delete().eq('id', allocated.id)
+    if (cleanup.error) console.error('[invoice] Failed to release incomplete invoice allocation', cleanup.error)
+    throw err
   }
-  const versionResult = await supabase.from('invoice_pdf_versions').insert({ invoice_id: data.id, storage_path: payload.pdf_storage_path })
-  if (versionResult.error) {
-    await supabase.from('invoices').delete().eq('id', data.id)
-    await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([payload.pdf_storage_path])
-    throw versionResult.error
-  }
-  return { record: decorateInvoice(data), pdf }
 }
 
 async function generate(req, res) {
@@ -209,7 +255,8 @@ async function commitPreview(req, res) {
 async function regenerationData(invoiceId, body) {
   const { data: existing, error } = await supabase.from('invoices').select('*').eq('id', invoiceId).maybeSingle()
   if (error) throw error
-  if (!existing) throw Object.assign(new Error('Invoice not found'), { statusCode: 404 })
+  if (!existing) throw httpError('Invoice not found', 404)
+  if (existing.status === 'cancelled') throw httpError('Cancelled invoices cannot be regenerated.', 409)
   const { entity, input, calc } = await invoiceInput({ ...existing, ...body, invoice_entity_id: existing.invoice_entity_id })
   const updated = { ...invoicePayload(entity, input, input.invoice_date || existing.invoice_date, { invoiceNumber: existing.invoice_number, financialYear: existing.financial_year, sequence: existing.sequence_number }, calc), invoice_display_id: existing.invoice_display_id }
   const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: updated, overrides: input })
@@ -248,11 +295,15 @@ async function deletePdfVersion(req, res) {
     const { data: version, error } = await supabase.from('invoice_pdf_versions').select('*').eq('id', req.params.id).maybeSingle()
     if (error) throw error
     if (!version) return res.status(404).json({ error: 'Invoice PDF version not found' })
-    const { error: storageError } = await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([version.storage_path])
+    const { data: invoice, error: invoiceError } = await supabase.from('invoices').select('pdf_storage_path, status').eq('id', version.invoice_id).maybeSingle()
+    if (invoiceError) throw invoiceError
+    if (invoice?.status === 'cancelled') throw httpError('PDF versions of cancelled invoices cannot be deleted.', 409)
+    const storagePath = normalizeStoragePath(version.storage_path, STORAGE_BUCKETS.INVOICE)
+    if (!storagePath) throw httpError('Stored invoice PDF is missing.', 404)
+    const { error: storageError } = await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([storagePath])
     if (storageError) throw storageError
     const { error: deleteError } = await supabase.from('invoice_pdf_versions').delete().eq('id', version.id)
     if (deleteError) throw deleteError
-    const { data: invoice } = await supabase.from('invoices').select('pdf_storage_path').eq('id', version.invoice_id).maybeSingle()
     if (invoice?.pdf_storage_path === version.storage_path) {
       const { data: latest } = await supabase.from('invoice_pdf_versions').select('storage_path').eq('invoice_id', version.invoice_id).order('created_at', { ascending: false }).limit(1)
       await supabase.from('invoices').update({ pdf_storage_path: latest?.[0]?.storage_path || null }).eq('id', version.invoice_id)
@@ -261,4 +312,88 @@ async function deletePdfVersion(req, res) {
   } catch (err) { return sendError(res, err) }
 }
 
-module.exports = { listEntities, getEntity, createEntity, updateEntity, deleteEntity, nextNumber, preview, generate, commitPreview, previewRegeneration, regenerate, deletePdfVersion }
+async function cancelInvoice(req, res) {
+  try {
+    const { data: existing, error } = await supabase
+      .from('invoices')
+      .select(INVOICE_FIELDS)
+      .eq('id', req.params.id)
+      .eq('invoice_entity_id', req.params.entityId)
+      .maybeSingle()
+    if (error) throw error
+    if (!existing) throw httpError('Invoice not found.', 404)
+    if (existing.status === 'cancelled') throw httpError('This invoice is already cancelled.', 409)
+
+    const cancelledAt = new Date().toISOString()
+    const { data, error: updateError } = await supabase
+      .from('invoices')
+      .update({ status: 'cancelled', cancelled_at: cancelledAt, cancelled_by: req.user.id })
+      .eq('id', existing.id)
+      .eq('invoice_entity_id', req.params.entityId)
+      .eq('status', 'active')
+      .select(INVOICE_FIELDS)
+      .maybeSingle()
+    if (updateError) throw updateError
+    if (!data) throw httpError('This invoice is already cancelled.', 409)
+    return res.json({ data: decorateInvoice(data) })
+  } catch (err) { return sendError(res, err) }
+}
+
+async function deleteInvoice(req, res) {
+  try {
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .select(INVOICE_FIELDS)
+      .eq('id', req.params.id)
+      .eq('invoice_entity_id', req.params.entityId)
+      .maybeSingle()
+    if (error) throw error
+    if (!invoice) throw httpError('Invoice not found or already deleted.', 404)
+
+    const { data: versions, error: versionError } = await supabase
+      .from('invoice_pdf_versions')
+      .select('storage_path')
+      .eq('invoice_id', invoice.id)
+    if (versionError) throw versionError
+
+    const storagePaths = [...new Set([
+      invoice.pdf_storage_path,
+      ...(versions || []).map(version => version.storage_path)
+    ].map(path => normalizeStoragePath(path, STORAGE_BUCKETS.INVOICE)).filter(Boolean))]
+
+    if (storagePaths.length) {
+      const { error: storageError } = await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove(storagePaths)
+      if (storageError) throw httpError('The invoice file could not be removed. The invoice was not deleted.', 502)
+    }
+
+    const { data: deleted, error: deleteError } = await supabase
+      .from('invoices')
+      .delete()
+      .eq('id', invoice.id)
+      .eq('invoice_entity_id', req.params.entityId)
+      .select('id')
+      .maybeSingle()
+    if (deleteError) {
+      throw httpError('Invoice files were removed, but the database row could not be deleted. Please contact an administrator.', 500)
+    }
+    if (!deleted) throw httpError('Invoice not found or already deleted.', 404)
+    return res.json({ ok: true, released: { billing_entity: invoice.billing_entity, financial_year: invoice.financial_year, sequence_number: invoice.sequence_number } })
+  } catch (err) { return sendError(res, err) }
+}
+
+module.exports = {
+  listEntities,
+  getEntity,
+  createEntity,
+  updateEntity,
+  deleteEntity,
+  nextNumber,
+  preview,
+  generate,
+  commitPreview,
+  previewRegeneration,
+  regenerate,
+  deletePdfVersion,
+  cancelInvoice,
+  deleteInvoice
+}
