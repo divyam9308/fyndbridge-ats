@@ -696,8 +696,8 @@ export default function ClientDetailPage() {
               <tr>
                 <th>Job ID</th>
                 <th>Mandate / Role</th>
-                <th>JD</th>
-                <th>Status</th>
+                <th className="align-center">JD</th>
+                <th className="align-center">Status</th>
                 <th className="align-center">Candidates Assigned</th>
                 {MANDATE_SUMMARY_COLUMNS.map(([, label]) => <th className="align-center" key={label}>{label}</th>)}
               </tr>
