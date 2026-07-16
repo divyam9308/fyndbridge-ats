@@ -388,6 +388,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
   })
 
   const candidateCounts = emptyStatusCounts()
+  let pendingStatusAssignmentCount = 0
   for (const association of candidateRows) {
     if (!candidateAssociationMatches(association, consultant)) continue
     const addedDate = candidateAssociationDate(association)
@@ -396,6 +397,8 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
       continue
     }
     if (addedDate < startDate || addedDate > endDate) continue
+    const storedStatus = clean(association.status)
+    if (!storedStatus || storedStatus === '-') pendingStatusAssignmentCount += 1
     const status = canonicalCandidateStatus(association.status)
     if (!status) {
       warnInvalidCandidateStatus(association)
@@ -427,10 +430,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
     {
       key: 'pendingStatusAssignment',
       label: 'Candidates Pending Status Assignment',
-      value: mandateRows.reduce((total, row) => total + row._associations.filter((association) => {
-        const status = clean(association.status)
-        return !status || status === '-'
-      }).length, 0),
+      value: pendingStatusAssignmentCount,
       tone: 'orange'
     }
   ]

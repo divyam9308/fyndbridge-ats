@@ -227,6 +227,60 @@ test('candidate additions are not suppressed by an unsupported mandate status', 
   assert.equal(warnings.invalid_candidate_status.count, 2)
 })
 
+test('pending status assignment follows candidate addition date rather than mandate allocation date', () => {
+  const result = facts(
+    [job({ id: 'current-mandate' })],
+    [],
+    {
+      candidateAssociations: [
+        association('older-mandate', '-', {
+          id: 'current-addition-on-older-mandate',
+          created_at: '2026-07-09T06:00:00.000Z'
+        }),
+        association('current-mandate', '-', {
+          id: 'older-addition-on-current-mandate',
+          created_at: '2026-06-20T06:00:00.000Z'
+        })
+      ]
+    }
+  )
+
+  assert.equal(result.exceptions.find((item) => item.key === 'pendingStatusAssignment').value, 1)
+})
+
+test('overall pending status assignment sums consultant candidate additions in the report period', () => {
+  const candidateAssociations = [
+    association('older-asha-mandate', '-', {
+      id: 'asha-current-addition',
+      created_at: '2026-07-09T06:00:00.000Z'
+    }),
+    association('older-bina-mandate', '-', {
+      id: 'bina-current-addition',
+      consultant_name: SECOND_CONSULTANT.name,
+      consultant_user_id: SECOND_CONSULTANT.user_id,
+      created_at: '2026-07-10T06:00:00.000Z'
+    }),
+    association('current-asha-mandate', '-', {
+      id: 'asha-older-addition',
+      created_at: '2026-06-20T06:00:00.000Z'
+    })
+  ]
+  const entries = [CONSULTANT, SECOND_CONSULTANT].map((consultant) => ({
+    consultant,
+    facts: buildConsultantReportFacts({
+      jobs: [],
+      associations: [],
+      candidateAssociations,
+      consultant,
+      startDate: START,
+      endDate: END
+    })
+  }))
+
+  const result = aggregateConsultantReportFacts(entries)
+  assert.equal(result.exceptions.find((item) => item.key === 'pendingStatusAssignment').value, 2)
+})
+
 test('created-at fallback applies the company local date at UTC boundaries', () => {
   const result = facts([
     job({ id: 'local-start', allocation_date: null, created_at: '2026-06-30T20:00:00.000Z' }),
