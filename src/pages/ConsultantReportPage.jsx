@@ -13,7 +13,6 @@ import {
   ReportKpiCard,
   ReportSectionHeader
 } from '../features/reports/ConsultantReportComponents'
-import { ReportWorkbookPreviewModal } from '../features/reports/ReportWorkbookPreviewModal'
 import { formatReportDate } from '../features/reports/reportFormatters'
 import { getConsultantReport, getConsultantReportExportPreview, getConsultantReportOptions, getConsultantReportRows } from '../services/reportApi'
 import '../styles/Shared.css'
@@ -365,7 +364,6 @@ export default function ConsultantReportPage() {
   const [modal, setModal] = useState('')
   const [toast, setToast] = useState('')
   const [exportLoading, setExportLoading] = useState(false)
-  const [exportPreview, setExportPreview] = useState(null)
   const exportControllerRef = useRef(null)
 
   const userLabel = user?.profile_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'FYNDBRIDGE User'
@@ -499,7 +497,6 @@ export default function ConsultantReportPage() {
     setConsultantMenuOpen(false)
     setHighlightedConsultantIndex(-1)
     setModal('')
-    setExportPreview(null)
     announceOnLoad.current = true
     setReportLoading(true)
     setReportError('')
@@ -546,9 +543,7 @@ export default function ConsultantReportPage() {
   }, [appliedFilters, modal])
   const closeModal = useCallback(() => setModal(''), [])
 
-  const closeExportPreview = useCallback(() => setExportPreview(null), [])
-
-  const openExportPreview = async () => {
+  const exportReport = async () => {
     if (!report || !appliedFilters) {
       setToast('Generate a report before exporting it.')
       return
@@ -560,11 +555,20 @@ export default function ConsultantReportPage() {
     try {
       const result = await getConsultantReportExportPreview(appliedFilters, { signal: controller.signal })
       if (controller.signal.aborted) return
-      if (!result?.contentBase64 || !Array.isArray(result?.preview?.sheets)) throw new Error('The Excel preview could not be prepared.')
-      setExportPreview(result)
+      if (!result?.contentBase64) throw new Error('The Excel report could not be prepared.')
+      const blob = workbookBlob(result.contentBase64, result.mimeType)
+      const objectUrl = window.URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = result.fileName || 'Fyndbridge_Consultant_Report.xlsx'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0)
+      setToast('Excel report downloaded.')
     } catch (requestError) {
       if (requestError?.name !== 'AbortError' && !controller.signal.aborted) {
-        setToast(requestError?.message || 'Unable to prepare the Excel report.')
+        setToast(requestError?.message || 'The Excel file could not be downloaded. Please try again.')
       }
     } finally {
       if (exportControllerRef.current === controller) {
@@ -573,25 +577,6 @@ export default function ConsultantReportPage() {
       }
     }
   }
-
-  const downloadExport = useCallback(() => {
-    if (!exportPreview?.contentBase64) return
-    try {
-      const blob = workbookBlob(exportPreview.contentBase64, exportPreview.mimeType)
-      const objectUrl = window.URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      anchor.href = objectUrl
-      anchor.download = exportPreview.fileName || 'Fyndbridge_Consultant_Report.xlsx'
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
-      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0)
-      setExportPreview(null)
-      setToast('Excel report downloaded.')
-    } catch {
-      setToast('The Excel file could not be downloaded. Please try again.')
-    }
-  }, [exportPreview])
 
   const warnings = Array.isArray(report?.meta?.warnings) ? report.meta.warnings : []
   const isOverall = Boolean(consultant?.isOverall || consultant?.key === 'overall')
@@ -688,7 +673,7 @@ export default function ConsultantReportPage() {
             className="report-secondary-button"
             type="button"
             disabled={!report || !appliedFilters || reportLoading || exportLoading}
-            onClick={openExportPreview}
+            onClick={exportReport}
           >
             {exportLoading ? <LoaderCircle className="report-button-spinner" size={17} /> : <FileDown size={17} />}
             {exportLoading ? 'Preparing...' : 'Export Report'}
@@ -815,7 +800,6 @@ export default function ConsultantReportPage() {
       </footer>
 
       {modal && <ReportDataModal kind={modal} fetchRows={fetchModalRows} onClose={closeModal} />}
-      {exportPreview && <ReportWorkbookPreviewModal exportData={exportPreview} onCancel={closeExportPreview} onDownload={downloadExport} />}
     </div>
   )
 }

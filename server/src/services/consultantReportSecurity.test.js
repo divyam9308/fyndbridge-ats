@@ -32,7 +32,6 @@ const reportAttendance = read('server/src/services/consultantReportAttendance.js
 const reportService = read('server/src/services/consultantReportService.js')
 const reportPage = read('src/pages/ConsultantReportPage.jsx')
 const reportApi = read('src/services/reportApi.js')
-const workbookPreview = read('src/features/reports/ReportWorkbookPreviewModal.jsx')
 
 test('Report page policy handles everyone, admin-only, super-admin-only and invalid values', () => {
   const ordinary = { isAdmin: false, isSuperAdmin: false }
@@ -302,16 +301,13 @@ test('consultant options and direct report scopes are derived from authenticated
   assert.match(reportService, /async function getPaginatedReport\(user, query, kind\)[\s\S]*?parseReportRequest\(query, kind\)[\s\S]*?reportAccess\(user, params\.consultantUserId\)/)
 })
 
-test('Excel export is preview-first, server-generated and downloaded only on confirmation', () => {
+test('Excel export is server-generated and downloaded immediately without a preview', () => {
   assert.match(routes, /router\.get\('\/consultant\/export-preview', controller\.exportPreview\)/)
   assert.match(reportController, /async function exportPreview\(req, res\)[\s\S]*?getConsultantReportExport\(req\.user, req\.query\)/)
   assert.match(reportService, /buildConsultantReportWorkbook\(\{[\s\S]*?mandates: access\.target\.isOverall \? \[\] : facts\.mandates/)
   assert.match(reportApi, /export function getConsultantReportExportPreview\(filters, \{ signal \} = \{\}\)/)
-  assert.match(reportPage, /await getConsultantReportExportPreview\(appliedFilters, \{ signal: controller\.signal \}\)[\s\S]*?setExportPreview\(result\)/)
-  assert.match(reportPage, /const downloadExport = useCallback\(\(\) => \{[\s\S]*?anchor\.download[\s\S]*?anchor\.click\(\)/)
-  assert.match(workbookPreview, /No file has been downloaded yet\./)
-  assert.match(workbookPreview, /onClick=\{onCancel\}>Cancel<\/button>/)
-  assert.match(workbookPreview, /onClick=\{onDownload\}[\s\S]*?Download Excel/)
+  assert.match(reportPage, /await getConsultantReportExportPreview\(appliedFilters, \{ signal: controller\.signal \}\)[\s\S]*?anchor\.download[\s\S]*?anchor\.click\(\)/)
+  assert.doesNotMatch(reportPage, /ReportWorkbookPreviewModal|setExportPreview/)
 })
 
 test('ordinary users are source-enforced as self-only while administrators use the employee directory', () => {
