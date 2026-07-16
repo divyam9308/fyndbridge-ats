@@ -167,6 +167,7 @@ test('PDF detection and rendering use the configured OCR scale', async () => {
 test('installed PDF renderer produces a real PNG buffer', async () => {
   const document = await loadPdfDocument(await createPdfBuffer())
   try {
+    assert.equal(typeof globalThis.pdfjsWorker?.WorkerMessageHandler, 'function')
     assert.equal(document.numPages, 1)
     const page = await document.getPage(1)
     const png = await renderPdfPageToPng(page, { scale: 1 })

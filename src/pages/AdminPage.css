@@ -274,10 +274,13 @@
 
 .admin-ios-switch {
   position: relative;
+  display: flex;
+  align-items: center;
   flex: 0 0 auto;
   width: 48px;
   height: 28px;
-  padding: 3px;
+  box-sizing: border-box;
+  padding: 0 3px;
   border: 1px solid #9aa8bd;
   border-radius: 999px;
   background: #e6ebf2;
@@ -287,6 +290,7 @@
 
 .admin-ios-switch span {
   display: block;
+  flex: 0 0 22px;
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -309,7 +313,7 @@
 }
 
 .admin-ios-switch.is-on { background: #25a768; border-color: #25a768; }
-.admin-ios-switch.is-on span { transform: translateX(20px); }
+.admin-ios-switch.is-on span { transform: translateX(18px); }
 .admin-ios-switch:disabled { cursor: wait; opacity: .6; }
 
 .admin-role-controls {

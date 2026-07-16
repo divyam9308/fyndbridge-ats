@@ -167,7 +167,16 @@ function isPdfBuffer(fileBuffer) {
 }
 
 async function loadPdfDocument(fileBuffer) {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const [pdfjs, pdfjsWorker] = await Promise.all([
+    import('pdfjs-dist/legacy/build/pdf.mjs'),
+    // Keep this as a literal import so serverless file tracing includes the
+    // worker module used by PDF.js's Node/fake-worker path.
+    import('pdfjs-dist/legacy/build/pdf.worker.mjs')
+  ])
+  globalThis.pdfjsWorker = {
+    ...globalThis.pdfjsWorker,
+    WorkerMessageHandler: pdfjsWorker.WorkerMessageHandler
+  }
   return pdfjs.getDocument({
     data: new Uint8Array(fileBuffer),
     isEvalSupported: false,
