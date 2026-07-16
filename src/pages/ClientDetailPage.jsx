@@ -12,6 +12,7 @@ import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } fr
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
+import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import { DocumentIconGroup } from '../components/DocumentAttachments'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { ConsultantPill } from '../components/ConsultantPill'
@@ -655,7 +656,7 @@ export default function ClientDetailPage() {
     }
   }
 
-  if (loading) return <div className="loading-state"><Loader2 size={32} className="spin" color="var(--gold)" /><p>Loading client metrics...</p></div>
+  if (loading) return <div className="loading-state"><FyndbridgeLoader size={88} label="Loading client metrics..." /></div>
 
   if (error || !client) {
     return (

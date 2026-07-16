@@ -24,6 +24,28 @@
   flex-shrink: 0;
 }
 
+.fyndbridge-loader path {
+  opacity: .5;
+  stroke-dashoffset: .65;
+  animation: fyndbridge-loader-draw 2.6s ease-in-out infinite;
+}
+
+@keyframes fyndbridge-loader-draw {
+  0% {
+    opacity: .5;
+    stroke-dashoffset: .65;
+  }
+  52%,
+  82% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+  100% {
+    opacity: .5;
+    stroke-dashoffset: -.65;
+  }
+}
+
 @media (max-width: 1100px) {
   .fyndbridge-loader { width: min(var(--fyndbridge-loader-size), 70px); }
 }
@@ -35,6 +57,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fyndbridge-loader path { stroke-dashoffset: 0; opacity: 1; }
-  .fyndbridge-loader animate { display: none; }
+  .fyndbridge-loader path { animation: none; stroke-dashoffset: 0; opacity: 1; }
 }

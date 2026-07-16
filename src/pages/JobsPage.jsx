@@ -221,13 +221,13 @@ export default function JobsPage() {
   const mandateListRequestRef = useRef(0)
   const mandateListAbortRef = useRef(null)
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async ({ showLoading = true } = {}) => {
     const requestId = ++mandateListRequestRef.current
     mandateListAbortRef.current?.abort()
     const controller = new AbortController()
     mandateListAbortRef.current = controller
     try {
-      setLoading(true)
+      if (showLoading) setLoading(true)
       setListError('')
       const params = new URLSearchParams()
       params.set('page', String(page))
@@ -307,13 +307,13 @@ export default function JobsPage() {
       pendingRealtimeRefreshRef.current = true
       return
     }
-    fetchData()
+    fetchData({ showLoading: false })
   }, [editingJob, fetchData, isOpen])
 
   useEffect(() => {
     if ((isOpen || editingJob) || !pendingRealtimeRefreshRef.current) return
     pendingRealtimeRefreshRef.current = false
-    fetchData()
+    fetchData({ showLoading: false })
   }, [editingJob, fetchData, isOpen])
 
   useRealtimeRefresh({
@@ -351,7 +351,7 @@ export default function JobsPage() {
 
   useEffect(() => {
     const refreshClients = () => refreshClientOptions()
-    const refreshJobs = () => fetchData()
+    const refreshJobs = () => fetchData({ showLoading: false })
     window.addEventListener('ats:clients-updated', refreshClients)
     window.addEventListener('ats:jobs-updated', refreshJobs)
     return () => {

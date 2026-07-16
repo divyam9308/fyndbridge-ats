@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { Check, Download, FileText, LoaderCircle, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { Check, Download, FileText, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import {
   commitInvoicePreview, createInvoiceEntity, deleteInvoiceEntity, fetchInvoiceEntities,
   fetchNextInvoiceNumber, lookupGstin, previewInvoicePdf, updateInvoiceEntity
@@ -39,17 +40,10 @@ export function ModelFields({ form, update }) {
   if (form.model === 'jra_adjustment_flat_fee') return <><Field label="Value (₹)"><Input name="jra_base_value" value={form.jra_base_value} update={update} inputMode="decimal" /></Field><Field label="Flat Fee / Adjustment (₹)"><Input name="jra_flat_fee" value={form.jra_flat_fee} update={update} inputMode="decimal" /></Field></>
   return <Field label="Amount (₹)"><Input name="others_amount" value={form.others_amount} update={update} inputMode="decimal" /></Field>
 }
-function Loader({ label }) { return <div className="invoice-loader"><LoaderCircle size={22} /><span>{label}</span></div> }
-
 function InvoiceTableSkeleton({ label }) {
   return (
     <div className="invoice-table-loading">
-      <Loader label={label} />
-      <div className="invoice-skeleton" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
+      <FyndbridgeLoader size={88} label={label} className="invoice-inline-loader" />
     </div>
   )
 }

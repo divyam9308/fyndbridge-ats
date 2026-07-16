@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams } from 'react-router-dom'
 import { CheckCircle2, ChevronLeft, CircleX, Download, FileText, LoaderCircle, Pencil, Trash2, X } from 'lucide-react'
+import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import ReportKpiCard from '../components/ReportKpiCard'
 import {
   cancelInvoice as cancelInvoiceRequest,
@@ -38,29 +39,31 @@ const KPI_CARDS = [
   { key: 'totalInvoiceValue', label: 'Total Invoice Value', tone: 'green' }
 ]
 
-const DETAIL_HEADERS = [
-  'Invoice ID',
-  'Invoice Number',
-  'Invoice Date',
-  'Status',
-  'Consultant Name',
-  'Candidate Name',
-  'Model',
-  'CTC',
-  'Percentage',
-  'Flat Fee',
-  'Retainer Amount',
-  'Project Amount',
-  'JRA Adjustment',
-  'JRA Base Value',
-  'JRA Flat Fee',
-  'Other Amount',
-  'Bill Value',
-  'Tax Value',
-  'Total Invoice Value',
-  'Invoice',
-  'Actions'
+const DETAIL_COLUMNS = [
+  { key: 'displayId', label: 'Invoice ID', width: 120 },
+  { key: 'number', label: 'Invoice Number', width: 190 },
+  { key: 'date', label: 'Invoice Date', width: 130 },
+  { key: 'status', label: 'Status', width: 120 },
+  { key: 'consultant', label: 'Consultant Name', width: 220 },
+  { key: 'candidate', label: 'Candidate Name', width: 220 },
+  { key: 'model', label: 'Model', width: 180 },
+  { key: 'ctc', label: 'CTC', width: 145 },
+  { key: 'percentage', label: 'Percentage', width: 125 },
+  { key: 'flatFee', label: 'Flat Fee', width: 155 },
+  { key: 'retainer', label: 'Retainer Amount', width: 155 },
+  { key: 'project', label: 'Project Amount', width: 155 },
+  { key: 'jraAdjustment', label: 'JRA Adjustment', width: 155 },
+  { key: 'jraBase', label: 'JRA Base Value', width: 155 },
+  { key: 'jraFlatFee', label: 'JRA Flat Fee', width: 155 },
+  { key: 'other', label: 'Other Amount', width: 155 },
+  { key: 'bill', label: 'Bill Value', width: 160 },
+  { key: 'tax', label: 'Tax Value', width: 150 },
+  { key: 'total', label: 'Total Invoice Value', width: 190 },
+  { key: 'invoice', label: 'Invoice', width: 130 },
+  { key: 'actions', label: 'Actions', width: 150 }
 ]
+const DETAIL_TABLE_WIDTH = DETAIL_COLUMNS.reduce((total, column) => total + column.width, 0)
+const DETAIL_TABLE_STYLE = { width: `${DETAIL_TABLE_WIDTH}px`, minWidth: `${DETAIL_TABLE_WIDTH}px` }
 
 function InvoiceKpis({ totals, loading = false }) {
   return <section className="invoice-kpi-grid" aria-label="Invoice totals">{KPI_CARDS.map(card => <ReportKpiCard key={card.key} label={card.label} value={formatInrPaise(totals?.[card.key] || 0n)} tone={card.tone} loading={loading} />)}</section>
@@ -88,9 +91,7 @@ function InvoiceActionDialog({ action, busy, error, onClose, onConfirm }) {
 function InvoiceDetailLoading() {
   return <div className="invoice-page invoice-entity-details">
     <div className="candidate-page-header"><div><Link className="invoice-back-link" to="/invoice"><ChevronLeft size={16} />Back to Invoice</Link><h2>Entity Details</h2><p>Loading invoice history…</p></div></div>
-    <div className="invoice-entity-summary invoice-entity-summary-loading"><div className="invoice-skeleton"><span /><span /></div></div>
-    <InvoiceKpis totals={null} loading />
-    <div className="table-card invoice-table-card"><div className="invoice-table-loading"><div className="invoice-loader"><LoaderCircle size={22} /><span>Loading invoices…</span></div><div className="invoice-skeleton"><span /><span /><span /></div></div></div>
+    <FyndbridgeLoader size={88} label="Loading invoices..." className="invoice-page-loader" />
   </div>
 }
 
@@ -201,7 +202,7 @@ export default function InvoiceEntityDetailPage() {
     {error && <div className="invoice-table-error">{error}</div>}
     <section className="invoice-entity-summary"><div><span className="invoice-id">{entity.entity_display_id || entity.invoice_id}</span><h3>{show(entity.legal_entity_name)}</h3>{optionalName && <p>{optionalName}</p>}</div><div className="invoice-entity-summary-grid">{[['GSTIN', entity.gstin], ['PAN', entity.pan], ['Address', entity.address], ['Contact Person', entity.contact_person], ['Contact Email', entity.email], ['GST Component', entity.gst_component === 'CGST_SGST' ? 'CGST + SGST' : entity.gst_component], ['Rate', rate]].map(([label, value]) => <span key={label}><small>{label}</small><b>{show(value)}</b></span>)}</div></section>
     <InvoiceKpis totals={totals} />
-    <div className="table-card invoice-table-card"><div className="invoice-card-toolbar"><strong>Generated Invoices</strong><span>{invoices.length} {invoices.length === 1 ? 'invoice' : 'invoices'}</span></div><div className="table-scroll"><table className="data-table invoice-detail-table"><thead><tr>{DETAIL_HEADERS.map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>
+    <div className="table-card invoice-table-card"><div className="invoice-card-toolbar"><strong>Generated Invoices</strong><span>{invoices.length} {invoices.length === 1 ? 'invoice' : 'invoices'}</span></div><div className="table-scroll"><table className="data-table invoice-detail-table" style={DETAIL_TABLE_STYLE}><colgroup>{DETAIL_COLUMNS.map(column => <col key={column.key} style={{ width: `${column.width}px` }} />)}</colgroup><thead><tr>{DETAIL_COLUMNS.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>
       {invoices.map(invoice => {
         const cancelled = invoice.status === 'cancelled'
         const values = invoiceMoneyValues(invoice)
@@ -211,9 +212,9 @@ export default function InvoiceEntityDetailPage() {
           <td className="invoice-number-cell" title={invoice.invoice_number}>{show(invoice.invoice_number)}</td>
           <td>{formatDateDDMMYYYY(invoice.invoice_date)}</td>
           <td><span className={`invoice-status-badge is-${cancelled ? 'cancelled' : 'active'}`}>{cancelled ? 'Cancelled' : 'Active'}</span></td>
-          <td>{show(invoice.consultant_name)}</td>
-          <td>{show(invoice.candidate_name)}</td>
-          <td>{INVOICE_MODEL_LABELS[invoice.model] || show(invoice.model)}</td>
+          <td className="invoice-wrap-cell" title={show(invoice.consultant_name)}>{show(invoice.consultant_name)}</td>
+          <td className="invoice-wrap-cell" title={show(invoice.candidate_name)}>{show(invoice.candidate_name)}</td>
+          <td className="invoice-wrap-cell" title={INVOICE_MODEL_LABELS[invoice.model] || show(invoice.model)}>{INVOICE_MODEL_LABELS[invoice.model] || show(invoice.model)}</td>
           <td className="invoice-money-cell">{moneyOrDash(invoice.ctc_lpa)}</td>
           <td className="invoice-number-value">{formatInvoicePercentage(invoice.model_percent)}</td>
           <td className="invoice-money-cell">{moneyOrDash(invoice.model_flat_fee)}</td>
@@ -234,7 +235,7 @@ export default function InvoiceEntityDetailPage() {
           </div></td>
         </tr>
       })}
-      {!invoices.length && <tr><td className="invoice-empty-cell" colSpan={DETAIL_HEADERS.length}>No invoices generated for this entity.</td></tr>}
+      {!invoices.length && <tr><td className="invoice-empty-cell" colSpan={DETAIL_COLUMNS.length}>No invoices generated for this entity.</td></tr>}
     </tbody></table></div></div>
     {editing && <EditInvoiceModal invoice={editing} entity={entity} onClose={() => setEditing(null)} onSaved={load} />}
     <InvoiceActionDialog action={action} busy={Boolean(pendingAction)} error={actionError} onClose={closeAction} onConfirm={confirmAction} />

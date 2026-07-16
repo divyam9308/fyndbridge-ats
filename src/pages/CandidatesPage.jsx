@@ -335,7 +335,7 @@ export default function CandidatesPage() {
   const candidateListRequestRef = useRef(0)
   const candidateListAbortRef = useRef(null)
   const [apiError, setApiError] = useState('')
-  const [loadingCandidates, setLoadingCandidates] = useState(false)
+  const [loadingCandidates, setLoadingCandidates] = useState(true)
   const [saving, setSaving] = useState(false)
   const [candidateDuplicate, setCandidateDuplicate] = useState(null)
   const [duplicateBypass, setDuplicateBypass] = useState(null)
