@@ -697,7 +697,7 @@ export default function ClientDetailPage() {
               <tr>
                 <th>Job ID</th>
                 <th>Mandate / Role</th>
-                <th className="align-center">JD</th>
+                <th className="client-mandate-jd-cell">JD</th>
                 <th className="align-center">Status</th>
                 <th className="align-center">Candidates Assigned</th>
                 {MANDATE_SUMMARY_COLUMNS.map(([, label]) => <th className="align-center" key={label}>{label}</th>)}
@@ -708,7 +708,7 @@ export default function ClientDetailPage() {
                 <tr key={group.key}>
                   <td>{group.relatedJob?.job_display_id ? <span className="table-id-chip table-job-id-chip">{group.relatedJob.job_display_id}</span> : mutedDash}</td>
                   <td><button className="table-link-button" type="button" onClick={() => openGroup(group.key, group.title)}>{group.title}</button></td>
-                  <td>
+                  <td className="client-mandate-jd-cell">
                     <DocumentIconGroup
                       attachments={jobJdAttachments(group.relatedJob)}
                       keyPrefix={`client-detail-jd-${group.relatedJob?.id || group.key}`}

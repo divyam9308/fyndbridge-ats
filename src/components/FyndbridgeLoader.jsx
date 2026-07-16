@@ -19,6 +19,7 @@ export function FyndbridgeLoader({ size = 84, label = 'Loading...', ariaLabel = 
         style={{ '--fyndbridge-loader-size': `${size}px` }}
       >
         <g
+          className="fyndbridge-loader-progress"
           fill="none"
           stroke="#DAB111"
           strokeWidth="5"
@@ -28,14 +29,10 @@ export function FyndbridgeLoader({ size = 84, label = 'Loading...', ariaLabel = 
           <path
             d="M47 52 L35 52 L35 14 L79 14 L79 52 L69 52"
             pathLength="1"
-            strokeDasharray="1"
-            strokeDashoffset="1"
           />
           <path
             d="M26 35 L13 35 L13 73 L58 73 L58 35 L47 35"
             pathLength="1"
-            strokeDasharray="1"
-            strokeDashoffset="1"
           />
         </g>
       </svg>

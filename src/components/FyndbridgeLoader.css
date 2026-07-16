@@ -24,25 +24,34 @@
   flex-shrink: 0;
 }
 
-.fyndbridge-loader path {
-  opacity: .5;
-  stroke-dashoffset: .65;
-  animation: fyndbridge-loader-draw 2.6s ease-in-out infinite;
+.fyndbridge-loader-progress path {
+  opacity: 0;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: fyndbridge-loader-draw 2.4s linear infinite;
 }
 
 @keyframes fyndbridge-loader-draw {
-  0% {
-    opacity: .5;
-    stroke-dashoffset: .65;
+  0%,
+  4% {
+    opacity: 0;
+    stroke-dashoffset: 1;
   }
-  52%,
+  8%,
+  68%,
   82% {
     opacity: 1;
+  }
+  8% {
+    stroke-dashoffset: 1;
+  }
+  68%,
+  100% {
     stroke-dashoffset: 0;
   }
+  94%,
   100% {
-    opacity: .5;
-    stroke-dashoffset: -.65;
+    opacity: 0;
   }
 }
 
@@ -57,5 +66,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fyndbridge-loader path { animation: none; stroke-dashoffset: 0; opacity: 1; }
+  .fyndbridge-loader-progress path { animation: none; opacity: 1; stroke-dashoffset: 0; }
 }

@@ -41,12 +41,23 @@ export function formatInvoiceMoney(value) {
   return formatInrPaise(moneyToPaise(value))
 }
 
+function roundPaiseToNearestRupee(value) {
+  const paise = BigInt(value)
+  const negative = paise < 0n
+  const absolute = negative ? -paise : paise
+  const rounded = ((absolute + 50n) / 100n) * 100n
+  return negative ? -rounded : rounded
+}
+
 export function invoiceMoneyValues(invoice = {}) {
   const billValue = moneyToPaise(invoice.taxable_amount)
   const taxValue = moneyToPaise(invoice.total_tax_amount)
-  const totalInvoiceValue = hasValue(invoice.total_before_rounding)
+  const fallbackTotal = hasValue(invoice.total_before_rounding)
     ? moneyToPaise(invoice.total_before_rounding)
     : billValue + taxValue
+  const totalInvoiceValue = hasValue(invoice.grand_total)
+    ? moneyToPaise(invoice.grand_total)
+    : roundPaiseToNearestRupee(fallbackTotal)
   return { billValue, taxValue, totalInvoiceValue }
 }
 

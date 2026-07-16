@@ -133,6 +133,24 @@
   text-align: center !important;
 }
 
+.client-mandate-jd-cell {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.client-mandate-jd-cell .document-icon-group {
+  justify-content: center;
+  width: 100%;
+}
+
+.client-mandate-jd-cell .document-icon-link {
+  line-height: 0;
+}
+
+.client-mandate-jd-cell .document-icon-link svg {
+  display: block;
+}
+
 .mandate-status-cell {
   text-align: center !important;
 }

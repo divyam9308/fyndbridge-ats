@@ -5,12 +5,20 @@ const path = require('node:path')
 
 const root = path.resolve(__dirname, '../../..')
 const clientDetailPage = fs.readFileSync(path.join(root, 'src/pages/ClientDetailPage.jsx'), 'utf8')
+const clientDetailCss = fs.readFileSync(path.join(root, 'src/pages/ClientDetailPage.css'), 'utf8')
 
 test('Client Details places JD between mandate name and status', () => {
   assert.match(
     clientDetailPage,
-    /<th>Mandate \/ Role<\/th>\s*<th>JD<\/th>\s*<th>Status<\/th>/
+    /<th>Mandate \/ Role<\/th>\s*<th className="client-mandate-jd-cell">JD<\/th>\s*<th className="align-center">Status<\/th>/
   )
+})
+
+test('Client Details centers the JD heading and document icons on both axes', () => {
+  assert.match(clientDetailPage, /<td className="client-mandate-jd-cell">\s*<DocumentIconGroup/)
+  assert.match(clientDetailCss, /\.client-mandate-jd-cell\s*\{[\s\S]*text-align:\s*center !important;[\s\S]*vertical-align:\s*middle !important;/)
+  assert.match(clientDetailCss, /\.client-mandate-jd-cell \.document-icon-group\s*\{[\s\S]*justify-content:\s*center;[\s\S]*width:\s*100%;/)
+  assert.match(clientDetailCss, /\.client-mandate-jd-cell \.document-icon-link svg\s*\{[\s\S]*display:\s*block;/)
 })
 
 test('Client Details displays the JD from each related job without per-row requests', () => {
