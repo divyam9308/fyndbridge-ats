@@ -483,8 +483,8 @@
 }
 .report-warning-toast {
   position: fixed;
+  top: 130px;
   right: 22px;
-  bottom: max(22px, env(safe-area-inset-bottom));
   z-index: 9090;
   width: min(440px, calc(100vw - 44px));
   box-shadow: var(--shadow-card);
@@ -834,8 +834,8 @@
   .report-toast { top: 70px; right: 12px; left: 12px; text-align: center; }
   .report-notice-stack { top: 70px; right: 12px; width: calc(100vw - 24px); }
   .report-warning-toast {
+    top: 122px;
     right: 12px;
-    bottom: max(12px, env(safe-area-inset-bottom));
     width: calc(100vw - 24px);
   }
   .report-tab-stage { min-height: 1580px; }

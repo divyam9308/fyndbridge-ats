@@ -31,6 +31,7 @@ const reportController = read('server/src/controllers/consultantReportController
 const reportAttendance = read('server/src/services/consultantReportAttendance.js')
 const reportService = read('server/src/services/consultantReportService.js')
 const reportPage = read('src/pages/ConsultantReportPage.jsx')
+const reportStyles = read('src/pages/ConsultantReportPage.css')
 const reportApi = read('src/services/reportApi.js')
 
 test('Report page policy handles everyone, admin-only, super-admin-only and invalid values', () => {
@@ -316,6 +317,9 @@ test('report data-quality warning popup automatically closes after five seconds'
     reportPage,
     /window\.setTimeout\(\(\) => setDismissedWarningKey\(warningKey\), WARNING_POPUP_DURATION_MS\)/
   )
+  const warningToast = reportStyles.match(/\.report-warning-toast\s*\{([\s\S]*?)\}/)?.[1] || ''
+  assert.match(warningToast, /top:\s*130px/)
+  assert.doesNotMatch(warningToast, /bottom:/)
 })
 
 test('ordinary users are source-enforced as self-only while administrators use the employee directory', () => {
