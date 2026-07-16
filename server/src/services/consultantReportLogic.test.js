@@ -432,7 +432,7 @@ test('all exception metrics and positive outcomes use documented current-state e
     association('all-rejected', 'Rejected by Recruiter'),
     association('all-rejected', 'Rejected by Client'),
     association('ageing', 'Interested'),
-    association('dropout', 'Dropout'),
+    association('dropout', '-'),
     association('offer-declined', 'Offer Declined')
   ]
   const result = facts(jobs, associations, { startDate: '2026-05-01', endDate: END })
@@ -442,7 +442,8 @@ test('all exception metrics and positive outcomes use documented current-state e
     withoutClientSubmission: 5,
     withoutInterview: 2,
     allRejected: 1,
-    ageing: 1
+    ageing: 1,
+    pendingStatusAssignment: 1
   })
   assert.deepEqual(Object.fromEntries(result.positiveOutcomes.map((item) => [item.key, item.value])), {
     hiredCandidates: 1,

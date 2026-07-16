@@ -75,7 +75,8 @@ function reportFixture({ overall = false } = {}) {
       { key: 'withoutClientSubmission', label: 'Mandates with candidates but no Client Submission', value: 1, tone: 'blue' },
       { key: 'withoutInterview', label: 'Mandates with Client Submission but no Interview', value: 1, tone: 'purple' },
       { key: 'allRejected', label: 'Mandates where every candidate is rejected', value: 0, tone: 'red' },
-      { key: 'ageing', label: 'Ongoing mandates older than 45 days', value: 1, tone: 'amber' }
+      { key: 'ageing', label: 'Ongoing mandates older than 45 days', value: 1, tone: 'amber' },
+      { key: 'pendingStatusAssignment', label: 'Candidates Pending Status Assignment', value: 2, tone: 'orange' }
     ],
     positiveOutcomes: [
       { key: 'hiredCandidates', label: 'Hired Candidates', value: 2, tone: 'green' },
@@ -146,6 +147,10 @@ test('builds the aligned five-sheet individual consultant workbook with typed ce
   assert.equal(mandates.views[0].showGridLines, false)
   assert.equal(workbook.getWorksheet('02 Conversion & Ageing').getCell('A4').value, 'Client Name')
   assert.equal(workbook.getWorksheet('03 Candidates & Pipeline').getCell('A6').value, 'Total Candidates')
+  assert.equal(summary.getCell('H28').value, 'Candidates Pending Status Assignment')
+  assert.equal(summary.getCell('M28').value, 2)
+  assert.equal(workbook.getWorksheet('04 Attendance & Outcomes').getCell('A11').value, 'Candidates Pending Status Assignment')
+  assert.equal(workbook.getWorksheet('04 Attendance & Outcomes').getCell('C11').value, 2)
   assert.equal(workbook.getWorksheet('04 Attendance & Outcomes').getCell('E16').value, 'Available Leave Balance')
 })
 

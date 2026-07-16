@@ -286,7 +286,7 @@ function OutcomesReport({ report }) {
       <section className="report-section">
         <ReportSectionHeader title="Exceptions" description={isOverall ? 'Combined number-only indicators across all consultants that may need follow-up within the selected period.' : 'Number-only indicators that may need follow-up within the selected period.'} />
         {exceptions.length ? (
-          <div className="report-kpi-grid is-five">
+          <div className="report-kpi-grid is-six">
             {exceptions.map((item) => <ReportKpiCard key={item.key || item.label} label={item.label} value={item.value ?? 0} tone={item.tone || 'blue'} compact />)}
           </div>
         ) : <div className="report-empty-state report-inline-empty">No exception metrics are available for this period.</div>}

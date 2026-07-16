@@ -19,7 +19,8 @@ const EMPTY_EXCEPTION_METRICS = Object.freeze([
   { key: 'withoutClientSubmission', label: 'Mandates with candidates but no Client Submission', tone: 'blue' },
   { key: 'withoutInterview', label: 'Mandates with Client Submission but no Interview', tone: 'purple' },
   { key: 'allRejected', label: 'Mandates where every candidate is Not Interested, Rejected by Recruiter or Rejected by Client', tone: 'red' },
-  { key: 'ageing', label: 'Ongoing mandates older than 45 days', tone: 'amber' }
+  { key: 'ageing', label: 'Ongoing mandates older than 45 days', tone: 'amber' },
+  { key: 'pendingStatusAssignment', label: 'Candidates Pending Status Assignment', tone: 'orange' }
 ])
 const EMPTY_POSITIVE_OUTCOME_METRICS = Object.freeze([
   { key: 'hiredCandidates', label: 'Hired Candidates', tone: 'green' },
@@ -422,7 +423,16 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
     { key: 'withoutClientSubmission', label: 'Mandates with candidates but no Client Submission', value: mandateRows.filter((row) => row.candidatesAssigned > 0 && !hasSubmissionEvidence(row)).length, tone: 'blue' },
     { key: 'withoutInterview', label: 'Mandates with Client Submission but no Interview', value: mandateRows.filter((row) => hasSubmissionEvidence(row) && !hasInterviewEvidence(row)).length, tone: 'purple' },
     { key: 'allRejected', label: 'Mandates where every candidate is Not Interested, Rejected by Recruiter or Rejected by Client', value: mandateRows.filter((row) => row.candidatesAssigned > 0 && row._associations.every((association) => REJECTED_STATUSES.has(association.canonicalStatus))).length, tone: 'red' },
-    { key: 'ageing', label: 'Ongoing mandates older than 45 days', value: mandateRows.filter((row) => row.isAgeingWarning).length, tone: 'amber' }
+    { key: 'ageing', label: 'Ongoing mandates older than 45 days', value: mandateRows.filter((row) => row.isAgeingWarning).length, tone: 'amber' },
+    {
+      key: 'pendingStatusAssignment',
+      label: 'Candidates Pending Status Assignment',
+      value: mandateRows.reduce((total, row) => total + row._associations.filter((association) => {
+        const status = clean(association.status)
+        return !status || status === '-'
+      }).length, 0),
+      tone: 'orange'
+    }
   ]
   const positiveOutcomes = [
     { key: 'hiredCandidates', label: 'Hired Candidates', value: candidateCounts.Hired, tone: 'green' },

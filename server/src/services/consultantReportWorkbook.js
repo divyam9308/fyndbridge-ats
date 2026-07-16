@@ -444,7 +444,7 @@ function buildSummarySheet(workbook, report) {
     })
   })
   const exceptions = Array.isArray(report?.exceptions) ? report.exceptions : []
-  exceptions.slice(0, 5).forEach((item, index) => {
+  exceptions.slice(0, 6).forEach((item, index) => {
     writeLabelValueRow(worksheet, 23 + index, 8, 12, 13, 13, item.label, safeNumber(item.value), {
       numFmt: NUMBER_FORMAT,
       fillColor: index % 2 === 0 ? COLORS.redLight : COLORS.white,
@@ -754,7 +754,7 @@ function buildAttendanceSheet(workbook, report) {
   worksheet.mergeCells(5, 5, 5, 6)
   worksheet._reportPreviewMerges.push({ startRow: 5, startColumn: 5, endRow: 5, endColumn: 6 })
   worksheet.getCell('E5').value = 'Outcome'
-  writeMetricList(worksheet, 6, 1, 2, 3, Array.isArray(report?.exceptions) ? report.exceptions.slice(0, 5) : [], COLORS.redLight)
+  writeMetricList(worksheet, 6, 1, 2, 3, Array.isArray(report?.exceptions) ? report.exceptions.slice(0, 6) : [], COLORS.redLight)
   writeMetricList(worksheet, 6, 5, 6, 7, Array.isArray(report?.positiveOutcomes) ? report.positiveOutcomes.slice(0, 6) : [], COLORS.greenLight)
 
   writeSection(worksheet, 14, 1, 3, 'Attendance Snapshot', COLORS.blue)
