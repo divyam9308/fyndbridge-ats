@@ -389,9 +389,11 @@ export default function ClientsPage() {
       const data = await res.json().catch(() => ({}))
       if (requestId !== clientListRequestRef.current || controller.signal.aborted) return
       if (!res.ok) throw new Error(data.error || 'Failed to fetch clients from server.')
+      const nextTotal = Number(data.total) || 0
+      const validPage = Math.min(Number(data.page) || page, Math.max(1, Math.ceil(nextTotal / pageSize)))
       setClients(data.data || [])
-      setTotalClients(Number(data.total) || 0)
-      setPage(Number(data.page) || 1)
+      setTotalClients(nextTotal)
+      setPage(validPage)
       if (import.meta.env.DEV && aiFilters) console.debug('Clients AI filter', { filters: aiFilters, matched: Number(data.total) || 0 })
       setError(null)
       setListError('')

@@ -392,6 +392,17 @@ export default function ConsultantReportPage() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
+  useEffect(() => {
+    const refreshReport = () => {
+      if (!requestFilters) return
+      setReportLoading(true)
+      setReportError('')
+      setReportRetryKey(value => value + 1)
+    }
+    window.addEventListener('ats:reports-updated', refreshReport)
+    return () => window.removeEventListener('ats:reports-updated', refreshReport)
+  }, [requestFilters])
+
   useEffect(() => () => exportControllerRef.current?.abort(), [])
 
   useEffect(() => {

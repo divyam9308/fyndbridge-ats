@@ -1683,6 +1683,18 @@
   overflow: hidden;
   animation: overlayIn 0.2s ease both;
 }
+.modal-overlay.resume-review-overlay {
+  left: var(--sidebar-width);
+  display: grid;
+  place-items: start center;
+  padding: 24px 16px;
+}
+.modal-overlay.resume-review-overlay > .modal-card {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: min(900px, calc(100vw - var(--sidebar-width) - 32px));
+}
 @keyframes overlayIn {
   from { opacity: 0; }
   to   { opacity: 1; }

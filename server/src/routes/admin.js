@@ -1,6 +1,7 @@
 const express = require('express')
 const controller = require('../controllers/adminController')
 const employeeController = require('../controllers/employeeManagementController')
+const recordDeletionController = require('../controllers/recordDeletionController')
 const { requireAdmin, requireSuperAdmin } = require('../middleware/adminAccessMiddleware')
 
 const router = express.Router()
@@ -10,6 +11,9 @@ router.route('/dashboard-visibility').get(controller.dashboardVisibility).patch(
 router.get('/column-permissions', controller.columnPermissions)
 router.route('/page-view-permissions').get(controller.pageViewPermissions).patch(controller.pageViewPermissions)
 router.use(requireAdmin)
+router.get('/record-management/records', requireSuperAdmin, recordDeletionController.list)
+router.post('/record-management/preview', requireSuperAdmin, recordDeletionController.preview)
+router.post('/record-management/delete', requireSuperAdmin, recordDeletionController.remove)
 router.get('/bootstrap', controller.bootstrap)
 router.route('/consultant-report-visibility').get(controller.consultantReportVisibility).patch(requireSuperAdmin, controller.consultantReportVisibility)
 router.get('/users', controller.users)

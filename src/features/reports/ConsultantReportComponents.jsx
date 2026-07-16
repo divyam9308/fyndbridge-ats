@@ -237,10 +237,10 @@ export function ReportDataModal({ kind, fetchRows, onClose }) {
   useEffect(() => {
     const dialog = dialogRef.current
     const previousFocus = document.activeElement
-    const appRoot = document.getElementById('root')
+    const appContent = document.querySelector('.dashboard-main, .dashboard-embed')
     const previousOverflow = document.body.style.overflow
-    const previousAriaHidden = appRoot?.getAttribute('aria-hidden') ?? null
-    const rootWasInert = appRoot?.hasAttribute('inert') || false
+    const previousAriaHidden = appContent?.getAttribute('aria-hidden') ?? null
+    const contentWasInert = appContent?.hasAttribute('inert') || false
 
     const focusableElements = () => [...(dialog?.querySelectorAll(
       'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
@@ -270,17 +270,17 @@ export function ReportDataModal({ kind, fetchRows, onClose }) {
     }
 
     document.body.style.overflow = 'hidden'
-    appRoot?.setAttribute('inert', '')
-    appRoot?.setAttribute('aria-hidden', 'true')
+    appContent?.setAttribute('inert', '')
+    appContent?.setAttribute('aria-hidden', 'true')
     document.addEventListener('keydown', handleDialogKeys)
     const focusFrame = window.requestAnimationFrame(() => (focusableElements()[0] || dialog)?.focus())
     return () => {
       window.cancelAnimationFrame(focusFrame)
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleDialogKeys)
-      if (!rootWasInert) appRoot?.removeAttribute('inert')
-      if (previousAriaHidden === null) appRoot?.removeAttribute('aria-hidden')
-      else appRoot?.setAttribute('aria-hidden', previousAriaHidden)
+      if (!contentWasInert) appContent?.removeAttribute('inert')
+      if (previousAriaHidden === null) appContent?.removeAttribute('aria-hidden')
+      else appContent?.setAttribute('aria-hidden', previousAriaHidden)
       previousFocus?.focus?.()
     }
   }, [onClose])

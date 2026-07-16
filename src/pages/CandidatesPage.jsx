@@ -327,6 +327,7 @@ export default function CandidatesPage() {
   const duplicateModalRef = useRef(null)
   const cvLinkCheckTimerRef = useRef(null)
   const importCancelledRef = useRef(false)
+  const importQueueRef = useRef([])
   const pendingRealtimeRefreshRef = useRef(false)
   const assignmentSourceRef = useRef(null)
   const nextCandidateIdRequestRef = useRef(0)
@@ -544,9 +545,11 @@ export default function CandidatesPage() {
         throw new Error(payload.error || 'Unable to load candidates.')
       }
 
+      const nextTotal = Number(payload.total) || 0
+      const validPage = Math.min(Number(payload.page) || nextPage, Math.max(1, Math.ceil(nextTotal / pageSize)))
       setCandidates(Array.isArray(payload.data) ? payload.data.map(apiCandidateToUi) : [])
-      setTotalCandidates(Number(payload.total) || 0)
-      setPage(Number(payload.page) || nextPage)
+      setTotalCandidates(nextTotal)
+      setPage(validPage)
       if (import.meta.env.DEV && aiFilters) console.debug('Candidates AI filter', { filters: aiFilters, matched: Number(payload.total) || 0 })
       setApiError('')
     } catch (err) {
@@ -1351,8 +1354,13 @@ export default function CandidatesPage() {
   const startResumeReview = async (rows) => {
     const candidateDisplayId = await fetchNextCandidateDisplayId().catch(() => '')
     const profile = await getFreshActiveConsultantName()
+    if (importCancelledRef.current) {
+      await discardResumeTemps(rows.map(row => row?.cv_storage_path || row?.resume_path))
+      return
+    }
     const consultantUser = consultantOptions.find(user => user.id && user.id === profile.userId) || consultantOptions.find(user => user.name === profile.name)
     setConsultantSearch(profile.name)
+    importQueueRef.current = rows
     setImportQueue(rows)
     setCurrentImportIndex(0)
     setParsedForm({ ...mapBulkResumeRowToForm(rows[0], profile.name, consultantUser?.id || ''), candidateDisplayId })
@@ -1572,6 +1580,7 @@ export default function CandidatesPage() {
   )
 
   const closeImport = () => {
+    importQueueRef.current = []
     setImportOpen(false); setResumeFiles([]); setImportQueue([]); setCurrentImportIndex(0); setImportError(''); setReviewNotice('')
     setParsing(false); setParsed(false); setParsedForm(null); setParsedSkillInput(''); setParsedErrors({})
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -1590,6 +1599,11 @@ export default function CandidatesPage() {
       // Cleanup is best-effort.
     }
   }, [])
+
+  useEffect(() => () => {
+    importCancelledRef.current = true
+    discardResumeTemps(importQueueRef.current.map(row => row?.cv_storage_path || row?.resume_path))
+  }, [discardResumeTemps])
 
   // ---- Parsed form change ----
   const handleParsedChange = (e) => {
@@ -2554,7 +2568,7 @@ export default function CandidatesPage() {
 
       {/* ===== Bulk Resume Review Modal ===== */}
       {importOpen && createPortal((
-        <div className="modal-overlay">
+        <div className="modal-overlay resume-review-overlay">
           <div className="modal-card modal-card-lg" ref={importModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Parse and add candidates">
             <div className="modal-header">
               <span className="modal-title">{parsed ? 'Parse & Add Candidates' : 'Upload Resumes'}</span>

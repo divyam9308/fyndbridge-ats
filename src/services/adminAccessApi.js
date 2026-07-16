@@ -107,3 +107,31 @@ export async function setRecordLock(tableName, id, locked) {
   invalidateApiJsonCache('/api/admin')
   return result
 }
+
+export async function fetchDeletionRecords(entityType, { search = '', page = 1, limit = 25 } = {}) {
+  const params = new URLSearchParams({
+    entity: entityType,
+    search,
+    page: String(page),
+    limit: String(limit)
+  })
+  return json(await apiFetch(`/api/admin/record-management/records?${params.toString()}`, { cache: 'no-store' }))
+}
+
+export async function previewRecordDeletion(entityType, ids, deleteLinkedCandidateRows = false) {
+  return json(await apiFetch('/api/admin/record-management/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entityType, ids, deleteLinkedCandidateRows })
+  }))
+}
+
+export async function deleteRecords(entityType, ids, deleteLinkedCandidateRows = false) {
+  const result = await json(await apiFetch('/api/admin/record-management/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entityType, ids, deleteLinkedCandidateRows })
+  }))
+  invalidateApiJsonCache()
+  return result
+}

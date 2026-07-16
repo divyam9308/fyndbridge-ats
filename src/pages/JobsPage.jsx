@@ -247,9 +247,11 @@ export default function JobsPage() {
       const jobsData = await jobsRes.json().catch(() => ({}))
       if (requestId !== mandateListRequestRef.current || controller.signal.aborted) return
       if (!jobsRes.ok) throw new Error(jobsData.error || 'Failed to fetch mandates.')
+      const nextTotal = Number(jobsData.total) || 0
+      const validPage = Math.min(Number(jobsData.page) || page, Math.max(1, Math.ceil(nextTotal / pageSize)))
       setJobs(jobsData.data || [])
-      setTotalJobs(Number(jobsData.total) || 0)
-      setPage(Number(jobsData.page) || 1)
+      setTotalJobs(nextTotal)
+      setPage(validPage)
       if (import.meta.env.DEV && aiFilters) console.debug('Mandates AI filter', { filters: aiFilters, matched: Number(jobsData.total) || 0 })
       setError(null)
       setListError('')

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, BarChart3, Briefcase, Building2, Eye, EyeOff, Lock, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, Building2, Check, Eye, EyeOff, Lock, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
 import { notifyAdminPermissionsChanged, useAdminAccess } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import {
@@ -18,6 +18,7 @@ import {
 } from '../services/adminAccessApi'
 import AdminPermissionPicker from '../components/admin/AdminPermissionPicker'
 import PageViewPermissions from '../components/admin/PageViewPermissions'
+import RecordManagementModal from '../components/admin/RecordManagementModal'
 import {
   PERFORMANCE_COLUMNS,
   PERFORMANCE_PERMISSION_OPTIONS,
@@ -255,6 +256,8 @@ export default function AdminPage() {
   const { isAdmin, isSuperAdmin, loading, columns, permissions, refresh, refreshPermissions, setPermissions } = useAdminAccess()
   const hadAdminAccessRef = useRef(false)
   const [activeTab, setActiveTab] = useState('clients')
+  const [recordManagementOpen, setRecordManagementOpen] = useState(false)
+  const [recordManagementToast, setRecordManagementToast] = useState('')
   const [admins, setAdmins] = useState([])
   const [profiles, setProfiles] = useState([])
   const [profileQuery, setProfileQuery] = useState('')
@@ -425,6 +428,12 @@ export default function AdminPage() {
     const query = profileQuery.trim().toLowerCase()
     return !query || profile.name.toLowerCase().includes(query) || profile.email.toLowerCase().includes(query)
   }).filter((profile) => !admins.some((admin) => admin.email === profile.email))
+
+  useEffect(() => {
+    if (!recordManagementToast) return undefined
+    const timer = window.setTimeout(() => setRecordManagementToast(''), 5000)
+    return () => window.clearTimeout(timer)
+  }, [recordManagementToast])
 
   if (loading) {
     return <AdminLoadingShell />
@@ -787,6 +796,24 @@ export default function AdminPage() {
 
       <EmployeeManagement ref={employeeManagementRef} isSuperAdmin={isSuperAdmin} onDirtyChange={setEmployeeManagementDirty} />
 
+      {isSuperAdmin ? (
+        <Section
+          title="Record Management"
+          description="Permanently remove selected candidates, mandates or clients with a verified impact preview."
+          icon={Trash2}
+        >
+          <div className="admin-record-management-card">
+            <div>
+              <h3>Delete records permanently</h3>
+              <p>Available only to Super Admins. Every operation is previewed, audited and completed atomically.</p>
+            </div>
+            <button className="admin-record-management-button" type="button" onClick={() => setRecordManagementOpen(true)}>
+              <Trash2 size={17} />Delete Records
+            </button>
+          </div>
+        </Section>
+      ) : null}
+
       {createPortal((
         <div className={`admin-unsaved-dock${dirty && !lockModalType ? ' is-visible' : ''}${savingPermissions ? ' is-saving' : ''}`} aria-hidden={!dirty || Boolean(lockModalType)}>
           <div className="admin-unsaved-dock-inner">
@@ -814,6 +841,19 @@ export default function AdminPage() {
           </div>
         </div>
       ), document.body)}
+
+      <RecordManagementModal
+        open={recordManagementOpen}
+        onClose={() => setRecordManagementOpen(false)}
+        onSuccess={setRecordManagementToast}
+      />
+      {recordManagementToast ? createPortal((
+        <div className="notice-toast is-visible" role="status" aria-live="polite">
+          <Check size={17} />
+          <span>{recordManagementToast}</span>
+          <button className="notice-toast-close" type="button" onClick={() => setRecordManagementToast('')} aria-label="Close"><X size={14} /></button>
+        </div>
+      ), document.body) : null}
     </div>
   )
 }
