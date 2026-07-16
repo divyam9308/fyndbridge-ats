@@ -152,6 +152,38 @@ test('optional name is rendered between the client legal name and address only w
   assert.match(placeholderText, /OPTIONAL NAME TEST CLIENT\s+123 TEST STREET/)
 })
 
+test('blank recipient GSTIN remains visible as GSTIN NA on the invoice', async () => {
+  const entity = {
+    legal_entity_name: 'UNREGISTERED GST CLIENT',
+    optional_name: '-',
+    address: '123 TEST STREET, NOIDA, UTTAR PRADESH, 201301',
+    pan: 'AABTS7575D',
+    place_of_supply: 'Noida',
+    state: 'Uttar Pradesh',
+    state_code: '09',
+    gstin: null,
+    contact_person: 'Test Contact',
+    email: 'billing@example.com',
+    sac: '998312'
+  }
+  const input = {
+    ...baseInput,
+    ...entity,
+    billing_entity: 'FCS',
+    others_amount: '560000'
+  }
+  const invoice = {
+    ...calculateInvoice(input),
+    billing_entity: 'FCS',
+    invoice_number: 'FB/26-27/GSTIN-NA',
+    invoice_date: '2026-07-16',
+    sac: entity.sac
+  }
+  const text = (await pdfParse((await renderInvoicePdf({ entity, invoice, overrides: input })).buffer)).text
+
+  assert.match(text, /GSTIN\s+NA/)
+})
+
 test('issuer bank accounts remain exact strings', () => {
   assert.equal(COMPANY.FCS.bank.account, '102305501028')
   assert.equal(COMPANY.FCAPL.bank.account, '42926962136')

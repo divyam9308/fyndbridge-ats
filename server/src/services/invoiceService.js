@@ -635,7 +635,7 @@ function drawClientDetails(doc, layout, entity) {
     ['PAN / IT No', entity.pan],
     ['Place of Supply', entity.place_of_supply],
     ['State', [clean(entity.state), normalizeStateCode(entity.state_code) ? `Code: ${normalizeStateCode(entity.state_code)}` : clean(entity.state_code)].filter(Boolean).join('   ')],
-    ['GSTIN', entity.gstin],
+    ['GSTIN', clean(entity.gstin) || 'NA'],
     ['Contact Person', entity.contact_person],
     ['Email', entity.email]
   ].map(([label, value], slot) => ({ label, value, slot })).filter(row => clean(row.value))
