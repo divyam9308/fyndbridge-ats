@@ -42,7 +42,7 @@ function RecordDetails({ entityType, row }) {
   if (entityType === 'candidate') {
     return (
       <>
-        <strong>{display(row.label)}</strong>
+        <strong>{display(row.label)} {row.display_id ? <em>{row.display_id}</em> : null}</strong>
         <span>{display(row.mandate)} · {display(row.client)}</span>
         <small>{display(row.consultant)} · {display(row.mobile_number)} · {display(row.email)} · {display(row.status)}</small>
       </>
@@ -51,7 +51,7 @@ function RecordDetails({ entityType, row }) {
   if (entityType === 'mandate') {
     return (
       <>
-        <strong>{display(row.label)}</strong>
+        <strong>{display(row.label)} {row.display_id ? <em>{row.display_id}</em> : null}</strong>
         <span>{display(row.client)} · {display(row.status)}</span>
         <small>{display(row.consultants || row.team_lead)} · {Number(row.candidate_count || 0)} candidate rows · {formatDate(row.allocation_date || row.created_at)}</small>
       </>
@@ -59,7 +59,7 @@ function RecordDetails({ entityType, row }) {
   }
   return (
     <>
-      <strong>{display(row.label)}</strong>
+      <strong>{display(row.label)} {row.display_id ? <em>{row.display_id}</em> : null}</strong>
       <span>{display(row.consultant)} · {display(row.status)} · {display(row.location)}</span>
       <small>{Number(row.mandate_count || 0)} mandates · {Number(row.candidate_count || 0)} candidate rows</small>
     </>
@@ -163,6 +163,11 @@ export default function RecordManagementModal({ open, onClose, onSuccess }) {
   const selectedIds = useMemo(() => [...selected.keys()], [selected])
   const pageSelected = rows.length > 0 && rows.every(row => selected.has(row.id))
   const meta = ENTITY_META[entityType]
+  const searchPlaceholder = entityType === 'candidate'
+    ? 'Search by candidate, CA ID, mandate, client, email or mobile'
+    : entityType === 'mandate'
+      ? 'Search by mandate, JB ID, client, consultant or status'
+      : 'Search by client, CL ID, consultant, location or status'
 
   const toggleRow = (row) => {
     setSelected(current => {
@@ -252,7 +257,7 @@ export default function RecordManagementModal({ open, onClose, onSuccess }) {
           <div className="admin-record-toolbar">
             <label>
               <Search size={17} />
-              <input value={search} onChange={event => { setSearch(event.target.value); setPage(1) }} placeholder={`Search ${meta.plural}`} autoFocus />
+              <input value={search} onChange={event => { setSearch(event.target.value); setPage(1) }} placeholder={searchPlaceholder} autoFocus />
             </label>
             <span>{selected.size} selected</span>
             <button type="button" onClick={() => setSelected(new Map())} disabled={!selected.size}>Clear selection</button>
@@ -312,6 +317,9 @@ export default function RecordManagementModal({ open, onClose, onSuccess }) {
             <button className="admin-record-delete-btn" type="button" onClick={openPreview} disabled={!selected.size || previewing}>
               <Trash2 size={16} />{previewing ? 'Calculating impact…' : `Delete Selected (${selected.size})`}
             </button>
+          </div>
+          <div className="admin-record-action-status" role="status" aria-live="polite">
+            {previewing ? 'Checking the latest database records and calculating the deletion impact…' : !selected.size ? 'Select at least one row to continue.' : 'Selected rows are ready for impact preview.'}
           </div>
         </div>
       )}

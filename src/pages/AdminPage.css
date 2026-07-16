@@ -1235,6 +1235,19 @@
   white-space: nowrap;
 }
 
+.admin-record-row strong em {
+  display: inline-flex;
+  margin-left: 7px;
+  border-radius: 999px;
+  background: rgba(0, 18, 100, 0.08);
+  color: #42506a;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 850;
+  vertical-align: middle;
+}
+
 .admin-record-row span,
 .admin-record-row small {
   overflow: hidden;
@@ -1327,6 +1340,16 @@
 .admin-record-pagination button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.admin-record-action-status {
+  border-top: 1px solid var(--admin-border);
+  background: #f8fafd;
+  color: var(--admin-muted);
+  padding: 9px 24px 12px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .admin-record-error {

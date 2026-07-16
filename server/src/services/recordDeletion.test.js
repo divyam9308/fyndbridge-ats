@@ -20,6 +20,11 @@ const migration = fs.readFileSync(
 const routes = fs.readFileSync(path.join(projectRoot, 'server/src/routes/admin.js'), 'utf8')
 const modal = fs.readFileSync(path.join(projectRoot, 'src/components/admin/RecordManagementModal.jsx'), 'utf8')
 const adminPage = fs.readFileSync(path.join(projectRoot, 'src/pages/AdminPage.jsx'), 'utf8')
+const deletionService = fs.readFileSync(path.join(projectRoot, 'server/src/services/recordDeletion.js'), 'utf8')
+const displayIdSearchMigration = fs.readFileSync(
+  path.join(projectRoot, 'supabase/migrations/20260716095921_record_management_display_id_search.sql'),
+  'utf8'
+)
 
 test('record deletion request validation accepts only supported entities and UUIDs', () => {
   assert.equal(normalizeEntityType('candidate'), 'candidate')
@@ -63,4 +68,17 @@ test('bulk deletion never removes resume storage objects or renumbers IDs', () =
   assert.doesNotMatch(modal, /storage\.remove/)
   assert.match(modal, /Uploaded resume files will be preserved\./)
   assert.match(modal, /IDs will not be renumbered\./)
+})
+
+test('record selector searches and displays CA, JB and CL IDs', () => {
+  assert.match(displayIdSearchMigration, /candidate\.candidate_display_id as display_id/)
+  assert.match(displayIdSearchMigration, /job\.job_display_id as display_id/)
+  assert.match(displayIdSearchMigration, /root\.client_display_id as display_id/)
+  assert.match(displayIdSearchMigration, /concat_ws\([\s\S]*display_id/)
+  assert.match(modal, /Search by candidate, CA ID/)
+  assert.match(modal, /Search by mandate, JB ID/)
+  assert.match(modal, /Search by client, CL ID/)
+  assert.match(deletionService, /candidate: \/\^CA\\d\+\$\/i/)
+  assert.match(deletionService, /mandate: \/\^JB\\d\+\$\/i/)
+  assert.match(deletionService, /client: \/\^CL\\d\+\$\/i/)
 })
