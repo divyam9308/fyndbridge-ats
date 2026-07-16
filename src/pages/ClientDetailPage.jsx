@@ -12,8 +12,10 @@ import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } fr
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
+import { DocumentIconGroup } from '../components/DocumentAttachments'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { ConsultantPill } from '../components/ConsultantPill'
+import { normalizeAttachments } from '../utils/documentAttachments'
 
 const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
 const candidateStatusLabel = (status) => status === 'Offer Declined' ? 'Offered Declined' : status
@@ -40,6 +42,10 @@ const previewWords = (value, count = 3) => {
   }
 }
 const getJobText = (candidate) => candidate.job || candidate.job_title || candidate.jobTitle || candidate.role || candidate.position || 'Unassigned Mandate'
+const jobJdAttachments = (job) => normalizeAttachments(job?.jd_attachments, {
+  path: job?.jd_storage_path || job?.jd_url,
+  name: job?.jd_file_name || job?.jd_original_name
+})
 const displayIdNumber = (value, prefix) => Number(String(value || '').replace(new RegExp(`^${prefix}`, 'i'), '')) || Number.MAX_SAFE_INTEGER
 const compareText = (a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' })
 const initials = (name) => String(name || '').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
@@ -165,6 +171,19 @@ export default function ClientDetailPage() {
     }
   }, [])
 
+  const openJdDocument = useCallback(async (key, path, jobId) => {
+    setOpeningDocument(key)
+    try {
+      await openProtectedDocumentPath('jd', path, {
+        recordId: jobId,
+        missingMessage: 'JD is missing or needs to be reuploaded',
+        notFoundMessage: 'JD not found.'
+      })
+    } finally {
+      setOpeningDocument('')
+    }
+  }, [])
+
   useEffect(() => {
     if (!editCandidate) return
     const previous = document.body.style.overflow
@@ -247,7 +266,7 @@ export default function ClientDetailPage() {
 
   useRealtimeRefresh({
     channelName: `realtime:client-detail:${clientId}`,
-    tables: ['clients', 'client_follow_ups'],
+    tables: ['clients', 'client_follow_ups', 'jobs'],
     onChange: refreshDetailRealtime,
     enabled: Boolean(clientId)
   })
@@ -677,6 +696,7 @@ export default function ClientDetailPage() {
               <tr>
                 <th>Job ID</th>
                 <th>Mandate / Role</th>
+                <th>JD</th>
                 <th>Status</th>
                 <th className="align-center">Candidates Assigned</th>
                 {MANDATE_SUMMARY_COLUMNS.map(([, label]) => <th className="align-center" key={label}>{label}</th>)}
@@ -687,6 +707,14 @@ export default function ClientDetailPage() {
                 <tr key={group.key}>
                   <td>{group.relatedJob?.job_display_id ? <span className="table-id-chip table-job-id-chip">{group.relatedJob.job_display_id}</span> : mutedDash}</td>
                   <td><button className="table-link-button" type="button" onClick={() => openGroup(group.key, group.title)}>{group.title}</button></td>
+                  <td>
+                    <DocumentIconGroup
+                      attachments={jobJdAttachments(group.relatedJob)}
+                      keyPrefix={`client-detail-jd-${group.relatedJob?.id || group.key}`}
+                      openingKey={openingDocument}
+                      onOpen={(key, attachment) => openJdDocument(key, attachment.path, group.relatedJob?.id)}
+                    />
+                  </td>
                   <td>
                     <div className="candidate-columns-control mandate-status-control">
                       <button className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', group.relatedJob?.id, event.currentTarget)} disabled={!group.relatedJob?.id || statusSaving[group.relatedJob?.id]}>

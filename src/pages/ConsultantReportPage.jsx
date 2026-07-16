@@ -299,38 +299,41 @@ function OutcomesReport({ report }) {
         ) : <div className="report-empty-state report-inline-empty">No positive outcome metrics are available for this period.</div>}
       </section>
       <section className="report-section">
-        <ReportSectionHeader title="Attendance Snapshot" description={isOverall ? 'Overall attendance totals for consultants included in Team Attendance.' : 'Attendance and leave-balance indicators from the ATS attendance service.'} />
+        {!isOverall && (
+          <ReportSectionHeader title="Attendance Snapshot" description="Attendance and leave-balance indicators from the ATS attendance service." />
+        )}
         {attendance.available ? (
-          <>
-            {attendanceMetrics.length ? (
-              <div className="attendance-metric-grid">
-                {attendanceMetrics.map((item) => <ReportKpiCard key={item.key || item.label} label={item.label} value={item.value ?? '—'} tone={item.tone || 'blue'} compact />)}
-              </div>
-            ) : <div className="report-empty-state report-inline-empty">No attendance records were found for this period.</div>}
-            <div className="report-subsection-heading">
-              <div>
-                <h3>Leave Balance</h3>
-                <p>Current combined available balance from the ATS leave ledger.</p>
-              </div>
-            </div>
-            <div className="report-leave-balance">
-              <ReportKpiCard label={isOverall ? 'Combined Available Leave Balance' : 'Available Leave Balance'} value={leaveBalanceValue(attendance.leaveBalance)} tone="green" compact />
-            </div>
-            {isOverall && (
-              <div className="report-attendance-breakdown">
-                <div className="report-subsection-heading">
-                  <div>
-                    <h3>Attendance by Consultant</h3>
-                    <p>Only active consultants included in Team Attendance are listed.</p>
-                  </div>
+          isOverall ? (
+            <div className="report-attendance-breakdown">
+              <div className="report-subsection-heading">
+                <div>
+                  <h3>Attendance by Consultant</h3>
+                  <p>Only active consultants included in Team Attendance are listed.</p>
                 </div>
-                <OverallAttendanceTable rows={Array.isArray(attendance.consultants) ? attendance.consultants : []} />
               </div>
-            )}
-          </>
+              <OverallAttendanceTable rows={Array.isArray(attendance.consultants) ? attendance.consultants : []} />
+            </div>
+          ) : (
+            <>
+              {attendanceMetrics.length ? (
+                <div className="attendance-metric-grid">
+                  {attendanceMetrics.map((item) => <ReportKpiCard key={item.key || item.label} label={item.label} value={item.value ?? '—'} tone={item.tone || 'blue'} compact />)}
+                </div>
+              ) : <div className="report-empty-state report-inline-empty">No attendance records were found for this period.</div>}
+              <div className="report-subsection-heading">
+                <div>
+                  <h3>Leave Balance</h3>
+                  <p>Current available balance from the ATS leave ledger.</p>
+                </div>
+              </div>
+              <div className="report-leave-balance">
+                <ReportKpiCard label="Available Leave Balance" value={leaveBalanceValue(attendance.leaveBalance)} tone="green" compact />
+              </div>
+            </>
+          )
         ) : (
           <div className="report-empty-state report-inline-empty">
-            Attendance data is not available for this consultant and period.
+            Attendance data is not available for this period.
           </div>
         )}
       </section>
@@ -363,6 +366,7 @@ export default function ConsultantReportPage() {
   const [activeTab, setActiveTab] = useState('mandates')
   const [modal, setModal] = useState('')
   const [toast, setToast] = useState('')
+  const [dismissedWarningKey, setDismissedWarningKey] = useState('')
   const [exportLoading, setExportLoading] = useState(false)
   const exportControllerRef = useRef(null)
 
@@ -375,6 +379,11 @@ export default function ConsultantReportPage() {
   const selectedPeriod = appliedFilters ? dateRangeLabel(appliedFilters.startDate, appliedFilters.endDate) : dateRangeLabel(draftFromDate, draftToDate)
   const generatedOn = report?.meta?.generatedAt
   const generatedBy = generatedByLabel(report?.meta?.generatedBy, userLabel)
+  const warnings = Array.isArray(report?.meta?.warnings) ? report.meta.warnings : []
+  const warningKey = warnings.length
+    ? `${generatedOn || 'report'}:${warnings.map((warning) => (typeof warning === 'string' ? warning : warning?.message)).join('|')}`
+    : ''
+  const showWarnings = Boolean(warningKey && dismissedWarningKey !== warningKey)
   const filteredConsultantOptions = useMemo(() => {
     const query = draftConsultantName.trim().toLowerCase()
     const isExactSelection = options.some((option) => option.inputLabel.toLowerCase() === query)
@@ -391,6 +400,12 @@ export default function ConsultantReportPage() {
     const timer = window.setTimeout(() => setToast(''), 3200)
     return () => window.clearTimeout(timer)
   }, [toast])
+
+  useEffect(() => {
+    if (!warningKey) return undefined
+    const timer = window.setTimeout(() => setDismissedWarningKey(warningKey), 5000)
+    return () => window.clearTimeout(timer)
+  }, [warningKey])
 
   useEffect(() => {
     const refreshReport = () => {
@@ -589,7 +604,6 @@ export default function ConsultantReportPage() {
     }
   }
 
-  const warnings = Array.isArray(report?.meta?.warnings) ? report.meta.warnings : []
   const isOverall = Boolean(consultant?.isOverall || consultant?.key === 'overall')
   const status = isOverall ? '' : displayEmployeeStatus(consultant?.employeeStatus || consultant?.employee_status)
   const avatarInitials = consultant?.initials || initials(consultant?.name)
@@ -718,25 +732,27 @@ export default function ConsultantReportPage() {
         </dl>
       </section>
 
-      {report && (reportLoading || optionsLoading || reportError || optionsError || warnings.length > 0) && (
+      {report && (reportLoading || optionsLoading || reportError || optionsError) && (
         <div className="report-notice-stack">
-          {(reportLoading || optionsLoading || reportError || optionsError) && (
-            <div className={`report-refresh-banner${reportError || optionsError ? ' is-error' : ''}`} role="status">
-              {reportLoading ? 'Updating the report…' : optionsLoading ? 'Reloading consultant access…' : (reportError || optionsError)}
-              {!reportLoading && reportError && (
-                <button className="report-text-button" type="button" onClick={() => { setReportLoading(true); setReportError(''); setReportRetryKey((value) => value + 1) }}>Try again</button>
-              )}
-              {!reportLoading && optionsError && (
-                <button className="report-text-button" type="button" onClick={() => { setOptionsLoading(true); setOptionsError(''); setOptionsRetryKey((value) => value + 1) }}>Reload consultants</button>
-              )}
-            </div>
-          )}
-          {warnings.length > 0 && (
-            <aside className="report-warning-panel" role="status">
-              {warnings.map((warning, index) => <p key={`${typeof warning === 'string' ? warning : warning?.message}-${index}`}>{typeof warning === 'string' ? warning : warning?.message}</p>)}
-            </aside>
-          )}
+          <div className={`report-refresh-banner${reportError || optionsError ? ' is-error' : ''}`} role="status">
+            {reportLoading ? 'Updating the report…' : optionsLoading ? 'Reloading consultant access…' : (reportError || optionsError)}
+            {!reportLoading && reportError && (
+              <button className="report-text-button" type="button" onClick={() => { setReportLoading(true); setReportError(''); setReportRetryKey((value) => value + 1) }}>Try again</button>
+            )}
+            {!reportLoading && optionsError && (
+              <button className="report-text-button" type="button" onClick={() => { setOptionsLoading(true); setOptionsError(''); setOptionsRetryKey((value) => value + 1) }}>Reload consultants</button>
+            )}
+          </div>
         </div>
+      )}
+      {showWarnings && (
+        <aside className="report-warning-panel report-warning-toast" role="status" aria-live="polite">
+          {warnings.map((warning, index) => (
+            <p key={`${typeof warning === 'string' ? warning : warning?.message}-${index}`}>
+              {typeof warning === 'string' ? warning : warning?.message}
+            </p>
+          ))}
+        </aside>
       )}
 
       <nav className="report-tabs" aria-label="Consultant report sections" role="tablist">

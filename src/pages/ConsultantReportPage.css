@@ -481,6 +481,14 @@
   color: #795b18;
   font-size: 11.5px;
 }
+.report-warning-toast {
+  position: fixed;
+  right: 22px;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  z-index: 9090;
+  width: min(440px, calc(100vw - 44px));
+  box-shadow: var(--shadow-card);
+}
 .report-notice-stack {
   position: fixed;
   top: 78px;
@@ -825,6 +833,11 @@
   .report-page-footer { align-items: flex-start; flex-direction: column; }
   .report-toast { top: 70px; right: 12px; left: 12px; text-align: center; }
   .report-notice-stack { top: 70px; right: 12px; width: calc(100vw - 24px); }
+  .report-warning-toast {
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: calc(100vw - 24px);
+  }
   .report-tab-stage { min-height: 1580px; }
 }
 
