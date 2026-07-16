@@ -269,23 +269,18 @@ async function ensureCandidateDisplayIds() {
 
   if (!candidates.some((candidate) => !cleanText(candidate.candidate_display_id))) return
 
-  // Find the highest existing numeric ID so we don't collide
-  const existingIds = new Set(
+  const usedDisplayIds = new Set(
     candidates
-      .map((candidate) => candidate.candidate_display_id)
-      .filter(Boolean)
+      .map((candidate) => displayIdNumber(candidate.candidate_display_id, 'CA'))
+      .filter((number) => number < Number.MAX_SAFE_INTEGER)
   )
-
-  let next = Math.max(0, ...candidates.map((candidate) => displayIdNumber(candidate.candidate_display_id, 'CA')).filter((number) => number < Number.MAX_SAFE_INTEGER)) + 1
+  let next = 1
 
   for (const candidate of candidates.filter((item) => !cleanText(item.candidate_display_id))) {
-    // Find the next truly unused ID (skip any that are already taken)
-    while (existingIds.has(`CA${next}`)) {
-      next++
-    }
+    while (usedDisplayIds.has(next)) next += 1
     const displayId = `CA${next}`
-    existingIds.add(displayId)
-    next++
+    usedDisplayIds.add(next)
+    next += 1
     const { error: updateError } = await supabase
       .from('candidates')
       .update({ candidate_display_id: displayId })
@@ -295,7 +290,7 @@ async function ensureCandidateDisplayIds() {
 }
 
 async function nextCandidateDisplayId() {
-  return allocateNextDisplayId({ supabase, table: 'candidates', column: 'candidate_display_id', prefix: 'CA', mode: 'max_plus_one' })
+  return allocateNextDisplayId({ supabase, table: 'candidates', column: 'candidate_display_id', prefix: 'CA' })
 }
 
 async function getNextCandidateDisplayId(req, res) {
