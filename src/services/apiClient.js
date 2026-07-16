@@ -204,10 +204,11 @@ export function isValidStoragePath(path) {
   return Boolean(text && text !== '-' && !text.startsWith('/tmp/'))
 }
 
-export function documentOpenUrl(type, path) {
+export function documentOpenUrl(type, path, options = {}) {
   const config = DOCUMENT_OPEN_TYPES[type]
   if (!config || !isValidStoragePath(path)) return ''
   const params = new URLSearchParams({ path: String(path).trim() })
+  if (options.recordId) params.set('record_id', String(options.recordId))
   return `${config.endpoint}?${params.toString()}`
 }
 
@@ -299,7 +300,7 @@ export async function openProtectedDocumentPath(type, path, options = {}) {
     return false
   }
   if (import.meta.env.DEV) console.debug('[storage] generating signed URL only after click', { bucket: config.bucket, path })
-  return openProtectedUrl(documentOpenUrl(type, path), options)
+  return openProtectedUrl(documentOpenUrl(type, path, options), options)
 }
 
 export { API_INACTIVE_EVENT, API_UNAUTHORIZED_EVENT }

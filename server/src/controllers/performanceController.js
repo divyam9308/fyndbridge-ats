@@ -1,4 +1,5 @@
 const {
+  getCompletionStatuses,
   getReview,
   updateReview,
   getPermissions,
@@ -28,6 +29,14 @@ async function me(req, res) {
 async function byEmployee(req, res) {
   try {
     return res.json({ data: await getReview(req.user, req.params.employeeUserId, reviewPeriod(req)) })
+  } catch (err) {
+    return sendError(res, err)
+  }
+}
+
+async function completionStatuses(req, res) {
+  try {
+    return res.json({ data: await getCompletionStatuses(req.user, reviewPeriod(req)) })
   } catch (err) {
     return sendError(res, err)
   }
@@ -66,6 +75,7 @@ async function handbook(req, res) {
 module.exports = {
   me,
   byEmployee,
+  completionStatuses,
   save,
   permissions,
   handbook

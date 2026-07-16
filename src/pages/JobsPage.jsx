@@ -14,7 +14,8 @@ import FloatingDropdown from '../components/FloatingDropdown'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
-import { apiFetch, isValidStoragePath, openProtectedDocumentPath } from '../services/apiClient'
+import { AttachmentList, DocumentIconGroup } from '../components/DocumentAttachments'
+import { apiFetch, openProtectedDocumentPath } from '../services/apiClient'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -22,8 +23,10 @@ import { highlightText } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 import { ConsultantPill, ConsultantPillGroup } from '../components/ConsultantPill'
+import { normalizeAttachments, validateDocumentSelection } from '../utils/documentAttachments'
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
+const MAX_JD_FILES_PER_SAVE = 20
 const SORT_OPTIONS = [
   { field: 'job_id', label: 'Job ID' },
   { field: 'role', label: 'Alphabetic order' }
@@ -132,6 +135,11 @@ const normalizeConsultantFields = (values) => {
   return real.length ? real : ['-']
 }
 
+const jobJdAttachments = (job) => normalizeAttachments(job?.jd_attachments, {
+  path: job?.jd_storage_path || job?.jd_url,
+  name: job?.jd_file_name || job?.jd_original_name
+})
+
 const notifyAiQuota = (message) => {
   if (message === 'AI quota reached') {
     window.dispatchEvent(new CustomEvent('ai-quota-reached', { detail: 'AI quota reached' }))
@@ -187,7 +195,9 @@ export default function JobsPage() {
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
   const [clientSearch, setClientSearch] = useState('')
-  const [jdFile, setJdFile] = useState(null)
+  const [savedJdAttachments, setSavedJdAttachments] = useState([])
+  const [pendingJdFiles, setPendingJdFiles] = useState([])
+  const [removedJdPaths, setRemovedJdPaths] = useState([])
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
   const [roleSearch, setRoleSearch] = useState('')
   const [roleSuggestionsOpen, setRoleSuggestionsOpen] = useState(false)
@@ -261,10 +271,11 @@ export default function JobsPage() {
     aiFilterAbortRef.current = null
   }, [])
 
-  const openDocument = useCallback(async (key, path) => {
+  const openDocument = useCallback(async (key, path, recordId) => {
     setOpeningDocument(key)
     try {
       await openProtectedDocumentPath('jd', path, {
+        recordId,
         missingMessage: 'JD is missing or needs to be reuploaded',
         notFoundMessage: 'JD not found.'
       })
@@ -396,7 +407,9 @@ export default function JobsPage() {
     setConsultantSearch({})
     setConsultantPickerOpen({})
     setAddingNewRole(false)
-    setJdFile(null)
+    setSavedJdAttachments([])
+    setPendingJdFiles([])
+    setRemovedJdPaths([])
     setClientSuggestionsOpen(false)
     setRoleSuggestionsOpen(false)
     setIsOpen(true)
@@ -457,7 +470,9 @@ export default function JobsPage() {
       jd_url: job.jd_storage_path || job.jd_url || '',
       jd_storage_path: job.jd_storage_path || ''
     })
-    setJdFile(null)
+    setSavedJdAttachments(jobJdAttachments(job))
+    setPendingJdFiles([])
+    setRemovedJdPaths([])
     setClientSearch(job.client_name || '')
     setRoleSearch(job.role || job.title || '')
     setRoleSelectionConfirmed(true)
@@ -626,6 +641,36 @@ export default function JobsPage() {
     setMandateDuplicate(null)
     setDuplicateBypass(false)
     setDuplicateMoreOpen(false)
+    setSavedJdAttachments([])
+    setPendingJdFiles([])
+    setRemovedJdPaths([])
+  }
+
+  const selectJdFiles = (event) => {
+    const { accepted, errors: fileErrors } = validateDocumentSelection(event.target.files, { label: 'JD file' })
+    const availableSlots = Math.max(0, MAX_JD_FILES_PER_SAVE - pendingJdFiles.length)
+    const filesToAdd = accepted.slice(0, availableSlots)
+    const selectionErrors = [
+      ...fileErrors,
+      ...accepted.slice(availableSlots).map(file => `${file.name}: no more than ${MAX_JD_FILES_PER_SAVE} new JD files can be uploaded at once.`)
+    ]
+    if (filesToAdd.length) setPendingJdFiles(current => [...current, ...filesToAdd])
+    setErrors(current => {
+      const next = { ...current }
+      if (selectionErrors.length) next.jd_files = selectionErrors.join(' ')
+      else delete next.jd_files
+      return next
+    })
+    event.target.value = ''
+  }
+
+  const removeSavedJd = (attachment) => {
+    if (!attachment?.path) return
+    setRemovedJdPaths(current => current.includes(attachment.path) ? current : [...current, attachment.path])
+  }
+
+  const removePendingJd = (index) => {
+    setPendingJdFiles(current => current.filter((_, itemIndex) => itemIndex !== index))
   }
 
   const resolveMandateDuplicate = (duplicateAction) => {
@@ -654,7 +699,7 @@ export default function JobsPage() {
       case 'mandateStatus': return row.mandate_status || row.status || '-'
       case 'sector': return row.vertical || '-'
       case 'allocationDate': return formatDateDDMMYYYY(row.allocation_date)
-      case 'jd': return row.jd_storage_path || row.jd_url || row.jd_file ? 'JD' : '-'
+      case 'jd': return jobJdAttachments(row).length || row.jd_file || row.jd_files ? 'JD' : '-'
       default: return '-'
     }
   }
@@ -687,14 +732,13 @@ export default function JobsPage() {
         budget: form.budget,
         mandate_status: form.mandate_status || null,
         vertical: form.vertical,
-        allocation_date: form.allocation_date,
-        jd_url: form.jd_url || '',
-        jd_storage_path: form.jd_storage_path || ''
+        allocation_date: form.allocation_date
       }
       const body = new FormData()
       Object.entries(payload).forEach(([key, value]) => body.append(key, Array.isArray(value) ? value.join(',') : value ?? ''))
       if (!editingJob && duplicateBypass) body.append('duplicate_action', 'add_duplicate')
-      if (jdFile) body.append('jd_file', jdFile)
+      pendingJdFiles.forEach(file => body.append('jd_files', file))
+      if (editingJob && removedJdPaths.length) body.append('removed_jd_paths', JSON.stringify(removedJdPaths))
       const res = await apiFetch(editingJob ? `/api/jobs/${editingJob.id}` : '/api/jobs', {
         method: editingJob ? 'PATCH' : 'POST',
         body
@@ -711,7 +755,7 @@ export default function JobsPage() {
             job_display_id: form.job_display_id,
             client_name: clientSearch,
             client_display_id: selectedClient?.client_display_id || '',
-            jd_file: jdFile?.name || ''
+            jd_file: pendingJdFiles.map(file => file.name).join(', ')
           }
         })
         setDuplicateBypass(false)
@@ -943,8 +987,17 @@ export default function JobsPage() {
         return <td key={column.key}>{formatDateDDMMYYYY(job.allocation_date)}</td>
       case 'jd':
         {
-          const docKey = `jd-${job.id}`
-          return <td key={column.key}>{isValidStoragePath(job.jd_storage_path) ? <a href="#" target="_blank" rel="noreferrer" className="cv-table-link" title="Open JD" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument(docKey, job.jd_storage_path) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
+          const attachments = jobJdAttachments(job)
+          return (
+            <td key={column.key}>
+              <DocumentIconGroup
+                attachments={attachments}
+                keyPrefix={`jd-${job.id}`}
+                openingKey={openingDocument}
+                onOpen={(key, attachment) => openDocument(key, attachment.path, job.id)}
+              />
+            </td>
+          )
         }
       case 'action':
         return <td key={column.key}><div className="row-actions"><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)} disabled={job.is_locked && !isAdmin}><Pencil size={13} /></button>{isAdmin && <RecordLockButton tableName="jobs" recordId={job.id} locked={job.is_locked} onChanged={updateJobLockState} />}</div></td>
@@ -1350,9 +1403,20 @@ export default function JobsPage() {
                   </div>
                 </div>}
                 {!isJobFieldHidden('jd_file') && <div className="form-group">
-                  <label className="form-label">JD File</label>
-                  <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="form-control" onChange={e => setJdFile(e.target.files?.[0] || null)} disabled={saving || isJobFieldDisabled('jd_file')} />
-                  {isValidStoragePath(form.jd_storage_path) && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('jd-form', form.jd_storage_path) }}>{openingDocument === 'jd-form' ? <Loader2 size={13} className="spin" /> : <FileText size={13} />} Current JD</a>}
+                  <label className="form-label">JD Files</label>
+                  <input type="file" multiple accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className={`form-control${errors.jd_files ? ' is-error' : ''}`} onChange={selectJdFiles} disabled={saving || isJobFieldDisabled('jd_file')} />
+                  {errors.jd_files && <span className="form-error">{errors.jd_files}</span>}
+                  <AttachmentList
+                    saved={savedJdAttachments}
+                    pending={pendingJdFiles}
+                    removedPaths={removedJdPaths}
+                    keyPrefix={`jd-form-${editingJob?.id || 'new'}`}
+                    openingKey={openingDocument}
+                    onOpen={editingJob ? (key, attachment) => openDocument(key, attachment.path, editingJob.id) : undefined}
+                    onRemoveSaved={isJobFieldDisabled('jd_file') ? undefined : removeSavedJd}
+                    onRemovePending={isJobFieldDisabled('jd_file') ? undefined : removePendingJd}
+                    disabled={saving}
+                  />
                 </div>}
               </div>
             </div>

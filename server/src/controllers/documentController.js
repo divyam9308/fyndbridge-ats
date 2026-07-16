@@ -1,6 +1,7 @@
 const supabase = require('../services/supabaseAdmin')
 const { bucketForType, normalizeStoragePath } = require('../services/storageBuckets')
 const { MIME_BY_EXTENSION, pathExtension } = require('../services/documentFile')
+const { assertDocumentAccess } = require('../services/documentAccess')
 
 function debugDocumentOpen(message, details) {
   if (process.env.NODE_ENV === 'production') return
@@ -27,6 +28,7 @@ async function openDocument(req, res) {
     const path = normalizeStoragePath(req.query.path || '', bucket)
     debugDocumentOpen('storage path', { type: req.params.type, bucket, path })
     if (!bucket || !isValidStoragePath(path)) return res.status(400).json({ error: 'Document path is required' })
+    await assertDocumentAccess(req.user, req.params.type, req.query.record_id, path)
 
     const extension = pathExtension(path)
     const fileName = path.split('/').pop() || `document.${extension || 'pdf'}`
@@ -43,9 +45,9 @@ async function openDocument(req, res) {
     return res.json({ url: data.signedUrl, fileName, contentType, disposition, path })
   } catch (err) {
     console.error('openDocument:', err.message || err)
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return res.status(500).json({ error: 'Document file could not be opened' })
   }
 }
 
 module.exports = { openDocument }
-

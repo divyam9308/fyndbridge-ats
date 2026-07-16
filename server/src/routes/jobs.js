@@ -8,10 +8,14 @@ router.get('/', controller.listJobs)
 router.get('/users/options', controller.listJobUsers)
 router.get('/next-display-id', controller.getNextJobDisplayId)
 router.post('/ai-filter', controller.buildJobFilters)
-router.post('/', upload.single('jd_file'), handleUploadErrors, controller.createJob)
+const jdUpload = upload.fields([
+  { name: 'jd_file', maxCount: 1 },
+  { name: 'jd_files', maxCount: 20 }
+])
+
+router.post('/', jdUpload, handleUploadErrors, controller.createJob)
 router.get('/:id', controller.getJob)
-router.patch('/:id', upload.single('jd_file'), handleUploadErrors, controller.updateJob)
+router.patch('/:id', jdUpload, handleUploadErrors, controller.updateJob)
 router.delete('/:id', controller.deleteJob)
 
 module.exports = router
-

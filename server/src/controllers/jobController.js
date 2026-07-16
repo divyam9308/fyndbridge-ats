@@ -1,7 +1,8 @@
 const supabase = require('../services/supabaseAdmin')
 const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
-const { uploadDocument } = require('../services/documentStorage')
+const { removeDocuments, uploadDocuments } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, normalizeStoragePath } = require('../services/storageBuckets')
+const { normalizeAttachments, removalPlan } = require('../services/documentAttachments')
 const fs = require('fs/promises')
 const { mandateAiFilter, MANDATE_FILTER_PERMISSION_KEYS } = require('../services/mandateAiFilter')
 const { parseMandateIntent, validateMandateIntent, mandateExecutionFilter } = require('../services/mandateIntent')
@@ -153,6 +154,11 @@ function formatJob(row) {
   const cleanRow = stripMandateAiColumns(row)
   const clientName = row.ai_client_name || row.ai_client_legacy_name || row.clients?.client_name || row.clients?.name || 'Unknown Client'
   const mandateStatus = normalizeMandateStatus(row.mandate_status || row.status || row.priority)
+  const jdAttachments = normalizeAttachments(row.jd_attachments, {
+    bucket: STORAGE_BUCKETS.JD,
+    legacy: { path: row.jd_storage_path || row.jd_url, uploadedAt: row.updated_at || row.created_at }
+  })
+  const primaryJd = jdAttachments[0]
   return {
     ...cleanRow,
     id: row.id,
@@ -166,8 +172,9 @@ function formatJob(row) {
     consultant: Array.isArray(row.consultants) && row.consultants.length ? row.consultants[0] : '-',
     team_lead: row.team_lead || '-',
     allocation_date: row.allocation_date || (row.created_at ? row.created_at.slice(0, 10) : ''),
-    jd_url: normalizeStoragePath(row.jd_storage_path || row.jd_url, STORAGE_BUCKETS.JD),
-    jd_storage_path: normalizeStoragePath(row.jd_storage_path || row.jd_url, STORAGE_BUCKETS.JD),
+    jd_attachments: jdAttachments,
+    jd_url: primaryJd?.path || '',
+    jd_storage_path: primaryJd?.path || '',
     client_display_id: row.ai_client_display_id || row.clients?.client_display_id || '',
     client: clientName,
     client_name: clientName,
@@ -177,6 +184,30 @@ function formatJob(row) {
     duplicate_confirmed: undefined,
     clients: undefined
   }
+}
+
+function requestFiles(req, ...fieldNames) {
+  if (req.file) return [req.file]
+  if (Array.isArray(req.files)) return req.files
+  return fieldNames.flatMap(name => Array.isArray(req.files?.[name]) ? req.files[name] : [])
+}
+
+async function cleanupTempFiles(files) {
+  await Promise.all((files || []).map(async (file) => {
+    if (!file?.path) return
+    try { await fs.unlink(file.path) } catch (error) { if (error.code !== 'ENOENT') console.error('job upload cleanup:', error.message) }
+  }))
+}
+
+async function hydrateJobAttachmentRows(rows) {
+  const missingIds = (rows || [])
+    .filter(row => row?.id && !Object.prototype.hasOwnProperty.call(row, 'jd_attachments'))
+    .map(row => row.id)
+  if (!missingIds.length) return rows || []
+  const { data, error } = await supabase.from('jobs').select('id, jd_attachments').in('id', missingIds)
+  if (error) throw error
+  const byId = new Map((data || []).map(row => [row.id, row.jd_attachments]))
+  return (rows || []).map(row => byId.has(row.id) ? { ...row, jd_attachments: byId.get(row.id) } : row)
 }
 
 async function nextJobDisplayId() {
@@ -361,7 +392,7 @@ async function listJobs(req, res) {
     if (paginate) query = query.range(from, to)
     const { data, error, count } = await query
     if (error) throw error
-    const rows = (data || []).map(formatJob)
+    const rows = (await hydrateJobAttachmentRows(data || [])).map(formatJob)
     const total = paginate ? count || 0 : rows.length
     const totalPages = Math.max(1, Math.ceil(total / limit))
     return res.json({ data: await stripHiddenFields('jobs', rows, await isAdmin(req.user)), total, page, totalPages, limit })
@@ -439,6 +470,8 @@ async function updateJobRow(id, payload) {
 }
 
 async function createJob(req, res) {
+  const files = requestFiles(req, 'jd_file', 'jd_files')
+  let uploadedAttachments = []
   try {
     const payload = await payloadFromBody(req.body)
     await assertClientExists(payload.client_id)
@@ -449,11 +482,10 @@ async function createJob(req, res) {
     }
     payload.duplicate_confirmed = Boolean(duplicate && duplicateAction === 'add_duplicate')
     await assertAssignmentUsersExist({ ...payload, consultant_user_ids: req.body.consultant_user_ids, team_lead_user_id: req.body.team_lead_user_id })
-    if (req.file) {
-      const jd = await uploadDocument(req.file, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
-      payload.jd_url = jd.path
-      payload.jd_storage_path = jd.path
-    }
+    uploadedAttachments = await uploadDocuments(files, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
+    payload.jd_attachments = uploadedAttachments
+    payload.jd_url = uploadedAttachments[0]?.path || null
+    payload.jd_storage_path = uploadedAttachments[0]?.path || null
     if (!payload.mandate_status) payload.mandate_status = '-'
     if (!payload.status) payload.status = payload.mandate_status
     let data = null
@@ -476,6 +508,9 @@ async function createJob(req, res) {
     })
     return res.status(201).json(job)
   } catch (err) {
+    if (uploadedAttachments.length) {
+      try { await removeDocuments(STORAGE_BUCKETS.JD, uploadedAttachments) } catch (cleanupError) { console.error('createJob storage rollback:', cleanupError.message) }
+    }
     if (isDisplayIdUniqueError(err, 'job_display_id')) {
       return res.status(400).json({ error: 'Could not allocate unique Job ID. Please try again.' })
     }
@@ -490,19 +525,22 @@ async function createJob(req, res) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'createJob', err)
   } finally {
-    if (req.file?.path) {
-      try { await fs.unlink(req.file.path) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('createJob cleanup:', cleanupError.message) }
-    }
+    await cleanupTempFiles(files)
   }
 }
 
 async function updateJob(req, res) {
+  const files = requestFiles(req, 'jd_file', 'jd_files')
+  let uploadedAttachments = []
+  let previousAttachments = []
+  let removedAttachments = []
+  let attachmentRowUpdated = false
   try {
     const admin = await isAdmin(req.user)
     await assertRowEditable('jobs', req.params.id, admin)
     await assertCanUpdateColumns('jobs', req.body, admin)
     const payload = await payloadFromBody(req.body, true)
-    const { data: currentJob, error: currentJobError } = await supabase.from('jobs').select('client_id, title, consultants, team_lead').eq('id', req.params.id).maybeSingle()
+    const { data: currentJob, error: currentJobError } = await supabase.from('jobs').select('client_id, title, consultants, team_lead, jd_attachments, jd_storage_path, jd_url, created_at, updated_at').eq('id', req.params.id).maybeSingle()
     if (currentJobError) throw currentJobError
     if (!currentJob) return res.status(404).json({ error: 'Mandate not found' })
     const nextClientId = payload.client_id || currentJob.client_id
@@ -514,15 +552,43 @@ async function updateJob(req, res) {
       { ...payload, consultant_user_ids: req.body.consultant_user_ids, team_lead_user_id: req.body.team_lead_user_id },
       { consultants: currentJob.consultants, team_lead: currentJob.team_lead }
     )
-    if (req.file) {
-      const jd = await uploadDocument(req.file, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
-      payload.jd_url = jd.path
-      payload.jd_storage_path = jd.path
+    const hasAttachmentMutation = files.length > 0 || Object.prototype.hasOwnProperty.call(req.body, 'removed_jd_paths')
+    if (hasAttachmentMutation) {
+      previousAttachments = normalizeAttachments(currentJob.jd_attachments, {
+        bucket: STORAGE_BUCKETS.JD,
+        legacy: { path: currentJob.jd_storage_path || currentJob.jd_url, uploadedAt: currentJob.updated_at || currentJob.created_at }
+      })
+      const plan = removalPlan(previousAttachments, req.body.removed_jd_paths, STORAGE_BUCKETS.JD, 'removed_jd_paths')
+      removedAttachments = plan.removed
+      uploadedAttachments = await uploadDocuments(files, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
+      const nextAttachments = [...plan.retained, ...uploadedAttachments]
+      payload.jd_attachments = nextAttachments
+      payload.jd_url = nextAttachments[0]?.path || null
+      payload.jd_storage_path = nextAttachments[0]?.path || null
     }
     payload.updated_at = new Date().toISOString()
     const { data, error } = await updateJobRow(req.params.id, payload)
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Mandate not found' })
+    attachmentRowUpdated = hasAttachmentMutation
+    if (removedAttachments.length) {
+      try {
+        await removeDocuments(STORAGE_BUCKETS.JD, removedAttachments)
+      } catch (storageError) {
+        const primary = previousAttachments[0]
+        const rollback = await updateJobRow(req.params.id, {
+          jd_attachments: previousAttachments,
+          jd_url: primary?.path || null,
+          jd_storage_path: primary?.path || null
+        })
+        if (rollback.error) console.error('updateJob attachment rollback:', rollback.error.message)
+        if (uploadedAttachments.length) {
+          try { await removeDocuments(STORAGE_BUCKETS.JD, uploadedAttachments) } catch (cleanupError) { console.error('updateJob new upload cleanup:', cleanupError.message) }
+          uploadedAttachments = []
+        }
+        throw Object.assign(new Error('The mandate was saved, but its attachment deletion could not be completed. Existing attachments were restored.'), { statusCode: 502 })
+      }
+    }
     const job = formatJob(data)
     await createAssignmentNotifications({
       job,
@@ -534,12 +600,13 @@ async function updateJob(req, res) {
     })
     return res.json(await stripHiddenFields('jobs', job, admin))
   } catch (err) {
+    if (uploadedAttachments.length && !attachmentRowUpdated) {
+      try { await removeDocuments(STORAGE_BUCKETS.JD, uploadedAttachments) } catch (cleanupError) { console.error('updateJob storage rollback:', cleanupError.message) }
+    }
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'updateJob', err)
   } finally {
-    if (req.file?.path) {
-      try { await fs.unlink(req.file.path) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('updateJob cleanup:', cleanupError.message) }
-    }
+    await cleanupTempFiles(files)
   }
 }
 

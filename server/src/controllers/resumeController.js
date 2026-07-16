@@ -6,6 +6,7 @@ const path = require('path')
 const os = require('os')
 const { RESUME_BUCKET, checkUploadedCvDuplicate, normalizeResumeStoragePath } = require('../services/cvStorage')
 const { MIME_BY_EXTENSION, pathExtension } = require('../services/documentFile')
+const { assertDocumentAccess } = require('../services/documentAccess')
 
 function cleanText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
@@ -131,6 +132,7 @@ async function openResume(req, res) {
     if (!isValidStoragePath(storagePath)) {
       return res.status(400).json({ error: 'Resume path is required' })
     }
+    await assertDocumentAccess(req.user, 'cv', req.query.record_id, storagePath)
 
     const extension = pathExtension(storagePath)
     const fileName = storagePath.split('/').pop() || `resume.${extension || 'pdf'}`
@@ -154,6 +156,7 @@ async function openResume(req, res) {
     return res.json({ url: data.signedUrl, fileName, contentType, disposition, path: storagePath })
   } catch (err) {
     console.error('openResume:', err.message)
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return res.status(500).json({ error: 'Resume file could not be opened' })
   }
 }

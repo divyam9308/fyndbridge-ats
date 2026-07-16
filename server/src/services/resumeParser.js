@@ -1,8 +1,11 @@
 const fs = require('fs/promises')
 const pdfParse = require('pdf-parse')
-const { createWorker } = require('tesseract.js')
+const { createWorker, PSM } = require('tesseract.js')
 const { extractFields } = require('./extractorUtils')
 const { callAiJson, GEMINI_MODEL } = require('./aiProvider')
+
+const PDF_HEADER = '%PDF-'
+const PDF_OCR_RENDER_SCALE = 2
 
 const RESUME_AI_SCHEMA = {
   type: 'object',
@@ -158,14 +161,87 @@ async function parseResumeWithAi(rawText) {
   return normalizeResumeAiOutput(parsed)
 }
 
-async function extractTextWithOcr(fileBuffer) {
-  const worker = await createWorker('eng')
+function isPdfBuffer(fileBuffer) {
+  if (!fileBuffer || typeof fileBuffer.subarray !== 'function') return false
+  return Buffer.from(fileBuffer.subarray(0, PDF_HEADER.length)).toString('ascii') === PDF_HEADER
+}
+
+async function loadPdfDocument(fileBuffer) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  return pdfjs.getDocument({
+    data: new Uint8Array(fileBuffer),
+    isEvalSupported: false,
+    useSystemFonts: true
+  }).promise
+}
+
+async function renderPdfPageToPng(page, { createCanvasImpl, scale = PDF_OCR_RENDER_SCALE } = {}) {
+  const createCanvasForPage = createCanvasImpl || require('@napi-rs/canvas').createCanvas
+  const viewport = page.getViewport({ scale })
+  const canvas = createCanvasForPage(Math.ceil(viewport.width), Math.ceil(viewport.height))
+
+  await page.render({
+    canvas,
+    viewport,
+    background: 'rgb(255,255,255)'
+  }).promise
+
+  return canvas.toBuffer('image/png')
+}
+
+async function extractTextWithOcr(fileBuffer, {
+  createWorkerImpl = createWorker,
+  loadPdfDocumentImpl = loadPdfDocument,
+  renderPdfPageToPngImpl = renderPdfPageToPng
+} = {}) {
+  let pdfDocument = null
+  let worker = null
+  let workerError = null
 
   try {
-    const result = await worker.recognize(fileBuffer)
-    return result.data.text || ''
+    if (isPdfBuffer(fileBuffer)) {
+      pdfDocument = await loadPdfDocumentImpl(fileBuffer)
+      if (!Number.isInteger(pdfDocument?.numPages) || pdfDocument.numPages < 1) {
+        throw new Error('PDF has no pages available for OCR')
+      }
+    }
+
+    worker = await createWorkerImpl('eng', undefined, {
+      // Tesseract otherwise rethrows worker failures outside the recognition
+      // promise, which can terminate the whole bulk-upload request.
+      errorHandler(error) {
+        workerError = error
+      }
+    })
+    await worker.setParameters({
+      tessedit_pageseg_mode: PSM.AUTO,
+      preserve_interword_spaces: '1'
+    })
+
+    if (!pdfDocument) {
+      const result = await worker.recognize(fileBuffer)
+      return result.data.text || ''
+    }
+
+    const pageTexts = []
+    for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
+      const page = await pdfDocument.getPage(pageNumber)
+      try {
+        const imageBuffer = await renderPdfPageToPngImpl(page)
+        const result = await worker.recognize(imageBuffer)
+        pageTexts.push(result.data.text || '')
+      } finally {
+        page.cleanup?.()
+      }
+    }
+
+    return pageTexts.join('\n')
+  } catch (error) {
+    if (!error?.message && workerError) throw new Error(String(workerError))
+    throw error
   } finally {
-    await worker.terminate()
+    if (worker) await worker.terminate().catch(() => {})
+    if (pdfDocument) await Promise.resolve(pdfDocument.destroy?.()).catch(() => {})
   }
 }
 
@@ -214,6 +290,10 @@ async function parseResume(filePath) {
 
 module.exports = {
   extractTextWithOcr,
+  isPdfBuffer,
+  loadPdfDocument,
   parseResume,
-  parseResumeText
+  parseResumeText,
+  PDF_OCR_RENDER_SCALE,
+  renderPdfPageToPng
 }

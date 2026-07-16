@@ -3,6 +3,8 @@
  * camelCase UI shape expected by all pages.
  */
 import { candidateStatusFormValue } from './candidateStatuses'
+import { normalizeAttachments } from './documentAttachments'
+import { STORAGE_BUCKETS } from './storageBuckets'
 
 export const apiCandidateToUi = (row) => ({
   id: row.association_id || row.id,
@@ -40,6 +42,7 @@ export const apiCandidateToUi = (row) => ({
   cvStoragePath: row.cv_storage_path || row.resume_path || '',
   cvOriginalName: row.cv_original_name || row.file_name || '',
   cvMimetype: row.cv_mimetype || '',
+  cvAttachments: candidateCvAttachments(row),
   linkedinUrl: row.linkedin_url || '',
   notes: row.notes || '',
   consultant: row.consultant_name || '',
@@ -78,6 +81,29 @@ export const cleanCandidateCvPath = (value) => {
     }
   }
   return path
+}
+
+export const candidateCvAttachments = (candidate) => {
+  const cvStoragePath = candidate?.cvStoragePath || candidate?.cv_storage_path || candidate?.resumePath || candidate?.resume_path || ''
+  const cvLink = candidate?.cvLink || candidate?.cv_link || candidate?.resumeUrl || candidate?.resume_url || ''
+  const externalStoragePath = /^https?:\/\//i.test(String(cvStoragePath).trim()) ? String(cvStoragePath).trim() : ''
+  const externalCvLink = /^https?:\/\//i.test(String(cvLink).trim()) ? String(cvLink).trim() : ''
+  const legacyPath = cleanCandidateCvPath(cvStoragePath) || externalStoragePath || externalCvLink
+  const attachments = normalizeAttachments(candidate?.cvAttachments ?? candidate?.cv_attachments, {
+    path: legacyPath,
+    name: candidate?.cvOriginalName || candidate?.cv_original_name || candidate?.fileName || candidate?.file_name || '',
+    mime_type: candidate?.cvMimetype || candidate?.cv_mimetype || ''
+  })
+
+  const seen = new Set()
+  return attachments.reduce((result, attachment) => {
+    const protectedPath = cleanCandidateCvPath(attachment.path)
+    const path = protectedPath || attachment.path
+    if (!path || seen.has(path)) return result
+    seen.add(path)
+    result.push({ ...attachment, path })
+    return result
+  }, [])
 }
 
 export const getCandidateCvOpenInfo = (candidate) => {
@@ -127,5 +153,4 @@ export const resolveCandidateCvHref = (candidate) => {
 export const logCandidateCvOpen = (candidate) => {
   if (import.meta.env?.DEV) console.log('[CV open]', { candidateId: candidate?.candidateId || candidate?.id || '' })
 }
-import { STORAGE_BUCKETS } from './storageBuckets'
 export { normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath } from '../services/apiClient'

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, X, Users, ChevronDown, AlertCircle, FileText, Search, Loader2, Eye, Pencil, Lock } from 'lucide-react'
+import { Plus, X, Users, ChevronDown, AlertCircle, Search, Loader2, Eye, Pencil, Lock } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
@@ -11,14 +11,16 @@ import { useStaffDirectory } from '../hooks/useStaffDirectory'
 import PaginationBar from '../components/PaginationBar'
 import FloatingDropdown from '../components/FloatingDropdown'
 import TablePopover from '../components/TablePopover'
+import { AttachmentList, DocumentIconGroup } from '../components/DocumentAttachments'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import '../styles/Shared.css'
-import { logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
+import { candidateCvAttachments, cleanCandidateCvPath, logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS, REQUIRED_CANDIDATE_STATUS_ERROR, candidateStatusFormValue, isCandidateStatusSelected } from '../utils/candidateStatuses'
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
+import { validateDocumentSelection } from '../utils/documentAttachments'
 import { highlightText } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
@@ -188,7 +190,7 @@ const EMPTY_CAND = {
   noticePeriod:'', openToRelocate:'',
   offeredCtc:'', dateOfJoining:'',
   client:'', clientId:'', newClientName:'', job:'', jobId:'', jobDisplayId:'', status:'',
-  cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', cvOriginalName:'', cvMimetype:'', linkedinUrl:'', notes:'', consultantName:'', consultantUserId:'', candidateId:'', candidateDisplayId:'', associationId:'',
+  cvLink:'', cvFile:null, cvFileHash:'', cvStoragePath:'', cvOriginalName:'', cvMimetype:'', cvAttachments:[], linkedinUrl:'', notes:'', consultantName:'', consultantUserId:'', candidateId:'', sourceCandidateId:'', candidateDisplayId:'', associationId:'',
   sourceFile:null, duplicateCvAlreadyChecked:false, duplicateCvResult:null,
 }
 
@@ -227,6 +229,7 @@ const apiCandidateToUi = (row) => ({
   cvStoragePath: row.cv_storage_path || row.resume_path || '',
   cvOriginalName: row.cv_original_name || row.file_name || '',
   cvMimetype: row.cv_mimetype || '',
+  cvAttachments: candidateCvAttachments(row),
   linkedinUrl: row.linkedin_url || '',
   notes: row.notes || '',
   consultant: row.consultant_name || '',
@@ -301,10 +304,6 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     offered_ctc: f.status === 'Hired' ? cleanNumberForApi(f.offeredCtc) : '',
     date_of_joining: f.status === 'Hired' ? f.dateOfJoining || '' : '',
     cv_link: f.cvLink,
-    cv_file_hash: f.cvFileHash || undefined,
-    cv_storage_path: f.cvStoragePath || undefined,
-    cv_original_name: f.cvOriginalName || undefined,
-    cv_mimetype: f.cvMimetype || undefined,
     linkedin_url: f.linkedinUrl,
     notes: f.notes,
     consultant_name: f.consultantName || consultantName || '',
@@ -453,6 +452,9 @@ export default function CandidatesPage() {
   const [skillInput, setSkillInput] = useState('')
   const [editing, setEditing] = useState(false)
   const [assigningAnother, setAssigningAnother] = useState(false)
+  const [savedCvAttachments, setSavedCvAttachments] = useState([])
+  const [pendingCvFiles, setPendingCvFiles] = useState([])
+  const [removedCvPaths, setRemovedCvPaths] = useState([])
   const [collapsed, setCollapsed] = useState({})
   const [selectedCandidate, setSelectedCandidate] = useState(null)
   const [detailPosition, setDetailPosition] = useState(null)
@@ -562,17 +564,22 @@ export default function CandidatesPage() {
     candidateListAbortRef.current = null
   }, [])
 
-  const openDocument = useCallback(async (key, path) => {
+  const openDocument = useCallback(async (key, path, recordId) => {
     setOpeningDocument(key)
     try {
+      if (/^https?:\/\//i.test(String(path || '').trim())) {
+        openExternalUrl(path)
+        return
+      }
       await openProtectedDocumentPath('cv', path, {
+        recordId,
         missingMessage: 'CV is missing or needs to be reuploaded',
         notFoundMessage: 'Document file not found. Please re-upload the CV.'
       })
     } finally {
       setOpeningDocument('')
     }
-  }, [session?.user?.id])
+  }, [])
 
   const scrollImportToTop = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -624,8 +631,15 @@ export default function CandidatesPage() {
       if (value === '') return
       formBody.append(key, Array.isArray(value) ? JSON.stringify(value) : value ?? '')
     })
-    const cvFile = candidate.cvFile || (candidate.source === 'resume' ? candidate.sourceFile : null)
-    if (cvFile) formBody.append('cv_file', cvFile)
+    const manualCvFiles = Array.isArray(candidate.cvFiles) ? candidate.cvFiles : []
+    const parsedPrimaryCv = candidate.source === 'resume' ? candidate.sourceFile : null
+    const cvFiles = manualCvFiles.length
+      ? manualCvFiles
+      : [candidate.cvFile || parsedPrimaryCv].filter(Boolean)
+    cvFiles.forEach(file => formBody.append('cv_files', file))
+    if (update && Array.isArray(candidate.removedCvPaths) && candidate.removedCvPaths.length) {
+      formBody.append('removed_cv_paths', JSON.stringify(candidate.removedCvPaths))
+    }
 
     const response = await fetch(update ? `/api/candidates/${candidate.associationId}` : '/api/candidates', {
       method: update ? 'PATCH' : 'POST',
@@ -964,6 +978,19 @@ export default function CandidatesPage() {
     return payload.candidate_display_id || ''
   }, [])
 
+  const closeCandidateModal = () => {
+    window.clearTimeout(cvLinkCheckTimerRef.current)
+    setAddOpen(false)
+    setEditing(false)
+    setAssigningAnother(false)
+    setSavedCvAttachments([])
+    setPendingCvFiles([])
+    setRemovedCvPaths([])
+    setErrors({})
+    setDuplicateBypass(null)
+    assignmentSourceRef.current = null
+  }
+
   const openAddModal = useCallback(async () => {
     setConsultantSearch('')
     setConsultantOpen(false)
@@ -973,6 +1000,9 @@ export default function CandidatesPage() {
     setErrors({})
     setDuplicateBypass(null)
     setSkillInput('')
+    setSavedCvAttachments([])
+    setPendingCvFiles([])
+    setRemovedCvPaths([])
     setAddOpen(true)
 
     const profile = await getFreshActiveConsultantName()
@@ -1032,6 +1062,9 @@ export default function CandidatesPage() {
     setErrors({})
     setDuplicateBypass(null)
     setSkillInput('')
+    setSavedCvAttachments(candidateCvAttachments(sourceForm))
+    setPendingCvFiles([])
+    setRemovedCvPaths([])
     setSelectedCandidate(null)
     setAddOpen(true)
   }
@@ -1044,6 +1077,7 @@ export default function CandidatesPage() {
       id: '',
       associationId: '',
       candidateId: '',
+      sourceCandidateId: source.candidateId || source.sourceCandidateId || '',
       candidateDisplayId: 'Loading...',
       client: '',
       clientId: '',
@@ -1059,6 +1093,9 @@ export default function CandidatesPage() {
     setAssigningAnother(true)
     setErrors({})
     setDuplicateBypass(null)
+    setSavedCvAttachments(candidateCvAttachments(source))
+    setPendingCvFiles([])
+    setRemovedCvPaths([])
     setClientSuggestionsOpen(false)
     setJobSuggestionsOpen(false)
     try {
@@ -1137,17 +1174,17 @@ export default function CandidatesPage() {
   const handleSave = async () => {
     const e = validate(form)
     if (Object.keys(e).length) { setErrors(e); return }
+    const currentCvLinkPath = cleanCandidateCvPath(form.cvLink) || String(form.cvLink || '').trim()
+    const nextCvLink = removedCvPaths.includes(currentCvLinkPath) ? '' : form.cvLink
+    const candidateToSave = assigningAnother
+      ? { ...form, cvLink: nextCvLink, id: '', associationId: '', candidateId: '', cvFile: null, cvFiles: [], removedCvPaths: [] }
+      : { ...form, cvLink: nextCvLink, cvFiles: pendingCvFiles, removedCvPaths: editing ? removedCvPaths : [] }
     setSaving(true)
     try {
-      const candidateToSave = assigningAnother
-        ? { ...form, id: '', associationId: '', candidateId: '', cvFile: null }
-        : form
       await saveCandidateToApi(candidateToSave, { update: editing && !assigningAnother, duplicateAction: assigningAnother ? 'add_duplicate' : (duplicateBypass?.source === 'manual' ? 'add_duplicate' : '') })
       setSaving(false)
       setDuplicateBypass(null)
-      setAddOpen(false)
-      setEditing(false)
-      setAssigningAnother(false)
+      closeCandidateModal()
       setPage(1)
       loadCandidates(1, { showLoading: false })
       setForm(current => ({ ...current, candidateDisplayId: 'Loading...' }))
@@ -1160,7 +1197,7 @@ export default function CandidatesPage() {
         return
       }
       if (err.duplicate) {
-        setCandidateDuplicate({ source: 'manual', candidate: form, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, allowAddDuplicate: err.duplicate.allowAddDuplicate !== false, message: err.message })
+        setCandidateDuplicate({ source: 'manual', candidate: candidateToSave, existing: err.duplicate.existing, exactAssociation: err.exactAssociation, allowAddDuplicate: err.duplicate.allowAddDuplicate !== false, message: err.message })
         return
       }
       setErrors({ form: err.message })
@@ -1188,13 +1225,51 @@ export default function CandidatesPage() {
     }
   }
 
-  const handleCvFileChange = (setF, file) => {
+  const selectCvFiles = (event) => {
+    const { accepted, errors: fileErrors } = validateDocumentSelection(event.target.files, { label: 'CV file' })
+    const hasSavedPrimary = savedCvAttachments.some(attachment => attachment?.path && !removedCvPaths.includes(attachment.path))
+    const shouldCheckPrimary = !hasSavedPrimary && pendingCvFiles.length === 0
+
+    if (accepted.length) {
+      setPendingCvFiles(current => [...current, ...accepted])
+      if (!hasSavedPrimary) setForm(current => ({ ...current, cvLink: '' }))
+    }
+    setErrors(current => {
+      const next = { ...current }
+      if (fileErrors.length) next.cv_files = fileErrors.join(' ')
+      else delete next.cv_files
+      return next
+    })
+    if (shouldCheckPrimary && accepted[0]) checkCvDuplicate({ file: accepted[0], setF: setForm })
+    event.target.value = ''
+  }
+
+  const removeSavedCv = (attachment) => {
+    if (!attachment?.path) return
+    const visibleSaved = savedCvAttachments.filter(item => item?.path && !removedCvPaths.includes(item.path))
+    const willRemoveLastSaved = visibleSaved.length === 1 && visibleSaved[0].path === attachment.path
+    setRemovedCvPaths(current => current.includes(attachment.path) ? current : [...current, attachment.path])
+    setForm(current => {
+      const currentCvLinkPath = cleanCandidateCvPath(current.cvLink) || String(current.cvLink || '').trim()
+      return currentCvLinkPath === attachment.path ? { ...current, cvLink: '' } : current
+    })
+    if (willRemoveLastSaved && pendingCvFiles[0]) checkCvDuplicate({ file: pendingCvFiles[0], setF: setForm })
+  }
+
+  const removePendingCv = (index) => {
+    const nextPending = pendingCvFiles.filter((_, itemIndex) => itemIndex !== index)
+    const hasSavedPrimary = savedCvAttachments.some(attachment => attachment?.path && !removedCvPaths.includes(attachment.path))
+    setPendingCvFiles(nextPending)
+    if (!hasSavedPrimary && index === 0 && nextPending[0]) checkCvDuplicate({ file: nextPending[0], setF: setForm })
+  }
+
+  const handleParsedCvFileChange = (setF, file) => {
     setF(current => ({ ...current, cvFile: file || null, cvLink: file ? '' : current.cvLink, cvOriginalName: file?.name || current.cvOriginalName }))
     if (file) checkCvDuplicate({ file, setF })
   }
 
   const handleCvLinkChange = (setF, value) => {
-    setF(current => ({ ...current, cvLink: value, cvFile: null }))
+    setF(current => ({ ...current, cvLink: value }))
     window.clearTimeout(cvLinkCheckTimerRef.current)
     const link = String(value || '').trim()
     if (link) {
@@ -1485,7 +1560,7 @@ export default function CandidatesPage() {
       case 'status': return row.status || '-'
       case 'offeredCtc': return row.status === 'Hired' ? fmt(row.offeredCtc) : '-'
       case 'dateOfJoining': return row.status === 'Hired' ? formatDate(row.dateOfJoining) : '-'
-      case 'cv': return row.cvLink ? 'CV' : '-'
+      case 'cv': return candidateCvAttachments(row).length || row.cvFiles?.length || row.cvFile || row.sourceFile ? 'CV' : '-'
       case 'month': return formatMonth(row.createdAt)
       case 'action': return '-'
       default: return '-'
@@ -1538,7 +1613,26 @@ export default function CandidatesPage() {
   }
 
   // ---- Candidate Form body (shared between Add + Review) ----
-  const CandidateFormBody = ({ f, setF, errs, sInput, onSkillInputChange, onSkillKey, onAddSkill, rmSkill, lowConf = [], onChange, lockCv = false }) => {
+  const CandidateFormBody = ({
+    f,
+    setF,
+    errs,
+    sInput,
+    onSkillInputChange,
+    onSkillKey,
+    onAddSkill,
+    rmSkill,
+    lowConf = [],
+    onChange,
+    lockCv = false,
+    cvSaved = [],
+    cvPending = [],
+    cvRemovedPaths = [],
+    onCvFilesSelected,
+    onRemoveSavedCv,
+    onRemovePendingCv,
+    cvRecordId = ''
+  }) => {
     const low = (field) => lowConf.includes(field) ? ' low-confidence' : ''
     const visibleClientValue = f.client || ''
     const matchingClients = canonicalClients
@@ -1586,6 +1680,7 @@ export default function CandidatesPage() {
     })
     const cvHref = resolveCandidateCvHref(f)
     const parsedResumeAttached = f.source === 'resume' && (f.sourceFile || f.cvOriginalName || f.cvStoragePath)
+    const isParsedResume = f.source === 'resume'
     return (
       <div className="form-grid-2">
         <div className="form-group">
@@ -1816,20 +1911,44 @@ export default function CandidatesPage() {
         </div>}
 
         {!isCandidateFieldHidden('cvLink') && <div className="form-group">
-          <label className="form-label">CV
+          <label className="form-label">{isParsedResume ? 'CV' : 'CV Files'}
             {f.cvLink && <span style={{ marginLeft:6, fontSize:10, color:'var(--success)', fontWeight:600, background:'rgba(40,167,69,0.1)', padding:'1px 6px', borderRadius:4 }}>Auto-filled</span>}
           </label>
           <div style={{ display:'grid', gap:8 }}>
-            {!lockCv && (
+            {isParsedResume && !lockCv && (
               <div>
                 <span className="sub-text">{parsedResumeAttached ? `Parsed resume attached: ${f.cvOriginalName || f.sourceFile?.name || 'Resume'}` : (f.cvOriginalName ? `Resume: ${f.cvOriginalName}` : 'Choose File')}</span>
                 {!parsedResumeAttached && (
-                  <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => handleCvFileChange(setF, event.target.files?.[0] || null)} className="form-control" disabled={isCandidateFieldDisabled('cvFile')} />
+                  <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => handleParsedCvFileChange(setF, event.target.files?.[0] || null)} className="form-control" disabled={isCandidateFieldDisabled('cvFile')} />
                 )}
               </div>
             )}
-            {cvHref && (
-              <button className="btn-secondary" type="button" onClick={(event) => { event.preventDefault(); openDocument(`cv-form-${f.associationId || f.candidateId || f.candidateDisplayId || 'new'}`, cvHref) }}>
+            {!isParsedResume && !lockCv && (
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={onCvFilesSelected}
+                className={`form-control${errs?.cv_files ? ' is-error' : ''}`}
+                disabled={isCandidateFieldDisabled('cvFile')}
+              />
+            )}
+            {!isParsedResume && errs?.cv_files && <span className="form-error">{errs.cv_files}</span>}
+            {!isParsedResume && (
+              <AttachmentList
+                saved={cvSaved}
+                pending={cvPending}
+                removedPaths={cvRemovedPaths}
+                keyPrefix={`cv-form-${f.associationId || cvRecordId || f.candidateDisplayId || 'new'}`}
+                openingKey={openingDocument}
+                onOpen={cvRecordId ? (key, attachment) => { logCandidateCvOpen(f); openDocument(key, attachment.path, cvRecordId) } : undefined}
+                onRemoveSaved={!lockCv && !isCandidateFieldDisabled('cvFile') ? onRemoveSavedCv : undefined}
+                onRemovePending={!lockCv && !isCandidateFieldDisabled('cvFile') ? onRemovePendingCv : undefined}
+                disabled={saving}
+              />
+            )}
+            {isParsedResume && cvHref && (
+              <button className="btn-secondary" type="button" onClick={(event) => { event.preventDefault(); openDocument(`cv-form-${f.associationId || f.candidateId || f.candidateDisplayId || 'new'}`, cvHref, f.candidateId) }}>
                 View Parsed Resume
               </button>
             )}
@@ -2048,18 +2167,16 @@ export default function CandidatesPage() {
       case 'dateOfJoining':
         return <td key={key}>{c.status === 'Hired' ? formatDate(c.dateOfJoining) : '-'}</td>
       case 'cv': {
-        const cvHref = resolveCandidateCvHref(c)
-        const docKey = `cv-${c.associationId || c.id}`
-        const isOpening = openingDocument === docKey
+        const attachments = candidateCvAttachments(c)
         return (
           <td key={key}>
-            {cvHref ? (
-              <a href="#" rel="noopener noreferrer" className="cv-table-link candidate-cv-link" title="Open CV" onClick={event => { event.preventDefault(); event.stopPropagation(); event.nativeEvent?.stopImmediatePropagation?.(); logCandidateCvOpen(c); openDocument(docKey, cvHref) }}>
-                {isOpening ? <Loader2 size={15} className="spin" /> : <FileText size={15} strokeWidth={2} />}
-              </a>
-            ) : (
-              <span className="candidate-empty-value">-</span>
-            )}
+            <DocumentIconGroup
+              attachments={attachments}
+              keyPrefix={`cv-${c.associationId || c.id}`}
+              openingKey={openingDocument}
+              empty={<span className="candidate-empty-value">-</span>}
+              onOpen={(docKey, attachment) => { logCandidateCvOpen(c); openDocument(docKey, attachment.path, c.candidateId) }}
+            />
           </td>
         )
       }
@@ -2323,8 +2440,13 @@ export default function CandidatesPage() {
 
             <div className="candidate-drawer-actions">
               <button className="btn-primary" onClick={() => openEditCandidate(selectedCandidate)}>Edit</button>
-              {!isCandidateFieldHidden('cvLink') && resolveCandidateCvHref(selectedCandidate) && (
-                <a className="btn-secondary" href="#" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); event.nativeEvent?.stopImmediatePropagation?.(); logCandidateCvOpen(selectedCandidate); openDocument(`cv-detail-${selectedCandidate.associationId || selectedCandidate.id}`, resolveCandidateCvHref(selectedCandidate)) }}>{openingDocument === `cv-detail-${selectedCandidate.associationId || selectedCandidate.id}` ? <Loader2 size={14} className="spin" /> : <FileText size={14} />} CV</a>
+              {!isCandidateFieldHidden('cvLink') && candidateCvAttachments(selectedCandidate).length > 0 && (
+                <DocumentIconGroup
+                  attachments={candidateCvAttachments(selectedCandidate)}
+                  keyPrefix={`cv-detail-${selectedCandidate.associationId || selectedCandidate.id}`}
+                  openingKey={openingDocument}
+                  onOpen={(docKey, attachment) => { logCandidateCvOpen(selectedCandidate); openDocument(docKey, attachment.path, selectedCandidate.candidateId) }}
+                />
               )}
               {!isCandidateFieldHidden('linkedinUrl') && normalizeExternalUrl(selectedCandidate.linkedinUrl) && (
                 <a className="btn-secondary" href={normalizeExternalUrl(selectedCandidate.linkedinUrl)} target="_blank" rel="noopener noreferrer" onClick={(event) => { event.preventDefault(); openExternalUrl(selectedCandidate.linkedinUrl) }}>LinkedIn</a>
@@ -2392,7 +2514,7 @@ export default function CandidatesPage() {
           <div className="modal-card modal-card-lg" ref={candidateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={assigningAnother ? 'Assign Another Mandate/Client' : 'Add Candidate'}>
             <div className="modal-header">
               <span className="modal-title">{assigningAnother ? 'Assign Another Mandate/Client' : (editing ? 'Edit Candidate' : 'Add New Candidate')}</span>
-              <button className="modal-close" onClick={() => { setAddOpen(false); setAssigningAnother(false) }} aria-label="Close" disabled={saving}><X size={16} /></button>
+              <button className="modal-close" onClick={closeCandidateModal} aria-label="Close" disabled={saving}><X size={16} /></button>
             </div>
             <div className="modal-body" ref={candidateModalBodyRef}>
               {errors.form && <div className="form-error" style={{ display:'block', marginBottom:12 }}>{errors.form}</div>}
@@ -2407,11 +2529,18 @@ export default function CandidatesPage() {
                 onAddSkill: addManualSkill,
                 rmSkill: removeSkill,
                 onChange: handleChange,
-                lockCv: assigningAnother
+                lockCv: assigningAnother,
+                cvSaved: savedCvAttachments,
+                cvPending: pendingCvFiles,
+                cvRemovedPaths: removedCvPaths,
+                onCvFilesSelected: selectCvFiles,
+                onRemoveSavedCv: removeSavedCv,
+                onRemovePendingCv: removePendingCv,
+                cvRecordId: form.candidateId || form.sourceCandidateId || ''
               })}
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => { setAddOpen(false); setAssigningAnother(false) }} disabled={saving}>Cancel</button>
+              <button className="btn-secondary" onClick={closeCandidateModal} disabled={saving}>Cancel</button>
               {editing && (
                 <button className="btn-secondary" onClick={openAssignAnother} disabled={saving}>Assign Another Mandate/Client</button>
               )}

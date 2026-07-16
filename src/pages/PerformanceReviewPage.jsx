@@ -18,6 +18,7 @@ import {
   normalizePerformanceRows
 } from '../utils/performanceReviewStorage'
 import {
+  fetchPerformanceCompletionStatuses,
   fetchMyPerformanceReview,
   fetchEmployeeHandbook,
   fetchPerformancePermissions,
@@ -203,7 +204,34 @@ function EmployeeReviewCard({ isSuperAdmin }) {
   )
 }
 
-function EmployeeSelector({ users, selectedUserId, onSelect, loading, disabled }) {
+const PERFORMANCE_COMPLETION_STAGES = [
+  { key: 'self', label: 'Self' },
+  { key: 'ss_ns', label: 'SS/NS' },
+  { key: 'ra', label: 'RA' }
+]
+
+function CompletionStatusDots({ completion }) {
+  const dots = PERFORMANCE_COMPLETION_STAGES.map(stage => {
+    const state = completion?.[stage.key]
+    if (!state || !['partial', 'complete'].includes(state.state)) return null
+    const completionLabel = state.state === 'complete' ? 'complete' : 'incomplete'
+    const label = `${stage.label} review: ${completionLabel} (${state.filled} of ${state.total} scores filled)`
+    return (
+      <span
+        key={stage.key}
+        className={`performance-completion-dot is-${state.state}`}
+        role="img"
+        aria-label={label}
+        title={label}
+      />
+    )
+  }).filter(Boolean)
+
+  if (!dots.length) return null
+  return <span className="performance-completion-dots">{dots}</span>
+}
+
+function EmployeeSelector({ users, selectedUserId, onSelect, loading, disabled, completionStatuses }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const selectRef = useRef(null)
@@ -243,7 +271,10 @@ function EmployeeSelector({ users, selectedUserId, onSelect, loading, disabled }
   return (
     <div ref={selectRef} className="performance-employee-select">
         <button type="button" onClick={() => { if (!disabled) setOpen(current => !current) }} aria-expanded={open} disabled={disabled}>
-          <span>{selected?.name || 'Select employee'}</span>
+          <span className="performance-employee-trigger-label">
+            <span>{selected?.name || 'Select employee'}</span>
+            <CompletionStatusDots completion={completionStatuses?.[selected?.id]} />
+          </span>
           <ChevronDown size={16} />
         </button>
         {open && (
@@ -255,7 +286,10 @@ function EmployeeSelector({ users, selectedUserId, onSelect, loading, disabled }
             {loading && <span>Loading employees...</span>}
             {matches.map(user => (
               <button key={user.id} type="button" className={user.id === selectedUserId ? 'is-selected' : ''} onClick={() => { onSelect(user.id); setOpen(false); setQuery('') }}>
-                <strong>{user.name}</strong>
+                <span className="performance-employee-name-row">
+                  <strong>{user.name}</strong>
+                  <CompletionStatusDots completion={completionStatuses?.[user.id]} />
+                </span>
                 {user.email ? <small>{user.email}</small> : null}
               </button>
             ))}
@@ -387,9 +421,12 @@ export default function PerformanceReviewPage() {
   const [uploadingHandbook, setUploadingHandbook] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
+  const [completionState, setCompletionState] = useState({ period: '', statuses: {} })
   const reviewCacheRef = useRef(new Map())
   const loadedReviewKeyRef = useRef('')
   const requestSeqRef = useRef(0)
+  const completionRequestSeqRef = useRef(0)
+  const completionStatuses = completionState.period === period ? completionState.statuses : {}
 
   const reviewCacheKey = useCallback((targetUserId, reviewPeriod) => `${isSuperAdmin ? 'employee' : 'self'}:${targetUserId}:${reviewPeriod}`, [isSuperAdmin])
   const readReview = useCallback((targetUserId, reviewPeriod) => (
@@ -466,6 +503,20 @@ export default function PerformanceReviewPage() {
       window.clearTimeout(viewTimer)
     }
   }, [cacheReview, effectiveUserId, period, readReview, reviewCacheKey])
+
+  useEffect(() => {
+    let active = true
+    const requestId = completionRequestSeqRef.current + 1
+    completionRequestSeqRef.current = requestId
+    fetchPerformanceCompletionStatuses(period, isSuperAdmin ? 'all' : 'self').then(({ data }) => {
+      if (active && completionRequestSeqRef.current === requestId) {
+        setCompletionState({ period, statuses: data || {} })
+      }
+    }).catch(err => {
+      if (active) setError(err.message)
+    })
+    return () => { active = false }
+  }, [isSuperAdmin, ownUserId, period])
 
   useEffect(() => {
     if (!effectiveUserId) return undefined
@@ -554,6 +605,16 @@ export default function PerformanceReviewPage() {
       setRows(clonePerformanceRows(loaded))
       setSavedRows(clonePerformanceRows(loaded))
       loadedReviewKeyRef.current = key
+      if (data?.completion) {
+        completionRequestSeqRef.current += 1
+        setCompletionState(current => ({
+          period,
+          statuses: {
+            ...(current.period === period ? current.statuses : {}),
+            [effectiveUserId]: data.completion
+          }
+        }))
+      }
       setToast('PMS saved.')
     } catch (err) {
       setError(err.message)
@@ -605,7 +666,7 @@ export default function PerformanceReviewPage() {
       <EmployeeReviewCard isSuperAdmin={isSuperAdmin} />
       <div className="performance-control-panel">
         <div className="performance-control-row">
-          <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={isSuperAdmin && loadingStaff} disabled={!isSuperAdmin} />
+          <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={isSuperAdmin && loadingStaff} disabled={!isSuperAdmin} completionStatuses={completionStatuses} />
           <PeriodSelector period={period} onChange={setPeriod} />
         </div>
         <EmployeeHandbook handbook={handbook} canUpload={isSuperAdmin} uploading={uploadingHandbook} onOpen={handleOpenHandbook} onUpload={handleHandbookUpload} />

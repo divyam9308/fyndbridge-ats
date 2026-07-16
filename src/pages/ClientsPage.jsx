@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, FileText, Search, Trash2, Lock } from 'lucide-react'
+import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, Search, Trash2, Lock } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
@@ -14,10 +14,12 @@ import TablePopover from '../components/TablePopover'
 import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
+import { AttachmentList, DocumentIconGroup } from '../components/DocumentAttachments'
 import '../styles/Shared.css'
 import { supabase } from '../services/supabaseClient'
-import { normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, isValidStoragePath } from '../services/apiClient'
+import { normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath } from '../services/apiClient'
 import { STORAGE_BUCKETS } from '../utils/storageBuckets'
+import { normalizeAttachments, validateDocumentSelection } from '../utils/documentAttachments'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { highlightText } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
@@ -37,6 +39,8 @@ const STATUS_BADGE_MAP = {
 const TERMS = ['%', 'Fixed Fee Model', 'Slab %', 'Any Other']
 const BILLING_ENTITIES = ['FCS', 'FCAPL']
 const REGION_OPTIONS = ['', 'North', 'South', 'East', 'West', 'International']
+const MAX_CONTRACT_SIZE_BYTES = 10 * 1024 * 1024
+const MAX_CONTRACT_FILES_PER_SAVE = 20
 const EMPTY_FORM = {
   client_group_id: '',
   client_display_id: '',
@@ -71,6 +75,15 @@ const mutedDash = <span className="table-muted-dash">-</span>
 const termsLabel = (client) => client.terms_signed_type === 'Any Other' ? client.terms_signed_custom : client.terms_signed_type
 const showCommercialFields = (client) => client.contract_signed === true || client.contract_signed === 'Yes'
 const commercialDash = (client, value) => showCommercialFields(client) ? dash(value) : '-'
+const clientContractAttachments = (client) => normalizeAttachments(
+  client?.contract_attachments,
+  {
+    path: client?.contract_pdf_storage_path || client?.contract_document || client?.contract_pdf_url,
+    name: client?.contract_document_name || '',
+    mime_type: 'application/pdf',
+    uploaded_at: client?.updated_at || client?.created_at || ''
+  }
+)
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
 const previewWords = (value, count = 3) => {
@@ -240,7 +253,7 @@ function clientToForm(client) {
     terms_signed_custom: client.terms_signed_custom || '',
     terms_value: client.terms_value || '',
     billing_entity: client.billing_entity || '',
-    contract_signed: client.contract_signed ? 'Yes' : 'No',
+    contract_signed: client.contract_signed === true || client.contract_signed === 'Yes' ? 'Yes' : 'No',
     contract_document: client.contract_pdf_storage_path || client.contract_document || client.contract_pdf_url || '',
     gstin: client.gstin || '',
     pan: client.pan || '',
@@ -276,7 +289,10 @@ export default function ClientsPage() {
   const [clientDuplicate, setClientDuplicate] = useState(null)
   const [clientAlreadyAdded, setClientAlreadyAdded] = useState(false)
   const [duplicateMoreOpen, setDuplicateMoreOpen] = useState(false)
-  const [contractFile, setContractFile] = useState(null)
+  const [contractFiles, setContractFiles] = useState([])
+  const [savedContractAttachments, setSavedContractAttachments] = useState([])
+  const [removedContractPaths, setRemovedContractPaths] = useState([])
+  const [contractRecordId, setContractRecordId] = useState('')
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [columnsAnchor, setColumnsAnchor] = useState(null)
   const initialClientColumns = useMemo(() => readStoredClientColumns() || DEFAULT_CLIENT_COLUMN_KEYS, [])
@@ -406,10 +422,11 @@ export default function ClientsPage() {
     fetchClients({ showLoading: false })
   }, [clientAlreadyAdded, clientDuplicate, fetchClients, followUpClient, isOpen])
 
-  const openDocument = useCallback(async (key, path) => {
+  const openDocument = useCallback(async (key, path, recordId = '') => {
     setOpeningDocument(key)
     try {
       await openProtectedDocumentPath('contract', path, {
+        recordId,
         missingMessage: 'Contract PDF is missing or needs to be reuploaded',
         notFoundMessage: 'Contract PDF not found.'
       })
@@ -603,7 +620,10 @@ export default function ClientsPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    if (name === 'contract_signed' && value === 'No') setContractFile(null)
+    if (name === 'contract_signed' && value === 'No') {
+      setContractFiles([])
+      setErrors((current) => ({ ...current, contract_document: '' }))
+    }
     if (name === 'client_name') setClientSuggestionsOpen(!addingNewClient)
     setForm((current) => {
       const next = { ...current, [name]: value }
@@ -618,16 +638,35 @@ export default function ClientsPage() {
     if (errors[name]) setErrors((current) => ({ ...current, [name]: '' }))
   }
 
-  const handleContractFile = (event) => {
-    const file = event.target.files?.[0] || null
-    if (file && file.type !== 'application/pdf') {
-      setErrors((current) => ({ ...current, contract_document: 'Contract document must be a PDF file.' }))
-      setContractFile(null)
-      event.target.value = ''
-      return
-    }
-    setErrors((current) => ({ ...current, contract_document: '' }))
-    setContractFile(file)
+  const handleContractFiles = (event) => {
+    const selection = validateDocumentSelection(event.target.files, {
+      allowedExtensions: ['pdf'],
+      maxSize: MAX_CONTRACT_SIZE_BYTES,
+      label: 'Contract document'
+    })
+    const fileErrors = [...selection.errors]
+    const pdfFiles = selection.accepted.filter((file) => {
+      if (!file.type || file.type === 'application/pdf') return true
+      fileErrors.push(`${file.name}: Contract document must be a PDF file.`)
+      return false
+    })
+    const remainingSlots = Math.max(0, MAX_CONTRACT_FILES_PER_SAVE - contractFiles.length)
+    const acceptedFiles = pdfFiles.slice(0, remainingSlots)
+    pdfFiles.slice(remainingSlots).forEach((file) => {
+      fileErrors.push(`${file.name}: A maximum of ${MAX_CONTRACT_FILES_PER_SAVE} contracts can be uploaded per save.`)
+    })
+    if (acceptedFiles.length) setContractFiles((current) => [...current, ...acceptedFiles])
+    setErrors((current) => ({ ...current, contract_document: fileErrors.join(' ') }))
+    event.target.value = ''
+  }
+
+  const removePendingContract = (index) => {
+    setContractFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))
+  }
+
+  const removeSavedContract = (attachment) => {
+    if (!attachment?.path) return
+    setRemovedContractPaths((current) => current.includes(attachment.path) ? current : [...current, attachment.path])
   }
 
   const validate = () => {
@@ -648,7 +687,10 @@ export default function ClientsPage() {
     setConsultantSearch('')
     setConsultantOpen(false)
     setErrors({})
-    setContractFile(null)
+    setContractFiles([])
+    setSavedContractAttachments([])
+    setRemovedContractPaths([])
+    setContractRecordId('')
     setEditingClient(null)
     setSelectedExistingClientId(null)
     setAddingNewClient(false)
@@ -684,7 +726,10 @@ export default function ClientsPage() {
     setConsultantSearch(client.consultant_name || client.consultant || '')
     setConsultantOpen(false)
     setErrors({})
-    setContractFile(null)
+    setContractFiles([])
+    setSavedContractAttachments(clientContractAttachments(client))
+    setRemovedContractPaths([])
+    setContractRecordId(client.id || '')
     setEditingClient(client)
     setSelectedExistingClientId(null)
     setAddingNewClient(false)
@@ -727,7 +772,10 @@ export default function ClientsPage() {
     setConsultantSearch(client.consultant_name || client.consultant || '')
     setConsultantOpen(false)
     setErrors({})
-    setContractFile(null)
+    setContractFiles([])
+    setSavedContractAttachments(clientContractAttachments(source))
+    setRemovedContractPaths([])
+    setContractRecordId(source.id || client.id || '')
     setEditingClient(null)
     setSelectedExistingClientId(client.client_group_id || client.id)
     setAddingNewClient(false)
@@ -737,32 +785,83 @@ export default function ClientsPage() {
     setIsOpen(true)
   }
 
-  const contractStoragePath = (clientId, file) => {
-    const baseName = String(file.name || 'contract.pdf')
-      .replace(/\.pdf$/i, '')
-      .replace(/[^a-z0-9._-]+/gi, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 80) || 'contract'
-    return `contracts/${clientId}/${Date.now()}-${baseName}.pdf`
+  const closeClientModal = () => {
+    if (saving || contractUploading) return
+    setIsOpen(false)
+    setContractFiles([])
+    setSavedContractAttachments([])
+    setRemovedContractPaths([])
+    setContractRecordId('')
+    setEditingClient(null)
+    setAddingContactPerson(false)
   }
 
-  const uploadContractFile = async (clientId) => {
-    if (!contractFile) return null
-    if (!supabase) throw new Error('Supabase is not configured.')
-    if (!clientId) throw new Error('Client ID is required before uploading contract.')
-    if (contractFile.type !== 'application/pdf') throw new Error('Contract document must be a PDF file.')
+  const discardContractUploadReservation = async (reservation) => {
+    if (!reservation) return
+    try {
+      await fetch('/api/clients/contract-uploads', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contract_upload_reservation: reservation })
+      })
+    } catch {
+      // Reservation expiry is the final cleanup fallback when the discard request cannot complete.
+    }
+  }
 
-    const path = contractStoragePath(clientId, contractFile)
-    if (import.meta.env.DEV) console.debug('[clients:contract-upload]', { clientId, path, fileName: contractFile.name, fileSize: contractFile.size })
-    setSaveStep('Uploading contract...')
-    setContractUploading(true)
-    const { error } = await supabase.storage.from(STORAGE_BUCKETS.CONTRACT).upload(path, contractFile, {
-      contentType: 'application/pdf',
-      upsert: true
+  const uploadPendingContracts = async (recordId = '') => {
+    if (!contractFiles.length) return null
+    if (!supabase) throw new Error('Supabase is not configured.')
+
+    setSaveStep('Preparing contract uploads...')
+    const prepareResponse = await fetch('/api/clients/contract-uploads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...(recordId ? { record_id: recordId } : {}),
+        files: contractFiles.map((file) => ({
+          name: file.name,
+          size: file.size,
+          type: file.type || 'application/pdf'
+        }))
+      })
     })
-    setContractUploading(false)
-    if (error) throw new Error(error.message || 'Contract upload failed.')
-    return { path, name: contractFile.name }
+    const prepared = await prepareResponse.json().catch(() => ({}))
+    if (!prepareResponse.ok) throw new Error(prepared.detail || prepared.error || 'Unable to prepare contract uploads.')
+
+    const reservation = prepared.reservation || ''
+    const uploads = Array.isArray(prepared.uploads) ? prepared.uploads : []
+    try {
+      if (!reservation || uploads.length !== contractFiles.length) {
+        throw new Error('The contract upload reservation was incomplete. Please try again.')
+      }
+      setContractUploading(true)
+      for (let index = 0; index < uploads.length; index += 1) {
+        const upload = uploads[index]
+        const file = contractFiles[index]
+        if (!upload?.path || !upload?.token) throw new Error(`${file.name}: Upload authorization is missing.`)
+        setSaveStep(`Uploading contract ${index + 1} of ${uploads.length}...`)
+        const { error: uploadError } = await supabase.storage
+          .from(STORAGE_BUCKETS.CONTRACT)
+          .uploadToSignedUrl(upload.path, upload.token, file, { contentType: 'application/pdf' })
+        if (uploadError) throw new Error(`${file.name}: ${uploadError.message || 'Contract upload failed.'}`)
+      }
+      return {
+        reservation,
+        attachments: uploads.map((upload) => ({
+          path: upload.path,
+          name: upload.name,
+          size: upload.size,
+          mime_type: upload.mime_type,
+          uploaded_at: upload.uploaded_at
+        }))
+      }
+    } catch (error) {
+      await discardContractUploadReservation(reservation)
+      throw error
+    } finally {
+      setContractUploading(false)
+    }
   }
 
   const saveClientMetadata = async ({ method, url, payload }) => {
@@ -809,16 +908,28 @@ export default function ClientsPage() {
     setContactSaving(current => ({ ...current, [clientId]: true }))
     setSaving(true)
     try {
+      const contractBatch = await uploadPendingContracts()
+      if (contractBatch) {
+        payload.contract_upload_reservation = contractBatch.reservation
+        payload.new_contract_attachments = contractBatch.attachments
+      }
+      setSaveStep(contractBatch ? 'Finalizing contracts...' : 'Saving contact...')
       const data = await saveClientMetadata({ method: 'POST', url: '/api/clients', payload })
       if (import.meta.env.DEV) console.debug('[clients]', { actionType: 'add_contact_person', clientId, status: 201 })
       setIsOpen(false)
       setAddingContactPerson(false)
+      setContractFiles([])
+      setSavedContractAttachments([])
+      setRemovedContractPaths([])
+      setContractRecordId('')
       setSelectedContacts(current => ({ ...current, [clientId]: data.id || data.data?.id || current[clientId] || '' }))
       await fetchClients({ showLoading: false })
       await fetchClientOptions()
     } catch (err) {
-      setErrors({ contact_person: err.message })
+      setErrors(contractFiles.length ? { contract_document: err.message } : { contact_person: err.message })
     } finally {
+      setContractUploading(false)
+      setSaveStep('')
       setSaving(false)
       contactSavingRef.current[clientId] = false
       setContactSaving(current => ({ ...current, [clientId]: false }))
@@ -831,60 +942,19 @@ export default function ClientsPage() {
       ? { ...form, consultant_name: matchedConsultant.name, consultant_user_id: matchedConsultant.id || '' }
       : { ...form }
     if (duplicateAction) payload.duplicate_action = duplicateAction
-
-    if (editingClient) {
-      setSaveStep(contractFile ? 'Uploading contract...' : 'Saving client...')
-      const contract = await uploadContractFile(editingClient.id)
-      if (contract) {
-        setSaveStep('Finalizing contract...')
-        try {
-          const data = await saveClientMetadata({
-            method: 'PATCH',
-            url: `/api/clients/${editingClient.id}`,
-            payload: {
-              contract_signed: true,
-              contract_document_path: contract.path,
-              contract_document_name: contract.name
-            }
-          })
-          window.dispatchEvent(new Event('ats:clients-updated'))
-          setSaveStep('Done')
-          return data
-        } catch (err) {
-          throw new Error(import.meta.env.DEV ? `Contract uploaded, but client record update failed: ${err.message}` : 'Contract uploaded, but client record update failed. Please retry saving.', { cause: err })
-        }
-      }
-      const data = await saveClientMetadata({ method: 'PATCH', url: `/api/clients/${editingClient.id}`, payload })
-      window.dispatchEvent(new Event('ats:clients-updated'))
-      setSaveStep('Done')
-      return data
+    const contractBatch = await uploadPendingContracts(editingClient?.id || '')
+    if (contractBatch) {
+      payload.contract_upload_reservation = contractBatch.reservation
+      payload.new_contract_attachments = contractBatch.attachments
     }
+    if (editingClient) payload.removed_contract_paths = removedContractPaths
 
-    setSaveStep('Saving client...')
-    const data = await saveClientMetadata({ method: 'POST', url: '/api/clients', payload })
-    const clientId = data.id || data.data?.id
-    if (contractFile) {
-      let contract
-      try {
-        contract = await uploadContractFile(clientId)
-      } catch (err) {
-        throw new Error(import.meta.env.DEV ? `Client was saved, but contract upload failed: ${err.message}` : 'Client was saved, but contract upload failed. Please upload the contract again from Edit Client.', { cause: err })
-      }
-      setSaveStep('Finalizing contract...')
-      try {
-        await saveClientMetadata({
-          method: 'PATCH',
-          url: `/api/clients/${clientId}`,
-          payload: {
-            contract_signed: true,
-            contract_document_path: contract.path,
-            contract_document_name: contract.name
-          }
-        })
-      } catch (err) {
-        throw new Error(import.meta.env.DEV ? `Contract uploaded, but client record update failed: ${err.message}` : 'Contract uploaded, but client record update failed. Please retry saving.', { cause: err })
-      }
-    }
+    setSaveStep(contractBatch ? 'Finalizing contracts...' : 'Saving client...')
+    const data = await saveClientMetadata({
+      method: editingClient ? 'PATCH' : 'POST',
+      url: editingClient ? `/api/clients/${editingClient.id}` : '/api/clients',
+      payload
+    })
     window.dispatchEvent(new Event('ats:clients-updated'))
     setSaveStep('Done')
     return data
@@ -909,7 +979,10 @@ export default function ClientsPage() {
     try {
       await saveClientToApi()
       setIsOpen(false)
-      setContractFile(null)
+      setContractFiles([])
+      setSavedContractAttachments([])
+      setRemovedContractPaths([])
+      setContractRecordId('')
       setEditingClient(null)
       setAddingContactPerson(false)
       await fetchClients({ showLoading: false })
@@ -920,7 +993,14 @@ export default function ClientsPage() {
         setDuplicateMoreOpen(false)
         return
       }
-      setErrors(contractFile ? { contract_document: err.message } : { client_name: err.message })
+      const hasContractChanges = contractFiles.length > 0 || removedContractPaths.length > 0 || (
+        editingClient && form.contract_signed === 'No' && savedContractAttachments.length > 0
+      )
+      if (editingClient && form.contract_signed === 'No' && savedContractAttachments.length > 0) {
+        setErrors({ contract_signed: err.message })
+      } else {
+        setErrors(hasContractChanges ? { contract_document: err.message } : { client_name: err.message })
+      }
     } finally {
       setContractUploading(false)
       setSaving(false)
@@ -936,6 +1016,9 @@ export default function ClientsPage() {
       client_display_id: clientDuplicate.existing.client_display_id || ''
     })
     setEditingClient(clientDuplicate.existing)
+    setSavedContractAttachments(clientContractAttachments(clientDuplicate.existing))
+    setRemovedContractPaths([])
+    setContractRecordId(clientDuplicate.existing.id || '')
     setSelectedExistingClientId(clientDuplicate.existing.client_group_id || clientDuplicate.existing.id)
     setAddingNewClient(false)
     setClientDuplicate(null)
@@ -1397,9 +1480,17 @@ export default function ClientsPage() {
       case 'addressOnInvoice':
         return <td key={key}>{commercialDash(client, client.address_on_invoice)}</td>
       case 'contractPdf': {
-        const contractPath = client.contract_pdf_storage_path || client.contract_document || client.contract_pdf_url
-        const docKey = `contract-${client.id}`
-        return <td key={key}>{isValidStoragePath(contractPath) ? <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" title="Open Contract PDF" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument(docKey, contractPath) }}>{openingDocument === docKey ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}</a> : '-'}</td>
+        const attachments = clientContractAttachments(client)
+        return (
+          <td key={key}>
+            <DocumentIconGroup
+              attachments={attachments}
+              openingKey={openingDocument}
+              keyPrefix={`contract-${client.id}`}
+              onOpen={(docKey, attachment) => openDocument(docKey, attachment.path, client.id)}
+            />
+          </td>
+        )
       }
       case 'actions':
         return <td key={key}><div className="row-actions"><button className="row-action-btn" title="Edit" id={`edit-client-${client.id}`} onClick={() => openEditModal(client)} disabled={client.is_locked && !isAdmin}><Pencil size={13} strokeWidth={2} /></button>{isAdmin && <RecordLockButton tableName="clients" recordId={client.id} locked={client.is_locked} onChanged={updateClientLockState} />}</div></td>
@@ -1647,7 +1738,7 @@ export default function ClientsPage() {
           <div className="modal-card modal-card-lg" ref={clientModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingClient ? 'Edit Client' : 'Add Client'}>
             <div className="modal-header">
               <span className="modal-title">{editingClient ? 'Edit Client' : 'Add New Client'}</span>
-              <button className="modal-close" onClick={() => setIsOpen(false)} aria-label="Close"><X size={16} /></button>
+              <button className="modal-close" onClick={closeClientModal} aria-label="Close" disabled={saving || contractUploading}><X size={16} /></button>
             </div>
             <div className="modal-body">
               <div className="form-grid-2">
@@ -1768,8 +1859,18 @@ export default function ClientsPage() {
                 {form.contract_signed === 'Yes' && !isClientFieldHidden('contract_document') && (
                   <div className="form-group">
                     <label className="form-label">Contract PDF</label>
-                    <input type="file" accept="application/pdf,.pdf" onChange={handleContractFile} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving || contractUploading || isClientFieldDisabled('contract_document')} />
-                    {isValidStoragePath(form.contract_document) && <a className="cv-table-link" href="#" target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openDocument('contract-form', form.contract_document) }}>{openingDocument === 'contract-form' ? 'Opening...' : 'Current Contract'}</a>}
+                    <input type="file" accept="application/pdf,.pdf" multiple onChange={handleContractFiles} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving || contractUploading || isClientFieldDisabled('contract_document')} />
+                    <AttachmentList
+                      saved={savedContractAttachments}
+                      pending={contractFiles}
+                      removedPaths={removedContractPaths}
+                      openingKey={openingDocument}
+                      keyPrefix={`contract-form-${contractRecordId || 'new'}`}
+                      onOpen={(docKey, attachment) => openDocument(docKey, attachment.path, contractRecordId)}
+                      onRemoveSaved={!addingContactPerson && !isClientFieldDisabled('contract_document') ? removeSavedContract : undefined}
+                      onRemovePending={!isClientFieldDisabled('contract_document') ? removePendingContract : undefined}
+                      disabled={saving || contractUploading}
+                    />
                     {contractUploading && <span className="form-error">Uploading contract...</span>}
                     {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
                   </div>
@@ -1815,7 +1916,7 @@ export default function ClientsPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setIsOpen(false)} disabled={saving || contractUploading}>Cancel</button>
+              <button className="btn-secondary" onClick={closeClientModal} disabled={saving || contractUploading}>Cancel</button>
               <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving || contractUploading}>{saveStep || (editingClient ? 'Update Client' : 'Save Client')}</button>
             </div>
           </div>

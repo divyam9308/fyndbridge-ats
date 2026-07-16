@@ -2381,3 +2381,86 @@ textarea.form-control {
   white-space: nowrap;
   text-decoration: underline;
 }
+.document-attachment-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.document-attachment-item {
+  align-items: center;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #dfe5ec);
+  border-radius: 7px;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 6px 7px 6px 9px;
+}
+
+.document-attachment-item.is-pending {
+  background: rgba(30, 88, 120, 0.035);
+}
+
+.document-attachment-main {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: var(--navy-darkest, #15354a);
+  display: flex;
+  font: inherit;
+  gap: 7px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+button.document-attachment-main:not(:disabled) {
+  cursor: pointer;
+}
+
+.document-attachment-name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-attachment-size {
+  color: var(--muted, #70808d);
+  flex: none;
+  font-size: 10.5px;
+}
+
+.document-attachment-remove {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--danger, #c13b3b);
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  padding: 4px;
+}
+
+.document-attachment-remove:hover:not(:disabled) {
+  background: rgba(193, 59, 59, 0.08);
+}
+
+.document-icon-group {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  max-width: 100%;
+}
+
+.document-icon-link {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+}

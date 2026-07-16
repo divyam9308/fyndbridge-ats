@@ -49,7 +49,7 @@ const COLUMN_DEFS = {
     ['Address on Invoice', 'address_on_invoice', ['address_on_invoice']],
     ['Designation', 'designation', ['designation']],
     ['Contract Signed', 'contract_signed', ['contract_signed']],
-    ['Contract Document', 'contract_document', ['contract_document', 'contract_document_path', 'contract_document_name', 'contract_pdf_url', 'contract_pdf_storage_path']],
+    ['Contract Document', 'contract_document', ['contract_document', 'contract_document_path', 'contract_document_name', 'contract_pdf_url', 'contract_pdf_storage_path', 'contract_attachments', 'contract_files', 'removed_contract_paths', 'new_contract_attachments', 'contract_upload_reservation']],
     ['Value', 'terms_value', ['terms_value', 'billing_entity']],
     ['Comments', 'comments', ['comments', 'notes']]
   ],
@@ -77,7 +77,7 @@ const COLUMN_DEFS = {
     ['Status', 'status', ['status']],
     ['Month', 'created_at_month', ['created_at']],
     ['LinkedIn', 'linkedin_url', ['linkedin_url']],
-    ['CV', 'cv_link', ['cv_link', 'resume_url', 'cv_storage_path', 'cv_file_hash', 'cv_original_name', 'cv_mimetype']],
+    ['CV', 'cv_link', ['cv_link', 'resume_url', 'cv_storage_path', 'cv_file_hash', 'cv_original_name', 'cv_mimetype', 'cv_attachments', 'cv_file', 'cv_files', 'removed_cv_paths']],
     ['Education', 'education', ['education']]
   ],
   jobs: [
@@ -92,7 +92,7 @@ const COLUMN_DEFS = {
     ['Experience', 'experience', ['experience']],
     ['Sector', 'vertical', ['vertical']],
     ['Date of Allocation', 'allocation_date', ['allocation_date']],
-    ['JD', 'jd_storage_path', ['jd_url', 'jd_storage_path']],
+    ['JD', 'jd_storage_path', ['jd_url', 'jd_storage_path', 'jd_attachments', 'jd_file', 'jd_files', 'removed_jd_paths']],
     ['Status', 'mandate_status', ['mandate_status', 'status', 'priority']],
     ['Comments', 'comments', ['comments', 'notes']]
   ]

@@ -1,5 +1,6 @@
 const supabase = require('./supabaseAdmin')
 const { isSuperAdmin } = require('./adminAccess')
+const { buildPerformanceCompletion } = require('./performanceCompletion')
 
 const REVIEW_PERIOD = 'Q1'
 const REVIEW_PERIODS = ['Q1', 'Q2', 'Q3', 'Q4']
@@ -122,6 +123,7 @@ function serializeReview(review, rows) {
     employee_user_id: review.employee_user_id,
     review_period: review.review_period,
     rows: serializedRows,
+    completion: buildPerformanceCompletion(serializedRows),
     ...totals
   }
 }
@@ -216,6 +218,35 @@ async function getReview(actor, employeeUserId, period = REVIEW_PERIOD) {
   const { targetUserId } = await assertCanAccessEmployee(actor, employeeUserId)
   const { review, rows } = await ensureReview(targetUserId, actor.id, period)
   return serializeReview(review, rows)
+}
+
+async function getCompletionStatuses(actor, period = REVIEW_PERIOD) {
+  const reviewPeriod = normalizeReviewPeriod(period)
+  const superAdmin = await isSuperAdmin(actor)
+  let query = supabase
+    .from('performance_reviews')
+    .select(`
+      employee_user_id,
+      performance_review_rows (
+        row_order,
+        self_score,
+        ss_ns_score,
+        ra_score
+      )
+    `)
+    .eq('review_period', reviewPeriod)
+
+  if (!superAdmin) {
+    query = query.eq('employee_user_id', assertUuid(actor?.id, 'Employee user id'))
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  return Object.fromEntries((data || []).map(review => [
+    review.employee_user_id,
+    buildPerformanceCompletion(review.performance_review_rows)
+  ]))
 }
 
 async function getPermissions() {
@@ -342,6 +373,7 @@ module.exports = {
   DEFAULT_ROWS,
   DEFAULT_PERMISSIONS,
   REVIEW_PERIODS,
+  getCompletionStatuses,
   getReview,
   updateReview,
   getPermissions,

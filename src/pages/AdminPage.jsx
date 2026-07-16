@@ -46,8 +46,8 @@ const LOW_MANDATE_AUDIENCE_OPTIONS = [
   { value: 'super_admins', label: 'Super Admins', Icon: Lock }
 ]
 const OVERALL_REPORT_AUDIENCE_OPTIONS = [
-  { value: 'admins', label: 'Admins & Super Admins', Icon: ShieldCheck },
-  { value: 'super_admins', label: 'Super Admins Only', Icon: Lock }
+  { value: 'admins', label: 'Admins', Icon: ShieldCheck },
+  { value: 'super_admins', label: 'Super Admins', Icon: Lock }
 ]
 
 const TYPE_META = {

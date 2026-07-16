@@ -18,6 +18,8 @@ const { createConsultantAssignmentNotification } = require('../services/assignme
 const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
 const { CANDIDATE_STATUSES: VALID_STATUSES, candidateStatusError, cleanStatus: cleanCandidateStatus } = require('../services/candidateStatuses')
+const { removeUnreferencedDocuments, uploadDocuments } = require('../services/documentStorage')
+const { normalizeAttachment, normalizeAttachments, removalPlan } = require('../services/documentAttachments')
 
 const CANDIDATE_FIELDS = [
   'full_name',
@@ -39,6 +41,7 @@ const CANDIDATE_FIELDS = [
   'cv_storage_path',
   'cv_original_name',
   'cv_mimetype',
+  'cv_attachments',
   'linkedin_url',
   'resume_url',
   'source',
@@ -551,6 +554,87 @@ async function findCandidateByNameAndMobile(fullName, mobileNumber) {
   return data
 }
 
+function candidateCvAttachments(candidate) {
+  return normalizeAttachments(candidate?.cv_attachments, {
+    bucket: RESUME_BUCKET,
+    legacy: {
+      path: candidate?.cv_storage_path || candidate?.resume_url || candidate?.cv_link,
+      name: candidate?.cv_original_name,
+      mimeType: candidate?.cv_mimetype,
+      fileHash: candidate?.cv_file_hash,
+      uploadedAt: candidate?.updated_at || candidate?.created_at
+    }
+  })
+}
+
+function requestCandidateFiles(req) {
+  if (req.file) return [req.file]
+  if (Array.isArray(req.files)) return req.files
+  return [
+    ...(Array.isArray(req.files?.cv_file) ? req.files.cv_file : []),
+    ...(Array.isArray(req.files?.cv_files) ? req.files.cv_files : [])
+  ]
+}
+
+async function cleanupCandidateTempFiles(files) {
+  await Promise.all((files || []).map(async (file) => {
+    if (!file?.path) return
+    try { await fs.unlink(file.path) } catch (error) { if (error.code !== 'ENOENT') console.error('candidate upload cleanup:', error.message) }
+  }))
+}
+
+function attachmentFromCvResult(cv, candidatePayload, file) {
+  return normalizeAttachment({
+    path: cv?.cv_storage_path || cv?.resume_path || cv?.resume_url || cv?.cv_link,
+    name: cv?.cv_original_name || candidatePayload.cv_original_name || file?.originalname,
+    mime_type: cv?.cv_mimetype || candidatePayload.cv_mimetype || file?.mimetype,
+    size: file?.size,
+    uploaded_at: new Date().toISOString(),
+    file_hash: cv?.cv_file_hash || candidatePayload.cv_file_hash
+  }, RESUME_BUCKET)
+}
+
+function setPrimaryCvFields(payload, attachments, existing = {}, cvResult = null) {
+  const primary = attachments[0]
+  payload.cv_attachments = attachments
+  if (!primary) {
+    payload.cv_link = null
+    payload.resume_url = null
+    payload.cv_storage_path = null
+    payload.cv_file_hash = null
+    payload.cv_original_name = null
+    payload.cv_mimetype = null
+    return
+  }
+
+  const primaryIsExternal = /^https?:\/\//i.test(primary.path)
+  const existingPrimaryPath = candidateCvAttachments(existing)[0]?.path || ''
+  const resultPath = normalizeResumeStoragePath(cvResult?.cv_storage_path || cvResult?.resume_path || '')
+  const resultIsPrimary = Boolean(resultPath && resultPath === primary.path)
+  payload.cv_storage_path = primaryIsExternal ? null : primary.path
+  payload.cv_original_name = primary.name || null
+  payload.cv_mimetype = primary.mime_type || null
+  payload.cv_file_hash = primary.file_hash || (resultIsPrimary ? cvResult?.cv_file_hash : primary.path === existingPrimaryPath ? existing.cv_file_hash : null) || null
+  if (resultIsPrimary) {
+    payload.cv_link = cvResult.cv_link || cvResult.resume_url || (primaryIsExternal ? primary.path : null)
+    payload.resume_url = cvResult.resume_url || cvResult.cv_link || (primaryIsExternal ? primary.path : null)
+  } else if (primary.path === existingPrimaryPath) {
+    payload.cv_link = existing.cv_link || existing.resume_url || (primaryIsExternal ? primary.path : null)
+    payload.resume_url = existing.resume_url || existing.cv_link || (primaryIsExternal ? primary.path : null)
+  } else {
+    payload.cv_link = primaryIsExternal ? primary.path : null
+    payload.resume_url = primaryIsExternal ? primary.path : null
+  }
+}
+
+async function removeCandidateCvFiles(attachments) {
+  await removeUnreferencedDocuments(RESUME_BUCKET, attachments, {
+    table: 'candidates',
+    attachmentField: 'cv_attachments',
+    legacyFields: ['cv_storage_path', 'resume_url', 'cv_link']
+  })
+}
+
 function flattenAssociation(row) {
   const candidate = row.candidates || {}
 
@@ -578,6 +662,7 @@ function flattenAssociation(row) {
     cv_storage_path: candidate.cv_storage_path || null,
     cv_original_name: candidate.cv_original_name || null,
     cv_mimetype: candidate.cv_mimetype || null,
+    cv_attachments: candidateCvAttachments(candidate),
     linkedin_url: candidate.linkedin_url || null,
     resume_url: candidate.resume_url || null,
     client_id: row.client_id || candidate.client_id || null,
@@ -625,6 +710,7 @@ function flattenCandidateOnly(candidate) {
     cv_storage_path: candidate.cv_storage_path || null,
     cv_original_name: candidate.cv_original_name || null,
     cv_mimetype: candidate.cv_mimetype || null,
+    cv_attachments: candidateCvAttachments(candidate),
     linkedin_url: candidate.linkedin_url || null,
     resume_url: candidate.resume_url || null,
     client_id: candidate.client_id || null,
@@ -1296,7 +1382,11 @@ async function notifyCandidateConsultantAssignment(req, candidate, association, 
 }
 
 async function createCandidate(req, res) {
+  const files = requestCandidateFiles(req)
   let cvResult = null
+  let newAttachments = []
+  let candidateRowSaved = false
+  let insertedCandidateId = ''
   try {
     const incomingStatus = firstDefinedCandidateStatus(req.body)
     const body = normalizeRequestBody({
@@ -1312,6 +1402,11 @@ async function createCandidate(req, res) {
 
     const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
     const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
+    await assertCanUpdateColumns('candidates', {
+      ...candidatePayload,
+      ...associationPayload,
+      ...(files.length ? { cv_files: true } : {})
+    }, await isAdmin(req.user))
     const duplicateAction = cleanText(body.duplicate_action)
     associationPayload.status = cleanCandidateStatus(associationPayload.status)
     if (!associationPayload.client_id || !associationPayload.job_id) {
@@ -1351,25 +1446,39 @@ async function createCandidate(req, res) {
       })
     }
 
-    cvResult = await applyCvInput(req, candidatePayload)
-
     let candidate = null
     if (duplicateAction === 'update_current') {
       const targetId = duplicateMatch.bestMatch?.candidate_id
-      if (targetId) {
-        const { data, error } = await supabase
-          .from('candidates')
-          .select('*')
-          .eq('id', targetId)
-          .maybeSingle()
-        if (error) throw error
-        candidate = data
-      }
+      candidate = duplicateMatch.matchedCandidates?.find(item => item.id === targetId) || null
     }
 
     if (!candidate && duplicateAction === 'add_duplicate' && duplicateMatch.matchedCandidates?.length) {
       candidate = duplicateMatch.matchedCandidates[0]
     }
+
+    const previousAttachments = candidateCvAttachments(candidate)
+    const shouldCreatePrimary = previousAttachments.length === 0
+    const primaryFile = shouldCreatePrimary ? files[0] || null : null
+    req.file = primaryFile
+    if (shouldCreatePrimary) cvResult = await applyCvInput(req, candidatePayload)
+    const primaryAttachment = cvResult ? attachmentFromCvResult(cvResult, candidatePayload, primaryFile) : null
+    const extraFiles = primaryFile ? files.slice(1) : files
+    const uploadedExtras = await uploadDocuments(extraFiles, RESUME_BUCKET, `attachments/${new Date().getFullYear()}`)
+    newAttachments = [primaryAttachment, ...uploadedExtras].filter(Boolean)
+    if (previousAttachments.length && !files.length) {
+      const incomingLink = cleanText(candidatePayload.cv_link || candidatePayload.resume_url)
+      const incomingAttachment = normalizeAttachment({
+        path: incomingLink,
+        name: candidatePayload.cv_original_name,
+        mime_type: candidatePayload.cv_mimetype,
+        uploaded_at: new Date().toISOString()
+      }, RESUME_BUCKET)
+      if (incomingAttachment && !previousAttachments.some(item => item.path === incomingAttachment.path)) {
+        newAttachments.push(incomingAttachment)
+      }
+    }
+    const nextAttachments = normalizeAttachments([...previousAttachments, ...newAttachments], { bucket: RESUME_BUCKET })
+    setPrimaryCvFields(candidatePayload, nextAttachments, candidate || {}, cvResult)
 
     if (!candidate) {
       let insertedCandidate = null
@@ -1393,6 +1502,7 @@ async function createCandidate(req, res) {
       }
 
       candidate = insertedCandidate
+      insertedCandidateId = candidate.id
     } else {
       const updatePayload = {
         ...candidatePayload,
@@ -1421,6 +1531,7 @@ async function createCandidate(req, res) {
 
       candidate = data
     }
+    candidateRowSaved = true
 
     const assocInsert = {
       ...associationPayload,
@@ -1445,8 +1556,15 @@ const { data: association, error: associationError } = await insertAssociation(a
 
     return res.status(201).json({ ...flattenAssociation(association), cv_duplicate: Boolean(cvResult?.duplicate) })
   } catch (err) {
-    if (cvResult && !cvResult.duplicate) {
-      await deleteUploadedCvResult(cvResult)
+    if (insertedCandidateId) {
+      const { count } = await supabase.from('candidate_associations').select('id', { count: 'exact', head: true }).eq('candidate_id', insertedCandidateId)
+      if (!count) {
+        await supabase.from('candidates').delete().eq('id', insertedCandidateId)
+        candidateRowSaved = false
+      }
+    }
+    if (newAttachments.length && !candidateRowSaved) {
+      try { await removeCandidateCvFiles(newAttachments) } catch (cleanupError) { console.error('createCandidate CV cleanup:', cleanupError.message) }
     }
     if (isDisplayIdUniqueError(err, 'candidate_display_id')) {
       return res.status(400).json({ error: 'Could not allocate unique Candidate ID. Please try again.' })
@@ -1456,14 +1574,17 @@ const { data: association, error: associationError } = await insertAssociation(a
     }
     return logAndSendInternal(res, 'createCandidate', err)
   } finally {
-    if (req.file?.path) {
-      try { await fs.unlink(req.file.path) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('createCandidate cleanup:', cleanupError.message) }
-    }
+    await cleanupCandidateTempFiles(files)
   }
 }
 
 async function updateCandidate(req, res) {
+  const files = requestCandidateFiles(req)
   let cvResult = null
+  let newAttachments = []
+  let previousAttachments = []
+  let removedAttachments = []
+  let attachmentRowUpdated = false
   try {
     const admin = await isAdmin(req.user)
     const incomingStatus = firstDefinedCandidateStatus(req.body)
@@ -1481,8 +1602,12 @@ async function updateCandidate(req, res) {
     const associationId = body.association_id || req.params.id
     const candidatePayload = pickPayload(body, CANDIDATE_FIELDS)
     const associationPayload = pickPayload(body, ASSOCIATION_FIELDS)
-    await assertCanUpdateColumns('candidates', { ...candidatePayload, ...associationPayload }, admin)
-    cvResult = await applyCvInput(req, candidatePayload)
+    await assertCanUpdateColumns('candidates', {
+      ...candidatePayload,
+      ...associationPayload,
+      ...(files.length ? { cv_files: true } : {}),
+      ...(Object.prototype.hasOwnProperty.call(req.body, 'removed_cv_paths') ? { removed_cv_paths: true } : {})
+    }, admin)
 
     if (Object.prototype.hasOwnProperty.call(associationPayload, 'status')) {
       associationPayload.status = cleanCandidateStatus(associationPayload.status)
@@ -1529,6 +1654,13 @@ async function updateCandidate(req, res) {
       return res.status(404).json({ error: 'Candidate or association not found' })
     }
     await assertRowEditable('candidates', existingCandidateId, admin)
+    const { data: existingCandidate, error: existingCandidateError } = await supabase
+      .from('candidates')
+      .select('*')
+      .eq('id', existingCandidateId)
+      .maybeSingle()
+    if (existingCandidateError) throw existingCandidateError
+    if (!existingCandidate) return res.status(404).json({ error: 'Candidate not found' })
 
     const duplicateMatch = await findMatchingCandidates(candidatePayload.email, candidatePayload.mobile_number)
     const duplicateAssociationPayload = {
@@ -1563,6 +1695,34 @@ async function updateCandidate(req, res) {
       return res.status(409).json({ error: identityError, duplicate: true, existing: identityDuplicate })
     }
 
+    const hasAttachmentMutation = files.length > 0 || Object.prototype.hasOwnProperty.call(req.body, 'removed_cv_paths')
+    if (hasAttachmentMutation) {
+      previousAttachments = candidateCvAttachments(existingCandidate)
+      const plan = removalPlan(previousAttachments, req.body.removed_cv_paths, RESUME_BUCKET, 'removed_cv_paths')
+      removedAttachments = plan.removed
+      const primaryFile = plan.retained.length ? null : files[0] || null
+      req.file = primaryFile
+      if (!plan.retained.length) cvResult = await applyCvInput(req, candidatePayload)
+      const primaryAttachment = cvResult ? attachmentFromCvResult(cvResult, candidatePayload, primaryFile) : null
+      const extraFiles = primaryFile ? files.slice(1) : files
+      const uploadedExtras = await uploadDocuments(extraFiles, RESUME_BUCKET, `attachments/${new Date().getFullYear()}`)
+      newAttachments = [primaryAttachment, ...uploadedExtras].filter(Boolean)
+      if (plan.retained.length && !files.length) {
+        const incomingLink = cleanText(candidatePayload.cv_link || candidatePayload.resume_url)
+        const incomingAttachment = normalizeAttachment({
+          path: incomingLink,
+          name: candidatePayload.cv_original_name,
+          mime_type: candidatePayload.cv_mimetype,
+          uploaded_at: new Date().toISOString()
+        }, RESUME_BUCKET)
+        if (incomingAttachment && !plan.retained.some(item => item.path === incomingAttachment.path)) {
+          newAttachments.push(incomingAttachment)
+        }
+      }
+      const nextAttachments = normalizeAttachments([...plan.retained, ...newAttachments], { bucket: RESUME_BUCKET })
+      setPrimaryCvFields(candidatePayload, nextAttachments, existingCandidate, cvResult)
+    }
+
     if (Object.keys(candidatePayload).length) {
       const updatePayload = {
         ...candidatePayload,
@@ -1577,6 +1737,22 @@ async function updateCandidate(req, res) {
 
       if (error) {
         throw error
+      }
+      attachmentRowUpdated = hasAttachmentMutation
+      if (removedAttachments.length) {
+        try {
+          await removeCandidateCvFiles(removedAttachments)
+        } catch (storageError) {
+          const rollbackPayload = {}
+          setPrimaryCvFields(rollbackPayload, previousAttachments, existingCandidate)
+          const rollback = await updateCandidateRow(existingCandidateId, rollbackPayload)
+          if (rollback.error) console.error('updateCandidate attachment rollback:', rollback.error.message)
+          if (newAttachments.length) {
+            try { await removeCandidateCvFiles(newAttachments) } catch (cleanupError) { console.error('updateCandidate new CV cleanup:', cleanupError.message) }
+            newAttachments = []
+          }
+          throw Object.assign(new Error('The candidate was saved, but CV deletion could not be completed. Existing attachments were restored.'), { statusCode: 502 })
+        }
       }
     }
 
@@ -1655,17 +1831,15 @@ const { data: inserted, error: insertError } = await insertAssociation(assocInse
       return res.json({ ...flattenCandidateOnly(data), cv_duplicate: Boolean(cvResult?.duplicate) })
     }
   } catch (err) {
-    if (cvResult && !cvResult.duplicate) {
-      await deleteUploadedCvResult(cvResult)
+    if (newAttachments.length && !attachmentRowUpdated) {
+      try { await removeCandidateCvFiles(newAttachments) } catch (cleanupError) { console.error('updateCandidate CV cleanup:', cleanupError.message) }
     }
     if (err.statusCode) {
       return res.status(err.statusCode).json({ error: err.message })
     }
     return logAndSendInternal(res, 'updateCandidate', err)
   } finally {
-    if (req.file?.path) {
-      try { await fs.unlink(req.file.path) } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('updateCandidate cleanup:', cleanupError.message) }
-    }
+    await cleanupCandidateTempFiles(files)
   }
 }
 

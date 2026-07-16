@@ -22,6 +22,11 @@ export async function fetchPerformanceReview(employeeUserId, period) {
   return cachedApiJson(`/api/performance/${encodeURIComponent(employeeUserId)}${periodQuery(period)}`, {}, { ttlMs: 30000 })
 }
 
+export async function fetchPerformanceCompletionStatuses(period, audience = 'self') {
+  const suffix = `${periodQuery(period)}${period ? '&' : '?'}audience=${audience === 'all' ? 'all' : 'self'}`
+  return cachedApiJson(`/api/performance/completion-statuses${suffix}`, {}, { ttlMs: 30000 })
+}
+
 export async function savePerformanceReview(employeeUserId, rows, period) {
   const result = await json(await apiFetch(`/api/performance/${encodeURIComponent(employeeUserId)}`, {
     method: 'PUT',

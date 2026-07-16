@@ -9,6 +9,14 @@ const { resolveEntityFilterReferences } = require('../services/entityFilterRefer
 const { createConsultantAssignmentNotification, createClientFollowUpDueNotification } = require('../services/assignmentNotifications')
 const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
+const { normalizeAttachments, parseArray, removalPlan } = require('../services/documentAttachments')
+const { removeDocuments, removeUnreferencedDocuments } = require('../services/documentStorage')
+const {
+  assertReservedUploadsExist,
+  createContractUploadReservation,
+  reservationAttachmentsForCleanup,
+  verifyContractUploadReservation
+} = require('../services/contractUploadReservation')
 
 const CLIENT_STATUSES = [
   'Active',
@@ -257,6 +265,16 @@ function normalizeClient(row, activeJobs = 0, followUps = [], jobs = []) {
   const comments = row.comments || row.notes || ''
   const consultant = row.consultant_name || row.consultant || ''
   const latestFollowUp = followUps[followUps.length - 1] || null
+  const contractAttachments = normalizeAttachments(row.contract_attachments, {
+    bucket: STORAGE_BUCKETS.CONTRACT,
+    legacy: {
+      path: row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document,
+      name: row.contract_document_name,
+      mimeType: 'application/pdf',
+      uploadedAt: row.updated_at || row.created_at
+    }
+  })
+  const primaryContract = contractAttachments[0]
 
   return {
     ...row,
@@ -280,10 +298,11 @@ function normalizeClient(row, activeJobs = 0, followUps = [], jobs = []) {
     terms_signed: row.terms_signed_type === 'Any Other' ? row.terms_signed_custom : row.terms_signed_type,
     billing_entity: row.billing_entity || '',
     contract_signed: Boolean(row.contract_signed),
-    contract_document: normalizeStoragePath(row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document, STORAGE_BUCKETS.CONTRACT),
-    contract_pdf_url: normalizeStoragePath(row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document, STORAGE_BUCKETS.CONTRACT),
-    contract_pdf_storage_path: normalizeStoragePath(row.contract_pdf_storage_path || row.contract_pdf_url || row.contract_document, STORAGE_BUCKETS.CONTRACT),
-    contract_document_name: row.contract_document_name || '',
+    contract_attachments: contractAttachments,
+    contract_document: primaryContract?.path || '',
+    contract_pdf_url: primaryContract?.path || '',
+    contract_pdf_storage_path: primaryContract?.path || '',
+    contract_document_name: primaryContract?.name || '',
     activeJobs,
     follow_up_date: latestFollowUp?.follow_up_date || '',
     follow_ups: followUps
@@ -311,9 +330,6 @@ function clientPayload(body, options = {}) {
   const email = clean(body.email)
   const contactPerson = clean(body.contact_person || body.contact)
   const contractSigned = normalizeBoolean(body.contract_signed)
-  const rawContractPath = body.contract_document_path || body.contract_pdf_storage_path || body.contract_pdf_url || body.contract_document
-  const contractPath = normalizeStoragePath(rawContractPath, STORAGE_BUCKETS.CONTRACT)
-  const contractDocumentName = nullable(body.contract_document_name)
 
   if (!clientName) {
     const err = new Error('Client Name is required')
@@ -335,12 +351,6 @@ function clientPayload(body, options = {}) {
     err.statusCode = 400
     throw err
   }
-  if ((body.contract_document_path || body.contract_document_name) && !contractPath) {
-    const err = new Error('Contract document path is required after upload.')
-    err.statusCode = 400
-    throw err
-  }
-
   return {
     client_group_id: body.client_group_id || null,
     client_display_id: nullable(body.client_display_id),
@@ -369,20 +379,10 @@ function clientPayload(body, options = {}) {
     terms_value: contractSigned ? nullable(body.terms_value || body.value) : null,
     billing_entity: contractSigned ? nullable(body.billing_entity) : null,
     contract_signed: contractSigned,
-    contract_document: contractSigned ? nullable(contractPath) : null,
-    contract_pdf_url: contractSigned ? nullable(contractPath) : null,
-    contract_pdf_storage_path: contractSigned ? nullable(contractPath) : null,
-    contract_document_name: contractSigned ? contractDocumentName : null,
     gstin: contractSigned ? nullable(body.gstin || body.GSTIN) : null,
     pan: contractSigned ? nullable(body.pan || body.PAN) : null,
     address_on_invoice: contractSigned ? nullable(body.address_on_invoice) : null
   }
-}
-
-function rejectMultipartContractUpload(req, res) {
-  if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('multipart/form-data')) return false
-  res.status(400).json({ error: 'Contract PDF files must be uploaded directly to storage before saving client metadata.' })
-  return true
 }
 
 async function findClientDuplicate(name, excludeGroupId = '') {
@@ -845,11 +845,96 @@ async function getClient(req, res) {
   }
 }
 
-async function createClient(req, res) {
+function contractLegacyPayload(attachments) {
+  const primary = attachments[0]
+  return {
+    contract_attachments: attachments,
+    contract_document: primary?.path || null,
+    contract_pdf_url: primary?.path || null,
+    contract_pdf_storage_path: primary?.path || null,
+    contract_document_name: primary?.name || null
+  }
+}
+
+async function removeClientContractFiles(attachments) {
+  await removeUnreferencedDocuments(STORAGE_BUCKETS.CONTRACT, attachments, {
+    table: 'clients',
+    attachmentField: 'contract_attachments',
+    legacyFields: ['contract_pdf_storage_path', 'contract_pdf_url', 'contract_document']
+  })
+}
+
+async function reservedContractAttachments(req, recordId = '') {
+  const reservation = clean(req.body?.contract_upload_reservation)
+  const rawAttachments = req.body?.new_contract_attachments
+  if (!reservation && (rawAttachments === undefined || rawAttachments === null || rawAttachments === '')) return []
+  if (!reservation || rawAttachments === undefined || rawAttachments === null || rawAttachments === '') {
+    throw Object.assign(new Error('Contract upload reservation and attachment metadata are both required.'), { statusCode: 400 })
+  }
+  const submitted = parseArray(rawAttachments, 'new_contract_attachments')
+  const attachments = verifyContractUploadReservation({
+    token: reservation,
+    userId: req.user?.id,
+    recordId,
+    submittedAttachments: submitted
+  })
+  await assertReservedUploadsExist(attachments)
+  return attachments
+}
+
+async function prepareContractUploads(req, res) {
   try {
-    if (rejectMultipartContractUpload(req, res)) return
+    const recordId = clean(req.body?.record_id)
+    const admin = await isAdmin(req.user)
+    await assertCanUpdateColumns('clients', { contract_files: true }, admin)
+    if (recordId) {
+      await assertRowEditable('clients', recordId, admin)
+      const { data, error } = await supabase.from('clients').select('id').eq('id', recordId).maybeSingle()
+      if (error) throw error
+      if (!data) return res.status(404).json({ error: 'Client not found' })
+    }
+    const result = await createContractUploadReservation({
+      userId: req.user?.id,
+      recordId,
+      files: req.body?.files
+    })
+    return res.status(201).json(result)
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
+    return logAndSendInternal(res, 'prepareContractUploads', err)
+  }
+}
+
+async function discardContractUploads(req, res) {
+  try {
+    const attachments = reservationAttachmentsForCleanup({
+      token: req.body?.contract_upload_reservation,
+      userId: req.user?.id
+    })
+    await removeClientContractFiles(attachments)
+    return res.json({ deleted: attachments.length })
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
+    return logAndSendInternal(res, 'discardContractUploads', err)
+  }
+}
+
+async function createClient(req, res) {
+  let newAttachments = []
+  let keepNewUploads = false
+  try {
     req.body = req.body || {}
+    const admin = await isAdmin(req.user)
+    await assertCanUpdateColumns('clients', {
+      ...req.body,
+      ...(req.body.contract_upload_reservation ? { contract_files: true } : {})
+    }, admin)
     const payload = clientPayload(req.body)
+    newAttachments = await reservedContractAttachments(req)
+    if (!payload.contract_signed && newAttachments.length) {
+      throw Object.assign(new Error('Contract documents cannot be added when Contract Signed is No.'), { statusCode: 400 })
+    }
+    Object.assign(payload, contractLegacyPayload(payload.contract_signed ? newAttachments : []))
     await validateConsultantReference(payload)
     const isContactPersonAdd = Boolean(payload.client_group_id)
     const initialFollowUpDate = isContactPersonAdd ? '' : normalizeFollowUpDateValue(req.body.follow_up_date)
@@ -909,6 +994,7 @@ async function createClient(req, res) {
       })
       throw error
     }
+    keepNewUploads = true
 
     if (!data.client_group_id) {
       const { data: grouped, error: groupError } = await supabase
@@ -921,18 +1007,21 @@ async function createClient(req, res) {
         releaseClientDisplayId(payload.client_display_id)
         if (initialFollowUpDate) await createClientFollowUp(data.id, initialFollowUpDate, initialFollowUpComments)
         await notifyClientConsultantAssignment(req, data)
+        keepNewUploads = true
         return res.status(201).json(await loadClientWithRelations(data.id))
       }
       if (groupError) throw groupError
       releaseClientDisplayId(payload.client_display_id)
       if (initialFollowUpDate) await createClientFollowUp(grouped.id, initialFollowUpDate, initialFollowUpComments)
       await notifyClientConsultantAssignment(req, grouped)
+      keepNewUploads = true
       return res.status(201).json(await loadClientWithRelations(grouped.id))
     }
 
     releaseClientDisplayId(payload.client_display_id)
     if (initialFollowUpDate) await createClientFollowUp(data.id, initialFollowUpDate, initialFollowUpComments)
     await notifyClientConsultantAssignment(req, data)
+    keepNewUploads = true
     return res.status(201).json(await loadClientWithRelations(data.id))
   } catch (err) {
     if (err.code === '23505' && /clients_name_key/i.test(err.message || '')) {
@@ -943,12 +1032,19 @@ async function createClient(req, res) {
     }
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'createClient', err)
+  } finally {
+    if (newAttachments.length && !keepNewUploads) {
+      try { await removeClientContractFiles(newAttachments) } catch (cleanupError) { console.error('createClient contract cleanup:', cleanupError.message) }
+    }
   }
 }
 
 async function updateClient(req, res) {
+  let newAttachments = []
+  let previousAttachments = []
+  let removedAttachments = []
+  let attachmentRowUpdated = false
   try {
-    if (rejectMultipartContractUpload(req, res)) return
     req.body = req.body || {}
     const admin = await isAdmin(req.user)
     debugClientContract('patch received', {
@@ -959,13 +1055,39 @@ async function updateClient(req, res) {
       admin
     })
     await assertRowEditable('clients', req.params.id, admin)
-    await assertCanUpdateColumns('clients', req.body, admin)
+    await assertCanUpdateColumns('clients', {
+      ...req.body,
+      ...(req.body.contract_upload_reservation ? { contract_files: true } : {})
+    }, admin)
     const { data: existing, error: existingError } = await supabase.from('clients').select('*').eq('id', req.params.id).maybeSingle()
     if (existingError) throw existingError
     if (!existing) return res.status(404).json({ error: 'Client not found' })
 
     await syncEditedClientFollowUp(req.params.id, req.body)
     const payload = clientPayload({ ...existing, ...req.body }, { validateContactPerson: false })
+    const hasAttachmentMutation = Object.prototype.hasOwnProperty.call(req.body, 'removed_contract_paths') ||
+      Object.prototype.hasOwnProperty.call(req.body, 'contract_upload_reservation') ||
+      Object.prototype.hasOwnProperty.call(req.body, 'new_contract_attachments') ||
+      Object.prototype.hasOwnProperty.call(req.body, 'contract_signed')
+    if (hasAttachmentMutation) {
+      previousAttachments = normalizeAttachments(existing.contract_attachments, {
+        bucket: STORAGE_BUCKETS.CONTRACT,
+        legacy: {
+          path: existing.contract_pdf_storage_path || existing.contract_pdf_url || existing.contract_document,
+          name: existing.contract_document_name,
+          mimeType: 'application/pdf',
+          uploadedAt: existing.updated_at || existing.created_at
+        }
+      })
+      const plan = removalPlan(previousAttachments, req.body.removed_contract_paths, STORAGE_BUCKETS.CONTRACT, 'removed_contract_paths')
+      newAttachments = await reservedContractAttachments(req, req.params.id)
+      if (!payload.contract_signed && newAttachments.length) {
+        throw Object.assign(new Error('Contract documents cannot be added when Contract Signed is No.'), { statusCode: 400 })
+      }
+      removedAttachments = payload.contract_signed ? plan.removed : previousAttachments
+      const nextAttachments = payload.contract_signed ? [...plan.retained, ...newAttachments] : []
+      Object.assign(payload, contractLegacyPayload(nextAttachments))
+    }
     await validateConsultantReference(payload, {
       userId: existing.consultant_user_id,
       name: existing.consultant_name || existing.consultant
@@ -999,6 +1121,20 @@ async function updateClient(req, res) {
       })
       throw error
     }
+    attachmentRowUpdated = hasAttachmentMutation
+    if (removedAttachments.length) {
+      try {
+        await removeClientContractFiles(removedAttachments)
+      } catch (storageError) {
+        const rollback = await updateClientRow(req.params.id, contractLegacyPayload(previousAttachments))
+        if (rollback.error) console.error('updateClient attachment rollback:', rollback.error.message)
+        if (newAttachments.length) {
+          try { await removeClientContractFiles(newAttachments) } catch (cleanupError) { console.error('updateClient new contract cleanup:', cleanupError.message) }
+          newAttachments = []
+        }
+        throw Object.assign(new Error('The client was saved, but contract deletion could not be completed. Existing attachments were restored.'), { statusCode: 502 })
+      }
+    }
     await notifyClientConsultantAssignment(req, data, existing.consultant_name || existing.consultant)
     return res.json(await stripHiddenFields('clients', await loadClientWithRelations(data.id), admin))
   } catch (err) {
@@ -1007,6 +1143,10 @@ async function updateClient(req, res) {
     }
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
     return logAndSendInternal(res, 'updateClient', err)
+  } finally {
+    if (newAttachments.length && !attachmentRowUpdated) {
+      try { await removeClientContractFiles(newAttachments) } catch (cleanupError) { console.error('updateClient contract cleanup:', cleanupError.message) }
+    }
   }
 }
 
@@ -1106,6 +1246,8 @@ async function deleteClient(req, res) {
 module.exports = {
   checkClientDuplicate,
   getNextClientDisplayId,
+  prepareContractUploads,
+  discardContractUploads,
   listClients,
   buildClientFilters,
   getClient,
