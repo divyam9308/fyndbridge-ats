@@ -275,6 +275,13 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
   const warnings = warningCollector()
   const scopedJobs = []
   const candidateRows = candidateAssociations === undefined ? associations : candidateAssociations
+  const warnedInvalidCandidateStatuses = new Set()
+  const warnInvalidCandidateStatus = (association) => {
+    const key = clean(association?.id) || association
+    if (warnedInvalidCandidateStatuses.has(key)) return
+    warnedInvalidCandidateStatuses.add(key)
+    warnings.add('invalid_candidate_status', 'Some candidate associations have a null or unsupported status and were excluded from current-status totals.')
+  }
 
   for (const job of jobs) {
     if (!consultantMatches(job, consultant)) continue
@@ -297,6 +304,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
   for (const association of associations) {
     if (!scopedJobIds.has(association.job_id)) continue
     const status = canonicalCandidateStatus(association.status)
+    if (!status) warnInvalidCandidateStatus(association)
     associationsByJob.get(association.job_id).push({ ...association, canonicalStatus: status || '' })
   }
 
@@ -389,7 +397,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
     if (addedDate < startDate || addedDate > endDate) continue
     const status = canonicalCandidateStatus(association.status)
     if (!status) {
-      warnings.add('invalid_candidate_status', 'Some candidate associations have a null or unsupported status and were excluded from current-status totals.')
+      warnInvalidCandidateStatus(association)
       continue
     }
     candidateCounts[status] += 1

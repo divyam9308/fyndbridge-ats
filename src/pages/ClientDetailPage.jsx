@@ -715,7 +715,7 @@ export default function ClientDetailPage() {
                       onOpen={(key, attachment) => openJdDocument(key, attachment.path, group.relatedJob?.id)}
                     />
                   </td>
-                  <td>
+                  <td className="mandate-status-cell">
                     <div className="candidate-columns-control mandate-status-control">
                       <button className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', group.relatedJob?.id, event.currentTarget)} disabled={!group.relatedJob?.id || statusSaving[group.relatedJob?.id]}>
                         {group.status}

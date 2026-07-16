@@ -133,6 +133,15 @@
   text-align: center !important;
 }
 
+.mandate-status-cell {
+  text-align: center !important;
+}
+
+.mandate-status-cell .mandate-status-control {
+  width: 100%;
+  justify-content: center;
+}
+
 .count-badge-link {
   display: inline-flex;
   align-items: center;

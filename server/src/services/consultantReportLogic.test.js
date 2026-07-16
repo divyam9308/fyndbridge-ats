@@ -254,6 +254,22 @@ test('invalid current statuses remain linked for workload, exceptions and tracke
   assert.ok(result.warnings.some((warning) => warning.code === 'invalid_candidate_status'))
 })
 
+test('invalid statuses on report mandate candidates warn even when the candidate was added before the report period', () => {
+  const invalidAssociation = association('in-period-mandate', null, {
+    id: 'older-invalid-status',
+    created_at: '2026-06-15T12:00:00.000Z'
+  })
+  const result = facts(
+    [job({ id: 'in-period-mandate' })],
+    [invalidAssociation],
+    { candidateAssociations: [invalidAssociation] }
+  )
+
+  assert.equal(result.mandates[0].candidatesAssigned, 1)
+  assert.equal(result.candidateOverview.total, 0)
+  assert.ok(result.warnings.some((warning) => warning.code === 'invalid_candidate_status' && warning.count === 1))
+})
+
 test('candidate pipeline uses the candidate total as every stage denominator', () => {
   const overview = {
     total: 20,

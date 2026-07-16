@@ -310,6 +310,14 @@ test('Excel export is server-generated and downloaded immediately without a prev
   assert.doesNotMatch(reportPage, /ReportWorkbookPreviewModal|setExportPreview/)
 })
 
+test('report data-quality warning popup automatically closes after five seconds', () => {
+  assert.match(reportPage, /const WARNING_POPUP_DURATION_MS = 5000/)
+  assert.match(
+    reportPage,
+    /window\.setTimeout\(\(\) => setDismissedWarningKey\(warningKey\), WARNING_POPUP_DURATION_MS\)/
+  )
+})
+
 test('ordinary users are source-enforced as self-only while administrators use the employee directory', () => {
   assert.match(reportService, /listEmployeeDirectory\(\)/)
   assert.match(reportService, /isAdmin\(user\)/)

@@ -23,6 +23,7 @@ const TABS = [
   { key: 'candidates', label: 'Candidates & Pipeline', Icon: UsersRound },
   { key: 'attendance', label: 'Attendance & Outcomes', Icon: CalendarCheck2 }
 ]
+const WARNING_POPUP_DURATION_MS = 5000
 
 function localDateValue(date) {
   const year = date.getFullYear()
@@ -403,7 +404,7 @@ export default function ConsultantReportPage() {
 
   useEffect(() => {
     if (!warningKey) return undefined
-    const timer = window.setTimeout(() => setDismissedWarningKey(warningKey), 5000)
+    const timer = window.setTimeout(() => setDismissedWarningKey(warningKey), WARNING_POPUP_DURATION_MS)
     return () => window.clearTimeout(timer)
   }, [warningKey])
 
