@@ -238,6 +238,75 @@ def currency_baseline_assertions(spans: list[dict]) -> dict:
     }
 
 
+def tax_summary_center_assertions(spans: list[dict], summary: dict, tax_type: str) -> dict:
+    columns = summary["columns"]
+    amount_columns = [1, 3] if tax_type == "IGST" else [1, 3, 5, 6]
+    expected_rows = [
+        (summary["data_top"], summary["total_top"]),
+        (summary["total_top"], summary["bottom"]),
+    ]
+
+    lines = {}
+    for span in spans:
+        lines.setdefault(span["line_index"], []).append(span)
+
+    checks = []
+    for row_index, (row_top, row_bottom) in enumerate(expected_rows):
+        row_lines = []
+        for line_spans in lines.values():
+            text = "".join(span["text"] for span in line_spans)
+            if "₹" not in text:
+                continue
+            x0 = min(span["bbox"][0] for span in line_spans)
+            y0 = min(span["bbox"][1] for span in line_spans)
+            x1 = max(span["bbox"][2] for span in line_spans)
+            y1 = max(span["bbox"][3] for span in line_spans)
+            center_y = (y0 + y1) / 2
+            if row_top <= center_y <= row_bottom:
+                row_lines.append({"text": text, "bbox": [x0, y0, x1, y1]})
+
+        for column_index in amount_columns:
+            left = columns[column_index]
+            right = columns[column_index + 1]
+            cell_center = (left + right) / 2
+            candidates = [
+                line for line in row_lines
+                if left <= (line["bbox"][0] + line["bbox"][2]) / 2 <= right
+            ]
+            line = min(
+                candidates,
+                key=lambda item: abs((item["bbox"][0] + item["bbox"][2]) / 2 - cell_center),
+                default=None,
+            )
+            text_center = (line["bbox"][0] + line["bbox"][2]) / 2 if line else None
+            checks.append({
+                "row": "values" if row_index == 0 else "totals",
+                "column_index": column_index,
+                "text": line["text"] if line else None,
+                "cell_center_x": cell_center,
+                "text_center_x": text_center,
+                "error_points": abs(text_center - cell_center) if text_center is not None else None,
+            })
+
+    tolerance = 0.75
+    return {
+        "tolerance_points": tolerance,
+        "expected_check_count": len(expected_rows) * len(amount_columns),
+        "max_error_points": max(
+            (item["error_points"] for item in checks if item["error_points"] is not None),
+            default=None,
+        ),
+        "checks": checks,
+        "passed": (
+            len(checks) == len(expected_rows) * len(amount_columns)
+            and all(
+                item["error_points"] is not None and item["error_points"] <= tolerance
+                for item in checks
+            )
+        ),
+    }
+
+
 def map_reference_y_to_a4(value: float, profile: dict) -> float:
     source_points = [0.0, *profile["source_y_points"], 792.0]
     target_points = [0.0, *profile["target_y_points"], A4_HEIGHT_POINTS]
@@ -555,8 +624,8 @@ def write_markdown(report: dict, output_path: Path) -> None:
         "",
         f"Target: A4 (595.28 x 841.89 pt), {report['dpi']} DPI",
         "",
-        "| Case | Page | Rule X error | Rule Y error | Text max error | Checked font max error | ₹ baseline error | Diagnostic diff % | Structural result |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Case | Page | Rule X error | Rule Y error | Text max error | Checked font max error | ₹ baseline error | Tax center error | Diagnostic diff % | Structural result |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for case in report["cases"]:
         structure = case["generated_structure"]
@@ -568,8 +637,9 @@ def write_markdown(report: dict, output_path: Path) -> None:
         )
         font_error = case["text_anchor_assertions"]["max_checked_font_size_error_points"] or 0
         currency_error = structure["currency_baseline_assertions"]["max_error_points"] or 0
+        tax_center_error = case["tax_summary_center_assertions"]["max_error_points"] or 0
         rows.append(
-            "| {id} | {width:.2f} x {height:.2f} | {x_error} | {y_error} | {text_error:.3f} | {font_error:.3f} | {currency_error:.3f} | {percent:.6f}% | {result} |".format(
+            "| {id} | {width:.2f} x {height:.2f} | {x_error} | {y_error} | {text_error:.3f} | {font_error:.3f} | {currency_error:.3f} | {tax_center_error:.3f} | {percent:.6f}% | {result} |".format(
                 id=case["id"],
                 width=structure["page_width_points"],
                 height=structure["page_height_points"],
@@ -578,6 +648,7 @@ def write_markdown(report: dict, output_path: Path) -> None:
                 text_error=text_error,
                 font_error=font_error,
                 currency_error=currency_error,
+                tax_center_error=tax_center_error,
                 percent=case["pixel_difference"]["changed_percent"],
                 result="PASS" if case["passed"] else "FAIL",
             )
@@ -639,6 +710,11 @@ def main(args: argparse.Namespace) -> int:
         generated_hash_matches = generated_digest == item["generated_sha256"]
         profile_assertions = invoice_profile_assertions(generated_structure, item["a4_profile"])
         anchor_assertions = text_anchor_assertions(reference_page, generated_structure["text_spans"], item["a4_profile"], item)
+        tax_center_assertions = tax_summary_center_assertions(
+            generated_structure["text_spans"],
+            item["tax_summary"],
+            item["tax_type"],
+        )
         structural_pass = (
             item["renderer_reported_page_count"] == 1
             and generated_structure["page_count"] == 1
@@ -659,6 +735,7 @@ def main(args: argparse.Namespace) -> int:
             and generated_hash_matches
             and profile_assertions["passed"]
             and anchor_assertions["passed"]
+            and tax_center_assertions["passed"]
         )
         visual_within_advisory_threshold = metrics["changed_percent"] <= args.max_diff_percent
         case_report = {
@@ -682,6 +759,7 @@ def main(args: argparse.Namespace) -> int:
             "generated_structure": generated_structure,
             "profile_assertions": profile_assertions,
             "text_anchor_assertions": anchor_assertions,
+            "tax_summary_center_assertions": tax_center_assertions,
             "pixel_difference": rounded_metrics(metrics),
             "structural_pass": structural_pass,
             "visual_within_advisory_threshold": visual_within_advisory_threshold,

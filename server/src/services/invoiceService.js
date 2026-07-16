@@ -778,7 +778,7 @@ function drawTaxSummary(doc, layout, invoice, sac) {
     ;[values, totals].forEach((row, rowIndex) => {
       const rowTop = rowIndex === 0 ? layout.y.summaryHeader : layout.y.summaryData
       const rowBottom = rowIndex === 0 ? layout.y.summaryData : layout.y.summaryBottom
-      row.forEach((value, index) => textBox(doc, value, columns[index], rowTop, columns[index + 1] - columns[index], rowBottom - rowTop, { bold: rowIndex === 1, size: body, minSize: body - 1.7, align: [1, 3].includes(index) ? 'right' : 'center', singleLine: true, valign: 'center' }))
+      row.forEach((value, index) => textBox(doc, value, columns[index], rowTop, columns[index + 1] - columns[index], rowBottom - rowTop, { bold: rowIndex === 1, size: body, minSize: body - 1.7, align: 'center', singleLine: true, valign: 'center' }))
     })
     return
   }
@@ -794,7 +794,7 @@ function drawTaxSummary(doc, layout, invoice, sac) {
   ;[values, totals].forEach((row, rowIndex) => {
     const rowTop = rowIndex === 0 ? layout.y.summaryHeader : layout.y.summaryData
     const rowBottom = rowIndex === 0 ? layout.y.summaryData : layout.y.summaryBottom
-    row.forEach((value, index) => textBox(doc, value, columns[index], rowTop, columns[index + 1] - columns[index], rowBottom - rowTop, { bold: rowIndex === 1, size: body, minSize: body - 1.8, align: [1, 3, 5, 6].includes(index) ? 'right' : 'center', singleLine: true, valign: 'center' }))
+    row.forEach((value, index) => textBox(doc, value, columns[index], rowTop, columns[index + 1] - columns[index], rowBottom - rowTop, { bold: rowIndex === 1, size: body, minSize: body - 1.8, align: 'center', singleLine: true, valign: 'center' }))
   })
 }
 

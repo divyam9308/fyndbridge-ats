@@ -3,7 +3,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { renderInvoicePdf } = require('../src/services/invoiceService')
+const { renderInvoicePdf, selectInvoiceLayout } = require('../src/services/invoiceService')
 const { CASES, renderPayloadForCase } = require('./invoice-visual-fixtures')
 
 const REPO_ROOT = path.resolve(__dirname, '../..')
@@ -106,6 +106,7 @@ async function main() {
   for (const definition of selected) {
     const payload = renderPayloadForCase(definition)
     const rendered = await renderInvoicePdf(payload)
+    const layout = selectInvoiceLayout(payload.invoice)
     const generatedPdf = path.join(PDF_OUTPUT_DIR, `${definition.id}.pdf`)
     fs.writeFileSync(generatedPdf, rendered.buffer)
     const referencePdf = path.join(options.references, definition.referenceFile)
@@ -121,6 +122,12 @@ async function main() {
       generated_sha256: sha256(generatedPdf),
       renderer_reported_page_count: rendered.pageCount,
       expected_text: payload.expectedText,
+      tax_summary: {
+        columns: layout.x.summary,
+        data_top: layout.y.summaryHeader,
+        total_top: layout.y.summaryData,
+        bottom: layout.y.summaryBottom
+      },
       a4_profile: definition.a4Profile
     })
     console.log(`generated ${path.relative(REPO_ROOT, generatedPdf)}`)

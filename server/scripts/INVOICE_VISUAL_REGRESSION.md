@@ -48,7 +48,8 @@ coordinates, rule thicknesses, title/metadata/body font sizes, embedded fonts,
 logo resolution, selectable text, rupee glyphs, mixed-font currency baseline
 alignment, expected fixture text, stable
 text-anchor coordinates (including client values and issuer-detail rows),
-per-anchor font sizes, off-page or overlapping text, and off-page drawings.
+per-anchor font sizes, centered tax-summary amount values, off-page or
+overlapping text, and off-page drawings.
 The complete client email is fitted into its cell instead of reproducing the
 source PDFs' clipped sample value, so that one anchor's font size is reported
 diagnostically while its x/y position remains a hard assertion.

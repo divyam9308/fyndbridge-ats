@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T12:42:35.349Z",
+  "generated_at": "2026-07-16T10:56:45.457Z",
   "target_page": {
     "name": "A4",
     "width_points": 595.28,
@@ -23,7 +23,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCAPL NOROUNDING (1).pdf",
       "reference_sha256": "9e9a3d81573f5ffcb15a6adc7cb91fcc35c5452d6d3a3341b96de565a6b8d746",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcapl-igst-no-rounding.pdf",
-      "generated_sha256": "659491749f51124469b7b6c574324be55435cd298e56383d4bfa17a0d137eea6",
+      "generated_sha256": "8ea171ffb494abec881da8143c27caefe5a891592e55c55efe678938669120db",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FCAPL/26-27/001",
@@ -32,6 +32,18 @@
         "INR Six Lakh Sixty Thousand Eight Hundred Only",
         "One Lakh Eight Hundred Rupees Only"
       ],
+      "tax_summary": {
+        "columns": [
+          21.01,
+          179.07,
+          324.67,
+          466.86,
+          572.16
+        ],
+        "data_top": 541.91,
+        "total_top": 555.91,
+        "bottom": 569.92
+      },
       "a4_profile": {
         "source_y_points": [
           21.6,
@@ -93,7 +105,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCAPL WITH ROUNDOFF.pdf",
       "reference_sha256": "6cb4f5108ec41642626003e6901c6fa2db1e7d93cdfbcebd343a2a9aa81413d5",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcapl-igst-rounding.pdf",
-      "generated_sha256": "6770b3e2583fbf765bf87b71d429c4886b80b584a500abf0c50fb7a567126a1f",
+      "generated_sha256": "030280e7f811a5d3c3b72c5b97a18f33849133aa3b3be18cc131e1a5642a9a54",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FCAPL/26-27/001",
@@ -102,6 +114,18 @@
         "INR Six Lakh Fifty Nine Thousand Two Hundred Ninety Only",
         "One Lakh Five Hundred Sixty Nine Rupees and Sixty Paise Only"
       ],
+      "tax_summary": {
+        "columns": [
+          21.13,
+          174.17,
+          326.89,
+          464.65,
+          569.48
+        ],
+        "data_top": 589.44,
+        "total_top": 602.98,
+        "bottom": 616.52
+      },
       "a4_profile": {
         "source_y_points": [
           21.72,
@@ -167,7 +191,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCAPL CGST SGST.pdf",
       "reference_sha256": "399959f4093eb5fbbba1216ac4980307cdb06e3559c30b25571b11dc45730160",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcapl-cgst-sgst.pdf",
-      "generated_sha256": "491cfbc9851e101179bbf45eb541b47502b330248cdf63c963610c1c8711f24e",
+      "generated_sha256": "851c4e671583d19150e4d8788d11ea804ed343f53c3c1e332cd87ecdd9318eaf",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FCAPL/26-27/001",
@@ -176,6 +200,21 @@
         "INR Six Lakh Fifty Nine Thousand Two Hundred Ninety Only",
         "One Lakh Five Hundred Sixty Nine Rupees and Sixty Paise Only"
       ],
+      "tax_summary": {
+        "columns": [
+          21.13,
+          67,
+          181.05,
+          255.32,
+          328.64,
+          410.22,
+          466.4,
+          568.43
+        ],
+        "data_top": 527.61,
+        "total_top": 541.15,
+        "bottom": 554.69
+      },
       "a4_profile": {
         "source_y_points": [
           21.72,
@@ -242,7 +281,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCS NoRounding.pdf",
       "reference_sha256": "86dc5b67dd043c281719db223cc854375a1709170a9b81d7128927d1f91388b3",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcs-igst-no-rounding.pdf",
-      "generated_sha256": "de4c11c4063b831f7f85dcb3faaa11495d199cae629823bf495241a02c9ac282",
+      "generated_sha256": "4ed6ffd54c40b734ff0204c6ea278c32a18b3ef78efecc5c0ce08f638ae394bd",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FB/26-27/012",
@@ -251,6 +290,18 @@
         "INR Six Lakh Sixty Thousand Eight Hundred Only",
         "One Lakh Eight Hundred Rupees Only"
       ],
+      "tax_summary": {
+        "columns": [
+          20.54,
+          184.9,
+          328.64,
+          472.23,
+          570.53
+        ],
+        "data_top": 587.14,
+        "total_top": 601.27,
+        "bottom": 614.92
+      },
       "a4_profile": {
         "source_y_points": [
           21.12,
@@ -312,7 +363,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCS with roundoff.pdf",
       "reference_sha256": "3aac4fca7eef75a067c365cfc62bd446ee3ab96a6fa8639900a4484e9b007a8f",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcs-igst-rounding.pdf",
-      "generated_sha256": "c05c62a0c89c4509711138de1e116375ed34ebf52ef74601066a7c4547e9b6a0",
+      "generated_sha256": "fcd37234d27b14b89be5bcdab47a0feb253c17bfdd6fcc1d972ffb7d71154eb5",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FB/26-27/012",
@@ -321,6 +372,18 @@
         "INR Six Lakh Fifty Nine Thousand Two Hundred Ninety Only",
         "One Lakh Five Hundred Sixty Nine Rupees and Sixty Paise Only"
       ],
+      "tax_summary": {
+        "columns": [
+          21.01,
+          188.41,
+          336.92,
+          476.2,
+          570.06
+        ],
+        "data_top": 593.08,
+        "total_top": 606.85,
+        "bottom": 620.63
+      },
       "a4_profile": {
         "source_y_points": [
           21.6,
@@ -385,7 +448,7 @@
       "reference_pdf": "/Users/divyamaggarwal/Downloads/FCS_CGST_SGST.pdf",
       "reference_sha256": "68ebde5ec11b1a91d7b225e485e81397c3e9e2a235f9da4236dac0d9ed38c187",
       "generated_pdf": "/Users/divyamaggarwal/Desktop/fyndbridge ats/fyndbridge-ats/output/pdf/fcs-cgst-sgst.pdf",
-      "generated_sha256": "8d8c67db915038b0838fb2f88465521d8ad55f6bd54e00464e30ec79828ea280",
+      "generated_sha256": "10a3d25924d43d87221ac5e0decdc94ecbbee605d347db3be316230ca0f0a05a",
       "renderer_reported_page_count": 1,
       "expected_text": [
         "FB/26-27/012",
@@ -394,6 +457,21 @@
         "INR Six Lakh Fifty Nine Thousand Two Hundred Ninety Only",
         "One Lakh Five Hundred Sixty Nine Rupees and Sixty Paise Only"
       ],
+      "tax_summary": {
+        "columns": [
+          21.01,
+          68.87,
+          168.56,
+          237.81,
+          322.57,
+          407.66,
+          466.16,
+          572.63
+        ],
+        "data_top": 540.04,
+        "total_top": 554.16,
+        "bottom": 568.29
+      },
       "a4_profile": {
         "source_y_points": [
           21.6,
