@@ -54,9 +54,16 @@ create table if not exists invoices (
   amount_in_words text not null,
   tax_amount_in_words text not null,
   pdf_storage_path text,
-  created_at timestamptz default now(),
-  unique (invoice_type, billing_entity, financial_year, sequence_number)
+  created_at timestamptz default now()
 );
+
+create unique index if not exists invoices_tax_invoice_sequence_key
+  on invoices (billing_entity, financial_year, sequence_number)
+  where invoice_type = 'tax_invoice';
+
+create unique index if not exists invoices_proforma_invoice_sequence_key
+  on invoices (financial_year, sequence_number)
+  where invoice_type = 'proforma_invoice';
 
 alter table invoice_entities enable row level security;
 alter table invoices enable row level security;

@@ -12,7 +12,6 @@ const INVOICE_FIELDS = 'id, invoice_entity_id, invoice_type, invoice_display_id,
 const SAFE_ERROR_MESSAGES = [
   /^Entity not found$/,
   /^Invoice not found$/,
-  /^Invoice PDF version not found$/,
   /^Amount fields must be numeric$/,
   /^Calculation fields must be numeric and non-negative$/,
   /^GST rates must be numeric and non-negative$/,
@@ -169,16 +168,17 @@ async function nextNumber(req, res) {
   } catch (err) { return sendError(res, err) }
 }
 
-async function invoiceInput(body) {
+async function invoiceInput(body, { billingEntity = '' } = {}) {
   const invoiceType = normalizeInvoiceType(body.invoice_type)
   const { data: entity, error } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).eq('id', body.invoice_entity_id || body.entity_id).maybeSingle()
   if (error) throw error
   if (!entity) throw Object.assign(new Error('Entity not found'), { statusCode: 404 })
+  const preservedBilling = BILLING_ENTITIES.has(billingEntity) ? billingEntity : ''
   const requestedBilling = BILLING_ENTITIES.has(body.billing_entity) ? body.billing_entity : entity.billing_entity || 'FCS'
   const input = {
     ...entity, ...body,
     invoice_type: invoiceType,
-    billing_entity: invoiceType === 'proforma_invoice' ? entity.billing_entity || 'FCS' : requestedBilling,
+    billing_entity: preservedBilling || (invoiceType === 'proforma_invoice' ? entity.billing_entity || 'FCS' : requestedBilling),
     model: MODELS.has(body.model) ? body.model : 'joining_percentage',
     gst_component: detectGstComponent(entity.state_code, entity.state, entity.place_of_supply, entity.address)
   }
@@ -279,7 +279,11 @@ async function regenerationData(invoiceId, body) {
   if (error) throw error
   if (!existing) throw httpError('Invoice not found', 404)
   if (existing.status === 'cancelled') throw httpError('Cancelled invoices cannot be regenerated.', 409)
-  const { entity, input, calc } = await invoiceInput({ ...existing, ...body, invoice_type: existing.invoice_type, invoice_entity_id: existing.invoice_entity_id })
+  const targetEntityId = clean(body.invoice_entity_id) || existing.invoice_entity_id
+  const { entity, input, calc } = await invoiceInput(
+    { ...existing, ...body, invoice_type: existing.invoice_type, invoice_entity_id: targetEntityId },
+    { billingEntity: existing.billing_entity }
+  )
   const updated = { ...invoicePayload(entity, input, input.invoice_date || existing.invoice_date, { invoiceNumber: existing.invoice_number, financialYear: existing.financial_year, sequence: existing.sequence_number }, calc), invoice_display_id: existing.invoice_display_id }
   const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: updated, overrides: input })
   return { existing, entity, updated, pdf }
@@ -318,28 +322,6 @@ async function regenerate(req, res) {
   } catch (err) { return sendError(res, err) }
 }
 
-async function deletePdfVersion(req, res) {
-  try {
-    const { data: version, error } = await supabase.from('invoice_pdf_versions').select('*').eq('id', req.params.id).maybeSingle()
-    if (error) throw error
-    if (!version) return res.status(404).json({ error: 'Invoice PDF version not found' })
-    const { data: invoice, error: invoiceError } = await supabase.from('invoices').select('pdf_storage_path, status').eq('id', version.invoice_id).maybeSingle()
-    if (invoiceError) throw invoiceError
-    if (invoice?.status === 'cancelled') throw httpError('PDF versions of cancelled invoices cannot be deleted.', 409)
-    const storagePath = normalizeStoragePath(version.storage_path, STORAGE_BUCKETS.INVOICE)
-    if (!storagePath) throw httpError('Stored invoice PDF is missing.', 404)
-    const { error: storageError } = await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([storagePath])
-    if (storageError) throw storageError
-    const { error: deleteError } = await supabase.from('invoice_pdf_versions').delete().eq('id', version.id)
-    if (deleteError) throw deleteError
-    if (invoice?.pdf_storage_path === version.storage_path) {
-      const { data: latest } = await supabase.from('invoice_pdf_versions').select('storage_path').eq('invoice_id', version.invoice_id).order('created_at', { ascending: false }).limit(1)
-      await supabase.from('invoices').update({ pdf_storage_path: latest?.[0]?.storage_path || null }).eq('id', version.invoice_id)
-    }
-    return res.json({ ok: true })
-  } catch (err) { return sendError(res, err) }
-}
-
 async function cancelInvoice(req, res) {
   try {
     const invoiceType = normalizeInvoiceType(req.query.invoice_type)
@@ -370,51 +352,6 @@ async function cancelInvoice(req, res) {
   } catch (err) { return sendError(res, err) }
 }
 
-async function deleteInvoice(req, res) {
-  try {
-    const invoiceType = normalizeInvoiceType(req.query.invoice_type)
-    const { data: invoice, error } = await supabase
-      .from('invoices')
-      .select(INVOICE_FIELDS)
-      .eq('id', req.params.id)
-      .eq('invoice_entity_id', req.params.entityId)
-      .eq('invoice_type', invoiceType)
-      .maybeSingle()
-    if (error) throw error
-    if (!invoice) throw httpError('Invoice not found or already deleted.', 404)
-
-    const { data: versions, error: versionError } = await supabase
-      .from('invoice_pdf_versions')
-      .select('storage_path')
-      .eq('invoice_id', invoice.id)
-    if (versionError) throw versionError
-
-    const storagePaths = [...new Set([
-      invoice.pdf_storage_path,
-      ...(versions || []).map(version => version.storage_path)
-    ].map(path => normalizeStoragePath(path, STORAGE_BUCKETS.INVOICE)).filter(Boolean))]
-
-    if (storagePaths.length) {
-      const { error: storageError } = await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove(storagePaths)
-      if (storageError) throw httpError('The invoice file could not be removed. The invoice was not deleted.', 502)
-    }
-
-    const { data: deleted, error: deleteError } = await supabase
-      .from('invoices')
-      .delete()
-      .eq('id', invoice.id)
-      .eq('invoice_entity_id', req.params.entityId)
-      .eq('invoice_type', invoiceType)
-      .select('id')
-      .maybeSingle()
-    if (deleteError) {
-      throw httpError('Invoice files were removed, but the database row could not be deleted. Please contact an administrator.', 500)
-    }
-    if (!deleted) throw httpError('Invoice not found or already deleted.', 404)
-    return res.json({ ok: true, released: { invoice_type: invoice.invoice_type, billing_entity: invoice.billing_entity, financial_year: invoice.financial_year, sequence_number: invoice.sequence_number } })
-  } catch (err) { return sendError(res, err) }
-}
-
 module.exports = {
   listEntities,
   getEntity,
@@ -427,7 +364,5 @@ module.exports = {
   commitPreview,
   previewRegeneration,
   regenerate,
-  deletePdfVersion,
-  cancelInvoice,
-  deleteInvoice
+  cancelInvoice
 }

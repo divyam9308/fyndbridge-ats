@@ -8,17 +8,22 @@ const { calculateInvoice, financialYear, renderInvoicePdf } = require('./invoice
 const root = path.resolve(__dirname, '../../..')
 const read = file => fs.readFileSync(path.join(root, file), 'utf8')
 const migration = read('supabase/migrations/20260717084023_proforma_invoice_support.sql')
+const sharedSequenceMigration = read('supabase/migrations/20260717091000_shared_proforma_invoice_sequence.sql')
 const controller = read('server/src/controllers/invoiceController.js')
+const routes = read('server/src/routes/invoice.js')
+const invoiceApi = read('src/services/invoiceApi.js')
 const invoicePage = read('src/pages/InvoicePage.jsx')
 const detailPage = read('src/pages/InvoiceEntityDetailPage.jsx')
 
-test('existing invoices default to tax and typed series remain independently unique', () => {
+test('tax sequences stay entity-scoped while proforma sequences are shared across entities', () => {
   assert.match(migration, /set invoice_type = 'tax_invoice'[\s\S]*where invoice_type is null or btrim\(invoice_type\) = ''/)
   assert.match(migration, /alter column invoice_type set default 'tax_invoice'[\s\S]*alter column invoice_type set not null/)
   assert.match(migration, /check \(invoice_type in \('tax_invoice', 'proforma_invoice'\)\)/)
-  assert.match(migration, /unique \(invoice_type, billing_entity, financial_year, sequence_number\)/)
-  assert.match(migration, /invoice\.invoice_type = p_invoice_type/)
-  assert.match(migration, /v_invoice_type \|\| ':' \|\| v_billing_entity \|\| ':' \|\| v_financial_year/)
+  assert.match(sharedSequenceMigration, /unique index if not exists invoices_tax_invoice_sequence_key[\s\S]*\(billing_entity, financial_year, sequence_number\)[\s\S]*where invoice_type = 'tax_invoice'/)
+  assert.match(sharedSequenceMigration, /unique index if not exists invoices_proforma_invoice_sequence_key[\s\S]*\(financial_year, sequence_number\)[\s\S]*where invoice_type = 'proforma_invoice'/)
+  assert.match(sharedSequenceMigration, /p_invoice_type = 'proforma_invoice'[\s\S]*or invoice\.billing_entity = p_billing_entity/)
+  assert.match(sharedSequenceMigration, /when v_invoice_type = 'proforma_invoice' then 'all-entities'[\s\S]*else v_billing_entity/)
+  assert.match(sharedSequenceMigration, /v_invoice_type \|\| ':' \|\| v_sequence_scope \|\| ':' \|\| v_financial_year/)
 })
 
 test('proforma and tax formats are generated from separate typed database series', () => {
@@ -32,16 +37,31 @@ test('proforma and tax formats are generated from separate typed database series
   assert.equal(financialYear('2027-04-01'), '27-28')
 })
 
-test('list and lifecycle mutations are scoped by invoice type without replacing tax delete UI', () => {
+test('list and cancellation are scoped by invoice type while permanent deletion stays unavailable', () => {
   const getEntitySection = controller.slice(controller.indexOf('async function getEntity'), controller.indexOf('async function createEntity'))
-  const cancelSection = controller.slice(controller.indexOf('async function cancelInvoice'), controller.indexOf('async function deleteInvoice'))
-  const deleteSection = controller.slice(controller.indexOf('async function deleteInvoice'), controller.indexOf('module.exports'))
+  const cancelSection = controller.slice(controller.indexOf('async function cancelInvoice'), controller.indexOf('module.exports'))
   assert.match(getEntitySection, /\.eq\('invoice_type', invoiceType\)/)
   assert.match(cancelSection, /\.eq\('invoice_type', invoiceType\)/)
-  assert.match(deleteSection, /\.eq\('invoice_type', invoiceType\)/)
   assert.match(controller, /invoice_type: existing\.invoice_type/)
-  assert.match(detailPage, /className="row-action-btn invoice-delete-action"/)
-  assert.match(detailPage, /onClick=\{\(\) => openAction\('delete', invoice\)\}/)
+  assert.doesNotMatch(routes, /router\.delete\('\/entities\/:entityId\/invoices\/:id'/)
+  assert.doesNotMatch(routes, /router\.delete\('\/invoice-pdf-versions\/:id'/)
+  assert.doesNotMatch(controller, /async function deleteInvoice\(/)
+  assert.doesNotMatch(controller, /async function deletePdfVersion\(/)
+  assert.doesNotMatch(invoiceApi, /export const deleteInvoice =/)
+  assert.doesNotMatch(invoiceApi, /export const deleteInvoicePdfVersion =/)
+  assert.doesNotMatch(detailPage, /invoice-delete-action|invoice-version-delete|Delete Invoice|Delete this PDF version/)
+})
+
+test('regeneration can move an invoice to another legal entity without changing invoice identity', () => {
+  const regenerationSection = controller.slice(controller.indexOf('async function regenerationData'), controller.indexOf('async function previewRegeneration'))
+  assert.match(regenerationSection, /targetEntityId = clean\(body\.invoice_entity_id\) \|\| existing\.invoice_entity_id/)
+  assert.match(regenerationSection, /invoice_entity_id: targetEntityId/)
+  assert.match(regenerationSection, /\{ billingEntity: existing\.billing_entity \}/)
+  assert.match(regenerationSection, /invoiceNumber: existing\.invoice_number/)
+  assert.match(regenerationSection, /financialYear: existing\.financial_year/)
+  assert.match(regenerationSection, /sequence: existing\.sequence_number/)
+  assert.match(detailPage, /<h3>Select Entity<\/h3><select className="form-control" value=\{form\.invoice_entity_id\}/)
+  assert.match(detailPage, /fetchInvoiceEntities\(\)/)
 })
 
 test('creation chooser, URL-backed switcher, KPI isolation, and proforma columns are wired', () => {
@@ -57,7 +77,7 @@ test('creation chooser, URL-backed switcher, KPI isolation, and proforma columns
   assert.match(detailPage, /No \{typeLabel\.toLowerCase\(\)\}s found for this entity\./)
 })
 
-test('proforma PDF changes only the heading and identifying number', async () => {
+test('FCS and FCAPL proforma PDFs use their supplied formats with PI numbers', async () => {
   const entity = {
     legal_entity_name: 'PROFORMA PDF TEST CLIENT',
     optional_name: '-',
@@ -71,41 +91,36 @@ test('proforma PDF changes only the heading and identifying number', async () =>
     email: 'billing@example.com',
     sac: '998312'
   }
-  const input = {
-    ...entity,
-    billing_entity: 'FCS',
-    model: 'others',
-    others_amount: '1000',
-    igst_rate: 18,
-    cgst_rate: 9,
-    sgst_rate: 9,
-    professional_fee_text: 'Recruitment services'
-  }
-  const values = calculateInvoice(input)
-  const baseInvoice = {
-    ...values,
-    billing_entity: 'FCS',
-    invoice_date: '2026-07-17',
-    sac: entity.sac
-  }
-  const proforma = await renderInvoicePdf({
-    entity,
-    invoice: { ...baseInvoice, invoice_type: 'proforma_invoice', invoice_number: 'PI/FCS/26-27/001' },
-    overrides: input
-  })
-  const tax = await renderInvoicePdf({
-    entity,
-    invoice: { ...baseInvoice, invoice_type: 'tax_invoice', invoice_number: 'FB/26-27/001' },
-    overrides: input
-  })
-  const proformaText = (await pdfParse(proforma.buffer)).text
-  const taxText = (await pdfParse(tax.buffer)).text
+  for (const billingEntity of ['FCS', 'FCAPL']) {
+    const input = {
+      ...entity,
+      billing_entity: billingEntity,
+      model: 'others',
+      others_amount: '100000',
+      igst_rate: 18,
+      cgst_rate: 9,
+      sgst_rate: 9,
+      professional_fee_text: 'Professional Fees'
+    }
+    const baseInvoice = {
+      ...calculateInvoice(input),
+      billing_entity: billingEntity,
+      invoice_date: '2026-07-17',
+      sac: entity.sac
+    }
+    const proforma = await renderInvoicePdf({
+      entity,
+      invoice: { ...baseInvoice, invoice_type: 'proforma_invoice', invoice_number: `PI/${billingEntity}/26-27/001` },
+      overrides: input
+    })
+    const proformaText = (await pdfParse(proforma.buffer)).text
 
-  assert.match(proformaText, /PROFORMA INVOICE/)
-  assert.match(proformaText, /PI\/FCS\/26-27\/001/)
-  assert.doesNotMatch(proformaText, /TAX INVOICE/)
-  assert.match(taxText, /TAX INVOICE/)
-  assert.match(taxText, /FB\/26-27\/001/)
-  assert.equal(proforma.pageCount, 1)
-  assert.equal(tax.pageCount, 1)
+    assert.match(proformaText, /PROFORMA INVOICE/)
+    assert.match(proformaText, new RegExp(`PI\\/${billingEntity}\\/26-27\\/001`))
+    assert.doesNotMatch(proformaText, /TAX INVOICE/)
+    assert.match(proformaText, billingEntity === 'FCS'
+      ? /FyndBridge Consulting Services/
+      : /FyndBridge Consultants & Advisors Private Limited/)
+    assert.equal(proforma.pageCount, 1)
+  }
 })

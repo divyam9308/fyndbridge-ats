@@ -668,13 +668,10 @@
 .invoice-version { position: relative; display: inline-flex; }
 .invoice-version .invoice-document-button { width: 42px; gap: 1px; }
 .invoice-version .invoice-document-button small { font-size: 8px; font-weight: 800; }
-.invoice-version-delete { position: absolute; top: -6px; right: -7px; display: grid; width: 18px; height: 18px; padding: 0; border: 1px solid #fecaca; border-radius: 50%; background: #fff; color: #b91c1c; cursor: pointer; place-items: center; }
-.invoice-row-actions { min-width: 120px; justify-content: center; opacity: 1; }
+.invoice-row-actions { min-width: 84px; justify-content: center; opacity: 1; }
 .invoice-row-actions .row-action-btn:disabled { cursor: not-allowed; opacity: .42; transform: none; }
 .invoice-row-actions .invoice-cancel-action:not(:disabled) { border-color: #f0c98a; color: #9a6500; }
 .invoice-row-actions .invoice-cancel-action:hover:not(:disabled) { background: #fff5df; color: #7a5000; }
-.invoice-row-actions .invoice-delete-action:not(:disabled) { border-color: #efb8b8; color: #b42318; }
-.invoice-row-actions .invoice-delete-action:hover:not(:disabled) { background: #fef0f0; color: #8f1912; }
 .invoice-toast { z-index: 9000; border-color: rgba(40, 167, 69, .28); background: rgba(242, 252, 245, .97); color: #26743b; }
 .invoice-toast .notice-toast-close { border-color: rgba(38, 116, 59, .2); color: #26743b; }
 .invoice-confirm-overlay { z-index: 100002; }
@@ -682,15 +679,10 @@
 .invoice-confirm-modal .modal-header p { margin: 5px 0 0; color: var(--gray-500); font-size: 12px; font-weight: 700; }
 .invoice-confirm-copy { margin: 0; color: #34415b; font-size: 13.5px; line-height: 1.65; }
 .invoice-confirm-list { display: grid; gap: 8px; margin: 16px 0 0; padding: 14px 16px 14px 34px; border: 1px solid #ecd9a9; border-radius: 12px; background: #fff9e9; color: #6f5414; font-size: 12.5px; line-height: 1.5; }
-.invoice-confirm-list.is-destructive { border-color: #f2c0c0; background: #fff1f1; color: #8f2c25; }
-.invoice-cancel-button,
-.invoice-danger-button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border-radius: 10px; font-weight: 800; }
+.invoice-cancel-button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border-radius: 10px; font-weight: 800; }
 .invoice-cancel-button { border: 1px solid #d59a23; background: #bd7f08; color: #fff; }
 .invoice-cancel-button:hover:not(:disabled) { background: #9d6905; }
-.invoice-danger-button { border: 1px solid #b42318; background: #b42318; color: #fff; }
-.invoice-danger-button:hover:not(:disabled) { background: #8f1912; }
-.invoice-cancel-button:disabled,
-.invoice-danger-button:disabled { cursor: not-allowed; opacity: .58; }
+.invoice-cancel-button:disabled { cursor: not-allowed; opacity: .58; }
 
 .invoice-combobox-results button {
   display: flex;

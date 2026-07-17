@@ -8,6 +8,8 @@ const migration = fs.readFileSync(path.join(root, 'supabase/migrations/202607161
 const baselineSchema = fs.readFileSync(path.join(root, 'server/supabase-invoice-module.sql'), 'utf8')
 const controller = fs.readFileSync(path.join(root, 'server/src/controllers/invoiceController.js'), 'utf8')
 const routes = fs.readFileSync(path.join(root, 'server/src/routes/invoice.js'), 'utf8')
+const invoiceApi = fs.readFileSync(path.join(root, 'src/services/invoiceApi.js'), 'utf8')
+const detailPage = fs.readFileSync(path.join(root, 'src/pages/InvoiceEntityDetailPage.jsx'), 'utf8')
 
 test('invoice lifecycle migration preserves cancelled rows and audit metadata', () => {
   assert.match(migration, /status text not null default 'active'/)
@@ -15,7 +17,7 @@ test('invoice lifecycle migration preserves cancelled rows and audit metadata', 
   assert.match(migration, /cancelled_at timestamptz/)
   assert.match(migration, /cancelled_by uuid references auth\.users\(id\) on delete set null/)
   assert.match(controller, /\.update\(\{ status: 'cancelled', cancelled_at: cancelledAt, cancelled_by: req\.user\.id \}\)/)
-  const cancelSection = controller.slice(controller.indexOf('async function cancelInvoice'), controller.indexOf('async function deleteInvoice'))
+  const cancelSection = controller.slice(controller.indexOf('async function cancelInvoice'), controller.indexOf('module.exports'))
   assert.doesNotMatch(cancelSection, /storage\.from\(STORAGE_BUCKETS\.INVOICE\)\.remove/)
 })
 
@@ -25,7 +27,8 @@ test('lowest missing invoice number is allocated inside the exact billing-entity
   assert.match(migration, /where not exists \([\s\S]*invoice\.sequence_number = candidate\.sequence_number/)
   assert.match(migration, /case when p_billing_entity = 'FCAPL' then 'FCAPL' else 'FB' end/)
   assert.match(baselineSchema, /invoice_type text not null default 'tax_invoice'/)
-  assert.match(baselineSchema, /unique \(invoice_type, billing_entity, financial_year, sequence_number\)/)
+  assert.match(baselineSchema, /invoices_tax_invoice_sequence_key[\s\S]*\(billing_entity, financial_year, sequence_number\)[\s\S]*where invoice_type = 'tax_invoice'/)
+  assert.match(baselineSchema, /invoices_proforma_invoice_sequence_key[\s\S]*\(financial_year, sequence_number\)[\s\S]*where invoice_type = 'proforma_invoice'/)
 })
 
 test('concurrent invoice creation is serialized and preview conflicts are rejected atomically', () => {
@@ -50,18 +53,15 @@ test('invoice lifecycle RPCs are service-role only', () => {
   }
 })
 
-test('entity-scoped cancel and delete routes remain behind the existing admin-only invoice router', () => {
+test('entity-scoped cancellation remains admin-only and permanent invoice deletion is not exposed', () => {
   assert.match(routes, /router\.use\(requireAdmin\)/)
   assert.match(routes, /router\.post\('\/entities\/:entityId\/invoices\/:id\/cancel', controller\.cancelInvoice\)/)
-  assert.match(routes, /router\.delete\('\/entities\/:entityId\/invoices\/:id', controller\.deleteInvoice\)/)
   assert.match(controller, /\.eq\('invoice_entity_id', req\.params\.entityId\)/)
-})
-
-test('permanent deletion removes all invoice storage paths before deleting the invoice row', () => {
-  const storageIndex = controller.indexOf("supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove(storagePaths)")
-  const deleteIndex = controller.indexOf(".from('invoices')\n      .delete()", storageIndex)
-  assert.ok(storageIndex >= 0)
-  assert.ok(deleteIndex > storageIndex)
-  assert.match(controller, /invoice\.pdf_storage_path,[\s\S]*versions \|\| \[\]\)\.map\(version => version\.storage_path\)/)
-  assert.match(controller, /released: \{ invoice_type: invoice\.invoice_type, billing_entity: invoice\.billing_entity, financial_year: invoice\.financial_year, sequence_number: invoice\.sequence_number \}/)
+  assert.doesNotMatch(routes, /router\.delete\('\/entities\/:entityId\/invoices\/:id'/)
+  assert.doesNotMatch(routes, /router\.delete\('\/invoice-pdf-versions\/:id'/)
+  assert.doesNotMatch(controller, /async function deleteInvoice\(/)
+  assert.doesNotMatch(controller, /async function deletePdfVersion\(/)
+  assert.doesNotMatch(invoiceApi, /export const deleteInvoice =/)
+  assert.doesNotMatch(invoiceApi, /export const deleteInvoicePdfVersion =/)
+  assert.doesNotMatch(detailPage, /invoice-delete-action|invoice-version-delete|Delete invoice permanently|Delete this PDF version|openAction\('delete'/)
 })

@@ -60,7 +60,7 @@ function InvoiceTypeChooser({ onClose, onSelect }) {
     {
       type: 'proforma_invoice',
       Icon: FileClock,
-      description: 'Create a proforma invoice with an independent PI sequence for the selected entity.'
+      description: 'Create a proforma invoice using the shared PI sequence across billing entities.'
     }
   ]
   return createPortal(<div className="modal-overlay invoice-type-overlay"><div className="modal-card invoice-type-modal" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="invoice-type-title">

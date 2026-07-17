@@ -79,18 +79,8 @@ export const previewRegeneratedInvoice = async (id, payload) => json(await apiFe
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
 }))
-export const deleteInvoicePdfVersion = async (id) => {
-  const result = await json(await apiFetch(`/api/invoice/invoice-pdf-versions/${id}`, { method: 'DELETE' }))
-  invalidateApiJsonCache('/api/invoice/entities')
-  return result
-}
 export const cancelInvoice = async (entityId, id, invoiceType = 'tax_invoice') => {
   const result = await json(await apiFetch(`/api/invoice/entities/${entityId}/invoices/${id}/cancel?invoice_type=${encodeURIComponent(invoiceType)}`, { method: 'POST' }))
-  invalidateApiJsonCache('/api/invoice/entities')
-  return result
-}
-export const deleteInvoice = async (entityId, id, invoiceType = 'tax_invoice') => {
-  const result = await json(await apiFetch(`/api/invoice/entities/${entityId}/invoices/${id}?invoice_type=${encodeURIComponent(invoiceType)}`, { method: 'DELETE' }))
   invalidateApiJsonCache('/api/invoice/entities')
   return result
 }

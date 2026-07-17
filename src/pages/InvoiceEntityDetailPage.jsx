@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { CheckCircle2, ChevronLeft, CircleX, Download, FileClock, FileText, LoaderCircle, Pencil, ReceiptText, Trash2, X } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, CircleX, Download, FileClock, FileText, LoaderCircle, Pencil, ReceiptText, X } from 'lucide-react'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import ReportKpiCard from '../components/ReportKpiCard'
 import {
   cancelInvoice as cancelInvoiceRequest,
-  deleteInvoice as deleteInvoiceRequest,
-  deleteInvoicePdfVersion,
+  fetchInvoiceEntities,
   fetchInvoiceEntity,
   previewRegeneratedInvoice,
   regenerateInvoice
@@ -75,20 +74,15 @@ function InvoiceKpis({ totals, loading = false }) {
 
 function InvoiceActionDialog({ action, busy, error, onClose, onConfirm }) {
   const dialogRef = useDialogFocus(onClose, { closeDisabled: busy })
-  const deleting = action.type === 'delete'
   const invoiceNumber = show(action.invoice.invoice_number)
   return createPortal(<div className="modal-overlay invoice-confirm-overlay"><div className="modal-card invoice-confirm-modal" ref={dialogRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby="invoice-action-title" aria-describedby="invoice-action-description">
-    <div className="modal-header"><div><span className="modal-title" id="invoice-action-title">{deleting ? 'Delete invoice permanently?' : 'Cancel invoice?'}</span><p>{invoiceNumber}</p></div><button className="modal-close" type="button" onClick={onClose} disabled={busy} aria-label="Close confirmation"><X size={16} /></button></div>
+    <div className="modal-header"><div><span className="modal-title" id="invoice-action-title">Cancel invoice?</span><p>{invoiceNumber}</p></div><button className="modal-close" type="button" onClick={onClose} disabled={busy} aria-label="Close confirmation"><X size={16} /></button></div>
     <div className="modal-body">
-      <p className="invoice-confirm-copy" id="invoice-action-description">{deleting
-        ? 'This permanently removes the invoice record and every stored PDF version. The released sequence number may be used by the next invoice in this same billing-entity and financial-year series.'
-        : 'The invoice will remain visible with its original number, values, and PDF history, but it will be excluded from all aggregate totals.'}</p>
-      <ul className={`invoice-confirm-list${deleting ? ' is-destructive' : ''}`}>
-        {deleting ? <><li>This action cannot be undone.</li><li>Existing invoice numbers will not be renumbered.</li><li>Candidate, consultant, client, mandate, and entity records are not affected.</li></> : <><li>The invoice number remains permanently consumed.</li><li>The next invoice will continue with the next available number.</li><li>Cancelled invoices cannot be edited or have PDF versions removed.</li></>}
-      </ul>
+      <p className="invoice-confirm-copy" id="invoice-action-description">The invoice will remain visible with its original number, values, and PDF history, but it will be excluded from all aggregate totals.</p>
+      <ul className="invoice-confirm-list"><li>The invoice number remains permanently consumed.</li><li>The next invoice will continue with the next available number.</li><li>Cancelled invoices cannot be edited or have PDF versions removed.</li></ul>
       {error && <div className="invoice-form-error" role="alert">{error}</div>}
     </div>
-    <div className="modal-footer"><button className="btn-secondary" type="button" onClick={onClose} disabled={busy}>Keep invoice</button><button className={deleting ? 'invoice-danger-button' : 'invoice-cancel-button'} type="button" onClick={onConfirm} disabled={busy}>{busy ? <LoaderCircle className="invoice-button-spin" size={15} /> : deleting ? <Trash2 size={15} /> : <CircleX size={15} />}{busy ? deleting ? 'Deleting…' : 'Cancelling…' : deleting ? 'Delete Invoice' : 'Cancel Invoice'}</button></div>
+    <div className="modal-footer"><button className="btn-secondary" type="button" onClick={onClose} disabled={busy}>Keep invoice</button><button className="invoice-cancel-button" type="button" onClick={onConfirm} disabled={busy}>{busy ? <LoaderCircle className="invoice-button-spin" size={15} /> : <CircleX size={15} />}{busy ? 'Cancelling…' : 'Cancel Invoice'}</button></div>
   </div></div>, document.body)
 }
 
@@ -103,15 +97,32 @@ function InvoiceTableLoading({ label }) {
   return <div className="invoice-detail-table-loading"><FyndbridgeLoader size={76} label={label} className="invoice-inline-loader" /></div>
 }
 
-function EditInvoiceModal({ invoice, entity, onClose, onSaved }) {
-  const [form, setForm] = useState({ ...EMPTY_INVOICE, ...invoice, gst_component: detectInvoiceGstComponent(entity) })
+function EditInvoiceModal({ invoice, entity, entities, onClose, onSaved }) {
+  const availableEntities = entities.length ? entities : [entity]
+  const initialEntityId = invoice.invoice_entity_id || entity.id
+  const [form, setForm] = useState({ ...EMPTY_INVOICE, ...invoice, invoice_entity_id: initialEntityId, gst_component: detectInvoiceGstComponent(entity) })
   const [preview, setPreview] = useState(null)
   const [saved, setSaved] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const dialogRef = useDialogFocus(onClose, { closeDisabled: saving })
   const typeLabel = INVOICE_TYPE_LABELS[invoice.invoice_type] || INVOICE_TYPE_LABELS.tax_invoice
+  const selectedEntity = availableEntities.find(item => item.id === form.invoice_entity_id) || entity
   const update = event => { const { name, value } = event.target; setPreview(null); setSaved(null); setForm(current => ({ ...current, [name]: value })) }
+  const selectEntity = event => {
+    const nextEntity = availableEntities.find(item => item.id === event.target.value)
+    setPreview(null); setSaved(null)
+    if (!nextEntity) return
+    setForm(current => ({
+      ...current,
+      invoice_entity_id: nextEntity.id,
+      sac: nextEntity.sac || current.sac || '998512',
+      gst_component: detectInvoiceGstComponent(nextEntity),
+      igst_rate: nextEntity.igst_rate ?? 18,
+      cgst_rate: nextEntity.cgst_rate ?? 9,
+      sgst_rate: nextEntity.sgst_rate ?? 9
+    }))
+  }
   const generatePreview = async () => {
     setSaving(true); setError('')
     try { setPreview(await previewRegeneratedInvoice(invoice.id, { ...form, invoice_type: invoice.invoice_type })) } catch (err) { setError(err.message) } finally { setSaving(false) }
@@ -129,7 +140,9 @@ function EditInvoiceModal({ invoice, entity, onClose, onSaved }) {
   const calc = calculateInvoicePreview(form)
   return createPortal(<div className="modal-overlay"><div className="modal-card modal-card-lg invoice-modal invoice-generate-modal" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="edit-invoice-title">
     <div className="modal-header"><span className="modal-title" id="edit-invoice-title">Edit {typeLabel} {invoice.invoice_display_id}</span><button className="modal-close" type="button" onClick={onClose} disabled={saving} aria-label={`Close Edit ${typeLabel}`}><X size={16} /></button></div>
-    <div className="modal-body">{error && <div className="invoice-form-error">{error}</div>}<section className="invoice-form-section"><h3>{typeLabel} Details</h3><div className="form-grid-2">
+    <div className="modal-body">{error && <div className="invoice-form-error">{error}</div>}
+    <section className="invoice-form-section"><h3>Select Entity</h3><select className="form-control" value={form.invoice_entity_id} onChange={selectEntity}>{availableEntities.map(item => <option key={item.id} value={item.id}>{item.entity_display_id || item.invoice_id} - {show(item.legal_entity_name)}</option>)}</select>{selectedEntity && <div className="invoice-selected-chip"><CheckCircle2 size={14} />{show(selectedEntity.legal_entity_name)}</div>}</section>
+    <section className="invoice-form-section"><h3>{typeLabel} Details</h3><div className="form-grid-2">
       <Field label="Consultant Name"><Input name="consultant_name" value={form.consultant_name} update={update} /></Field><Field label="Candidate Name"><Input name="candidate_name" value={form.candidate_name} update={update} /></Field>
       <Field label="Invoice Number"><input className="form-control" value={invoice.invoice_number} readOnly /></Field><Field label="Invoice Date"><Input type="date" name="invoice_date" value={form.invoice_date} update={update} /></Field>
       <Field label="Model"><select className="form-control" name="model" value={form.model} onChange={update}>{INVOICE_MODELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
@@ -149,6 +162,7 @@ export default function InvoiceEntityDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const invoiceType = searchParams.get('type') === 'proforma' ? 'proforma_invoice' : 'tax_invoice'
   const [data, setData] = useState(null)
+  const [entities, setEntities] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(null)
@@ -162,8 +176,14 @@ export default function InvoiceEntityDetailPage() {
     const requestId = ++requestRef.current
     setLoading(true); setError('')
     try {
-      const result = (await fetchInvoiceEntity(entityId, invoiceType)).data
-      if (requestId === requestRef.current) setData({ ...result, invoiceType })
+      const [result, entityList] = await Promise.all([
+        fetchInvoiceEntity(entityId, invoiceType),
+        fetchInvoiceEntities()
+      ])
+      if (requestId === requestRef.current) {
+        setData({ ...result.data, invoiceType })
+        setEntities(entityList.data || [])
+      }
     } catch (err) {
       if (requestId === requestRef.current) setError(err.message)
     } finally {
@@ -196,28 +216,21 @@ export default function InvoiceEntityDetailPage() {
       })
     } finally { setOpening('') }
   }
-  const deleteVersion = async version => { if (!window.confirm('Delete this PDF version?')) return; try { await deleteInvoicePdfVersion(version.id); await load() } catch (err) { setError(err.message) } }
-  const openAction = (type, invoice) => { setActionError(''); setAction({ type, invoice }) }
+  const openAction = invoice => { setActionError(''); setAction({ invoice }) }
   const closeAction = () => { if (!pendingAction) { setAction(null); setActionError('') } }
   const confirmAction = async () => {
     if (!action || pendingAction) return
-    const pending = { type: action.type, id: action.invoice.id }
+    const pending = { id: action.invoice.id }
     setPendingAction(pending); setActionError(''); setError('')
     try {
-      if (action.type === 'cancel') {
-        const result = await cancelInvoiceRequest(entityId, action.invoice.id, action.invoice.invoice_type)
-        setData(current => ({
-          ...current,
-          invoices: current.invoices.map(invoice => invoice.id === action.invoice.id
-            ? { ...invoice, ...result.data, pdf_versions: invoice.pdf_versions || [] }
-            : invoice)
-        }))
-        setToast(`${action.invoice.invoice_number} was cancelled. Its number remains consumed.`)
-      } else {
-        await deleteInvoiceRequest(entityId, action.invoice.id, action.invoice.invoice_type)
-        setData(current => ({ ...current, invoices: current.invoices.filter(invoice => invoice.id !== action.invoice.id) }))
-        setToast(`${action.invoice.invoice_number} was deleted. Its sequence is now available in the same series.`)
-      }
+      const result = await cancelInvoiceRequest(entityId, action.invoice.id, action.invoice.invoice_type)
+      setData(current => ({
+        ...current,
+        invoices: current.invoices.map(invoice => invoice.id === action.invoice.id
+          ? { ...invoice, ...result.data, pdf_versions: invoice.pdf_versions || [] }
+          : invoice)
+      }))
+      setToast(`${action.invoice.invoice_number} was cancelled. Its number remains consumed.`)
       setAction(null)
     } catch (err) { setActionError(err.message) } finally { setPendingAction(null) }
   }
@@ -267,17 +280,16 @@ export default function InvoiceEntityDetailPage() {
           {invoiceType === 'tax_invoice' && <><td className="invoice-money-cell">{formatInrPaise(values.billValue)}</td>
           <td className="invoice-money-cell">{formatInrPaise(values.taxValue)}</td>
           <td className="invoice-money-cell invoice-total-cell">{formatInrPaise(values.totalInvoiceValue)}</td></>}
-          <td><div className="invoice-version-list">{(invoice.pdf_versions || []).map((version, index) => <span className="invoice-version" key={version.id}><button className="invoice-document-button" type="button" onClick={() => openInvoice(version)} title={`Open PDF version ${invoice.pdf_versions.length - index}`} aria-label={`Open PDF version ${invoice.pdf_versions.length - index}`}>{opening === version.id ? <LoaderCircle className="invoice-button-spin" size={16} /> : <FileText size={16} />}<small>v{invoice.pdf_versions.length - index}</small></button>{!cancelled && <button className="invoice-version-delete" type="button" onClick={() => deleteVersion(version)} title="Delete this PDF version" aria-label={`Delete PDF version ${invoice.pdf_versions.length - index}`}><Trash2 size={12} /></button>}</span>)}{!invoice.pdf_versions?.length ? '—' : null}</div></td>
+          <td><div className="invoice-version-list">{(invoice.pdf_versions || []).map((version, index) => <span className="invoice-version" key={version.id}><button className="invoice-document-button" type="button" onClick={() => openInvoice(version)} title={`Open PDF version ${invoice.pdf_versions.length - index}`} aria-label={`Open PDF version ${invoice.pdf_versions.length - index}`}>{opening === version.id ? <LoaderCircle className="invoice-button-spin" size={16} /> : <FileText size={16} />}<small>v{invoice.pdf_versions.length - index}</small></button></span>)}{!invoice.pdf_versions?.length ? '—' : null}</div></td>
           <td><div className="row-actions invoice-row-actions">
             <button className="row-action-btn" type="button" onClick={() => setEditing(invoice)} disabled={cancelled || rowBusy} aria-label={cancelled ? 'Cancelled invoices cannot be edited' : 'Edit invoice'} title={cancelled ? 'Cancelled invoices cannot be edited' : 'Edit invoice'}><Pencil size={14} /></button>
-            <button className="row-action-btn invoice-cancel-action" type="button" onClick={() => openAction('cancel', invoice)} disabled={cancelled || rowBusy} aria-label={cancelled ? 'Invoice already cancelled' : 'Cancel invoice'} title={cancelled ? 'Invoice already cancelled' : 'Cancel invoice'}>{rowBusy && pendingAction.type === 'cancel' ? <LoaderCircle className="invoice-button-spin" size={14} /> : <CircleX size={14} />}</button>
-            <button className="row-action-btn invoice-delete-action" type="button" onClick={() => openAction('delete', invoice)} disabled={rowBusy} aria-label="Delete invoice" title="Delete invoice">{rowBusy && pendingAction.type === 'delete' ? <LoaderCircle className="invoice-button-spin" size={14} /> : <Trash2 size={14} />}</button>
+            <button className="row-action-btn invoice-cancel-action" type="button" onClick={() => openAction(invoice)} disabled={cancelled || rowBusy} aria-label={cancelled ? 'Invoice already cancelled' : 'Cancel invoice'} title={cancelled ? 'Invoice already cancelled' : 'Cancel invoice'}>{rowBusy ? <LoaderCircle className="invoice-button-spin" size={14} /> : <CircleX size={14} />}</button>
           </div></td>
         </tr>
       })}
       {!invoices.length && <tr><td className="invoice-empty-cell" colSpan={columns.length}>No {typeLabel.toLowerCase()}s found for this entity.</td></tr>}
     </tbody></table></div>}</div>
-    {editing && <EditInvoiceModal invoice={editing} entity={entity} onClose={() => setEditing(null)} onSaved={load} />}
+    {editing && <EditInvoiceModal invoice={editing} entity={entity} entities={entities} onClose={() => setEditing(null)} onSaved={load} />}
     {action && <InvoiceActionDialog action={action} busy={Boolean(pendingAction)} error={actionError} onClose={closeAction} onConfirm={confirmAction} />}
   </div>
 }
