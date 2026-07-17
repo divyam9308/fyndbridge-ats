@@ -83,6 +83,8 @@ test('PDF versions receive permanent per-invoice numbers that are never renumber
   assert.match(versionMigration, /set pdf_version_counter = pdf_version_counter \+ 1[\s\S]*returning pdf_version_counter into v_version_number/)
   assert.match(versionMigration, /insert into public\.invoice_pdf_versions \([\s\S]*version_number[\s\S]*v_version_number/)
   assert.match(versionMigration, /perform public\.create_invoice_pdf_version\(p_invoice_id, p_storage_path\)/)
+  assert.match(versionMigration, /set pdf_version_counter = greatest\(/)
+  assert.doesNotMatch(versionMigration, /pg_catalog\.greatest/)
   assert.match(baselineSchema, /pdf_version_counter integer not null default 0/)
   assert.match(baselineSchema, /version_number integer not null/)
 })

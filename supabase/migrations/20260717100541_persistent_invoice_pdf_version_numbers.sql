@@ -67,7 +67,7 @@ with highest_versions as (
   group by version.invoice_id
 )
 update public.invoices invoice
-set pdf_version_counter = pg_catalog.greatest(
+set pdf_version_counter = greatest(
   invoice.pdf_version_counter,
   highest.version_number
 )
