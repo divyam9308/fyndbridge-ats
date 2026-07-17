@@ -54,6 +54,7 @@ create table if not exists invoices (
   amount_in_words text not null,
   tax_amount_in_words text not null,
   pdf_storage_path text,
+  pdf_version_counter integer not null default 0 check (pdf_version_counter >= 0),
   created_at timestamptz default now()
 );
 
@@ -212,14 +213,95 @@ create table if not exists invoice_pdf_versions (
   id uuid primary key default gen_random_uuid(),
   invoice_id uuid not null references invoices(id) on delete cascade,
   storage_path text unique not null,
+  version_number integer not null check (version_number > 0),
   created_at timestamptz default now()
 );
 
-insert into invoice_pdf_versions (invoice_id, storage_path, created_at)
-select id, pdf_storage_path, coalesce(created_at, now())
-from invoices
-where pdf_storage_path is not null and btrim(pdf_storage_path) <> ''
+alter table invoices
+  add column if not exists pdf_version_counter integer not null default 0;
+
+alter table invoice_pdf_versions
+  add column if not exists version_number integer;
+
+with ranked_versions as (
+  select
+    version.id,
+    row_number() over (
+      partition by version.invoice_id
+      order by version.created_at, version.id
+    )::integer as version_number
+  from invoice_pdf_versions version
+)
+update invoice_pdf_versions version
+set version_number = ranked.version_number
+from ranked_versions ranked
+where version.id = ranked.id
+  and version.version_number is null;
+
+insert into invoice_pdf_versions (
+  invoice_id,
+  storage_path,
+  version_number,
+  created_at
+)
+select
+  invoice.id,
+  invoice.pdf_storage_path,
+  coalesce((
+    select max(version.version_number)
+    from invoice_pdf_versions version
+    where version.invoice_id = invoice.id
+  ), 0) + 1,
+  coalesce(invoice.created_at, now())
+from invoices invoice
+where invoice.pdf_storage_path is not null
+  and btrim(invoice.pdf_storage_path) <> ''
 on conflict (storage_path) do nothing;
+
+alter table invoice_pdf_versions
+  alter column version_number set not null;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'invoices_pdf_version_counter_nonnegative'
+      and conrelid = 'invoices'::regclass
+  ) then
+    alter table invoices
+      add constraint invoices_pdf_version_counter_nonnegative
+      check (pdf_version_counter >= 0);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'invoice_pdf_versions_version_number_positive'
+      and conrelid = 'invoice_pdf_versions'::regclass
+  ) then
+    alter table invoice_pdf_versions
+      add constraint invoice_pdf_versions_version_number_positive
+      check (version_number > 0);
+  end if;
+end
+$$;
+
+with highest_versions as (
+  select invoice_id, max(version_number) as version_number
+  from invoice_pdf_versions
+  group by invoice_id
+)
+update invoices invoice
+set pdf_version_counter = greatest(
+  invoice.pdf_version_counter,
+  highest.version_number
+)
+from highest_versions highest
+where invoice.id = highest.invoice_id;
+
+create unique index if not exists invoice_pdf_versions_invoice_id_version_number_key
+  on invoice_pdf_versions (invoice_id, version_number);
 
 create index if not exists invoice_pdf_versions_invoice_id_created_at_idx
   on invoice_pdf_versions (invoice_id, created_at desc);

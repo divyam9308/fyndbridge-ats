@@ -366,8 +366,8 @@ export default function InvoiceEntityDetailPage() {
           {invoiceType === 'tax_invoice' && <><td className="invoice-money-cell">{formatInrPaise(values.billValue)}</td>
           <td className="invoice-money-cell">{formatInrPaise(values.taxValue)}</td>
           <td className="invoice-money-cell invoice-total-cell">{formatInrPaise(values.totalInvoiceValue)}</td></>}
-          <td><div className="invoice-version-list">{(invoice.pdf_versions || []).map((version, index) => {
-            const versionNumber = invoice.pdf_versions.length - index
+          <td><div className="invoice-version-list">{(invoice.pdf_versions || []).map(version => {
+            const versionNumber = version.version_number
             return <span className="invoice-version" key={version.id}><button className="invoice-document-button" type="button" onClick={() => openInvoice(version)} disabled={deletingVersion === version.id} title={`Open PDF version ${versionNumber}`} aria-label={`Open PDF version ${versionNumber}`}>{opening === version.id ? <LoaderCircle className="invoice-button-spin" size={16} /> : <FileText size={16} />}<small>v{versionNumber}</small></button>{!cancelled && <button className="invoice-version-delete" type="button" onClick={() => deleteVersion(invoice, version, versionNumber)} disabled={Boolean(deletingVersion)} title={`Delete PDF version ${versionNumber}`} aria-label={`Delete PDF version ${versionNumber}`}>{deletingVersion === version.id ? <LoaderCircle className="invoice-button-spin" size={11} /> : <Trash2 size={11} />}</button>}</span>
           })}{!invoice.pdf_versions?.length ? '—' : null}</div></td>
           <td><div className="row-actions invoice-row-actions">

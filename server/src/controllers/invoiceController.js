@@ -112,7 +112,7 @@ async function getEntity(req, res) {
     const invoiceIds = (invoices || []).map(invoice => invoice.id)
     let versions = []
     if (invoiceIds.length) {
-      const result = await supabase.from('invoice_pdf_versions').select('*').in('invoice_id', invoiceIds).order('created_at', { ascending: false })
+      const result = await supabase.from('invoice_pdf_versions').select('*').in('invoice_id', invoiceIds).order('version_number', { ascending: false })
       if (result.error) throw result.error
       versions = result.data || []
     }
@@ -363,10 +363,18 @@ async function regenerate(req, res) {
   try {
     const { existing, entity, updated, pdf } = await regenerationData(req.params.id, req.body)
     const storagePath = await uploadInvoicePdf(entity.id, existing.invoice_display_id || 'IID', pdf)
-    const versionResult = await supabase.from('invoice_pdf_versions').insert({ invoice_id: existing.id, storage_path: storagePath }).select('*').single()
+    const versionResult = await supabase.rpc('create_invoice_pdf_version', {
+      p_invoice_id: existing.id,
+      p_storage_path: storagePath
+    })
     if (versionResult.error) {
       await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([storagePath])
       throw versionResult.error
+    }
+    const version = rpcRow(versionResult.data)
+    if (!version?.id) {
+      await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([storagePath])
+      throw new Error('Invoice PDF version allocation failed')
     }
     updated.pdf_storage_path = storagePath
     const { data: updatedData, error: updateError } = await supabase.rpc('update_invoice_with_reassigned_sequence', {
@@ -375,12 +383,12 @@ async function regenerate(req, res) {
       p_expected_invoice_number: updated.invoice_number
     })
     if (updateError) {
-      await supabase.from('invoice_pdf_versions').delete().eq('id', versionResult.data.id)
+      await supabase.from('invoice_pdf_versions').delete().eq('id', version.id)
       await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([storagePath])
       throw updateError
     }
     const data = rpcRow(updatedData)
-    return res.json({ data: decorateInvoice(data), version: decoratePdfVersion(versionResult.data), fileName: invoiceFileName(data), pdfBase64: pdf.toString('base64') })
+    return res.json({ data: decorateInvoice(data), version: decoratePdfVersion(version), fileName: invoiceFileName(data), pdfBase64: pdf.toString('base64') })
   } catch (err) { return sendError(res, err) }
 }
 
@@ -426,7 +434,7 @@ async function deletePdfVersion(req, res) {
         .from('invoice_pdf_versions')
         .select('storage_path')
         .eq('invoice_id', version.invoice_id)
-        .order('created_at', { ascending: false })
+        .order('version_number', { ascending: false })
         .limit(1)
         .maybeSingle()
       if (latestError) throw latestError
