@@ -165,7 +165,7 @@ async function nextNumberParts(billingEntity, invoiceDate, invoiceType = 'tax_in
 
 function invoiceNumberForSequence(billingEntity, invoiceType, financialYearValue, sequence) {
   const prefix = invoiceType === 'proforma_invoice'
-    ? `PI/${billingEntity}`
+    ? (billingEntity === 'FCS' ? 'PI/FB' : 'PI/FCAPL')
     : billingEntity === 'FCAPL' ? 'FCAPL' : 'FB'
   return `${prefix}/${financialYearValue}/${String(sequence).padStart(3, '0')}`
 }
@@ -173,10 +173,8 @@ function invoiceNumberForSequence(billingEntity, invoiceType, financialYearValue
 async function reassignmentNumberParts(existing, entity, invoiceDate) {
   const billingEntity = BILLING_ENTITIES.has(entity.billing_entity) ? entity.billing_entity : 'FCS'
   const targetFinancialYear = financialYear(invoiceDate)
-  const staysInSeries = existing.financial_year === targetFinancialYear && (
-    existing.invoice_type === 'proforma_invoice' ||
+  const staysInSeries = existing.financial_year === targetFinancialYear &&
     existing.billing_entity === billingEntity
-  )
   if (!staysInSeries) {
     return {
       billingEntity,

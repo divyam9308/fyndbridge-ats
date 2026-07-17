@@ -545,7 +545,14 @@ function selectInvoiceLayout(invoice) {
 }
 
 function layoutForInvoice(invoice) {
-  const selected = selectInvoiceLayout(invoice)
+  // Document type is deliberately excluded: a proforma always reuses the
+  // matching normal invoice layout for its billing entity, GST, and rounding.
+  const selected = selectInvoiceLayout({
+    billing_entity: invoice.billing_entity,
+    gst_component: invoice.gst_component,
+    rounding_type: invoice.rounding_type,
+    rounding_amount: invoice.rounding_amount
+  })
   if (selected.tax !== 'CGST_SGST' || hasRounding(invoice)) return selected
   const removedHeight = selected.y.totals.at(-1) - selected.y.totals[0]
   const shiftedKeys = ['amountWords', 'summaryGroup', 'summaryHeader', 'summaryData', 'summaryBottom', 'taxWords', 'lowerBottom']

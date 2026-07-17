@@ -28,7 +28,7 @@ test('lowest missing invoice number is allocated inside the exact billing-entity
   assert.match(migration, /case when p_billing_entity = 'FCAPL' then 'FCAPL' else 'FB' end/)
   assert.match(baselineSchema, /invoice_type text not null default 'tax_invoice'/)
   assert.match(baselineSchema, /invoices_tax_invoice_sequence_key[\s\S]*\(billing_entity, financial_year, sequence_number\)[\s\S]*where invoice_type = 'tax_invoice'/)
-  assert.match(baselineSchema, /invoices_proforma_invoice_sequence_key[\s\S]*\(financial_year, sequence_number\)[\s\S]*where invoice_type = 'proforma_invoice'/)
+  assert.match(baselineSchema, /invoices_proforma_invoice_sequence_key[\s\S]*\(billing_entity, financial_year, sequence_number\)[\s\S]*where invoice_type = 'proforma_invoice'/)
 })
 
 test('concurrent invoice creation is serialized and preview conflicts are rejected atomically', () => {

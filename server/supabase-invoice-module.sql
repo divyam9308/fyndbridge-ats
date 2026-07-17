@@ -62,7 +62,7 @@ create unique index if not exists invoices_tax_invoice_sequence_key
   where invoice_type = 'tax_invoice';
 
 create unique index if not exists invoices_proforma_invoice_sequence_key
-  on invoices (financial_year, sequence_number)
+  on invoices (billing_entity, financial_year, sequence_number)
   where invoice_type = 'proforma_invoice';
 
 alter table invoice_entities enable row level security;
