@@ -74,11 +74,17 @@ export const regenerateInvoice = async (id, payload) => {
   invalidateApiJsonCache('/api/invoice/entities')
   return result
 }
+export const fetchReassignedInvoiceNumber = async (id, invoiceEntityId, invoiceDate) => json(await apiFetch(`/api/invoice/invoices/${id}/reassignment-number?invoice_entity_id=${encodeURIComponent(invoiceEntityId)}&invoice_date=${encodeURIComponent(invoiceDate)}`, { cache: 'no-store' }))
 export const previewRegeneratedInvoice = async (id, payload) => json(await apiFetch(`/api/invoice/invoices/${id}/regeneration-preview`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
 }))
+export const deleteInvoicePdfVersion = async (id) => {
+  const result = await json(await apiFetch(`/api/invoice/invoice-pdf-versions/${id}`, { method: 'DELETE' }))
+  invalidateApiJsonCache('/api/invoice/entities')
+  return result
+}
 export const cancelInvoice = async (entityId, id, invoiceType = 'tax_invoice') => {
   const result = await json(await apiFetch(`/api/invoice/entities/${entityId}/invoices/${id}/cancel?invoice_type=${encodeURIComponent(invoiceType)}`, { method: 'POST' }))
   invalidateApiJsonCache('/api/invoice/entities')

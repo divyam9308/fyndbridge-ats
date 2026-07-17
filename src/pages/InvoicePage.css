@@ -668,6 +668,9 @@
 .invoice-version { position: relative; display: inline-flex; }
 .invoice-version .invoice-document-button { width: 42px; gap: 1px; }
 .invoice-version .invoice-document-button small { font-size: 8px; font-weight: 800; }
+.invoice-version-delete { position: absolute; top: -6px; right: -7px; display: grid; width: 18px; height: 18px; padding: 0; border: 1px solid #fecaca; border-radius: 50%; background: #fff; color: #b91c1c; cursor: pointer; place-items: center; }
+.invoice-version-delete:hover:not(:disabled) { border-color: #f87171; background: #fef2f2; color: #991b1b; }
+.invoice-version-delete:disabled { cursor: wait; opacity: .58; }
 .invoice-row-actions { min-width: 84px; justify-content: center; opacity: 1; }
 .invoice-row-actions .row-action-btn:disabled { cursor: not-allowed; opacity: .42; transform: none; }
 .invoice-row-actions .invoice-cancel-action:not(:disabled) { border-color: #f0c98a; color: #9a6500; }
@@ -743,6 +746,37 @@
   font-weight: 800;
 }
 
+.invoice-selected-entity-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(var(--brand-blue-rgb), 0.12);
+  border-radius: 12px;
+  background: var(--gray-50);
+}
+
+.invoice-selected-entity-details span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.invoice-selected-entity-details small {
+  color: var(--gray-500);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.invoice-selected-entity-details b {
+  color: var(--navy);
+  font-size: 11.5px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .invoice-selected-preview {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -812,6 +846,7 @@
   .invoice-page .header-actions { align-items: stretch; flex-direction: column; }
   .invoice-page .header-actions button { justify-content: center; width: 100%; }
   .invoice-selected-preview,
+  .invoice-selected-entity-details,
   .invoice-preview { grid-template-columns: 1fr; }
   .invoice-kpi-grid { grid-template-columns: 1fr; }
   .invoice-modal .modal-body { padding: 16px; }

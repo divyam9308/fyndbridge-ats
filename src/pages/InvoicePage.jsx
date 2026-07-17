@@ -120,6 +120,8 @@ function CreateInvoiceModal({ entities, invoiceType, onClose, onCreated }) {
   const selected = entities.find(entity => entity.id === selectedId)
   const [form, setForm] = useState({ ...EMPTY_INVOICE, invoice_type: invoiceType, invoice_date: today() })
   const [nextNumber, setNextNumber] = useState('')
+  const [nextNumberLoading, setNextNumberLoading] = useState(true)
+  const [nextNumberFailed, setNextNumberFailed] = useState(false)
   const [result, setResult] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -128,14 +130,35 @@ function CreateInvoiceModal({ entities, invoiceType, onClose, onCreated }) {
   useEffect(() => {
     let active = true
     fetchNextInvoiceNumber(form.billing_entity || 'FCS', form.invoice_date || today(), invoiceType)
-      .then(data => { if (active) setNextNumber(data.invoiceNumber) })
-      .catch(() => { if (active) setNextNumber('') })
+      .then(data => {
+        if (!active) return
+        setNextNumber(data.invoiceNumber)
+        setNextNumberLoading(false)
+      })
+      .catch(() => {
+        if (!active) return
+        setNextNumberFailed(true)
+        setNextNumberLoading(false)
+      })
     return () => { active = false }
-  }, [form.billing_entity, form.invoice_date, invoiceType])
-  const update = event => { const { name, value } = event.target; setResult(null); if (name === 'billing_entity' || name === 'invoice_date') setNextNumber(''); setForm(current => ({ ...current, [name]: value })) }
+  }, [form.billing_entity, form.invoice_date, invoiceType, selectedId])
+  const update = event => {
+    const { name, value } = event.target
+    setResult(null)
+    if (name === 'billing_entity' || name === 'invoice_date') {
+      setNextNumber('')
+      setNextNumberLoading(true)
+      setNextNumberFailed(false)
+    }
+    setForm(current => ({ ...current, [name]: value }))
+  }
   const select = event => {
     const entity = entities.find(item => item.id === event.target.value)
-    setSelectedId(event.target.value); setResult(null); setNextNumber('')
+    setSelectedId(event.target.value)
+    setResult(null)
+    setNextNumber('')
+    setNextNumberLoading(true)
+    setNextNumberFailed(false)
     if (entity) setForm(current => ({ ...current, billing_entity: entity.billing_entity || 'FCS', sac: entity.sac || '998512', gst_component: detectInvoiceGstComponent(entity), igst_rate: entity.igst_rate ?? 18, cgst_rate: entity.cgst_rate ?? 9, sgst_rate: entity.sgst_rate ?? 9 }))
   }
   const preview = async () => {
@@ -154,13 +177,14 @@ function CreateInvoiceModal({ entities, invoiceType, onClose, onCreated }) {
     } catch (err) { setError(err.message); setSaving(false) }
   }
   const calc = calculateInvoicePreview(form)
+  const nextNumberPreview = nextNumber || (nextNumberLoading ? 'Loading invoice number...' : nextNumberFailed ? 'Unable to load invoice number' : '')
   return createPortal(<div className="modal-overlay"><div className="modal-card modal-card-lg invoice-modal invoice-generate-modal" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="create-invoice-title">
     <div className="modal-header"><span className="modal-title" id="create-invoice-title">Create {typeLabel}</span><button className="modal-close" type="button" onClick={onClose} disabled={saving} aria-label={`Close Create ${typeLabel}`}><X size={16} /></button></div>
     <div className="modal-body">{error && <div className="invoice-form-error">{error}</div>}
       <section className="invoice-form-section"><h3>Select Entity</h3><select className="form-control" value={selectedId} onChange={select}><option value="" disabled hidden>Select Entity</option>{entities.map(entity => <option key={entity.id} value={entity.id}>{entity.entity_display_id || entity.invoice_id} - {display(entity.legal_entity_name)}</option>)}</select>{selected && <div className="invoice-selected-chip"><Check size={14} />{display(selected.legal_entity_name)}</div>}</section>
       <section className="invoice-form-section"><h3>{typeLabel} Details</h3><div className="form-grid-2">
         <Field label="Consultant Name"><Input name="consultant_name" value={form.consultant_name} update={update} /></Field><Field label="Candidate Name"><Input name="candidate_name" value={form.candidate_name} update={update} /></Field>
-        <Field label="Invoice Date"><Input type="date" name="invoice_date" value={form.invoice_date} update={update} /></Field><Field label="Invoice Number Preview"><input className="form-control" value={nextNumber || 'Auto-generated'} readOnly /></Field>
+        <Field label="Invoice Date"><Input type="date" name="invoice_date" value={form.invoice_date} update={update} /></Field><Field label="Invoice Number Preview"><input className="form-control" value={nextNumberPreview} readOnly /></Field>
         <Field label="Billing Entity"><select className="form-control" name="billing_entity" value={form.billing_entity} onChange={update} disabled={invoiceType === 'proforma_invoice'} title={invoiceType === 'proforma_invoice' ? 'Automatically determined by the selected entity' : undefined}><option>FCS</option><option>FCAPL</option></select></Field>
         <Field label="Model"><select className="form-control" name="model" value={form.model} onChange={update}>{INVOICE_MODELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
         <Field label="Professional Fee Text" full><textarea className="form-control" name="professional_fee_text" value={form.professional_fee_text} onChange={update} rows={3} /></Field>

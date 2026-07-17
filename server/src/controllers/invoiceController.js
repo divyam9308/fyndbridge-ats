@@ -18,6 +18,8 @@ const SAFE_ERROR_MESSAGES = [
   /^Taxable amount cannot be negative$/,
   /^Invalid billing entity$/,
   /^Invalid invoice type$/,
+  /^Invoice PDF version not found$/,
+  /^PDF versions of cancelled invoices cannot be deleted\.$/,
   /^Stored invoice PDF is missing\.$/
 ]
 function httpError(message, statusCode, code = '') {
@@ -27,6 +29,7 @@ function publicInvoiceError(err) {
   if (err?.statusCode) return err
   if (err?.message === 'INVOICE_NUMBER_CHANGED') return httpError('Invoice number changed. Return to edit and generate again.', 409, 'INVOICE_NUMBER_CHANGED')
   if (err?.message === 'INVOICE_NOT_FOUND') return httpError('Invoice not found.', 404)
+  if (err?.message === 'CANCELLED_INVOICE') return httpError('Cancelled invoices cannot be regenerated.', 409)
   if (err?.code === '23505') return httpError('An invoice number conflict occurred. Please try again.', 409, 'INVOICE_NUMBER_CONFLICT')
   if (SAFE_ERROR_MESSAGES.some(pattern => pattern.test(err?.message || ''))) return httpError(err.message, 400)
   console.error('[invoice]', err)
@@ -160,6 +163,39 @@ async function nextNumberParts(billingEntity, invoiceDate, invoiceType = 'tax_in
   return { financialYear: next.financial_year, sequence: Number(next.sequence_number), invoiceNumber: next.invoice_number }
 }
 
+function invoiceNumberForSequence(billingEntity, invoiceType, financialYearValue, sequence) {
+  const prefix = invoiceType === 'proforma_invoice'
+    ? `PI/${billingEntity}`
+    : billingEntity === 'FCAPL' ? 'FCAPL' : 'FB'
+  return `${prefix}/${financialYearValue}/${String(sequence).padStart(3, '0')}`
+}
+
+async function reassignmentNumberParts(existing, entity, invoiceDate) {
+  const billingEntity = BILLING_ENTITIES.has(entity.billing_entity) ? entity.billing_entity : 'FCS'
+  const targetFinancialYear = financialYear(invoiceDate)
+  const staysInSeries = existing.financial_year === targetFinancialYear && (
+    existing.invoice_type === 'proforma_invoice' ||
+    existing.billing_entity === billingEntity
+  )
+  if (!staysInSeries) {
+    return {
+      billingEntity,
+      ...await nextNumberParts(billingEntity, invoiceDate, existing.invoice_type)
+    }
+  }
+  return {
+    billingEntity,
+    financialYear: targetFinancialYear,
+    sequence: Number(existing.sequence_number),
+    invoiceNumber: invoiceNumberForSequence(
+      billingEntity,
+      existing.invoice_type,
+      targetFinancialYear,
+      existing.sequence_number
+    )
+  }
+}
+
 async function nextNumber(req, res) {
   try {
     const invoiceType = normalizeInvoiceType(req.query.invoice_type)
@@ -168,19 +204,22 @@ async function nextNumber(req, res) {
   } catch (err) { return sendError(res, err) }
 }
 
-async function invoiceInput(body, { billingEntity = '' } = {}) {
+async function invoiceInput(body, { entityControlsInvoice = false } = {}) {
   const invoiceType = normalizeInvoiceType(body.invoice_type)
   const { data: entity, error } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).eq('id', body.invoice_entity_id || body.entity_id).maybeSingle()
   if (error) throw error
   if (!entity) throw Object.assign(new Error('Entity not found'), { statusCode: 404 })
-  const preservedBilling = BILLING_ENTITIES.has(billingEntity) ? billingEntity : ''
   const requestedBilling = BILLING_ENTITIES.has(body.billing_entity) ? body.billing_entity : entity.billing_entity || 'FCS'
   const input = {
     ...entity, ...body,
     invoice_type: invoiceType,
-    billing_entity: preservedBilling || (invoiceType === 'proforma_invoice' ? entity.billing_entity || 'FCS' : requestedBilling),
+    billing_entity: (entityControlsInvoice || invoiceType === 'proforma_invoice') ? entity.billing_entity || 'FCS' : requestedBilling,
     model: MODELS.has(body.model) ? body.model : 'joining_percentage',
-    gst_component: detectGstComponent(entity.state_code, entity.state, entity.place_of_supply, entity.address)
+    sac: entityControlsInvoice ? clean(entity.sac) || '998512' : clean(body.sac || entity.sac) || '998512',
+    gst_component: detectGstComponent(entity.state_code, entity.state, entity.place_of_supply, entity.address),
+    igst_rate: entityControlsInvoice ? entity.igst_rate ?? 18 : body.igst_rate,
+    cgst_rate: entityControlsInvoice ? entity.cgst_rate ?? 9 : body.cgst_rate,
+    sgst_rate: entityControlsInvoice ? entity.sgst_rate ?? 9 : body.sgst_rate
   }
   const invoiceDate = body.invoice_date || new Date().toISOString().slice(0, 10)
   return { entity, input, invoiceDate, billing: input.billing_entity, calc: calculateInvoice(input) }
@@ -274,6 +313,23 @@ async function commitPreview(req, res) {
   } catch (err) { return sendError(res, err) }
 }
 
+async function reassignmentNumber(req, res) {
+  try {
+    const { data: existing, error } = await supabase.from('invoices').select('*').eq('id', req.params.id).maybeSingle()
+    if (error) throw error
+    if (!existing) throw httpError('Invoice not found', 404)
+    if (existing.status === 'cancelled') throw httpError('Cancelled invoices cannot be regenerated.', 409)
+
+    const targetEntityId = clean(req.query.invoice_entity_id) || existing.invoice_entity_id
+    const { data: entity, error: entityError } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).eq('id', targetEntityId).maybeSingle()
+    if (entityError) throw entityError
+    if (!entity) throw httpError('Entity not found', 404)
+
+    const invoiceDate = clean(req.query.invoice_date) || existing.invoice_date
+    return res.json(await reassignmentNumberParts(existing, entity, invoiceDate))
+  } catch (err) { return sendError(res, err) }
+}
+
 async function regenerationData(invoiceId, body) {
   const { data: existing, error } = await supabase.from('invoices').select('*').eq('id', invoiceId).maybeSingle()
   if (error) throw error
@@ -282,9 +338,18 @@ async function regenerationData(invoiceId, body) {
   const targetEntityId = clean(body.invoice_entity_id) || existing.invoice_entity_id
   const { entity, input, calc } = await invoiceInput(
     { ...existing, ...body, invoice_type: existing.invoice_type, invoice_entity_id: targetEntityId },
-    { billingEntity: existing.billing_entity }
+    { entityControlsInvoice: true }
   )
-  const updated = { ...invoicePayload(entity, input, input.invoice_date || existing.invoice_date, { invoiceNumber: existing.invoice_number, financialYear: existing.financial_year, sequence: existing.sequence_number }, calc), invoice_display_id: existing.invoice_display_id }
+  const invoiceDate = input.invoice_date || existing.invoice_date
+  const parts = await reassignmentNumberParts(existing, entity, invoiceDate)
+  const expectedNumber = clean(body.expected_invoice_number)
+  if (expectedNumber && expectedNumber !== parts.invoiceNumber) {
+    throw httpError('Invoice number changed. Return to edit and generate again.', 409, 'INVOICE_NUMBER_CHANGED')
+  }
+  const updated = {
+    ...invoicePayload(entity, input, invoiceDate, parts, calc),
+    invoice_display_id: existing.invoice_display_id
+  }
   const pdf = await createInvoicePdf({ entity: { ...entity, ...input }, invoice: updated, overrides: input })
   return { existing, entity, updated, pdf }
 }
@@ -292,7 +357,7 @@ async function regenerationData(invoiceId, body) {
 async function previewRegeneration(req, res) {
   try {
     const { existing, updated, pdf } = await regenerationData(req.params.id, req.body)
-    return res.json({ data: { ...updated, id: existing.id }, fileName: invoiceFileName(existing), pdfBase64: pdf.toString('base64') })
+    return res.json({ data: { ...updated, id: existing.id }, fileName: invoiceFileName(updated), pdfBase64: pdf.toString('base64') })
   } catch (err) { return sendError(res, err) }
 }
 
@@ -306,19 +371,77 @@ async function regenerate(req, res) {
       throw versionResult.error
     }
     updated.pdf_storage_path = storagePath
-    const { data, error: updateError } = await supabase
-      .from('invoices')
-      .update(updated)
-      .eq('id', existing.id)
-      .eq('invoice_type', existing.invoice_type)
-      .select(INVOICE_FIELDS)
-      .single()
+    const { data: updatedData, error: updateError } = await supabase.rpc('update_invoice_with_reassigned_sequence', {
+      p_invoice_id: existing.id,
+      p_invoice: updated,
+      p_expected_invoice_number: updated.invoice_number
+    })
     if (updateError) {
       await supabase.from('invoice_pdf_versions').delete().eq('id', versionResult.data.id)
       await supabase.storage.from(STORAGE_BUCKETS.INVOICE).remove([storagePath])
       throw updateError
     }
-    return res.json({ data: decorateInvoice(data), version: decoratePdfVersion(versionResult.data), fileName: invoiceFileName(existing), pdfBase64: pdf.toString('base64') })
+    const data = rpcRow(updatedData)
+    return res.json({ data: decorateInvoice(data), version: decoratePdfVersion(versionResult.data), fileName: invoiceFileName(data), pdfBase64: pdf.toString('base64') })
+  } catch (err) { return sendError(res, err) }
+}
+
+async function deletePdfVersion(req, res) {
+  try {
+    const { data: version, error } = await supabase
+      .from('invoice_pdf_versions')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle()
+    if (error) throw error
+    if (!version) throw httpError('Invoice PDF version not found', 404)
+
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .select('pdf_storage_path, status')
+      .eq('id', version.invoice_id)
+      .maybeSingle()
+    if (invoiceError) throw invoiceError
+    if (!invoice) throw httpError('Invoice not found', 404)
+    if (invoice.status === 'cancelled') throw httpError('PDF versions of cancelled invoices cannot be deleted.', 409)
+
+    const storagePath = normalizeStoragePath(version.storage_path, STORAGE_BUCKETS.INVOICE)
+    if (!storagePath) throw httpError('Stored invoice PDF is missing.', 404)
+
+    const { error: storageError } = await supabase.storage
+      .from(STORAGE_BUCKETS.INVOICE)
+      .remove([storagePath])
+    if (storageError) throw storageError
+
+    const { data: deleted, error: deleteError } = await supabase
+      .from('invoice_pdf_versions')
+      .delete()
+      .eq('id', version.id)
+      .select('id')
+      .maybeSingle()
+    if (deleteError) throw deleteError
+    if (!deleted) throw httpError('Invoice PDF version not found', 404)
+
+    const currentStoragePath = normalizeStoragePath(invoice.pdf_storage_path, STORAGE_BUCKETS.INVOICE)
+    if (currentStoragePath === storagePath) {
+      const { data: latest, error: latestError } = await supabase
+        .from('invoice_pdf_versions')
+        .select('storage_path')
+        .eq('invoice_id', version.invoice_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (latestError) throw latestError
+
+      const { error: pointerError } = await supabase
+        .from('invoices')
+        .update({ pdf_storage_path: latest?.storage_path || null })
+        .eq('id', version.invoice_id)
+        .eq('pdf_storage_path', invoice.pdf_storage_path)
+      if (pointerError) throw pointerError
+    }
+
+    return res.json({ ok: true })
   } catch (err) { return sendError(res, err) }
 }
 
@@ -362,7 +485,9 @@ module.exports = {
   preview,
   generate,
   commitPreview,
+  reassignmentNumber,
   previewRegeneration,
   regenerate,
+  deletePdfVersion,
   cancelInvoice
 }

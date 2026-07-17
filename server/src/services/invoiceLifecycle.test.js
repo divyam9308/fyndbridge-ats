@@ -53,15 +53,22 @@ test('invoice lifecycle RPCs are service-role only', () => {
   }
 })
 
-test('entity-scoped cancellation remains admin-only and permanent invoice deletion is not exposed', () => {
+test('permanent invoice deletion stays unavailable while individual PDF versions can be deleted', () => {
+  const versionDeleteSection = controller.slice(controller.indexOf('async function deletePdfVersion'), controller.indexOf('async function cancelInvoice'))
   assert.match(routes, /router\.use\(requireAdmin\)/)
   assert.match(routes, /router\.post\('\/entities\/:entityId\/invoices\/:id\/cancel', controller\.cancelInvoice\)/)
+  assert.match(routes, /router\.delete\('\/invoice-pdf-versions\/:id', controller\.deletePdfVersion\)/)
   assert.match(controller, /\.eq\('invoice_entity_id', req\.params\.entityId\)/)
   assert.doesNotMatch(routes, /router\.delete\('\/entities\/:entityId\/invoices\/:id'/)
-  assert.doesNotMatch(routes, /router\.delete\('\/invoice-pdf-versions\/:id'/)
   assert.doesNotMatch(controller, /async function deleteInvoice\(/)
-  assert.doesNotMatch(controller, /async function deletePdfVersion\(/)
+  assert.match(controller, /async function deletePdfVersion\(/)
+  assert.match(versionDeleteSection, /storage[\s\S]*\.from\(STORAGE_BUCKETS\.INVOICE\)[\s\S]*\.remove\(\[storagePath\]\)/)
+  assert.match(versionDeleteSection, /\.from\('invoice_pdf_versions'\)[\s\S]*\.delete\(\)[\s\S]*\.eq\('id', version\.id\)[\s\S]*\.select\('id'\)/)
+  assert.match(versionDeleteSection, /\.update\(\{ pdf_storage_path: latest\?\.storage_path \|\| null \}\)/)
+  assert.match(versionDeleteSection, /invoice\.status === 'cancelled'[\s\S]*PDF versions of cancelled invoices cannot be deleted/)
   assert.doesNotMatch(invoiceApi, /export const deleteInvoice =/)
-  assert.doesNotMatch(invoiceApi, /export const deleteInvoicePdfVersion =/)
-  assert.doesNotMatch(detailPage, /invoice-delete-action|invoice-version-delete|Delete invoice permanently|Delete this PDF version|openAction\('delete'/)
+  assert.match(invoiceApi, /export const deleteInvoicePdfVersion =/)
+  assert.match(detailPage, /invoice-version-delete/)
+  assert.match(detailPage, /Delete PDF version/)
+  assert.doesNotMatch(detailPage, /invoice-delete-action|Delete invoice permanently|openAction\('delete'/)
 })
