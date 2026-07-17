@@ -92,15 +92,19 @@ test('invoice reassignment renumbers atomically inside the target billing-entity
   assert.match(correctedSequenceMigration, /grant execute on function public\.update_invoice_with_reassigned_sequence\(uuid, jsonb, text\)[\s\S]*to service_role/)
 })
 
-test('creation chooser, URL-backed switcher, KPI isolation, and proforma columns are wired', () => {
+test('creation chooser, URL-backed switcher, global tax KPIs, and proforma columns are wired', () => {
   assert.match(invoicePage, /function InvoiceTypeChooser/)
   assert.match(invoicePage, /tax_invoice/)
   assert.match(invoicePage, /proforma_invoice/)
   assert.match(invoicePage, /Create \{typeLabel\}/)
   assert.match(invoicePage, /Automatically determined by the selected entity/)
+  assert.match(invoicePage, /function InvoiceBillingTotals/)
+  assert.match(invoicePage, /BILLING_ENTITIES\.map\(billingEntity/)
+  assert.match(invoicePage, /setInvoiceTotals\(result\.totals \|\| EMPTY_INVOICE_TOTALS\)/)
+  assert.match(invoicePage, /<InvoiceBillingTotals totals=\{invoiceTotals\} loading=\{loading\}/)
   assert.match(detailPage, /useSearchParams/)
   assert.match(detailPage, /searchParams\.get\('type'\) === 'proforma'/)
-  assert.match(detailPage, /invoiceType === 'tax_invoice' && <InvoiceKpis/)
+  assert.doesNotMatch(detailPage, /InvoiceKpis|aggregateInvoiceValues/)
   assert.match(detailPage, /PROFORMA_DETAIL_COLUMNS = DETAIL_COLUMNS\.filter\(column => !\['bill', 'tax', 'total'\]\.includes\(column\.key\)\)/)
   assert.match(detailPage, /No \{typeLabel\.toLowerCase\(\)\}s found for this entity\./)
 })

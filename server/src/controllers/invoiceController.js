@@ -1,6 +1,7 @@
 const supabase = require('../services/supabaseAdmin')
 const { normalizeGstin } = require('../services/gstLookup')
 const { STORAGE_BUCKETS, normalizeStoragePath } = require('../services/storageBuckets')
+const { aggregateTaxInvoiceTotals } = require('../services/invoiceTotals')
 const {
   BILLING_ENTITIES, GST_COMPONENTS, INVOICE_TYPES, MODELS, clean, financialYear,
   detectGstComponent, calculateInvoice, createInvoicePdf
@@ -8,6 +9,8 @@ const {
 
 const ENTITY_FIELDS = 'id, invoice_id, entity_display_id, legal_entity_name, optional_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, sac, billing_entity, gst_component, igst_rate, cgst_rate, sgst_rate, created_at, updated_at'
 const INVOICE_FIELDS = 'id, invoice_entity_id, invoice_type, invoice_display_id, invoice_number, financial_year, sequence_number, invoice_date, consultant_name, candidate_name, professional_fee_text, model, ctc_lpa, model_percent, model_flat_fee, retainer_amount, project_amount, jra_adjustment_value, jra_base_value, jra_flat_fee, others_amount, sac, billing_entity, taxable_amount, gst_component, igst_rate, igst_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount, total_tax_amount, total_before_rounding, rounding_type, rounding_amount, grand_total, pdf_storage_path, status, cancelled_at, cancelled_by, created_at'
+const INVOICE_TOTAL_FIELDS = 'id, invoice_type, billing_entity, taxable_amount, total_tax_amount, total_before_rounding, grand_total, status'
+const INVOICE_TOTAL_PAGE_SIZE = 1000
 
 const SAFE_ERROR_MESSAGES = [
   /^Entity not found$/,
@@ -88,11 +91,34 @@ const decorateInvoice = row => ({ ...row })
 const decoratePdfVersion = row => ({ ...row })
 const rpcRow = data => Array.isArray(data) ? data[0] : data
 
+async function listTaxInvoiceTotalRows() {
+  const rows = []
+  for (let from = 0; ; from += INVOICE_TOTAL_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select(INVOICE_TOTAL_FIELDS)
+      .eq('invoice_type', 'tax_invoice')
+      .eq('status', 'active')
+      .order('id', { ascending: true })
+      .range(from, from + INVOICE_TOTAL_PAGE_SIZE - 1)
+    if (error) throw error
+    rows.push(...(data || []))
+    if (!data || data.length < INVOICE_TOTAL_PAGE_SIZE) break
+  }
+  return rows
+}
+
 async function listEntities(req, res) {
   try {
-    const { data, error } = await supabase.from('invoice_entities').select(ENTITY_FIELDS).order('created_at', { ascending: false })
-    if (error) throw error
-    return res.json({ data: data || [] })
+    const [entitiesResult, taxInvoices] = await Promise.all([
+      supabase.from('invoice_entities').select(ENTITY_FIELDS).order('created_at', { ascending: false }),
+      listTaxInvoiceTotalRows()
+    ])
+    if (entitiesResult.error) throw entitiesResult.error
+    return res.json({
+      data: entitiesResult.data || [],
+      totals: aggregateTaxInvoiceTotals(taxInvoices)
+    })
   } catch (err) { return sendError(res, err) }
 }
 

@@ -2,6 +2,7 @@ const supabase=require('./supabaseAdmin')
 const {localDate,addDays,weekday,workedMinutes,calculateLeave,applySandwichContext,bad,getFinancialYearForDate,getFinancialYearRange,getFinancialYearMonths,previousFinancialYear,calculateLeaveEntitlement,calculateCarryForward}=require('./attendanceUtils')
 const {buildActiveProfiles,buildTodayAttendanceSummary}=require('./teamAttendanceToday')
 const {buildAttendancePeriodSummary}=require('./attendancePeriodSummary')
+const {excludeSuperAdminProfiles,isSuperAdminProfile}=require('./attendanceLeaveEligibility')
 const KEYS=['attendance_approve_corrections','attendance_approve_leave','attendance_view_all','attendance_manage_holidays','attendance_manage_leave_balances','attendance_receive_correction_notifications','attendance_receive_leave_notifications']
 const clean=v=>String(v||'').trim()
 let openClockInsExpiredBefore=''
@@ -24,14 +25,17 @@ async function profileName(userId,fallback='Team member'){const {data}=await sup
 async function notify(row){let {error}=await supabase.from('notifications').insert(row);if(error&&(error.code==='PGRST204'||error.code==='42703')){const legacy={...row};delete legacy.entity_type;delete legacy.entity_id;delete legacy.action_url;delete legacy.idempotency_key;({error}=await supabase.from('notifications').insert(legacy))}if(error&&error.code!=='23505')throw error}
 async function notifyReviewers(key,entity,message,url,sender){const p=await permissions(),{data:admins}=await supabase.from('admin_users').select('*');const authUsers=await supabase.auth.admin.listUsers({page:1,perPage:1000});if(authUsers.error)throw authUsers.error;const idsByEmail=new Map((authUsers.data.users||[]).map(user=>[String(user.email||'').toLowerCase(),user.id]));const recipients=new Set();for(const a of admins||[]){const recipientId=a.user_id||idsByEmail.get(String(a.email||'').toLowerCase());if(!recipientId||recipients.has(recipientId)||((p[key]==='super_admins')&&!(a.role==='super_admin'||a.is_super_admin)))continue;recipients.add(recipientId);await notify({recipient_user_id:recipientId,sender_user_id:sender,role_type:'system',title:'Attendance approval required',message,status:'pending',action_type:'attendance_request',entity_type:entity.type,entity_id:entity.id,action_url:url,idempotency_key:`${entity.type}-submitted:${entity.id}:${recipientId}`})}}
 async function ledgerTotal(userId,financialYear){const {data,error}=await supabase.from('leave_ledger').select('amount').eq('user_id',userId).eq('financial_year',financialYear);if(error)throw error;return (data||[]).reduce((n,x)=>n+Number(x.amount),0)}
-async function ensureFinancialYearLedger(userId,financialYear,asOfDate=localDate()){
+async function leaveEligibilityAdmins(){const {data,error}=await supabase.from('admin_users').select('user_id,email,role,is_super_admin');if(error)throw error;return data||[]}
+async function ensureFinancialYearLedger(userId,financialYear,asOfDate=localDate(),eligibilityAdmins=null){
  const authUser=await supabase.auth.admin.getUserById(userId);if(authUser.error)throw authUser.error
+ const admins=eligibilityAdmins||await leaveEligibilityAdmins()
+ if(isSuperAdminProfile({user_id:userId,email:authUser.data.user.email},admins))return
  const joined=localDate(authUser.data.user.created_at),joinFinancialYear=getFinancialYearForDate(joined),range=getFinancialYearRange(financialYear)
  if(range.end<joined)return
  if(localDate(asOfDate)<range.start)return
  if(range.start>getFinancialYearRange(joinFinancialYear).start){
   const previous=previousFinancialYear(financialYear),previousRange=getFinancialYearRange(previous)
-  await ensureFinancialYearLedger(userId,previous,addDays(previousRange.end,1))
+  await ensureFinancialYearLedger(userId,previous,addDays(previousRange.end,1),admins)
   const carry=calculateCarryForward(await ledgerTotal(userId,previous))
   const {error}=await supabase.from('leave_ledger').insert({user_id:userId,entry_date:range.start,entry_type:'opening_balance',amount:carry,financial_year:financialYear,description:`Carry-forward from ${previous} (maximum 5 days)`})
   if(error&&error.code!=='23505')throw error
@@ -45,8 +49,8 @@ async function ensureFinancialYearLedger(userId,financialYear,asOfDate=localDate
   if(error&&error.code!=='23505')throw error
  }
 }
-async function leaveBalanceSummary(userId,financialYear=getFinancialYearForDate(localDate()),asOfDate=localDate()){
- await ensureFinancialYearLedger(userId,financialYear,asOfDate)
+async function leaveBalanceSummary(userId,financialYear=getFinancialYearForDate(localDate()),asOfDate=localDate(),eligibilityAdmins=null){
+ await ensureFinancialYearLedger(userId,financialYear,asOfDate,eligibilityAdmins)
  const range=getFinancialYearRange(financialYear),[{data:ledger,error:ledgerError},{data:pending,error:pendingError},holidayRows]=await Promise.all([
   supabase.from('leave_ledger').select('entry_type,amount').eq('user_id',userId).eq('financial_year',financialYear),
   supabase.from('leave_requests').select('start_date,end_date,duration_type,half_day_session,charged_leave_days,status').eq('user_id',userId).in('status',['pending','approved']).lte('start_date',range.end).gte('end_date',range.start),
@@ -69,7 +73,7 @@ async function leaveBalanceSummary(userId,financialYear=getFinancialYearForDate(
  return {financial_year:financialYear,annual_entitlement:calculateLeaveEntitlement(),opening_carry_forward:opening,accrued_leave:accrued,used_leave:used,pending_leave:pendingDays,available_balance:available,projected_balance:projected,loss_of_pay_exposure:Math.max(0,-projected)}
 }
 async function balance(userId,financialYear,asOfDate){return (await leaveBalanceSummary(userId,financialYear,asOfDate)).available_balance}
-async function listLeaveBalances(user,financialYear){await requirePermission(user,'attendance_manage_leave_balances');const {data,error}=await supabase.from('user_profiles').select('user_id,name,email').order('name');if(error)throw error;return Promise.all((data||[]).map(async profile=>({user:profile,balance:await leaveBalanceSummary(profile.user_id,financialYear)})))}
+async function listLeaveBalances(user,financialYear){await requirePermission(user,'attendance_manage_leave_balances');const [profilesResult,admins]=await Promise.all([supabase.from('user_profiles').select('user_id,name,email').order('name'),leaveEligibilityAdmins()]);if(profilesResult.error)throw profilesResult.error;const profiles=excludeSuperAdminProfiles(profilesResult.data||[],admins);return Promise.all(profiles.map(async profile=>({user:profile,balance:await leaveBalanceSummary(profile.user_id,financialYear,localDate(),admins)})))}
 async function adjustLeaveBalance(user,targetUserId,amount,description,financialYear){await requirePermission(user,'attendance_manage_leave_balances');const numeric=Number(amount);if(!Number.isFinite(numeric)||numeric===0)throw bad('Enter a non-zero balance adjustment.');const fy=financialYear||getFinancialYearForDate(localDate()),{data,error}=await supabase.from('leave_ledger').insert({user_id:targetUserId,entry_date:localDate(),entry_type:'adjustment',amount:numeric,financial_year:fy,description:clean(description)||'Manual leave balance adjustment',created_by:user.id}).select().single();if(error)throw error;return {entry:data,balance:await leaveBalanceSummary(targetUserId,fy)}}
 async function holidays(start,end,active=true){let q=supabase.from('company_holidays').select('*').gte('holiday_date',start).lte('holiday_date',end);if(active)q=q.eq('is_active',true);const {data,error}=await q.order('holiday_date');if(error)throw error;return data||[]}
 async function today(user){const date=localDate();await expireOpenClockIns(date);const {data,error}=await supabase.from('attendance_records').select('*').eq('user_id',user.id).eq('attendance_date',date).maybeSingle();if(error)throw error;return data}

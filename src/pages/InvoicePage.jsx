@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { Check, Download, FileClock, FileText, Pencil, Plus, ReceiptText, Search, Trash2, X } from 'lucide-react'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
+import ReportKpiCard from '../components/ReportKpiCard'
 import {
   commitInvoicePreview, createInvoiceEntity, deleteInvoiceEntity, fetchInvoiceEntities,
   fetchNextInvoiceNumber, lookupGstin, previewInvoicePdf, updateInvoiceEntity
@@ -10,6 +11,7 @@ import {
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import { useDialogFocus } from '../hooks/useDialogFocus'
 import { EMPTY_INVOICE, INVOICE_MODELS, INVOICE_TYPE_LABELS, calculateInvoicePreview, detectInvoiceGstComponent } from '../utils/invoiceModels'
+import { formatInrPaise } from '../utils/invoiceValues'
 import '../styles/Shared.css'
 import './InvoicePage.css'
 
@@ -20,6 +22,17 @@ const EMPTY_ENTITY = {
 const ENTITY_FIELDS = Object.keys(EMPTY_ENTITY)
 const SEARCH_FIELDS = ['entity_display_id', 'invoice_id', 'legal_entity_name', 'optional_name', 'gstin', 'pan', 'contact_person', 'email', 'billing_entity']
 const INVOICE_TABLE_HEADERS = ['Entity ID', 'Default Billing Entity', 'Legal Entity Name', 'Optional Name', 'Address', 'GSTIN', 'PAN', 'Place of Supply', 'State', 'State Code', 'Contact Person', 'Contact Email', 'SAC', 'GST Component', 'Rate', 'Actions']
+const BILLING_ENTITIES = ['FCS', 'FCAPL']
+const KPI_CARDS = [
+  { key: 'billValue', label: 'Total Bill Value', tone: 'navy' },
+  { key: 'taxValue', label: 'Total Tax Value', tone: 'amber' },
+  { key: 'totalInvoiceValue', label: 'Total Invoice Value', tone: 'green' }
+]
+const EMPTY_INVOICE_TOTALS = Object.fromEntries(BILLING_ENTITIES.map(entity => [entity, {
+  billValue: '0',
+  taxValue: '0',
+  totalInvoiceValue: '0'
+}]))
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const number = value => Number(String(value ?? '').replace(/₹|â‚¹|Rs\.?|,/gi, '').trim() || 0)
 const money = value => `₹${number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -47,6 +60,23 @@ function InvoiceTableSkeleton({ label }) {
       <FyndbridgeLoader size={88} label={label} className="invoice-inline-loader" />
     </div>
   )
+}
+
+function InvoiceBillingTotals({ totals, loading = false }) {
+  return <section className="invoice-billing-totals" aria-label="Tax invoice totals by billing entity">
+    {BILLING_ENTITIES.map(billingEntity => <div className="invoice-billing-total-row" key={billingEntity}>
+      <div className="invoice-billing-total-entity"><span>Billing Entity</span><strong>{billingEntity}</strong></div>
+      <div className="invoice-kpi-grid" aria-label={`${billingEntity} tax invoice totals`}>
+        {KPI_CARDS.map(card => <ReportKpiCard
+          key={card.key}
+          label={card.label}
+          value={formatInrPaise(BigInt(totals?.[billingEntity]?.[card.key] || 0))}
+          tone={card.tone}
+          loading={loading}
+        />)}
+      </div>
+    </div>)}
+  </section>
 }
 
 function InvoiceTypeChooser({ onClose, onSelect }) {
@@ -207,6 +237,7 @@ function rate(entity) {
 export default function InvoicePage() {
   const { isAdmin, loading: adminLoading } = useAdminAccess({ loadPermissions: false, realtime: false })
   const [entities, setEntities] = useState([])
+  const [invoiceTotals, setInvoiceTotals] = useState(EMPTY_INVOICE_TOTALS)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -214,7 +245,18 @@ export default function InvoicePage() {
   const [adding, setAdding] = useState(false)
   const [choosingInvoiceType, setChoosingInvoiceType] = useState(false)
   const [creatingInvoiceType, setCreatingInvoiceType] = useState('')
-  const load = useCallback(async () => { setError(''); try { setEntities((await fetchInvoiceEntities()).data || []) } catch (err) { setError(err.message) } finally { setLoading(false) } }, [])
+  const load = useCallback(async () => {
+    setError('')
+    try {
+      const result = await fetchInvoiceEntities()
+      setEntities(result.data || [])
+      setInvoiceTotals(result.totals || EMPTY_INVOICE_TOTALS)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
   useEffect(() => { if (!adminLoading && isAdmin) Promise.resolve().then(load); else if (!adminLoading) Promise.resolve().then(() => setLoading(false)) }, [adminLoading, isAdmin, load])
   const filtered = useMemo(() => { const term = query.toLowerCase().trim(); return entities.filter(entity => !term || SEARCH_FIELDS.some(field => String(entity[field] || '').toLowerCase().includes(term))) }, [entities, query])
   const save = async form => { if (editing) await updateInvoiceEntity(editing.id, form); else await createInvoiceEntity(form); await load() }
@@ -225,6 +267,7 @@ export default function InvoicePage() {
       <button className="btn-secondary" onClick={() => setChoosingInvoiceType(true)} disabled={!canUseInvoice}><FileText size={15} />Create Invoice</button>
       <button className="btn-primary" onClick={() => setAdding(true)} disabled={!canUseInvoice}><Plus size={15} />Add Entity</button>
     </div>
+    {canUseInvoice && <InvoiceBillingTotals totals={invoiceTotals} loading={loading} />}
     <div className="table-card invoice-table-card"><div className="invoice-card-toolbar"><div className="invoice-search"><Search size={17} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search billing entities..." disabled={!canUseInvoice} /></div><span>{canUseInvoice ? `${filtered.length} ${filtered.length === 1 ? 'entity' : 'entities'}` : 'Access check'}</span></div>
       {error && canUseInvoice && <div className="invoice-table-error">{error}</div>}
       {adminLoading ? <InvoiceTableSkeleton label="Checking invoice access..." /> : !isAdmin ? <div className="invoice-access-panel"><div className="invoice-denied">Admin access required.</div></div> : loading ? <InvoiceTableSkeleton label="Loading entities..." /> : <div className="table-scroll"><table className="data-table invoice-table"><thead><tr>{INVOICE_TABLE_HEADERS.map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>

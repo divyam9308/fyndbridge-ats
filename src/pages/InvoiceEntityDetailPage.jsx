@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, ChevronLeft, CircleX, Download, FileClock, FileText, LoaderCircle, Pencil, ReceiptText, Trash2, X } from 'lucide-react'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
-import ReportKpiCard from '../components/ReportKpiCard'
 import {
   cancelInvoice as cancelInvoiceRequest,
   deleteInvoicePdfVersion,
@@ -19,7 +18,6 @@ import { useDialogFocus } from '../hooks/useDialogFocus'
 import { EMPTY_INVOICE, INVOICE_MODEL_LABELS, INVOICE_MODELS, INVOICE_TYPE_LABELS, calculateInvoicePreview, detectInvoiceGstComponent } from '../utils/invoiceModels'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import {
-  aggregateInvoiceValues,
   formatInrPaise,
   formatInvoiceMoney,
   formatInvoicePercentage,
@@ -34,12 +32,6 @@ const money = formatInvoiceMoney
 const moneyOrDash = value => value === null || value === undefined || String(value).trim() === '' ? '—' : money(value)
 function Field({ label, children, full = false }) { return <div className={`form-group${full ? ' full' : ''}`}><label className="form-label">{label}</label>{children}</div> }
 function Input({ name, value, update, ...props }) { return <input className="form-control" name={name} value={value ?? ''} onChange={update} {...props} /> }
-
-const KPI_CARDS = [
-  { key: 'billValue', label: 'Total Bill Value', tone: 'navy' },
-  { key: 'taxValue', label: 'Total Tax Value', tone: 'amber' },
-  { key: 'totalInvoiceValue', label: 'Total Invoice Value', tone: 'green' }
-]
 
 const DETAIL_COLUMNS = [
   { key: 'displayId', label: 'Invoice ID', width: 120 },
@@ -69,10 +61,6 @@ const DETAIL_TABLE_STYLE = { width: `${DETAIL_TABLE_WIDTH}px`, minWidth: `${DETA
 const PROFORMA_DETAIL_COLUMNS = DETAIL_COLUMNS.filter(column => !['bill', 'tax', 'total'].includes(column.key))
 const PROFORMA_TABLE_WIDTH = PROFORMA_DETAIL_COLUMNS.reduce((total, column) => total + column.width, 0)
 const PROFORMA_TABLE_STYLE = { width: `${PROFORMA_TABLE_WIDTH}px`, minWidth: `${PROFORMA_TABLE_WIDTH}px` }
-
-function InvoiceKpis({ totals, loading = false }) {
-  return <section className="invoice-kpi-grid" aria-label="Invoice totals">{KPI_CARDS.map(card => <ReportKpiCard key={card.key} label={card.label} value={formatInrPaise(totals?.[card.key] || 0n)} tone={card.tone} loading={loading} />)}</section>
-}
 
 function InvoiceActionDialog({ action, busy, error, onClose, onConfirm }) {
   const dialogRef = useDialogFocus(onClose, { closeDisabled: busy })
@@ -280,7 +268,6 @@ export default function InvoiceEntityDetailPage() {
   }, [toast])
   const currentData = data?.invoiceType === invoiceType ? data : null
   const invoices = useMemo(() => currentData?.invoices || [], [currentData?.invoices])
-  const totals = useMemo(() => aggregateInvoiceValues(invoices), [invoices])
   const openInvoice = async invoice => {
     const path = invoice.storage_path || invoice.pdf_storage_path
     if (!isValidStoragePath(path)) return setError('Stored invoice PDF is missing.')
@@ -340,7 +327,6 @@ export default function InvoiceEntityDetailPage() {
       <button className={invoiceType === 'tax_invoice' ? 'is-active' : ''} type="button" onClick={() => selectInvoiceType('tax_invoice')} aria-current={invoiceType === 'tax_invoice' ? 'page' : undefined}><ReceiptText size={17} />Tax Invoice</button>
       <button className={invoiceType === 'proforma_invoice' ? 'is-active' : ''} type="button" onClick={() => selectInvoiceType('proforma_invoice')} aria-current={invoiceType === 'proforma_invoice' ? 'page' : undefined}><FileClock size={17} />Proforma Invoice</button>
     </nav>
-    {invoiceType === 'tax_invoice' && <InvoiceKpis totals={totals} loading={typeLoading} />}
     <div className="table-card invoice-table-card"><div className="invoice-card-toolbar"><strong>{typeLabel}s</strong><span>{typeLoading ? 'Loading…' : `${invoices.length} ${invoices.length === 1 ? 'invoice' : 'invoices'}`}</span></div>{typeLoading ? <InvoiceTableLoading label={`Loading ${typeLabel.toLowerCase()}s...`} /> : <div className="table-scroll"><table className="data-table invoice-detail-table" style={tableStyle}><colgroup>{columns.map(column => <col key={column.key} style={{ width: `${column.width}px` }} />)}</colgroup><thead><tr>{columns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>
       {invoices.map(invoice => {
         const cancelled = invoice.status === 'cancelled'
