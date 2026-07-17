@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   LayoutDashboard, Briefcase, Building2, ClipboardList, Users, LogOut, ShieldCheck, FileText, BookOpenText, CalendarCheck, ChartNoAxesCombined
 } from 'lucide-react'
@@ -8,6 +8,39 @@ import { useAdminAccess } from '../hooks/useAdminAccess'
 import { usePageViewPermissions } from '../hooks/usePageViewPermissions'
 import { preloadRoute } from '../utils/routePreload'
 import './Sidebar.css'
+
+// Switch during the completed-logo hold, before the looping GIF starts clearing.
+const SIDEBAR_LOGO_ANIMATION_DURATION_MS = 4600
+const SIDEBAR_LOGO_ANIMATION_STORAGE_KEY = 'fyndx-sidebar-logo-animation-page-load'
+const SIDEBAR_LOGO_STATIC_SRC = '/assets/fyndx-sidebar-logo.png'
+const SIDEBAR_LOGO_ANIMATED_SRC = '/assets/fyndx-sidebar-logo-animated.gif'
+let sidebarLogoAnimationPageLoad = ''
+
+function getPageLoadId() {
+  if (typeof window === 'undefined') return ''
+  const timeOrigin = window.performance?.timeOrigin
+  return Number.isFinite(timeOrigin) ? String(timeOrigin) : window.location.href
+}
+
+function shouldPlaySidebarLogoAnimation() {
+  if (typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false
+  const pageLoadId = getPageLoadId()
+  try {
+    return window.sessionStorage.getItem(SIDEBAR_LOGO_ANIMATION_STORAGE_KEY) !== pageLoadId
+  } catch {
+    return sidebarLogoAnimationPageLoad !== pageLoadId
+  }
+}
+
+function rememberSidebarLogoAnimation() {
+  const pageLoadId = getPageLoadId()
+  sidebarLogoAnimationPageLoad = pageLoadId
+  try {
+    window.sessionStorage.setItem(SIDEBAR_LOGO_ANIMATION_STORAGE_KEY, pageLoadId)
+  } catch {
+    // The module-level value still prevents replays during this page lifecycle.
+  }
+}
 
 const navItems = [
   { to: '/dashboard',            label: 'Dashboard', key: 'dashboard', Icon: LayoutDashboard, end: true },
@@ -26,6 +59,8 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const { isAdmin, isSuperAdmin } = useAdminAccess({ loadPermissions: false })
   const pageViews = usePageViewPermissions({ isAdmin, isSuperAdmin })
+  const logoAnimationTimerRef = useRef(null)
+  const [showAnimatedLogo, setShowAnimatedLogo] = useState(shouldPlaySidebarLogoAnimation)
   const displayName = user?.profile_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Recruiter'
   const initials = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 
@@ -41,6 +76,25 @@ export default function Sidebar() {
       preloadRoute('/dashboard/admin')
     }
   }, [isAdmin])
+
+  useEffect(() => {
+    if (!showAnimatedLogo) return undefined
+    rememberSidebarLogoAnimation()
+    return () => {
+      if (logoAnimationTimerRef.current !== null) {
+        window.clearTimeout(logoAnimationTimerRef.current)
+        logoAnimationTimerRef.current = null
+      }
+    }
+  }, [showAnimatedLogo])
+
+  const handleAnimatedLogoLoad = () => {
+    if (logoAnimationTimerRef.current !== null) return
+    logoAnimationTimerRef.current = window.setTimeout(() => {
+      logoAnimationTimerRef.current = null
+      setShowAnimatedLogo(false)
+    }, SIDEBAR_LOGO_ANIMATION_DURATION_MS)
+  }
 
   const preload = (to) => {
     preloadRoute(to)
@@ -58,22 +112,32 @@ export default function Sidebar() {
     <aside className="sidebar" role="navigation" aria-label="Main navigation">
       {/* Logo */}
       <div className="sidebar-logo">
-        <picture>
-          <source
-            srcSet="/assets/fyndbridge-official-logo-380.webp 380w, /assets/fyndbridge-official-logo.webp 543w"
-            sizes="212px"
-            type="image/webp"
-          />
+        <div className="sidebar-logo-media">
           <img
-            src="/assets/fyndbridge-official-logo.png"
-            alt="FYNDBRIDGE"
-            className="sidebar-logo-image"
-            width="380"
-            height="63"
+            src={SIDEBAR_LOGO_STATIC_SRC}
+            alt="BridgeX FyndX"
+            className={`sidebar-logo-image sidebar-logo-image-static${showAnimatedLogo ? ' is-hidden' : ''}`}
+            width="951"
+            height="288"
             decoding="async"
-            onError={() => console.error('FYNDBRIDGE logo failed to load')}
+            draggable="false"
+            onError={() => console.error('BridgeX FyndX sidebar logo failed to load')}
           />
-        </picture>
+          {showAnimatedLogo && (
+            <img
+              src={SIDEBAR_LOGO_ANIMATED_SRC}
+              alt=""
+              aria-hidden="true"
+              className="sidebar-logo-image sidebar-logo-image-animated"
+              width="475"
+              height="144"
+              decoding="async"
+              draggable="false"
+              onLoad={handleAnimatedLogoLoad}
+              onError={() => setShowAnimatedLogo(false)}
+            />
+          )}
+        </div>
       </div>
 
       {/* Nav links */}
