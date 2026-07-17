@@ -600,7 +600,7 @@
   display: grid;
   align-content: center;
   gap: 7px;
-  padding: 16px;
+  padding: 12px 16px;
   border: 1px solid rgba(var(--brand-blue-rgb), 0.15);
   border-radius: 14px;
   background: var(--navy);
@@ -622,6 +622,10 @@
 .invoice-kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .invoice-kpi-grid .report-kpi strong { font-size: clamp(21px, 2vw, 29px); overflow-wrap: anywhere; }
 .invoice-billing-total-row .invoice-kpi-grid { grid-template-columns: repeat(3, minmax(200px, 1fr)); }
+.invoice-billing-total-row .report-kpi {
+  min-height: 92px;
+  padding: 12px 14px 11px;
+}
 .invoice-type-switcher {
   display: flex;
   gap: 6px;

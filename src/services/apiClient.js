@@ -26,8 +26,9 @@ export async function getAccessToken() {
 
 export async function authHeaders(existing = undefined) {
   const headers = new Headers(existing || {})
+  if (headers.has('Authorization')) return headers
   const token = await getAccessToken()
-  if (token && !headers.has('Authorization')) {
+  if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
   return headers
