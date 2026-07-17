@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { Check, Download, FileText, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { Check, Download, FileClock, FileText, Pencil, Plus, ReceiptText, Search, Trash2, X } from 'lucide-react'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import {
   commitInvoicePreview, createInvoiceEntity, deleteInvoiceEntity, fetchInvoiceEntities,
   fetchNextInvoiceNumber, lookupGstin, previewInvoicePdf, updateInvoiceEntity
 } from '../services/invoiceApi'
 import { useAdminAccess } from '../hooks/useAdminAccess'
-import { EMPTY_INVOICE, INVOICE_MODELS, calculateInvoicePreview, detectInvoiceGstComponent } from '../utils/invoiceModels'
+import { useDialogFocus } from '../hooks/useDialogFocus'
+import { EMPTY_INVOICE, INVOICE_MODELS, INVOICE_TYPE_LABELS, calculateInvoicePreview, detectInvoiceGstComponent } from '../utils/invoiceModels'
 import '../styles/Shared.css'
 import './InvoicePage.css'
 
@@ -46,6 +47,31 @@ function InvoiceTableSkeleton({ label }) {
       <FyndbridgeLoader size={88} label={label} className="invoice-inline-loader" />
     </div>
   )
+}
+
+function InvoiceTypeChooser({ onClose, onSelect }) {
+  const dialogRef = useDialogFocus(onClose)
+  const options = [
+    {
+      type: 'tax_invoice',
+      Icon: ReceiptText,
+      description: 'Create the standard GST tax invoice using the selected entity and its billing series.'
+    },
+    {
+      type: 'proforma_invoice',
+      Icon: FileClock,
+      description: 'Create a proforma invoice with an independent PI sequence for the selected entity.'
+    }
+  ]
+  return createPortal(<div className="modal-overlay invoice-type-overlay"><div className="modal-card invoice-type-modal" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="invoice-type-title">
+    <div className="modal-header"><div><span className="modal-title" id="invoice-type-title">Create Invoice</span><p>Choose the invoice type to continue.</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Close invoice type chooser"><X size={16} /></button></div>
+    <div className="modal-body invoice-type-grid">{options.map(({ type, Icon, description }) => <button className="invoice-type-card" type="button" key={type} onClick={() => onSelect(type)}>
+      <span><Icon size={22} /></span>
+      <strong>{INVOICE_TYPE_LABELS[type]}</strong>
+      <p>{description}</p>
+      <em><FileText size={14} />Continue to invoice form</em>
+    </button>)}</div>
+  </div></div>, document.body)
 }
 
 function EntityModal({ initial, onClose, onSave }) {
@@ -89,30 +115,38 @@ function EntityModal({ initial, onClose, onSave }) {
   </div></div>, document.body)
 }
 
-function CreateInvoiceModal({ entities, onClose, onCreated }) {
+function CreateInvoiceModal({ entities, invoiceType, onClose, onCreated }) {
   const [selectedId, setSelectedId] = useState('')
   const selected = entities.find(entity => entity.id === selectedId)
-  const [form, setForm] = useState({ ...EMPTY_INVOICE, invoice_date: today() })
+  const [form, setForm] = useState({ ...EMPTY_INVOICE, invoice_type: invoiceType, invoice_date: today() })
   const [nextNumber, setNextNumber] = useState('')
   const [result, setResult] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  useEffect(() => { fetchNextInvoiceNumber(form.billing_entity || 'FCS', form.invoice_date || today()).then(data => setNextNumber(data.invoiceNumber)).catch(() => setNextNumber('')) }, [form.billing_entity, form.invoice_date])
-  const update = event => { const { name, value } = event.target; setResult(null); setForm(current => ({ ...current, [name]: value })) }
+  const dialogRef = useDialogFocus(onClose, { closeDisabled: saving })
+  const typeLabel = INVOICE_TYPE_LABELS[invoiceType]
+  useEffect(() => {
+    let active = true
+    fetchNextInvoiceNumber(form.billing_entity || 'FCS', form.invoice_date || today(), invoiceType)
+      .then(data => { if (active) setNextNumber(data.invoiceNumber) })
+      .catch(() => { if (active) setNextNumber('') })
+    return () => { active = false }
+  }, [form.billing_entity, form.invoice_date, invoiceType])
+  const update = event => { const { name, value } = event.target; setResult(null); if (name === 'billing_entity' || name === 'invoice_date') setNextNumber(''); setForm(current => ({ ...current, [name]: value })) }
   const select = event => {
     const entity = entities.find(item => item.id === event.target.value)
-    setSelectedId(event.target.value); setResult(null)
+    setSelectedId(event.target.value); setResult(null); setNextNumber('')
     if (entity) setForm(current => ({ ...current, billing_entity: entity.billing_entity || 'FCS', sac: entity.sac || '998512', gst_component: detectInvoiceGstComponent(entity), igst_rate: entity.igst_rate ?? 18, cgst_rate: entity.cgst_rate ?? 9, sgst_rate: entity.sgst_rate ?? 9 }))
   }
   const preview = async () => {
     if (!selected) return setError('Select an entity.')
     setSaving(true); setError('')
-    try { setResult(await previewInvoicePdf({ ...form, invoice_entity_id: selected.id })) } catch (err) { setError(err.message) } finally { setSaving(false) }
+    try { setResult(await previewInvoicePdf({ ...form, invoice_type: invoiceType, invoice_entity_id: selected.id })) } catch (err) { setError(err.message) } finally { setSaving(false) }
   }
   const create = async () => {
     setSaving(true); setError('')
     try {
-      const saved = await commitInvoicePreview({ ...form, invoice_entity_id: selected.id, invoice_number: result.data.invoice_number })
+      const saved = await commitInvoicePreview({ ...form, invoice_type: invoiceType, invoice_entity_id: selected.id, invoice_number: result.data.invoice_number })
       const bytes = Uint8Array.from(atob(saved.pdfBase64), char => char.charCodeAt(0))
       const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
       const link = document.createElement('a'); link.href = url; link.download = saved.fileName; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0)
@@ -120,14 +154,14 @@ function CreateInvoiceModal({ entities, onClose, onCreated }) {
     } catch (err) { setError(err.message); setSaving(false) }
   }
   const calc = calculateInvoicePreview(form)
-  return createPortal(<div className="modal-overlay"><div className="modal-card modal-card-lg invoice-modal invoice-generate-modal" role="dialog" aria-modal="true">
-    <div className="modal-header"><span className="modal-title">Create Invoice</span><button className="modal-close" onClick={onClose}><X size={16} /></button></div>
+  return createPortal(<div className="modal-overlay"><div className="modal-card modal-card-lg invoice-modal invoice-generate-modal" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="create-invoice-title">
+    <div className="modal-header"><span className="modal-title" id="create-invoice-title">Create {typeLabel}</span><button className="modal-close" type="button" onClick={onClose} disabled={saving} aria-label={`Close Create ${typeLabel}`}><X size={16} /></button></div>
     <div className="modal-body">{error && <div className="invoice-form-error">{error}</div>}
       <section className="invoice-form-section"><h3>Select Entity</h3><select className="form-control" value={selectedId} onChange={select}><option value="" disabled hidden>Select Entity</option>{entities.map(entity => <option key={entity.id} value={entity.id}>{entity.entity_display_id || entity.invoice_id} - {display(entity.legal_entity_name)}</option>)}</select>{selected && <div className="invoice-selected-chip"><Check size={14} />{display(selected.legal_entity_name)}</div>}</section>
-      <section className="invoice-form-section"><h3>Invoice Details</h3><div className="form-grid-2">
+      <section className="invoice-form-section"><h3>{typeLabel} Details</h3><div className="form-grid-2">
         <Field label="Consultant Name"><Input name="consultant_name" value={form.consultant_name} update={update} /></Field><Field label="Candidate Name"><Input name="candidate_name" value={form.candidate_name} update={update} /></Field>
         <Field label="Invoice Date"><Input type="date" name="invoice_date" value={form.invoice_date} update={update} /></Field><Field label="Invoice Number Preview"><input className="form-control" value={nextNumber || 'Auto-generated'} readOnly /></Field>
-        <Field label="Billing Entity"><select className="form-control" name="billing_entity" value={form.billing_entity} onChange={update}><option>FCS</option><option>FCAPL</option></select></Field>
+        <Field label="Billing Entity"><select className="form-control" name="billing_entity" value={form.billing_entity} onChange={update} disabled={invoiceType === 'proforma_invoice'} title={invoiceType === 'proforma_invoice' ? 'Automatically determined by the selected entity' : undefined}><option>FCS</option><option>FCAPL</option></select></Field>
         <Field label="Model"><select className="form-control" name="model" value={form.model} onChange={update}>{INVOICE_MODELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
         <Field label="Professional Fee Text" full><textarea className="form-control" name="professional_fee_text" value={form.professional_fee_text} onChange={update} rows={3} /></Field>
         <ModelFields form={form} update={update} />
@@ -135,8 +169,8 @@ function CreateInvoiceModal({ entities, onClose, onCreated }) {
         {form.gst_component === 'IGST' ? <Field label="IGST Rate"><Input name="igst_rate" value={form.igst_rate} update={update} /></Field> : <><Field label="CGST Rate"><Input name="cgst_rate" value={form.cgst_rate} update={update} /></Field><Field label="SGST Rate"><Input name="sgst_rate" value={form.sgst_rate} update={update} /></Field></>}
       </div></section>
       <section className="invoice-form-section"><h3>Calculation Preview</h3><div className="invoice-preview"><span>Taxable<b>{money(calc.taxable)}</b></span><span>IGST<b>{money(calc.igst)}</b></span><span>CGST<b>{money(calc.cgst)}</b></span><span>SGST<b>{money(calc.sgst)}</b></span><span>Grand Total<b>{money(calc.grand)}</b></span></div></section>
-      {result && <section className="invoice-form-section"><h3>Invoice Preview</h3><div className="invoice-selected-chip"><FileText size={14} />{result.data.invoice_number}</div><div className="invoice-pdf-preview"><iframe title="Invoice PDF preview" src={`data:application/pdf;base64,${result.pdfBase64}`} /></div></section>}
-    </div><div className="modal-footer"><button className="btn-secondary" onClick={onClose}>Cancel</button>{result ? <button className="btn-primary" onClick={create} disabled={saving}><Download size={14} />{saving ? 'Creating...' : 'Create & Download'}</button> : <button className="btn-primary" onClick={preview} disabled={saving || !selected}>{saving ? 'Preparing...' : 'Preview Invoice'}</button>}</div>
+      {result && <section className="invoice-form-section"><h3>{typeLabel} Preview</h3><div className="invoice-selected-chip"><FileText size={14} />{result.data.invoice_number}</div><div className="invoice-pdf-preview"><iframe title={`${typeLabel} PDF preview`} src={`data:application/pdf;base64,${result.pdfBase64}`} /></div></section>}
+    </div><div className="modal-footer"><button className="btn-secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button>{result ? <button className="btn-primary" type="button" onClick={create} disabled={saving}><Download size={14} />{saving ? `Creating ${typeLabel}...` : `Create ${typeLabel} & Download`}</button> : <button className="btn-primary" type="button" onClick={preview} disabled={saving || !selected}>{saving ? 'Preparing...' : `Preview ${typeLabel}`}</button>}</div>
   </div></div>, document.body)
 }
 
@@ -154,7 +188,8 @@ export default function InvoicePage() {
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState(null)
   const [adding, setAdding] = useState(false)
-  const [creating, setCreating] = useState(false)
+  const [choosingInvoiceType, setChoosingInvoiceType] = useState(false)
+  const [creatingInvoiceType, setCreatingInvoiceType] = useState('')
   const load = useCallback(async () => { setError(''); try { setEntities((await fetchInvoiceEntities()).data || []) } catch (err) { setError(err.message) } finally { setLoading(false) } }, [])
   useEffect(() => { if (!adminLoading && isAdmin) Promise.resolve().then(load); else if (!adminLoading) Promise.resolve().then(() => setLoading(false)) }, [adminLoading, isAdmin, load])
   const filtered = useMemo(() => { const term = query.toLowerCase().trim(); return entities.filter(entity => !term || SEARCH_FIELDS.some(field => String(entity[field] || '').toLowerCase().includes(term))) }, [entities, query])
@@ -163,7 +198,7 @@ export default function InvoicePage() {
   const canUseInvoice = !adminLoading && isAdmin
   return <div className="invoice-page">
     <div className={`header-actions${!canUseInvoice ? ' is-pending-access' : ''}`} aria-hidden={!canUseInvoice}>
-      <button className="btn-secondary" onClick={() => setCreating(true)} disabled={!canUseInvoice}><FileText size={15} />Create Invoice</button>
+      <button className="btn-secondary" onClick={() => setChoosingInvoiceType(true)} disabled={!canUseInvoice}><FileText size={15} />Create Invoice</button>
       <button className="btn-primary" onClick={() => setAdding(true)} disabled={!canUseInvoice}><Plus size={15} />Add Entity</button>
     </div>
     <div className="table-card invoice-table-card"><div className="invoice-card-toolbar"><div className="invoice-search"><Search size={17} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search billing entities..." disabled={!canUseInvoice} /></div><span>{canUseInvoice ? `${filtered.length} ${filtered.length === 1 ? 'entity' : 'entities'}` : 'Access check'}</span></div>
@@ -174,6 +209,7 @@ export default function InvoicePage() {
       </tbody></table></div>}
     </div>
     {(adding || editing) && <EntityModal initial={editing} onClose={() => { setAdding(false); setEditing(null) }} onSave={save} />}
-    {creating && <CreateInvoiceModal entities={entities} onClose={() => setCreating(false)} onCreated={load} />}
+    {choosingInvoiceType && <InvoiceTypeChooser onClose={() => setChoosingInvoiceType(false)} onSelect={type => { setChoosingInvoiceType(false); setCreatingInvoiceType(type) }} />}
+    {creatingInvoiceType && <CreateInvoiceModal key={creatingInvoiceType} entities={entities} invoiceType={creatingInvoiceType} onClose={() => setCreatingInvoiceType('')} onCreated={load} />}
   </div>
 }

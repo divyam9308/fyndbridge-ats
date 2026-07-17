@@ -44,7 +44,8 @@ test('PMS sidebar navigation commits on the initial primary pointer event', () =
 
 test('invoice detail table uses one shared column model with centered non-overlapping cells', () => {
   assert.match(invoicePage, /const DETAIL_COLUMNS = \[/)
-  assert.match(invoicePage, /<colgroup>\{DETAIL_COLUMNS\.map/)
+  assert.match(invoicePage, /const PROFORMA_DETAIL_COLUMNS = DETAIL_COLUMNS\.filter/)
+  assert.match(invoicePage, /<colgroup>\{columns\.map/)
   assert.match(invoiceCss, /\.invoice-detail-table th[\s\S]*text-align:\s*center/)
   assert.match(invoiceCss, /\.invoice-detail-table td[\s\S]*vertical-align:\s*middle[\s\S]*overflow-wrap:\s*anywhere/)
   assert.match(invoiceCss, /\.invoice-wrap-cell\s*\{[\s\S]*overflow-wrap:\s*anywhere/)

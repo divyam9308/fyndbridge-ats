@@ -7,7 +7,7 @@ async function json(response) {
 }
 
 export const fetchInvoiceEntities = async () => cachedApiJson('/api/invoice/entities', {}, { ttlMs: 30000 })
-export const fetchInvoiceEntity = async (id) => cachedApiJson(`/api/invoice/entities/${id}`, {}, { ttlMs: 30000 })
+export const fetchInvoiceEntity = async (id, invoiceType = 'tax_invoice') => cachedApiJson(`/api/invoice/entities/${id}?invoice_type=${encodeURIComponent(invoiceType)}`, {}, { ttlMs: 30000 })
 export const createInvoiceEntity = async (payload) => {
   const result = await json(await apiFetch('/api/invoice/entities', {
   method: 'POST',
@@ -45,7 +45,7 @@ export const lookupGstin = async (gstin) => {
   }
   return payload
 }
-export const fetchNextInvoiceNumber = async (billingEntity, invoiceDate) => json(await apiFetch(`/api/invoice/next-number?billing_entity=${encodeURIComponent(billingEntity)}&invoice_date=${encodeURIComponent(invoiceDate)}`, { cache: 'no-store' }))
+export const fetchNextInvoiceNumber = async (billingEntity, invoiceDate, invoiceType = 'tax_invoice') => json(await apiFetch(`/api/invoice/next-number?billing_entity=${encodeURIComponent(billingEntity)}&invoice_date=${encodeURIComponent(invoiceDate)}&invoice_type=${encodeURIComponent(invoiceType)}`, { cache: 'no-store' }))
 export const generateInvoicePdf = async (payload) => json(await apiFetch('/api/invoice/generate', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -84,13 +84,13 @@ export const deleteInvoicePdfVersion = async (id) => {
   invalidateApiJsonCache('/api/invoice/entities')
   return result
 }
-export const cancelInvoice = async (entityId, id) => {
-  const result = await json(await apiFetch(`/api/invoice/entities/${entityId}/invoices/${id}/cancel`, { method: 'POST' }))
+export const cancelInvoice = async (entityId, id, invoiceType = 'tax_invoice') => {
+  const result = await json(await apiFetch(`/api/invoice/entities/${entityId}/invoices/${id}/cancel?invoice_type=${encodeURIComponent(invoiceType)}`, { method: 'POST' }))
   invalidateApiJsonCache('/api/invoice/entities')
   return result
 }
-export const deleteInvoice = async (entityId, id) => {
-  const result = await json(await apiFetch(`/api/invoice/entities/${entityId}/invoices/${id}`, { method: 'DELETE' }))
+export const deleteInvoice = async (entityId, id, invoiceType = 'tax_invoice') => {
+  const result = await json(await apiFetch(`/api/invoice/entities/${entityId}/invoices/${id}?invoice_type=${encodeURIComponent(invoiceType)}`, { method: 'DELETE' }))
   invalidateApiJsonCache('/api/invoice/entities')
   return result
 }

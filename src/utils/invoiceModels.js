@@ -3,6 +3,10 @@ export const INVOICE_MODELS = [
   ['jra_adjustment_percentage', 'JRA Adjustment %'], ['jra_adjustment_flat_fee', 'JRA Adjustment Flat Fee'], ['project', 'Project'], ['others', 'Others']
 ]
 export const INVOICE_MODEL_LABELS = Object.fromEntries(INVOICE_MODELS)
+export const INVOICE_TYPE_LABELS = {
+  tax_invoice: 'Tax Invoice',
+  proforma_invoice: 'Proforma Invoice'
+}
 export const EMPTY_INVOICE = {
   consultant_name: '', candidate_name: '', professional_fee_text: '', model: 'joining_percentage', ctc_lpa: '', model_percent: '',
   model_flat_fee: '', retainer_amount: '', project_amount: '', jra_adjustment_value: '', jra_base_value: '', jra_flat_fee: '',

@@ -32,6 +32,7 @@ create table if not exists invoice_entities (
 create table if not exists invoices (
   id uuid primary key default gen_random_uuid(),
   invoice_entity_id uuid references invoice_entities(id) on delete set null,
+  invoice_type text not null default 'tax_invoice' check (invoice_type in ('tax_invoice', 'proforma_invoice')),
   billing_entity text not null check (billing_entity in ('FCS', 'FCAPL')),
   invoice_number text unique not null,
   financial_year text not null,
@@ -54,7 +55,7 @@ create table if not exists invoices (
   tax_amount_in_words text not null,
   pdf_storage_path text,
   created_at timestamptz default now(),
-  unique (billing_entity, financial_year, sequence_number)
+  unique (invoice_type, billing_entity, financial_year, sequence_number)
 );
 
 alter table invoice_entities enable row level security;

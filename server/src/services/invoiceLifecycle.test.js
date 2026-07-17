@@ -24,7 +24,8 @@ test('lowest missing invoice number is allocated inside the exact billing-entity
   assert.match(migration, /invoice\.billing_entity = p_billing_entity[\s\S]*invoice\.financial_year = p_financial_year/)
   assert.match(migration, /where not exists \([\s\S]*invoice\.sequence_number = candidate\.sequence_number/)
   assert.match(migration, /case when p_billing_entity = 'FCAPL' then 'FCAPL' else 'FB' end/)
-  assert.match(baselineSchema, /unique \(billing_entity, financial_year, sequence_number\)/)
+  assert.match(baselineSchema, /invoice_type text not null default 'tax_invoice'/)
+  assert.match(baselineSchema, /unique \(invoice_type, billing_entity, financial_year, sequence_number\)/)
 })
 
 test('concurrent invoice creation is serialized and preview conflicts are rejected atomically', () => {
@@ -62,5 +63,5 @@ test('permanent deletion removes all invoice storage paths before deleting the i
   assert.ok(storageIndex >= 0)
   assert.ok(deleteIndex > storageIndex)
   assert.match(controller, /invoice\.pdf_storage_path,[\s\S]*versions \|\| \[\]\)\.map\(version => version\.storage_path\)/)
-  assert.match(controller, /released: \{ billing_entity: invoice\.billing_entity, financial_year: invoice\.financial_year, sequence_number: invoice\.sequence_number \}/)
+  assert.match(controller, /released: \{ invoice_type: invoice\.invoice_type, billing_entity: invoice\.billing_entity, financial_year: invoice\.financial_year, sequence_number: invoice\.sequence_number \}/)
 })

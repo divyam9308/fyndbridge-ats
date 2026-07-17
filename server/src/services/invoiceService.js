@@ -5,6 +5,7 @@ const PDFDocument = require('pdfkit')
 const MODELS = new Set(['joining_percentage', 'joining_flat_fee', 'retainer', 'jra_adjustment_percentage', 'jra_adjustment_flat_fee', 'project', 'others'])
 const GST_COMPONENTS = new Set(['IGST', 'CGST_SGST'])
 const BILLING_ENTITIES = new Set(['FCS', 'FCAPL'])
+const INVOICE_TYPES = new Set(['tax_invoice', 'proforma_invoice'])
 
 const COMPANY = {
   FCS: {
@@ -598,8 +599,9 @@ function invoiceLogoBuffer() {
 function drawHeader(doc, layout, entity, invoice, company) {
   const { x, y } = layout
   const logo = invoiceLogoBuffer()
+  const heading = invoice.invoice_type === 'proforma_invoice' ? 'PROFORMA INVOICE' : 'TAX INVOICE'
   if (logo) doc.image(logo, layout.logo.x, layout.logo.y, { fit: [layout.logo.width, layout.logo.height], align: 'left', valign: 'center' })
-  textBox(doc, 'TAX INVOICE', x.split, y.top, x.right - x.split, y.header - y.top, {
+  textBox(doc, heading, x.split, y.top, x.right - x.split, y.header - y.top, {
     bold: true, size: layout.titleSize, minSize: layout.titleSize - 1.4, align: 'right', singleLine: true, valign: 'center', paddingX: 2.2
   })
   textBox(doc, `Invoice No.:  ${invoice.invoice_number}`, x.left, y.header, x.split - x.left, y.meta - y.header, {
@@ -839,9 +841,10 @@ async function createInvoicePdf(data) {
 
 function renderInvoicePdf({ entity, invoice, overrides = {} }) {
   return new Promise((resolve, reject) => {
+    const title = invoice.invoice_type === 'proforma_invoice' ? 'Proforma Invoice' : 'Tax Invoice'
     const doc = new PDFDocument({
       size: [A4_WIDTH, A4_HEIGHT], margin: 0, autoFirstPage: true, compress: true,
-      info: { Title: `Tax Invoice ${clean(invoice.invoice_number)}`, Author: 'FyndBridge', Creator: 'FyndBridge ATS', Producer: 'PDFKit' }
+      info: { Title: `${title} ${clean(invoice.invoice_number)}`, Author: 'FyndBridge', Creator: 'FyndBridge ATS', Producer: 'PDFKit' }
     })
     const chunks = []
     let pageCount = 1
@@ -879,6 +882,7 @@ module.exports = {
   MODELS,
   GST_COMPONENTS,
   BILLING_ENTITIES,
+  INVOICE_TYPES,
   COMPANY,
   A4_WIDTH,
   A4_HEIGHT,
