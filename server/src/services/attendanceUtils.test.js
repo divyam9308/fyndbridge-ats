@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict')
-const {localDate,workedMinutes,calculateLeave,getFinancialYearForDate,getFinancialYearRange,getFinancialYearMonths,calculateCompletedMonthsInFinancialYear,calculateLeaveEntitlement,calculateCarryForward}=require('./attendanceUtils')
+const {localDate,workedMinutes,calculateLeave,getFinancialYearForDate,getFinancialYearRange,getFinancialYearMonths,getLeaveAccrualSchedule,calculateLeaveEntitlement,calculateCarryForward}=require('./attendanceUtils')
 test('company local date does not shift at UTC boundary',()=>assert.equal(localDate('2026-07-11T20:00:00Z'),'2026-07-12'))
 test('worked duration is authoritative minutes',()=>assert.equal(workedMinutes('2026-07-12T09:00:00Z','2026-07-12T17:30:00Z'),510))
 test('full day excludes Sunday and holiday',()=>{const x=calculateLeave({startDate:'2026-07-10',endDate:'2026-07-13',durationType:'full_day',holidays:['2026-07-11'],balance:10});assert.equal(x.charged_leave_days,2)})
@@ -7,6 +7,35 @@ test('Saturday to Monday applies sandwich Sunday',()=>{const x=calculateLeave({s
 test('half day and negative projected balance',()=>{const x=calculateLeave({startDate:'2026-07-13',endDate:'2026-07-13',durationType:'half_day',halfDaySession:'first_half',balance:0});assert.equal(x.charged_leave_days,.5);assert.equal(x.loss_of_pay_days,.5);assert.equal(x.projected_balance,-.5)})
 test('financial year runs from April through March',()=>{assert.equal(getFinancialYearForDate('2026-04-01'),'FY 2026-27');assert.equal(getFinancialYearForDate('2027-03-31'),'FY 2026-27');assert.deepEqual(getFinancialYearRange('FY 2026-27'),{start:'2026-04-01',end:'2027-03-31'})})
 test('financial year exposes April to March month list',()=>assert.deepEqual(getFinancialYearMonths('FY 2026-27'),['2026-04-01','2026-05-01','2026-06-01','2026-07-01','2026-08-01','2026-09-01','2026-10-01','2026-11-01','2026-12-01','2027-01-01','2027-02-01','2027-03-01']))
-test('only completed financial-year months accrue',()=>{assert.equal(calculateCompletedMonthsInFinancialYear('FY 2026-27','2026-07-12'),3);assert.equal(calculateCompletedMonthsInFinancialYear('FY 2026-27','2027-04-01'),12);assert.equal(calculateLeaveEntitlement(),18)})
+test('August 2026 starts front-loaded accrual without automatically crediting July again',()=>{
+  assert.deepEqual(
+    getLeaveAccrualSchedule('FY 2026-27','2026-07-31').map(item=>item.month),
+    ['2026-04-01','2026-05-01','2026-06-01']
+  )
+  const augustSchedule=getLeaveAccrualSchedule('FY 2026-27','2026-08-01')
+  assert.deepEqual(
+    augustSchedule.map(item=>item.month),
+    ['2026-04-01','2026-05-01','2026-06-01','2026-08-01']
+  )
+  assert.equal(augustSchedule.at(-1).entryDate,'2026-08-01')
+})
+test('March accrues on March first and the next financial year starts with April only',()=>{
+  const transitionYear=getLeaveAccrualSchedule('FY 2026-27','2027-03-01')
+  assert.equal(transitionYear.at(-1).month,'2027-03-01')
+  assert.equal(transitionYear.at(-1).entryDate,'2027-03-01')
+  assert.equal(transitionYear.length,11)
+  assert.equal(transitionYear.length*1.5+1.5,calculateLeaveEntitlement())
+  assert.deepEqual(
+    getLeaveAccrualSchedule('FY 2027-28','2027-04-01'),
+    [{month:'2027-04-01',entryDate:'2027-04-01'}]
+  )
+  assert.equal(getLeaveAccrualSchedule('FY 2027-28','2028-03-01').length,12)
+})
+test('April applies at most five carried days before adding the new monthly accrual',()=>{
+  const openingBalance=calculateCarryForward(8)
+  const aprilAccrual=getLeaveAccrualSchedule('FY 2027-28','2027-04-01').length*1.5
+  assert.equal(openingBalance,5)
+  assert.equal(openingBalance+aprilAccrual,6.5)
+})
 test('carry forward is capped at five and never converts debt to leave',()=>{assert.equal(calculateCarryForward(8),5);assert.equal(calculateCarryForward(3.5),3.5);assert.equal(calculateCarryForward(0),0);assert.equal(calculateCarryForward(-2),0)})
 test('sandwich leave contributes three projected days while pending',()=>{const x=calculateLeave({startDate:'2026-07-11',endDate:'2026-07-13',durationType:'full_day',holidays:[],balance:5});assert.equal(x.charged_leave_days,3);assert.equal(x.projected_balance,2)})

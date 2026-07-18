@@ -2,7 +2,7 @@ const supabase = require('../services/supabaseAdmin')
 const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
 const { removeDocuments, uploadDocuments } = require('../services/documentStorage')
 const { STORAGE_BUCKETS, normalizeStoragePath } = require('../services/storageBuckets')
-const { normalizeAttachments, removalPlan } = require('../services/documentAttachments')
+const { normalizeAttachments, normalizeExternalAttachments, removalPlan } = require('../services/documentAttachments')
 const fs = require('fs/promises')
 const { mandateAiFilter, MANDATE_FILTER_PERMISSION_KEYS } = require('../services/mandateAiFilter')
 const { parseMandateIntent, validateMandateIntent, mandateExecutionFilter } = require('../services/mandateIntent')
@@ -488,10 +488,11 @@ async function createJob(req, res) {
     }
     payload.duplicate_confirmed = Boolean(duplicate && duplicateAction === 'add_duplicate')
     await assertAssignmentUsersExist({ ...payload, consultant_user_ids: req.body.consultant_user_ids, team_lead_user_id: req.body.team_lead_user_id })
+    const linkedAttachments = normalizeExternalAttachments(req.body.jd_links, { fieldName: 'jd_links' })
     uploadedAttachments = await uploadDocuments(files, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
-    payload.jd_attachments = uploadedAttachments
-    payload.jd_url = uploadedAttachments[0]?.path || null
-    payload.jd_storage_path = uploadedAttachments[0]?.path || null
+    payload.jd_attachments = normalizeAttachments([...uploadedAttachments, ...linkedAttachments], { bucket: STORAGE_BUCKETS.JD })
+    payload.jd_url = payload.jd_attachments[0]?.path || null
+    payload.jd_storage_path = payload.jd_attachments[0]?.path || null
     if (!payload.mandate_status) payload.mandate_status = '-'
     if (!payload.status) payload.status = payload.mandate_status
     let data = null
@@ -558,7 +559,8 @@ async function updateJob(req, res) {
       { ...payload, consultant_user_ids: req.body.consultant_user_ids, team_lead_user_id: req.body.team_lead_user_id },
       { consultants: currentJob.consultants, team_lead: currentJob.team_lead }
     )
-    const hasAttachmentMutation = files.length > 0 || Object.prototype.hasOwnProperty.call(req.body, 'removed_jd_paths')
+    const linkedAttachments = normalizeExternalAttachments(req.body.jd_links, { fieldName: 'jd_links' })
+    const hasAttachmentMutation = files.length > 0 || linkedAttachments.length > 0 || Object.prototype.hasOwnProperty.call(req.body, 'removed_jd_paths')
     if (hasAttachmentMutation) {
       previousAttachments = normalizeAttachments(currentJob.jd_attachments, {
         bucket: STORAGE_BUCKETS.JD,
@@ -567,7 +569,7 @@ async function updateJob(req, res) {
       const plan = removalPlan(previousAttachments, req.body.removed_jd_paths, STORAGE_BUCKETS.JD, 'removed_jd_paths')
       removedAttachments = plan.removed
       uploadedAttachments = await uploadDocuments(files, STORAGE_BUCKETS.JD, String(new Date().getFullYear()))
-      const nextAttachments = [...plan.retained, ...uploadedAttachments]
+      const nextAttachments = normalizeAttachments([...plan.retained, ...uploadedAttachments, ...linkedAttachments], { bucket: STORAGE_BUCKETS.JD })
       payload.jd_attachments = nextAttachments
       payload.jd_url = nextAttachments[0]?.path || null
       payload.jd_storage_path = nextAttachments[0]?.path || null

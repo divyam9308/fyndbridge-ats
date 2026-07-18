@@ -109,6 +109,14 @@ test('creation chooser, URL-backed switcher, global tax KPIs, and proforma colum
   assert.match(detailPage, /No \{typeLabel\.toLowerCase\(\)\}s found for this entity\./)
 })
 
+test('tax and proforma previews offer separate save and save-and-download actions', () => {
+  assert.match(invoicePage, /const create = async \(download = false\)/)
+  assert.match(invoicePage, /if \(download\) \{[\s\S]*link\.click\(\)/)
+  assert.match(invoicePage, /onClick=\{\(\) => create\(false\)\}[\s\S]*>Save<\/button>/)
+  assert.match(invoicePage, /onClick=\{\(\) => create\(true\)\}[\s\S]*>Save and Download<\/button>/)
+  assert.doesNotMatch(invoicePage, /Create \{typeLabel\} & Download/)
+})
+
 test('tax and proforma number previews refresh whenever the selected legal entity changes', () => {
   assert.match(invoicePage, /fetchNextInvoiceNumber\(form\.billing_entity \|\| 'FCS', form\.invoice_date \|\| today\(\), invoiceType\)/)
   assert.match(invoicePage, /\[form\.billing_entity, form\.invoice_date, invoiceType, selectedId\]/)

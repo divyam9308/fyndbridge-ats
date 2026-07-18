@@ -2399,6 +2399,19 @@ textarea.form-control {
   margin-top: 8px;
 }
 
+.document-link-input {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 8px;
+}
+
+.document-link-input .btn-secondary {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
 .document-attachment-item {
   align-items: center;
   background: var(--surface, #fff);
@@ -2475,4 +2488,10 @@ button.document-attachment-main:not(:disabled) {
   display: inline-flex;
   flex: none;
   justify-content: center;
+}
+
+@media (max-width: 560px) {
+  .document-link-input {
+    grid-template-columns: 1fr;
+  }
 }

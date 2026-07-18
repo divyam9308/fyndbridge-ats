@@ -35,6 +35,59 @@ function normalizedSize(value) {
   return Number.isFinite(size) && size >= 0 ? size : null
 }
 
+function normalizeExternalUrl(value) {
+  const text = clean(value)
+  if (!text || text.length > 2048) return ''
+  const withProtocol = /^https?:\/\//i.test(text) ? text : `https://${text}`
+  try {
+    const parsed = new URL(withProtocol)
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname.includes('.')) return ''
+    return parsed.href
+  } catch {
+    return ''
+  }
+}
+
+function externalLinkName(path, index = 0) {
+  try {
+    const hostname = new URL(path).hostname.replace(/^www\./i, '')
+    return hostname ? `JD link (${hostname})` : `JD link ${index + 1}`
+  } catch {
+    return `JD link ${index + 1}`
+  }
+}
+
+function normalizeExternalAttachments(value, {
+  fieldName = 'links',
+  maxCount = 20
+} = {}) {
+  const input = parseArray(value, fieldName)
+  if (input.length > maxCount) {
+    const error = new Error(`No more than ${maxCount} links can be added at once.`)
+    error.statusCode = 400
+    throw error
+  }
+  return input.map((item, index) => {
+    const rawPath = typeof item === 'object' && item !== null
+      ? item.path || item.url
+      : item
+    const path = normalizeExternalUrl(rawPath)
+    if (!path) {
+      const error = new Error('Please enter a valid HTTP or HTTPS link.')
+      error.statusCode = 400
+      throw error
+    }
+    return {
+      path,
+      name: clean(typeof item === 'object' && item !== null ? item.name : '').slice(0, 200) || externalLinkName(path, index),
+      mime_type: 'text/uri-list',
+      size: null,
+      uploaded_at: new Date().toISOString(),
+      file_hash: ''
+    }
+  })
+}
+
 function normalizeAttachment(value, bucket) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const rawPath = value.path || value.storage_path || value.storagePath || value.url
@@ -122,6 +175,8 @@ module.exports = {
   legacyAttachment,
   normalizeAttachment,
   normalizeAttachments,
+  normalizeExternalAttachments,
+  normalizeExternalUrl,
   parseArray,
   removalPlan,
   storagePaths,

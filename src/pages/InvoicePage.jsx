@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { Check, Download, FileClock, FileText, Pencil, Plus, ReceiptText, Search, Trash2, X } from 'lucide-react'
+import { Check, Download, FileClock, FileText, Pencil, Plus, ReceiptText, Save as SaveIcon, Search, Trash2, X } from 'lucide-react'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import ReportKpiCard from '../components/ReportKpiCard'
 import {
@@ -196,13 +196,15 @@ function CreateInvoiceModal({ entities, invoiceType, onClose, onCreated }) {
     setSaving(true); setError('')
     try { setResult(await previewInvoicePdf({ ...form, invoice_type: invoiceType, invoice_entity_id: selected.id })) } catch (err) { setError(err.message) } finally { setSaving(false) }
   }
-  const create = async () => {
+  const create = async (download = false) => {
     setSaving(true); setError('')
     try {
       const saved = await commitInvoicePreview({ ...form, invoice_type: invoiceType, invoice_entity_id: selected.id, invoice_number: result.data.invoice_number })
-      const bytes = Uint8Array.from(atob(saved.pdfBase64), char => char.charCodeAt(0))
-      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-      const link = document.createElement('a'); link.href = url; link.download = saved.fileName; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0)
+      if (download) {
+        const bytes = Uint8Array.from(atob(saved.pdfBase64), char => char.charCodeAt(0))
+        const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+        const link = document.createElement('a'); link.href = url; link.download = saved.fileName; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0)
+      }
       await onCreated(saved.data); onClose()
     } catch (err) { setError(err.message); setSaving(false) }
   }
@@ -224,7 +226,7 @@ function CreateInvoiceModal({ entities, invoiceType, onClose, onCreated }) {
       </div></section>
       <section className="invoice-form-section"><h3>Calculation Preview</h3><div className="invoice-preview"><span>Taxable<b>{money(calc.taxable)}</b></span><span>IGST<b>{money(calc.igst)}</b></span><span>CGST<b>{money(calc.cgst)}</b></span><span>SGST<b>{money(calc.sgst)}</b></span><span>Grand Total<b>{money(calc.grand)}</b></span></div></section>
       {result && <section className="invoice-form-section"><h3>{typeLabel} Preview</h3><div className="invoice-selected-chip"><FileText size={14} />{result.data.invoice_number}</div><div className="invoice-pdf-preview"><iframe title={`${typeLabel} PDF preview`} src={`data:application/pdf;base64,${result.pdfBase64}`} /></div></section>}
-    </div><div className="modal-footer"><button className="btn-secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button>{result ? <button className="btn-primary" type="button" onClick={create} disabled={saving}><Download size={14} />{saving ? `Creating ${typeLabel}...` : `Create ${typeLabel} & Download`}</button> : <button className="btn-primary" type="button" onClick={preview} disabled={saving || !selected}>{saving ? 'Preparing...' : `Preview ${typeLabel}`}</button>}</div>
+    </div><div className="modal-footer"><button className="btn-secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button>{result ? <><button className="btn-secondary" type="button" onClick={() => create(false)} disabled={saving}><SaveIcon size={14} />Save</button><button className="btn-primary" type="button" onClick={() => create(true)} disabled={saving}><Download size={14} />Save and Download</button></> : <button className="btn-primary" type="button" onClick={preview} disabled={saving || !selected}>{saving ? 'Preparing...' : `Preview ${typeLabel}`}</button>}</div>
   </div></div>, document.body)
 }
 

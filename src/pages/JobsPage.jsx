@@ -15,7 +15,7 @@ import CompactPagination from '../components/CompactPagination'
 import FormattedDateInput from '../components/FormattedDateInput'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import { AttachmentList, DocumentIconGroup } from '../components/DocumentAttachments'
-import { apiFetch, openProtectedDocumentPath } from '../services/apiClient'
+import { apiFetch, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath } from '../services/apiClient'
 import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
@@ -27,6 +27,7 @@ import { normalizeAttachments, validateDocumentSelection } from '../utils/docume
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const MAX_JD_FILES_PER_SAVE = 20
+const MAX_JD_LINKS_PER_SAVE = 20
 const SORT_OPTIONS = [
   { field: 'job_id', label: 'Job ID' },
   { field: 'role', label: 'Alphabetic order' }
@@ -139,6 +140,16 @@ const jobJdAttachments = (job) => normalizeAttachments(job?.jd_attachments, {
   path: job?.jd_storage_path || job?.jd_url,
   name: job?.jd_file_name || job?.jd_original_name
 })
+const jdLinkAttachment = (path) => {
+  const hostname = new URL(path).hostname.replace(/^www\./i, '')
+  return {
+    path,
+    name: `JD link (${hostname})`,
+    mime_type: 'text/uri-list',
+    size: null,
+    uploaded_at: ''
+  }
+}
 
 const notifyAiQuota = (message) => {
   if (message === 'AI quota reached') {
@@ -197,6 +208,8 @@ export default function JobsPage() {
   const [clientSearch, setClientSearch] = useState('')
   const [savedJdAttachments, setSavedJdAttachments] = useState([])
   const [pendingJdFiles, setPendingJdFiles] = useState([])
+  const [pendingJdLinks, setPendingJdLinks] = useState([])
+  const [jdLinkInput, setJdLinkInput] = useState('')
   const [removedJdPaths, setRemovedJdPaths] = useState([])
   const [clientSuggestionsOpen, setClientSuggestionsOpen] = useState(false)
   const [roleSearch, setRoleSearch] = useState('')
@@ -276,6 +289,10 @@ export default function JobsPage() {
   const openDocument = useCallback(async (key, path, recordId) => {
     setOpeningDocument(key)
     try {
+      if (/^https?:\/\//i.test(String(path || '').trim())) {
+        openExternalUrl(path)
+        return
+      }
       await openProtectedDocumentPath('jd', path, {
         recordId,
         missingMessage: 'JD is missing or needs to be reuploaded',
@@ -411,6 +428,8 @@ export default function JobsPage() {
     setAddingNewRole(false)
     setSavedJdAttachments([])
     setPendingJdFiles([])
+    setPendingJdLinks([])
+    setJdLinkInput('')
     setRemovedJdPaths([])
     setClientSuggestionsOpen(false)
     setRoleSuggestionsOpen(false)
@@ -474,6 +493,8 @@ export default function JobsPage() {
     })
     setSavedJdAttachments(jobJdAttachments(job))
     setPendingJdFiles([])
+    setPendingJdLinks([])
+    setJdLinkInput('')
     setRemovedJdPaths([])
     setClientSearch(job.client_name || '')
     setRoleSearch(job.role || job.title || '')
@@ -645,6 +666,8 @@ export default function JobsPage() {
     setDuplicateMoreOpen(false)
     setSavedJdAttachments([])
     setPendingJdFiles([])
+    setPendingJdLinks([])
+    setJdLinkInput('')
     setRemovedJdPaths([])
   }
 
@@ -673,6 +696,48 @@ export default function JobsPage() {
 
   const removePendingJd = (index) => {
     setPendingJdFiles(current => current.filter((_, itemIndex) => itemIndex !== index))
+  }
+
+  const addJdLink = () => {
+    const path = normalizeExternalUrl(jdLinkInput)
+    if (!path) {
+      setErrors(current => ({ ...current, jd_link: 'Please enter a valid HTTP or HTTPS link.' }))
+      return
+    }
+    const savedMatch = savedJdAttachments.find(attachment => attachment.path === path)
+    if (savedMatch) {
+      if (removedJdPaths.includes(path)) {
+        setRemovedJdPaths(current => current.filter(item => item !== path))
+        setJdLinkInput('')
+        setErrors(current => {
+          const next = { ...current }
+          delete next.jd_link
+          return next
+        })
+        return
+      }
+      setErrors(current => ({ ...current, jd_link: 'This JD link has already been added.' }))
+      return
+    }
+    if (pendingJdLinks.some(attachment => attachment.path === path)) {
+      setErrors(current => ({ ...current, jd_link: 'This JD link has already been added.' }))
+      return
+    }
+    if (pendingJdLinks.length >= MAX_JD_LINKS_PER_SAVE) {
+      setErrors(current => ({ ...current, jd_link: `No more than ${MAX_JD_LINKS_PER_SAVE} new JD links can be added at once.` }))
+      return
+    }
+    setPendingJdLinks(current => [...current, jdLinkAttachment(path)])
+    setJdLinkInput('')
+    setErrors(current => {
+      const next = { ...current }
+      delete next.jd_link
+      return next
+    })
+  }
+
+  const removePendingJdLink = (index) => {
+    setPendingJdLinks(current => current.filter((_, itemIndex) => itemIndex !== index))
   }
 
   const resolveMandateDuplicate = (duplicateAction) => {
@@ -740,6 +805,7 @@ export default function JobsPage() {
       Object.entries(payload).forEach(([key, value]) => body.append(key, Array.isArray(value) ? value.join(',') : value ?? ''))
       if (!editingJob && duplicateBypass) body.append('duplicate_action', 'add_duplicate')
       pendingJdFiles.forEach(file => body.append('jd_files', file))
+      if (pendingJdLinks.length) body.append('jd_links', JSON.stringify(pendingJdLinks))
       if (editingJob && removedJdPaths.length) body.append('removed_jd_paths', JSON.stringify(removedJdPaths))
       const res = await apiFetch(editingJob ? `/api/jobs/${editingJob.id}` : '/api/jobs', {
         method: editingJob ? 'PATCH' : 'POST',
@@ -757,7 +823,7 @@ export default function JobsPage() {
             job_display_id: form.job_display_id,
             client_name: clientSearch,
             client_display_id: selectedClient?.client_display_id || '',
-            jd_file: pendingJdFiles.map(file => file.name).join(', ')
+            jd_file: [...pendingJdFiles.map(file => file.name), ...pendingJdLinks.map(link => link.name)].join(', ')
           }
         })
         setDuplicateBypass(false)
@@ -997,6 +1063,7 @@ export default function JobsPage() {
                 keyPrefix={`jd-${job.id}`}
                 openingKey={openingDocument}
                 onOpen={(key, attachment) => openDocument(key, attachment.path, job.id)}
+                showExternalLinkIcon
               />
             </td>
           )
@@ -1405,19 +1472,43 @@ export default function JobsPage() {
                   </div>
                 </div>}
                 {!isJobFieldHidden('jd_file') && <div className="form-group">
-                  <label className="form-label">JD Files</label>
+                  <label className="form-label">JD Files or Links</label>
                   <input type="file" multiple accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className={`form-control${errors.jd_files ? ' is-error' : ''}`} onChange={selectJdFiles} disabled={saving || isJobFieldDisabled('jd_file')} />
                   {errors.jd_files && <span className="form-error">{errors.jd_files}</span>}
+                  <div className="document-link-input">
+                    <input
+                      type="url"
+                      className={`form-control${errors.jd_link ? ' is-error' : ''}`}
+                      value={jdLinkInput}
+                      onChange={event => {
+                        setJdLinkInput(event.target.value)
+                        if (errors.jd_link) setErrors(current => ({ ...current, jd_link: '' }))
+                      }}
+                      onKeyDown={event => {
+                        if (event.key !== 'Enter') return
+                        event.preventDefault()
+                        addJdLink()
+                      }}
+                      placeholder="Paste a JD link"
+                      aria-label="JD link"
+                      disabled={saving || isJobFieldDisabled('jd_file')}
+                    />
+                    <button className="btn-secondary" type="button" onClick={addJdLink} disabled={saving || isJobFieldDisabled('jd_file') || !jdLinkInput.trim()}>Add Link</button>
+                  </div>
+                  {errors.jd_link && <span className="form-error">{errors.jd_link}</span>}
                   <AttachmentList
                     saved={savedJdAttachments}
                     pending={pendingJdFiles}
+                    pendingAttachments={pendingJdLinks}
                     removedPaths={removedJdPaths}
                     keyPrefix={`jd-form-${editingJob?.id || 'new'}`}
                     openingKey={openingDocument}
                     onOpen={editingJob ? (key, attachment) => openDocument(key, attachment.path, editingJob.id) : undefined}
                     onRemoveSaved={isJobFieldDisabled('jd_file') ? undefined : removeSavedJd}
                     onRemovePending={isJobFieldDisabled('jd_file') ? undefined : removePendingJd}
+                    onRemovePendingAttachment={isJobFieldDisabled('jd_file') ? undefined : removePendingJdLink}
                     disabled={saving}
+                    showExternalLinkIcon
                   />
                 </div>}
               </div>

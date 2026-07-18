@@ -175,6 +175,10 @@ export default function ClientDetailPage() {
   const openJdDocument = useCallback(async (key, path, jobId) => {
     setOpeningDocument(key)
     try {
+      if (/^https?:\/\//i.test(String(path || '').trim())) {
+        openExternalUrl(path)
+        return
+      }
       await openProtectedDocumentPath('jd', path, {
         recordId: jobId,
         missingMessage: 'JD is missing or needs to be reuploaded',
@@ -717,6 +721,7 @@ export default function ClientDetailPage() {
                       keyPrefix={`client-detail-jd-${group.relatedJob?.id || group.key}`}
                       openingKey={openingDocument}
                       onOpen={(key, attachment) => openJdDocument(key, attachment.path, group.relatedJob?.id)}
+                      showExternalLinkIcon
                     />
                   </td>
                   <td className="mandate-status-cell">

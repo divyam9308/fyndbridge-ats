@@ -16,7 +16,7 @@ const jobController = fs.readFileSync(path.join(root, 'server/src/controllers/jo
 const candidateController = fs.readFileSync(path.join(root, 'server/src/controllers/candidateController.js'), 'utf8')
 const clientsPage = fs.readFileSync(path.join(root, 'src/pages/ClientsPage.jsx'), 'utf8')
 const migration = fs.readFileSync(
-  path.join(root, 'supabase/migrations/20260718070818_enforce_root_client_ownership.sql'),
+  path.join(root, 'supabase/migrations/20260718072008_enforce_root_client_ownership.sql'),
   'utf8'
 )
 

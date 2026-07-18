@@ -92,7 +92,7 @@ const COLUMN_DEFS = {
     ['Experience', 'experience', ['experience']],
     ['Sector', 'vertical', ['vertical']],
     ['Date of Allocation', 'allocation_date', ['allocation_date']],
-    ['JD', 'jd_storage_path', ['jd_url', 'jd_storage_path', 'jd_attachments', 'jd_file', 'jd_files', 'removed_jd_paths']],
+    ['JD', 'jd_storage_path', ['jd_url', 'jd_storage_path', 'jd_attachments', 'jd_file', 'jd_files', 'jd_links', 'removed_jd_paths']],
     ['Status', 'mandate_status', ['mandate_status', 'status', 'priority']],
     ['Comments', 'comments', ['comments', 'notes']]
   ]

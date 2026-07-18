@@ -69,9 +69,9 @@ from public.clients root
 where contact.client_group_id = root.id
   and contact.id <> root.id;
 
--- Preserve same-title mandates as separate Job IDs. The root's existing
--- mandate remains primary and every additional row becomes a confirmed
--- duplicate before all rows are moved under one client_id.
+-- Preserve same-title mandates as separate Job IDs. An existing primary is
+-- retained, preferring the root when multiple unconfirmed rows exist, and
+-- every additional row becomes a confirmed duplicate before the root move.
 with ranked_jobs as (
   select
     job.id,

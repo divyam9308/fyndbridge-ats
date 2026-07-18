@@ -1,5 +1,5 @@
 const supabase=require('./supabaseAdmin')
-const {localDate,addDays,weekday,workedMinutes,calculateLeave,applySandwichContext,bad,getFinancialYearForDate,getFinancialYearRange,getFinancialYearMonths,previousFinancialYear,calculateLeaveEntitlement,calculateCarryForward}=require('./attendanceUtils')
+const {localDate,addDays,weekday,workedMinutes,calculateLeave,applySandwichContext,bad,getFinancialYearForDate,getFinancialYearRange,previousFinancialYear,getLeaveAccrualSchedule,calculateLeaveEntitlement,calculateCarryForward}=require('./attendanceUtils')
 const {buildActiveProfiles,buildTodayAttendanceSummary}=require('./teamAttendanceToday')
 const {buildAttendancePeriodSummary}=require('./attendancePeriodSummary')
 const {excludeSuperAdminProfiles,isSuperAdminProfile}=require('./attendanceLeaveEligibility')
@@ -41,10 +41,7 @@ async function ensureFinancialYearLedger(userId,financialYear,asOfDate=localDate
   if(error&&error.code!=='23505')throw error
  }
  const joinMonth=`${joined.slice(0,7)}-01`,eligibleCursor=new Date(`${joinMonth}T12:00:00Z`);eligibleCursor.setUTCMonth(eligibleCursor.getUTCMonth()+1);const eligibleMonth=eligibleCursor.toISOString().slice(0,10)
- const effectiveAsOf=localDate(asOfDate),cutoff=effectiveAsOf>range.end?addDays(range.end,1):effectiveAsOf.slice(0,8)+'01'
- for(const month of getFinancialYearMonths(financialYear)){
-  if(month>=cutoff||month<eligibleMonth)continue
-  const entryDate=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10)
+ for(const {month,entryDate} of getLeaveAccrualSchedule(financialYear,asOfDate,eligibleMonth)){
   const {error}=await supabase.from('leave_ledger').insert({user_id:userId,entry_date:entryDate,entry_type:'accrual',amount:1.5,accrual_month:month,financial_year:financialYear,description:`Monthly leave accrual for ${month.slice(0,7)}`})
   if(error&&error.code!=='23505')throw error
  }
