@@ -144,7 +144,7 @@ const jdLinkAttachment = (path) => {
   const hostname = new URL(path).hostname.replace(/^www\./i, '')
   return {
     path,
-    name: `JD link (${hostname})`,
+    name: `Mandate Sheet link (${hostname})`,
     mime_type: 'text/uri-list',
     size: null,
     uploaded_at: ''
@@ -716,15 +716,15 @@ export default function JobsPage() {
         })
         return
       }
-      setErrors(current => ({ ...current, jd_link: 'This JD link has already been added.' }))
+      setErrors(current => ({ ...current, jd_link: 'This Mandate Sheet link has already been added.' }))
       return
     }
     if (pendingJdLinks.some(attachment => attachment.path === path)) {
-      setErrors(current => ({ ...current, jd_link: 'This JD link has already been added.' }))
+      setErrors(current => ({ ...current, jd_link: 'This Mandate Sheet link has already been added.' }))
       return
     }
     if (pendingJdLinks.length >= MAX_JD_LINKS_PER_SAVE) {
-      setErrors(current => ({ ...current, jd_link: `No more than ${MAX_JD_LINKS_PER_SAVE} new JD links can be added at once.` }))
+      setErrors(current => ({ ...current, jd_link: `No more than ${MAX_JD_LINKS_PER_SAVE} new Mandate Sheet links can be added at once.` }))
       return
     }
     setPendingJdLinks(current => [...current, jdLinkAttachment(path)])
@@ -1489,8 +1489,8 @@ export default function JobsPage() {
                         event.preventDefault()
                         addJdLink()
                       }}
-                      placeholder="Paste a JD link"
-                      aria-label="JD link"
+                      placeholder="Paste a Mandate Sheet link"
+                      aria-label="Mandate Sheet link"
                       disabled={saving || isJobFieldDisabled('jd_file')}
                     />
                     <button className="btn-secondary" type="button" onClick={addJdLink} disabled={saving || isJobFieldDisabled('jd_file') || !jdLinkInput.trim()}>Add Link</button>

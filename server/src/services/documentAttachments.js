@@ -51,9 +51,9 @@ function normalizeExternalUrl(value) {
 function externalLinkName(path, index = 0) {
   try {
     const hostname = new URL(path).hostname.replace(/^www\./i, '')
-    return hostname ? `JD link (${hostname})` : `JD link ${index + 1}`
+    return hostname ? `Mandate Sheet link (${hostname})` : `Mandate Sheet link ${index + 1}`
   } catch {
-    return `JD link ${index + 1}`
+    return `Mandate Sheet link ${index + 1}`
   }
 }
 
