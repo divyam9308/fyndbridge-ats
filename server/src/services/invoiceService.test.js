@@ -206,6 +206,15 @@ test('six explicit reference cases select six distinct layout profiles', () => {
   }
 })
 
+test('FCAPL and FCS CGST/SGST signature areas are thirty percent shorter', () => {
+  const fcaplLayout = INVOICE_LAYOUTS.FCAPL_CGST_SGST
+  const fcsLayout = INVOICE_LAYOUTS.FCS_CGST_SGST
+  assert.equal(fcaplLayout.y.bottom, 713.89)
+  assert.equal(Number((fcaplLayout.y.bottom - fcaplLayout.y.lowerBottom).toFixed(2)), 81.88)
+  assert.equal(fcsLayout.y.bottom, 740.17)
+  assert.equal(Number((fcsLayout.y.bottom - fcsLayout.y.lowerBottom).toFixed(2)), 91.32)
+})
+
 test('FCAPL CGST/SGST revised format keeps calculated tax and rounding variants intact', async () => {
   const entity = {
     legal_entity_name: 'FCAPL CGST FORMAT TEST',

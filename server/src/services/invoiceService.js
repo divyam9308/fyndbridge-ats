@@ -99,7 +99,7 @@ const INVOICE_LAYOUTS = Object.freeze({
     y: {
       top: 21.01, header: 64.66, meta: 82.17, details: 230.41, serviceHeader: 250.02, serviceBottom: 444.56,
       totals: [458.80, 473.04, 487.28], amountWords: 500.81, summaryGroup: 514.35, summaryHeader: 527.89,
-      summaryData: 541.43, summaryBottom: 554.97, taxWords: 568.51, lowerBottom: 632.01, bottom: 748.98
+      summaryData: 541.43, summaryBottom: 554.97, taxWords: 568.51, lowerBottom: 632.01, bottom: 713.89
     },
     logo: { x: scaled(27.84), y: scaled(31.20), width: scaled(176.40), height: scaled(27.36) },
     detailPaddingX: scaled(2.40), clientValueX: 187.22, clientNameY: 98.23, clientAddressY: 122.24, clientAddressLineGap: 0.81,
@@ -213,7 +213,7 @@ const INVOICE_LAYOUTS = Object.freeze({
     y: {
       top: 21.01, header: 66.90, meta: 85.23, details: 235.01, serviceHeader: 255.55, serviceBottom: 453.20,
       totals: [468.02, 482.85, 497.67], amountWords: 511.79, summaryGroup: 525.92, summaryHeader: 540.04,
-      summaryData: 554.16, summaryBottom: 568.29, taxWords: 582.41, lowerBottom: 648.85, bottom: 779.31
+      summaryData: 554.16, summaryBottom: 568.29, taxWords: 582.41, lowerBottom: 648.85, bottom: 740.17
     },
     logo: { x: scaled(27.546), y: scaled(31.271), width: scaled(182.59), height: scaled(28.909) },
     detailPaddingX: scaled(2.28), clientValueX: 170.78, clientNameY: 100.83, clientAddressY: 127.40, clientAddressLineGap: 0.87,
