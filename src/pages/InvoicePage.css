@@ -669,7 +669,7 @@
   min-height: 280px;
 }
 .invoice-detail-table { table-layout: fixed; }
-.invoice-detail-table th {
+.invoice-table-card .data-table.invoice-detail-table thead th {
   background: #001264;
   color: #fff !important;
   text-align: center;

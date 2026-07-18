@@ -23,6 +23,8 @@ const ENTITY_FIELDS = Object.keys(EMPTY_ENTITY)
 const SEARCH_FIELDS = ['entity_display_id', 'invoice_id', 'legal_entity_name', 'optional_name', 'gstin', 'pan', 'contact_person', 'email', 'billing_entity']
 const INVOICE_TABLE_HEADERS = ['Entity ID', 'Default Billing Entity', 'Legal Entity Name', 'Optional Name', 'Address', 'GSTIN', 'PAN', 'Place of Supply', 'State', 'State Code', 'Contact Person', 'Contact Email', 'SAC', 'GST Component', 'Rate', 'Actions']
 const BILLING_ENTITIES = ['FCS', 'FCAPL']
+const COMBINED_BILLING_ENTITY = 'FCS + FCAPL'
+const BILLING_TOTAL_ROWS = [...BILLING_ENTITIES, COMBINED_BILLING_ENTITY]
 const KPI_CARDS = [
   { key: 'billValue', label: 'Total Bill Value', tone: 'navy' },
   { key: 'taxValue', label: 'Total Tax Value', tone: 'amber' },
@@ -63,14 +65,20 @@ function InvoiceTableSkeleton({ label }) {
 }
 
 function InvoiceBillingTotals({ totals, loading = false }) {
+  const combinedTotals = Object.fromEntries(KPI_CARDS.map(card => [
+    card.key,
+    BILLING_ENTITIES.reduce((sum, billingEntity) => sum + BigInt(totals?.[billingEntity]?.[card.key] || 0), 0n)
+  ]))
+  const totalsByBillingEntity = { ...totals, [COMBINED_BILLING_ENTITY]: combinedTotals }
+
   return <section className="invoice-billing-totals" aria-label="Tax invoice totals by billing entity">
-    {BILLING_ENTITIES.map(billingEntity => <div className="invoice-billing-total-row" key={billingEntity}>
+    {BILLING_TOTAL_ROWS.map(billingEntity => <div className="invoice-billing-total-row" key={billingEntity}>
       <div className="invoice-billing-total-entity"><span>Billing Entity</span><strong>{billingEntity}</strong></div>
       <div className="invoice-kpi-grid" aria-label={`${billingEntity} tax invoice totals`}>
         {KPI_CARDS.map(card => <ReportKpiCard
           key={card.key}
           label={card.label}
-          value={formatInrPaise(BigInt(totals?.[billingEntity]?.[card.key] || 0))}
+          value={formatInrPaise(BigInt(totalsByBillingEntity?.[billingEntity]?.[card.key] || 0))}
           tone={card.tone}
           loading={loading}
         />)}
