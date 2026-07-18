@@ -89,26 +89,29 @@ const scaled = value => Number((value * A4_SCALE).toFixed(3))
 
 const INVOICE_LAYOUTS = Object.freeze({
   FCAPL_CGST_SGST: {
-    id: 'FCAPL_CGST_SGST', reference: 'FCAPL CGST SGST.pdf', tax: 'CGST_SGST', rounded: true,
-    rule: scaled(0.84), majorRule: scaled(0.84), bodySize: scaled(8.88), metaSize: scaled(9.36), titleSize: scaled(14.88),
+    id: 'FCAPL_CGST_SGST', reference: 'FyndBridge_Tax_Invoice_CGST_SGST (1).pdf', tax: 'CGST_SGST', rounded: true,
+    rule: scaled(0.96), majorRule: scaled(0.96), bodySize: scaled(9.12), metaSize: scaled(9.60), titleSize: scaled(15.36),
     x: {
-      left: 21.13, right: 568.43, split: 328.64, lowerSplit: 328.64,
-      service: [21.13, 67.00, 255.32, 328.64, 410.22, 466.40, 568.43],
-      summary: [21.13, 67.00, 181.05, 255.32, 328.64, 410.22, 466.40, 568.43]
+      left: 21.24, right: 570.76, split: 329.39, lowerSplit: 329.39,
+      service: [21.24, 67.46, 251.65, 329.39, 411.56, 468.05, 570.76],
+      summary: [21.24, 67.46, 184.89, 251.65, 329.39, 411.56, 468.05, 570.76]
     },
     y: {
-      top: 21.13, header: 65.15, meta: 82.77, details: 231.16, serviceHeader: 250.76, serviceBottom: 444.25,
-      totals: [458.51, 472.75, 486.99], amountWords: 500.53, summaryGroup: 514.07, summaryHeader: 527.61,
-      summaryData: 541.15, summaryBottom: 554.69, taxWords: 568.23, lowerBottom: 639.10, bottom: 750.71
+      top: 21.01, header: 64.66, meta: 82.17, details: 230.41, serviceHeader: 250.02, serviceBottom: 444.56,
+      totals: [458.80, 473.04, 487.28], amountWords: 500.81, summaryGroup: 514.35, summaryHeader: 527.89,
+      summaryData: 541.43, summaryBottom: 554.97, taxWords: 568.51, lowerBottom: 632.01, bottom: 748.98
     },
-    logo: { x: scaled(27.30), y: scaled(30.87), width: scaled(174.95), height: scaled(27.83) },
-    detailPaddingX: scaled(2.16), clientValueX: 183.16, clientNameY: 98.93, clientAddressY: 122.93, clientAddressLineGap: 0.81,
-    clientTextY: [164.18, 176.66, 189.14, 201.62, 214.10, 226.61].map(scaled),
-    clientValueTextY: [159.58, 171.72, 183.86, 196.00, 208.14, 220.31],
-    issuerLabelY: 84.10, issuerNameY: 98.93,
-    issuerTextY: [110.79, 122.93, 135.07, 147.21, 159.35, 171.49, 183.63, 195.77, 207.91, 220.07],
-    taxTextY: [390.18, 405.48], splitStartsAtTop: true, descriptionBreak: true,
-    branchLines: '233 Okhla Industrial Estate, New Delhi -\n110020'
+    logo: { x: scaled(27.84), y: scaled(31.20), width: scaled(176.40), height: scaled(27.36) },
+    detailPaddingX: scaled(2.40), clientValueX: 187.22, clientNameY: 98.23, clientAddressY: 122.24, clientAddressLineGap: 0.81,
+    clientTextY: [163.35, 175.83, 188.31, 200.79, 213.27, 225.75].map(scaled),
+    clientValueTextY: [158.65, 170.79, 182.93, 195.07, 207.21, 219.35],
+    issuerLabelY: 83.52, issuerNameY: 98.23,
+    issuerTextY: [110.10, 122.24, 134.38, 146.51, 158.65, 170.79, 182.93, 195.07, 207.21, 219.35],
+    taxTextY: [391.94, 404.78],
+    numberGrouping: 'western',
+    reverseChargeText: 'Tax Payable on reverse charge basis: No',
+    reverseBold: false,
+    branchLines: '233 Okhla Industrial Estate, New Delhi\n- 110020'
   },
   FCAPL_IGST_NO_ROUND: {
     id: 'FCAPL_IGST_NO_ROUND', reference: 'FCAPL NOROUNDING (1).pdf', tax: 'IGST', rounded: false,
@@ -399,17 +402,26 @@ function groupIndianDigits(value) {
   return `${groups.join(',')},${tail}`
 }
 
-function formatMoney(value, includeSymbol = true) {
+function groupWesternDigits(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+function formatMoney(value, includeSymbol = true, grouping = 'indian') {
   const paise = moneyToPaise(value)
   const negative = paise < 0n
   const absolute = negative ? -paise : paise
   const rupees = absolute / MONEY_SCALE
   const fraction = String(absolute % MONEY_SCALE).padStart(2, '0')
-  return `${negative ? '-' : ''}${includeSymbol ? '₹' : ''}${groupIndianDigits(rupees)}.${fraction}`
+  const groupedRupees = grouping === 'western' ? groupWesternDigits(rupees) : groupIndianDigits(rupees)
+  return `${negative ? '-' : ''}${includeSymbol ? '₹' : ''}${groupedRupees}.${fraction}`
 }
 
 function formatRs(value) {
   return formatMoney(value, true)
+}
+
+function formatLayoutMoney(layout, value, includeSymbol = true) {
+  return formatMoney(value, includeSymbol, layout.numberGrouping)
 }
 
 function normalizeInvoiceText(value) {
@@ -734,7 +746,7 @@ function drawServiceTable(doc, layout, entity, invoice, overrides, company) {
   const feeText = normalizeInvoiceText(overrides.professional_fee_text || entity.professional_fee_text || '')
   textBox(doc, [company.feeLabel, feeText].filter(Boolean).join('\n'), columns[1], itemTop, columns[2] - columns[1], 44, { bold: layout.lineItemBold, size: body, minSize: body - 2 })
   textBox(doc, clean(entity.sac || invoice.sac || '998512'), columns[2], itemTop, columns[3] - columns[2], itemHeight, { size: body, align: 'center', singleLine: true, valign: 'center' })
-  textBox(doc, formatMoney(invoice.taxable_amount, false), columns[5], itemTop, columns[6] - columns[5], itemHeight, { size: body, align: 'right', singleLine: true, valign: 'center' })
+  textBox(doc, formatLayoutMoney(layout, invoice.taxable_amount, false), columns[5], itemTop, columns[6] - columns[5], itemHeight, { size: body, align: 'right', singleLine: true, valign: 'center' })
 
   const taxRows = invoice.gst_component === 'CGST_SGST'
     ? [['Central Tax (CGST)', invoice.cgst_rate, invoice.cgst_amount], ['State Tax (SGST)', invoice.sgst_rate, invoice.sgst_amount]]
@@ -745,7 +757,7 @@ function drawServiceTable(doc, layout, entity, invoice, overrides, company) {
     textBox(doc, label, columns[1], rowY, columns[2] - columns[1], rowHeight, { bold: layout.taxBold, size: body, minSize: body - 1.5, align: 'right', singleLine: true, valign: 'center' })
     textBox(doc, clean(rate), columns[3], rowY, columns[4] - columns[3], rowHeight, { size: body, align: 'center', singleLine: true, valign: 'center' })
     textBox(doc, '%', columns[4], rowY, columns[5] - columns[4], rowHeight, { size: body, align: 'center', singleLine: true, valign: 'center' })
-    textBox(doc, formatMoney(amount, false), columns[5], rowY, columns[6] - columns[5], rowHeight, { size: body, align: 'right', singleLine: true, valign: 'center' })
+    textBox(doc, formatLayoutMoney(layout, amount, false), columns[5], rowY, columns[6] - columns[5], rowHeight, { size: body, align: 'right', singleLine: true, valign: 'center' })
   })
 }
 
@@ -753,11 +765,11 @@ function drawTotals(doc, layout, invoice) {
   const rounded = hasRounding(invoice)
   const rows = rounded
     ? [
-        ['Total before Rounding Off', formatRs(invoice.total_before_rounding)],
-        ['More: ROUNDING OFF', `${invoice.rounding_type === 'MORE' ? '(+)' : '(-)'}${formatRs(invoice.rounding_amount)}`],
-        ['Total', formatRs(invoice.grand_total)]
+        ['Total before Rounding Off', formatLayoutMoney(layout, invoice.total_before_rounding)],
+        ['More: ROUNDING OFF', `${invoice.rounding_type === 'MORE' ? '(+)' : '(-)'}${formatLayoutMoney(layout, invoice.rounding_amount)}`],
+        ['Total', formatLayoutMoney(layout, invoice.grand_total)]
       ]
-    : [['Total', formatRs(invoice.grand_total)]]
+    : [['Total', formatLayoutMoney(layout, invoice.grand_total)]]
   let top = layout.y.serviceBottom
   const amountX = layout.x.service[5]
   rows.forEach(([label, amount], index) => {
@@ -782,8 +794,8 @@ function drawTaxSummary(doc, layout, invoice, sac) {
   if (invoice.gst_component === 'IGST') {
     const headers = ['SAC', 'Taxable Value', 'Integrated GST (IGST) - Rate', 'IGST Amount']
     headers.forEach((label, index) => textBox(doc, label, columns[index], top, columns[index + 1] - columns[index], layout.y.summaryHeader - top, { bold: true, size: body, minSize: body - 1.7, align: 'center', singleLine: true, valign: 'center' }))
-    const values = [sac, formatRs(invoice.taxable_amount), `${clean(invoice.igst_rate)}%`, formatRs(invoice.igst_amount)]
-    const totals = ['Total', formatRs(invoice.taxable_amount), '', formatRs(invoice.igst_amount)]
+    const values = [sac, formatLayoutMoney(layout, invoice.taxable_amount), `${clean(invoice.igst_rate)}%`, formatLayoutMoney(layout, invoice.igst_amount)]
+    const totals = ['Total', formatLayoutMoney(layout, invoice.taxable_amount), '', formatLayoutMoney(layout, invoice.igst_amount)]
     ;[values, totals].forEach((row, rowIndex) => {
       const rowTop = rowIndex === 0 ? layout.y.summaryHeader : layout.y.summaryData
       const rowBottom = rowIndex === 0 ? layout.y.summaryData : layout.y.summaryBottom
@@ -798,8 +810,8 @@ function drawTaxSummary(doc, layout, invoice, sac) {
   textBox(doc, 'State Tax (SGST)', columns[4], top, columns[6] - columns[4], layout.y.summaryGroup - top, { bold: true, size: body, minSize: body - 1.5, align: 'center', singleLine: true, valign: 'center' })
   textBox(doc, 'Total Tax Amount', columns[6], top, columns[7] - columns[6], layout.y.summaryHeader - top, { bold: true, size: body, minSize: body - 1.5, align: 'center', singleLine: true, valign: 'center' })
   ;[[2, 'Rate'], [3, 'Amount'], [4, 'Rate'], [5, 'Amount']].forEach(([index, label]) => textBox(doc, label, columns[index], layout.y.summaryGroup, columns[index + 1] - columns[index], layout.y.summaryHeader - layout.y.summaryGroup, { bold: true, size: body, minSize: body - 1.4, align: 'center', singleLine: true, valign: 'center' }))
-  const values = [sac, formatRs(invoice.taxable_amount), `${clean(invoice.cgst_rate)}%`, formatRs(invoice.cgst_amount), `${clean(invoice.sgst_rate)}%`, formatRs(invoice.sgst_amount), formatRs(invoice.total_tax_amount)]
-  const totals = ['Total', formatRs(invoice.taxable_amount), '', formatRs(invoice.cgst_amount), '', formatRs(invoice.sgst_amount), formatRs(invoice.total_tax_amount)]
+  const values = [sac, formatLayoutMoney(layout, invoice.taxable_amount), `${clean(invoice.cgst_rate)}%`, formatLayoutMoney(layout, invoice.cgst_amount), `${clean(invoice.sgst_rate)}%`, formatLayoutMoney(layout, invoice.sgst_amount), formatLayoutMoney(layout, invoice.total_tax_amount)]
+  const totals = ['Total', formatLayoutMoney(layout, invoice.taxable_amount), '', formatLayoutMoney(layout, invoice.cgst_amount), '', formatLayoutMoney(layout, invoice.sgst_amount), formatLayoutMoney(layout, invoice.total_tax_amount)]
   ;[values, totals].forEach((row, rowIndex) => {
     const rowTop = rowIndex === 0 ? layout.y.summaryHeader : layout.y.summaryData
     const rowBottom = rowIndex === 0 ? layout.y.summaryData : layout.y.summaryBottom
@@ -819,7 +831,7 @@ function drawLowerDetails(doc, layout, company, taxWords) {
     : 'Permanent placement services, other than executive search services'
   textBox(doc, serviceDescription, x.left, lowerTop + 13, leftWidth, 28, { size: body, minSize: body - 1.8 })
   textBox(doc, `Company's PAN: ${company.pan}`, x.left, y.lowerBottom - 29, leftWidth, 14, { size: body, minSize: body - 1.5, singleLine: true, valign: 'center' })
-  textBox(doc, company.reverseCharge, x.left, y.lowerBottom - 15, leftWidth, 14, { bold: layout.reverseBold !== false, size: body, minSize: 5.8, singleLine: true, valign: 'center' })
+  textBox(doc, layout.reverseChargeText || company.reverseCharge, x.left, y.lowerBottom - 15, leftWidth, 14, { bold: layout.reverseBold !== false, size: body, minSize: 5.8, singleLine: true, valign: 'center' })
 
   const bankRows = [
     ['Bank Name', company.bank.name],

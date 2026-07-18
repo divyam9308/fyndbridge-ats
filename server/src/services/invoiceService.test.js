@@ -206,6 +206,56 @@ test('six explicit reference cases select six distinct layout profiles', () => {
   }
 })
 
+test('FCAPL CGST/SGST revised format keeps calculated tax and rounding variants intact', async () => {
+  const entity = {
+    legal_entity_name: 'FCAPL CGST FORMAT TEST',
+    optional_name: '-',
+    address: '20, OKHLA INDUSTRIAL ESTATE PHASE 3, NEW DELHI, DELHI, 110020',
+    pan: 'AABTS7575D',
+    place_of_supply: 'New Delhi',
+    state: 'Delhi',
+    state_code: '07',
+    gstin: '07AABTS7575D1Z6',
+    contact_person: 'Test Contact',
+    email: 'billing@example.com',
+    sac: '998312'
+  }
+  const renderText = async others_amount => {
+    const input = { ...baseInput, ...entity, billing_entity: 'FCAPL', model: 'others', others_amount }
+    const calculation = calculateInvoice(input)
+    const invoice = {
+      ...calculation,
+      billing_entity: 'FCAPL',
+      invoice_number: 'FCAPL/26-27/001',
+      invoice_date: '2026-06-24',
+      sac: entity.sac
+    }
+    const text = (await pdfParse((await renderInvoicePdf({ entity, invoice, overrides: input })).buffer)).text
+    return { calculation, text }
+  }
+
+  const rounded = await renderText('558720')
+  assert.equal(rounded.calculation.cgst_amount, 50284.8)
+  assert.equal(rounded.calculation.sgst_amount, 50284.8)
+  assert.equal(rounded.calculation.total_before_rounding, 659289.6)
+  assert.equal(rounded.calculation.rounding_type, 'MORE')
+  assert.equal(rounded.calculation.rounding_amount, 0.4)
+  assert.equal(rounded.calculation.grand_total, 659290)
+  assert.match(rounded.text, /50,284\.80/)
+  assert.match(rounded.text, /₹659,289\.60/)
+  assert.match(rounded.text, /\(\+\)₹0\.40/)
+  assert.match(rounded.text, /₹659,290\.00/)
+  assert.match(rounded.text, /Tax Payable on reverse charge basis: No/)
+
+  const exact = await renderText('560000')
+  assert.equal(exact.calculation.total_before_rounding, 660800)
+  assert.equal(exact.calculation.rounding_type, null)
+  assert.equal(exact.calculation.rounding_amount, 0)
+  assert.equal(exact.calculation.grand_total, 660800)
+  assert.doesNotMatch(exact.text, /ROUNDING OFF/)
+  assert.match(exact.text, /₹660,800\.00/)
+})
+
 test('all tax and rounding combinations render as one A4 page with long dynamic text', async () => {
   const entityBase = {
     legal_entity_name: 'A VERY LONG LEGAL ENTITY NAME FOR PDF OVERFLOW VERIFICATION AND ACCOUNTING RECORDS',

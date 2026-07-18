@@ -12,6 +12,14 @@ export const PERMISSION_ITEMS = [
 
 export function iso(date) { return date.toLocaleDateString('en-CA') }
 export function dateLabel(value) { return new Date(`${value}T12:00:00`).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) }
+export function leaveRangeHasSundayBoundary(start,end) {
+  const isSunday=value=>{
+    if(!value)return false
+    const [year,month,day]=value.split('-').map(Number)
+    return new Date(Date.UTC(year,month-1,day)).getUTCDay()===0
+  }
+  return isSunday(start)||isSunday(end)
+}
 export function initials(name) { return name.split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase() }
 export function minutesBetween(a,b) { if(!a||!b) return 0; const [ah,am]=a.split(':').map(Number); const [bh,bm]=b.split(':').map(Number); return Math.max(0,bh*60+bm-ah*60-am) }
 export function durationLabel(minutes) { return `${Math.floor(minutes/60)}h ${String(minutes%60).padStart(2,'0')}m` }
