@@ -29,6 +29,13 @@ test('render and stale-asset failures show recovery UI instead of a white screen
   assert.match(errorBoundary, /Reload ATS/)
 })
 
+test('clearing notifications removes only read items from the bell', () => {
+  assert.match(notificationBell, /const hasReadNotifications = notifications\.some\(item => item\.status === 'read'\)/)
+  assert.match(notificationBell, /setNotifications\(current => current\.filter\(item => item\.status !== 'read'\)\)/)
+  assert.match(notificationBell, /disabled=\{!hasReadNotifications \|\| clearingRead\}/)
+  assert.doesNotMatch(notificationBell, /setNotifications\(\[\]\)/)
+})
+
 test('low-mandate audience supports everyone, admins and super admins with a database default', () => {
   assert.match(migration, /low_mandate_notification_audience', '"super_admins"'::jsonb/)
   assert.match(migration, /in \('everyone', 'admins', 'super_admins'\)/)

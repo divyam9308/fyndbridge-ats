@@ -33,6 +33,23 @@ const STOP_SECTION_HEADERS = new Set([
   'references'
 ])
 
+const EXPERIENCE_SECTION_HEADERS = new Set([
+  'experience',
+  'professional experience',
+  'work experience',
+  'employment',
+  'employment history',
+  'career history',
+  'professional background',
+  'work history'
+])
+
+const COMPANY_HINT_PATTERN = /\b(?:pvt|private|limited|ltd|llp|llc|inc|incorporated|corp|corporation|company|co\.?|group|bank|university|college|school|institute|foundation|solutions|technologies|technology|services|consulting|consultancy|systems|industries|enterprises|ventures|labs|logistics|hotels?|hospital|healthcare|media|agency|associates)\b/i
+const ROLE_HINT_PATTERN = /\b(?:manager|director|head|lead|leader|engineer|developer|consultant|officer|executive|analyst|specialist|architect|designer|professor|lecturer|teacher|recruiter|accountant|controller|president|founder|partner|associate|administrator|coordinator|supervisor|intern|trainee)\b/i
+const RESPONSIBILITY_PATTERN = /^(?:responsible for|responsibilities|worked on|working on|led|managed|developed|delivered|created|built|implemented|handled|supported|oversaw|drove|collaborated|provided|prepared|conducted|achieved)\b/i
+const CURRENT_EMPLOYMENT_PATTERN = /\b(?:present|current|currently|ongoing|till date|to date|now)\b/i
+const EMPLOYMENT_DATE_PATTERN = /\b(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(?:19|20)\d{2}\b/i
+
 function normalizeLines(text) {
   return String(text || '')
     .replace(/\r/g, '\n')
@@ -154,28 +171,92 @@ function extractExperience(text) {
   return proximity ? Number.parseFloat(proximity[1]) : null
 }
 
+function normalizeSectionHeading(line) {
+  return String(line || '').replace(/:$/, '').trim().toLowerCase()
+}
+
 function getCurrentExperienceBlock(text) {
   const lines = normalizeLines(text)
-  const bounds = sectionBounds(lines, /^professional experience:?$/i)
-  if (!bounds) {
+  const start = lines.findIndex((line) => EXPERIENCE_SECTION_HEADERS.has(normalizeSectionHeading(line)))
+  if (start === -1) {
     return []
   }
 
   const block = []
-  for (let i = bounds.start + 1; i < bounds.end; i += 1) {
-    if (!block.length && !lines[i]) {
-      continue
-    }
-    if (block.length && /^[A-Z][A-Za-z\s/&().-]+,?\s*(19\d{2}|20\d{2}|present|current)/i.test(lines[i])) {
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const heading = normalizeSectionHeading(lines[i])
+    if (
+      block.length
+      && (
+        (SECTION_HEADERS.includes(heading) && !EXPERIENCE_SECTION_HEADERS.has(heading))
+        || STOP_SECTION_HEADERS.has(heading)
+      )
+    ) {
       break
     }
     block.push(lines[i])
-    if (block.length >= 8) {
+    if (block.length >= 16) {
       break
     }
   }
 
   return block
+}
+
+function cleanExperienceCandidate(line) {
+  return String(line || '')
+    .replace(/^[-*•]\s*/, '')
+    .replace(/^(?:current\s+)?(?:organisation|organization|company|employer)(?:\s+name)?\s*[:-]\s*/i, '')
+    .replace(/\s*(?:\||,|·|•|[-–—])\s*(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(?:19|20)\d{2}.*$/i, '')
+    .replace(/\s*(?:\||,|·|•|[-–—])\s*(?:present|current|ongoing|till date|to date|now).*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function isPlausibleCompanyCandidate(line) {
+  const value = cleanExperienceCandidate(line)
+  if (!value || value.length < 2 || value.length > 100) return false
+  if (/@|https?:\/\/|www\./i.test(value)) return false
+  if (/^\+?[\d\s().-]+$/.test(value)) return false
+  if (EMPLOYMENT_DATE_PATTERN.test(value) || CURRENT_EMPLOYMENT_PATTERN.test(value)) return false
+  if (RESPONSIBILITY_PATTERN.test(value)) return false
+  const heading = normalizeSectionHeading(value)
+  return !SECTION_HEADERS.includes(heading)
+    && !STOP_SECTION_HEADERS.has(heading)
+    && !EXPERIENCE_SECTION_HEADERS.has(heading)
+}
+
+function extractLabelledCurrentCompany(text) {
+  const lines = normalizeLines(text)
+
+  for (const line of lines) {
+    const labelled = line.match(/^(?:current\s+)?(?:organisation|organization|company|employer)(?:\s+name)?\s*[:-]\s*(.+)$/i)
+    if (labelled && isPlausibleCompanyCandidate(labelled[1])) {
+      return cleanExperienceCandidate(labelled[1])
+    }
+
+    const statement = line.match(/\bcurrently\s+(?:working|employed)\s+(?:at|with|for)\s+(.+?)(?:[.;]|$)/i)
+    if (statement && isPlausibleCompanyCandidate(statement[1])) {
+      return cleanExperienceCandidate(statement[1])
+    }
+  }
+
+  return null
+}
+
+function nearbyCompanyCandidates(block, dateIndex) {
+  const indexes = [dateIndex, dateIndex + 1, dateIndex - 1, dateIndex + 2, dateIndex - 2]
+  const seen = new Set()
+
+  return indexes
+    .filter((index) => index >= 0 && index < block.length)
+    .map((index) => cleanExperienceCandidate(block[index]))
+    .filter((value) => {
+      const key = value.toLowerCase()
+      if (seen.has(key) || !isPlausibleCompanyCandidate(value)) return false
+      seen.add(key)
+      return true
+    })
 }
 
 // Heuristic: current role is usually the first dated title under Professional Experience.
@@ -203,15 +284,31 @@ function extractCurrentDesignation(text) {
   return null
 }
 
-// Heuristic: the organization is normally the line immediately after the current role title.
+// Heuristic: prefer explicit current-employer labels, then inspect lines around the latest role dates.
 function extractCurrentCompany(text) {
-  const currentBlock = getCurrentExperienceBlock(text)
-  const roleIndex = currentBlock.findIndex((line) => /,\s*(19\d{2}|20\d{2}|present|current)/i.test(line))
-  if (roleIndex !== -1 && currentBlock[roleIndex + 1]) {
-    return currentBlock[roleIndex + 1].replace(/\s+/g, ' ').trim()
+  const labelledCompany = extractLabelledCurrentCompany(text)
+  if (labelledCompany) {
+    return labelledCompany
   }
 
-  return null
+  const currentBlock = getCurrentExperienceBlock(text)
+  if (!currentBlock.length) {
+    return null
+  }
+
+  const currentDateIndex = currentBlock.findIndex((line) => CURRENT_EMPLOYMENT_PATTERN.test(line))
+  const datedIndex = currentDateIndex !== -1
+    ? currentDateIndex
+    : currentBlock.findIndex((line) => EMPLOYMENT_DATE_PATTERN.test(line))
+  const searchIndex = datedIndex === -1 ? 0 : datedIndex
+  const candidates = nearbyCompanyCandidates(currentBlock, searchIndex)
+  const explicitCompany = candidates.find((candidate) => COMPANY_HINT_PATTERN.test(candidate))
+
+  if (explicitCompany) {
+    return explicitCompany
+  }
+
+  return candidates.find((candidate) => !ROLE_HINT_PATTERN.test(candidate)) || null
 }
 
 function isSectionHeader(line) {
@@ -509,4 +606,3 @@ module.exports = {
   extractCoverLetter,
   extractFields
 }
-

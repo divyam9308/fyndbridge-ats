@@ -20,6 +20,7 @@ const RESUME_AI_SCHEMA = {
     city: { type: ['string', 'null'] },
     state: { type: ['string', 'null'] },
     currentDesignation: { type: ['string', 'null'] },
+    currentOrganisation: { type: ['string', 'null'] },
     experience: { type: ['number', 'null'] },
     education: { type: ['string', 'null'] },
     skills: {
@@ -133,7 +134,7 @@ function normalizeResumeAiOutput(data) {
     state: cleanText(data.state) || null,
     location: null,
     currentDesignation: cleanText(data.currentDesignation) || null,
-    currentOrganisation: null,
+    currentOrganisation: cleanText(data.currentOrganisation) || null,
     experience: Number.isFinite(Number(data.experience)) ? Number(data.experience) : null,
     education: formatEducationEntries(data.education) || cleanText(data.education) || null,
     skills,
@@ -147,8 +148,9 @@ async function parseResumeWithAi(rawText) {
   const prompt = [
     'Extract the following resume fields from the cleaned resume text below and return JSON only.',
     'Do not invent values. Use null for missing fields.',
-    'Fields: name, email, mobile, city, state, currentDesignation, experience, education, skills, salary, linkedin, summary.',
+    'Fields: name, email, mobile, city, state, currentDesignation, currentOrganisation, experience, education, skills, salary, linkedin, summary.',
     'Mobile extraction is mandatory if a phone/mobile/contact number is present. Experience should be a number of years.',
+    'currentOrganisation means the candidate\'s most recent or present employer. Prefer the employer tied to a role marked Present, Current, Ongoing, or Till Date.',
     'Do not include certifications, certificate programs, workshops, short courses, seminars, bootcamps, training programs, or professional development programs in education.',
     'Resume text:',
     cleanText(rawText).slice(0, 12000)
@@ -260,14 +262,17 @@ async function extractTextWithOcr(fileBuffer, {
   }
 }
 
-async function parseResumeText(rawText) {
+async function parseResumeText(rawText, { parseResumeWithAiImpl = parseResumeWithAi } = {}) {
   const extracted = extractFields(rawText)
   let aiExtracted = null
   try {
-    aiExtracted = await parseResumeWithAi(rawText)
+    aiExtracted = await parseResumeWithAiImpl(rawText)
     if (aiExtracted) {
       aiExtracted.location = aiExtracted.location || extracted.location?.value || null
-      aiExtracted.currentOrganisation = aiExtracted.currentOrganisation || extracted.current_organisation?.value || null
+      aiExtracted.currentOrganisation = aiExtracted.currentOrganisation
+        || extracted.current_organisation?.value
+        || extracted.current_company?.value
+        || null
       aiExtracted.name = aiExtracted.name || extracted.full_name?.value || null
       aiExtracted.email = aiExtracted.email || extracted.email?.value || null
       aiExtracted.mobile = aiExtracted.mobile || extracted.mobile_number?.value || null
@@ -307,9 +312,11 @@ module.exports = {
   extractTextWithOcr,
   isPdfBuffer,
   loadPdfDocument,
+  normalizeResumeAiOutput,
   parseResume,
   parseResumeText,
   PDF_OCR_RENDER_SCALE,
+  RESUME_AI_SCHEMA,
   renderPdfPageToPng,
   TESSERACT_LANGUAGE_PATH,
   TESSERACT_WORKER_PATH

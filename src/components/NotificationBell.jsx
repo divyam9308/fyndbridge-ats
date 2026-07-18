@@ -167,9 +167,10 @@ export default function NotificationBell() {
 
   const clearRead = async () => {
     if (clearingRead) return
-    if (!notifications.length) return
+    const hasReadNotifications = notifications.some(item => item.status === 'read')
+    if (!hasReadNotifications) return
     const previous = notifications
-    setNotifications([])
+    setNotifications(current => current.filter(item => item.status !== 'read'))
     setClearingRead(true)
     setActionError('')
     try {
@@ -193,6 +194,7 @@ export default function NotificationBell() {
   }
 
   const pendingCount = notifications.filter(item => item.status === 'pending').length
+  const hasReadNotifications = notifications.some(item => item.status === 'read')
 
   return (
     <div className="notification-root" ref={rootRef}>
@@ -205,7 +207,7 @@ export default function NotificationBell() {
         <div className="notification-dropdown">
           <div className="notification-dropdown-header">
             <div className="notification-dropdown-title">Notifications</div>
-            <button className="notification-clear-btn" type="button" onClick={clearRead} disabled={!notifications.length || clearingRead}>
+            <button className="notification-clear-btn" type="button" onClick={clearRead} disabled={!hasReadNotifications || clearingRead}>
               {clearingRead ? 'Clearing...' : 'Clear All'}
             </button>
           </div>
