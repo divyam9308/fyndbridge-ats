@@ -58,22 +58,15 @@ export default function Sidebar() {
     <aside className="sidebar" role="navigation" aria-label="Main navigation">
       {/* Logo */}
       <div className="sidebar-logo">
-        <picture>
-          <source
-            srcSet="/assets/fyndbridge-official-logo-380.webp 380w, /assets/fyndbridge-official-logo.webp 543w"
-            sizes="212px"
-            type="image/webp"
-          />
-          <img
-            src="/assets/fyndbridge-official-logo.png"
-            alt="FYNDBRIDGE"
-            className="sidebar-logo-image"
-            width="380"
-            height="63"
-            decoding="async"
-            onError={() => console.error('FYNDBRIDGE logo failed to load')}
-          />
-        </picture>
+        <img
+          src="/assets/fynd-sidebar-logo.png"
+          alt="FYND"
+          className="sidebar-logo-image"
+          width="2000"
+          height="2000"
+          decoding="async"
+          onError={() => console.error('FYND sidebar logo failed to load')}
+        />
       </div>
 
       {/* Nav links */}
