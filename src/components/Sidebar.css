@@ -20,6 +20,7 @@
   height: var(--topbar-height);
   padding: 6px 14px;
   background: var(--navy);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 
   /* ✦ CHANGED — mirrors the sidebar top-right notch so white area curves with it */
   border-radius: 0;
