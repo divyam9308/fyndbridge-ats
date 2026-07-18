@@ -10,6 +10,7 @@ const { resolveEntityFilterReferences } = require('../services/entityFilterRefer
 const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/displayIdAllocator')
 const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
+const { resolveClientGroupScope } = require('../services/clientGroups')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
@@ -217,10 +218,12 @@ async function nextJobDisplayId() {
 async function findDuplicateMandate(clientId, title) {
   const normalizedTitle = clean(title).toLowerCase()
   if (!clientId || !normalizedTitle) return null
+  const scope = await resolveClientGroupScope(supabase, clientId)
+  if (!scope.ownerId) return null
   const { data, error } = await supabase
     .from('jobs')
     .select('*, clients(name, client_name, client_display_id)')
-    .eq('client_id', clientId)
+    .eq('client_id', scope.ownerId)
   if (error) throw error
   return (data || []).find(job => clean(job.title).toLowerCase() === normalizedTitle) || null
 }
@@ -246,9 +249,9 @@ async function sendDuplicateMandateResponse(req, res, duplicate) {
 async function assertClientExists(clientId) {
   const id = clean(clientId)
   if (!id) throw Object.assign(new Error('Please select a valid client from the dropdown.'), { statusCode: 400 })
-  const { data, error } = await supabase.from('clients').select('id').eq('id', id).maybeSingle()
-  if (error) throw error
-  if (!data) throw Object.assign(new Error('Please select a valid client from the dropdown.'), { statusCode: 400 })
+  const scope = await resolveClientGroupScope(supabase, id)
+  if (!scope.ownerId) throw Object.assign(new Error('Please select a valid client from the dropdown.'), { statusCode: 400 })
+  return scope.ownerId
 }
 
 async function assertNoDuplicateMandate(clientId, title, excludeJobId = '') {
@@ -346,7 +349,10 @@ async function listJobs(req, res) {
     let query = useFilterView
       ? supabase.from('mandate_ai_filter_rows').select('*', { count: paginate ? 'exact' : undefined })
       : supabase.from('jobs').select('*, clients(name, client_name, client_display_id)', { count: paginate ? 'exact' : undefined })
-    if (req.query.client_id) query = query.eq('client_id', req.query.client_id)
+    if (req.query.client_id) {
+      const scope = await resolveClientGroupScope(supabase, req.query.client_id)
+      query = query.eq('client_id', scope.ownerId || '__no_match__')
+    }
     if (req.query.status) query = query.ilike('mandate_status', clean(req.query.status))
     if (req.query.teamLead) query = query.ilike('team_lead', clean(req.query.teamLead))
     if (req.query.role) query = query.ilike('title', clean(req.query.role))
@@ -474,7 +480,7 @@ async function createJob(req, res) {
   let uploadedAttachments = []
   try {
     const payload = await payloadFromBody(req.body)
-    await assertClientExists(payload.client_id)
+    payload.client_id = await assertClientExists(payload.client_id)
     const duplicateAction = clean(req.body.duplicate_action)
     const duplicate = await findDuplicateMandate(payload.client_id, payload.title)
     if (duplicate && duplicateAction !== 'add_duplicate') {
@@ -543,9 +549,9 @@ async function updateJob(req, res) {
     const { data: currentJob, error: currentJobError } = await supabase.from('jobs').select('client_id, title, consultants, team_lead, jd_attachments, jd_storage_path, jd_url, created_at, updated_at').eq('id', req.params.id).maybeSingle()
     if (currentJobError) throw currentJobError
     if (!currentJob) return res.status(404).json({ error: 'Mandate not found' })
-    const nextClientId = payload.client_id || currentJob.client_id
+    const nextClientId = await assertClientExists(payload.client_id || currentJob.client_id)
+    if (Object.prototype.hasOwnProperty.call(payload, 'client_id') || nextClientId !== currentJob.client_id) payload.client_id = nextClientId
     const nextTitle = Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : currentJob.title
-    await assertClientExists(nextClientId)
     const duplicateIdentityChanged = nextClientId !== currentJob.client_id || clean(nextTitle).toLowerCase() !== clean(currentJob.title).toLowerCase()
     if (duplicateIdentityChanged) await assertNoDuplicateMandate(nextClientId, nextTitle, req.params.id)
     await assertAssignmentUsersExist(

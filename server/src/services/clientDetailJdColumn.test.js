@@ -25,7 +25,8 @@ test('Client Details displays the JD from each related job without per-row reque
   assert.match(clientDetailPage, /normalizeAttachments\(job\?\.jd_attachments,\s*\{[\s\S]*?jd_storage_path \|\| job\?\.jd_url/)
   assert.match(clientDetailPage, /attachments=\{jobJdAttachments\(group\.relatedJob\)\}/)
   assert.match(clientDetailPage, /client-detail-jd-\$\{group\.relatedJob\?\.id \|\| group\.key\}/)
-  assert.match(clientDetailPage, /fetch\(`\/api\/jobs\?client_id=\$\{clientId\}&all=true`\)/)
+  assert.match(clientDetailPage, /const rootClientId = clientData\.client_group_id \|\| clientData\.root_client_id \|\| clientData\.id \|\| clientId/)
+  assert.match(clientDetailPage, /fetch\(`\/api\/jobs\?client_id=\$\{rootClientId\}&all=true`\)/)
   assert.doesNotMatch(clientDetailPage, /jobGroups\.map\([\s\S]{0,1200}fetch\(/)
 })
 

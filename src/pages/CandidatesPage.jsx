@@ -250,9 +250,11 @@ const getCanonicalClients = (clients) => {
   const map = new Map()
   clients.forEach(client => {
     const name = client?.name || client?.client_name || ''
-    const key = (client?.client_display_id || name).toString().trim().toLowerCase()
-    if (!key || map.has(key)) return
-    map.set(key, client)
+    const groupId = client?.client_group_id || client?.id || ''
+    const key = (groupId || client?.client_display_id || name).toString().trim().toLowerCase()
+    if (!key) return
+    const current = map.get(key)
+    if (!current || client?.id === groupId) map.set(key, client)
   })
   return [...map.values()].sort((a, b) => (a?.name || a?.client_name || '').localeCompare(b?.name || b?.client_name || '', undefined, { sensitivity: 'base' }))
 }
@@ -296,7 +298,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
     education: f.education,
     client_name: f.client,
     job_title: f.job,
-    client_id: f.clientId || matchingClient?.id || '',
+    client_id: f.clientId || matchingClient?.client_group_id || matchingClient?.id || '',
     job_id: f.jobId || matchingJob?.id || '',
     status: f.status,
     current_salary: cleanNumberForApi(f.salary),
@@ -720,7 +722,7 @@ export default function CandidatesPage() {
     return byId
   }, [dbJobs])
   const findClientByName = (name) => canonicalClients.find(c => normalizeText(clientName(c)) === normalizeText(name))
-  const findClientByInput = (value) => canonicalClients.find(c => c.id === value)
+  const findClientByInput = (value) => canonicalClients.find(c => c.id === value || c.client_group_id === value)
   const clientDisplayIdForForm = (candidate) => {
     return clientDisplayLookup.byId.get(candidate.clientId) || ''
   }
@@ -929,7 +931,7 @@ export default function CandidatesPage() {
       setForm(f => ({
         ...f,
         client: matchingClient ? clientName(matchingClient) : value,
-        clientId: matchingClient?.id || '',
+        clientId: matchingClient?.client_group_id || matchingClient?.id || '',
         job: ''
       }))
     } else {
@@ -1047,7 +1049,7 @@ export default function CandidatesPage() {
       consultantUserId: candidate.consultantUserId || candidate.consultant_user_id || '',
       associationId: candidate.associationId,
       candidateId: candidate.candidateId,
-      clientId: candidate.clientId || matchedClient?.id || '',
+      clientId: candidate.clientId || matchedClient?.client_group_id || matchedClient?.id || '',
       client: clientName(matchedClient) || candidate.client || '',
       currentOrganisation: candidate.currentOrganisation || candidate.currentCompany || '',
       skills: Array.isArray(candidate.skills) ? candidate.skills : []
@@ -1335,7 +1337,7 @@ export default function CandidatesPage() {
       education: row.education || '',
       salary: row.salary ?? '',
       client: matchedClient ? clientName(matchedClient) : '',
-      clientId: matchedClient?.id || '',
+      clientId: matchedClient?.client_group_id || matchedClient?.id || '',
       newClientName: '',
       linkedinUrl: row.linkedin_url || '',
       cvLink: row.cv_link || row.resume_url || '',
@@ -1614,7 +1616,7 @@ export default function CandidatesPage() {
       setParsedForm(f => ({
         ...f,
         client: matchingClient ? clientName(matchingClient) : value,
-        clientId: matchingClient?.id || '',
+        clientId: matchingClient?.client_group_id || matchingClient?.id || '',
         job: ''
       }))
     } else {
@@ -1657,7 +1659,7 @@ export default function CandidatesPage() {
       setF(prev => ({
         ...prev,
         client: matchedClient ? clientName(matchedClient) : value,
-        clientId: matchedClient?.id || '',
+        clientId: matchedClient?.client_group_id || matchedClient?.id || '',
         job: '',
         jobId: '',
         jobDisplayId: ''
@@ -1683,7 +1685,7 @@ export default function CandidatesPage() {
         setF(prev => ({
         ...prev,
         client: matchedClient ? clientName(matchedClient) : value,
-        clientId: matchedClient?.id || '',
+        clientId: matchedClient?.client_group_id || matchedClient?.id || '',
         job: '',
         jobId: '',
         jobDisplayId: ''

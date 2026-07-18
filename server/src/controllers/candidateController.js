@@ -17,6 +17,7 @@ const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/d
 const { createConsultantAssignmentNotification } = require('../services/assignmentNotifications')
 const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
+const { resolveClientGroupScope } = require('../services/clientGroups')
 const { CANDIDATE_STATUSES: VALID_STATUSES, candidateStatusError, cleanStatus: cleanCandidateStatus } = require('../services/candidateStatuses')
 const { removeUnreferencedDocuments, uploadDocuments } = require('../services/documentStorage')
 const { normalizeAttachment, normalizeAttachments, removalPlan } = require('../services/documentAttachments')
@@ -784,9 +785,11 @@ async function validateMandateReference(payload) {
   if (!data) {
     throw Object.assign(new Error('Please select a valid mandate from the dropdown.'), { statusCode: 400 })
   }
-  if (!data.client_id || payload.client_id !== data.client_id) {
+  const scope = await resolveClientGroupScope(supabase, payload.client_id)
+  if (!data.client_id || !scope.ownerId || scope.ownerId !== data.client_id) {
     throw Object.assign(new Error('Selected mandate does not belong to the selected client.'), { statusCode: 400 })
   }
+  payload.client_id = data.client_id
   payload.job_title = data.title || payload.job_title
   payload.client_name = data.clients?.client_name || data.clients?.name || payload.client_name
 }
@@ -1076,6 +1079,11 @@ async function listCandidates(req, res) {
     const sortField = cleanText(req.query.sortField)
     const sortDirection = cleanText(req.query.sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc'
     const rawAiFilters = parseJsonFilter(req.query.ai_filters)
+    let clientFilterId = cleanText(req.query.client_id)
+    if (clientFilterId) {
+      const scope = await resolveClientGroupScope(supabase, clientFilterId)
+      clientFilterId = scope.ownerId || '__no_match__'
+    }
     const hasAssocFilters = req.query.job_title ||
                             req.query.job_id ||
                             req.query.client_id ||
@@ -1156,7 +1164,7 @@ async function listCandidates(req, res) {
       if (req.query.job_title) query = query.ilike('job_title', `%${cleanText(req.query.job_title)}%`)
       if (req.query.job_id) query = query.eq('job_id', cleanText(req.query.job_id))
       if (req.query.client_name) query = query.ilike('client_name', `%${cleanText(req.query.client_name)}%`)
-      if (req.query.client_id) query = query.eq('client_id', cleanText(req.query.client_id))
+      if (clientFilterId) query = query.eq('client_id', clientFilterId)
       if (req.query.consultant) query = query.ilike('consultant_name', cleanText(req.query.consultant))
 
       query = applyDashboardPeriod(query, 'created_at', cleanText(req.query.period))
@@ -1218,8 +1226,8 @@ async function listCandidates(req, res) {
       query = query.ilike('candidate_associations.client_name', `%${cleanText(req.query.client_name)}%`)
     }
 
-    if (req.query.client_id) {
-      query = query.eq('candidate_associations.client_id', cleanText(req.query.client_id))
+    if (clientFilterId) {
+      query = query.eq('candidate_associations.client_id', clientFilterId)
     }
 
     if (req.query.consultant) {
@@ -1417,6 +1425,7 @@ async function createCandidate(req, res) {
       validateConsultantReference(associationPayload),
       findMatchingCandidates(candidatePayload.email, candidatePayload.mobile_number)
     ])
+    candidatePayload.client_id = associationPayload.client_id
     const exactAssociation = duplicateMatch.matches.length
       ? duplicateMatch.matches.find((match) => hasSameConcreteAssociation(match, associationPayload))
       : null
@@ -1608,6 +1617,7 @@ async function updateCandidate(req, res) {
       associationPayload.status = cleanCandidateStatus(associationPayload.status)
     }
     await validateMandateReference(associationPayload)
+    if (associationPayload.client_id) candidatePayload.client_id = associationPayload.client_id
 
     let existingCandidateId = null
     let existingAssociation = null

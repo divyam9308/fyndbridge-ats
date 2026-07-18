@@ -196,10 +196,11 @@ export default function ClientDetailPage() {
     const candidateMap = new Map()
     let nextPage = 1
     const clientName = clientData.name || clientData.client_name || ''
+    const rootClientId = clientData.client_group_id || clientData.root_client_id || clientData.id || clientId
 
     while (true) {
       const results = await Promise.allSettled([
-        fetch(`/api/candidates?client_id=${clientId}&page=${nextPage}&limit=100`),
+        fetch(`/api/candidates?client_id=${rootClientId}&page=${nextPage}&limit=100`),
         fetch(`/api/candidates?client_name=${encodeURIComponent(clientName)}&page=${nextPage}&limit=100`),
       ])
 
@@ -211,7 +212,7 @@ export default function ClientDetailPage() {
       const payloads = await Promise.all(responses.map(response => response.json()))
       payloads.flatMap(payload => payload.data || []).forEach((row) => {
         const clientTextMatches = normalizeText(row.client_name) === normalizeText(clientName)
-        if (row.client_id === clientId || clientTextMatches) candidateMap.set(row.association_id || row.id, row)
+        if (row.client_id === rootClientId || clientTextMatches) candidateMap.set(row.association_id || row.id, row)
       })
       if (payloads.every(payload => (payload.data || []).length < 100)) break
       nextPage += 1
@@ -230,8 +231,9 @@ export default function ClientDetailPage() {
       }
       if (!clientRes.ok) throw new Error('Failed to fetch client details.')
       const clientData = await clientRes.json()
+      const rootClientId = clientData.client_group_id || clientData.root_client_id || clientData.id || clientId
       const [jobsRes, candidateRows] = await Promise.all([
-        fetch(`/api/jobs?client_id=${clientId}&all=true`),
+        fetch(`/api/jobs?client_id=${rootClientId}&all=true`),
         fetchAllCandidates(clientData),
       ])
       if (!jobsRes.ok) throw new Error('Failed to fetch client jobs.')
@@ -385,11 +387,12 @@ export default function ClientDetailPage() {
   }
 
   const refreshClientJobs = useCallback(async () => {
-    const jobsRes = await fetch(`/api/jobs?client_id=${clientId}&all=true`)
+    const rootClientId = client?.client_group_id || client?.root_client_id || client?.id || clientId
+    const jobsRes = await fetch(`/api/jobs?client_id=${rootClientId}&all=true`)
     if (!jobsRes.ok) throw new Error('Failed to refresh client jobs.')
     const jobsPayload = await jobsRes.json().catch(() => ({}))
     setClientJobs(jobsPayload.data || [])
-  }, [clientId])
+  }, [client?.client_group_id, client?.id, client?.root_client_id, clientId])
 
   const updateMandateStatus = async (group, status) => {
     const job = group.relatedJob

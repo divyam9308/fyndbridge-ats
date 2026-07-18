@@ -41,6 +41,15 @@ const BILLING_ENTITIES = ['FCS', 'FCAPL']
 const REGION_OPTIONS = ['', 'North', 'South', 'East', 'West', 'International']
 const MAX_CONTRACT_SIZE_BYTES = 10 * 1024 * 1024
 const MAX_CONTRACT_FILES_PER_SAVE = 20
+const CONTACT_ONLY_FORM_FIELDS = new Set([
+  'contact_person',
+  'mobile',
+  'email',
+  'designation',
+  'linkedin',
+  'connected_on_date',
+  'follow_up_date'
+])
 const EMPTY_FORM = {
   client_group_id: '',
   client_display_id: '',
@@ -218,12 +227,15 @@ const getCanonicalClients = (clients) => {
     if (isPlaceholderContact(client)) return
     const name = client.client_name || client.name || ''
     const key = String(client.client_group_id || client.client_display_id || name).trim().toLowerCase()
-    if (key && !map.has(key)) map.set(key, client)
+    if (!key) return
+    const current = map.get(key)
+    if (!current || client.id === client.client_group_id) map.set(key, client)
   })
   return [...map.values()].sort((a, b) => String(a.client_name || a.name || '').localeCompare(String(b.client_name || b.name || ''), undefined, { sensitivity: 'base' }))
 }
 
-const followUpClientKey = (client) => client?._contact_group_id || client?.client_group_id || client?.id || ''
+const clientRootId = (client) => client?._contact_group_id || client?.client_group_id || client?.root_client_id || client?.id || ''
+const followUpClientKey = (client) => client?.id || ''
 
 const formatLocationRegion = (location, region) => {
   const parts = [location, region].map(value => String(value || '').trim()).filter(Boolean)
@@ -343,6 +355,8 @@ export default function ClientsPage() {
   const aiFilterAbortRef = useRef(null)
   const clientListRequestRef = useRef(0)
   const clientListAbortRef = useRef(null)
+  const editingSecondaryContact = Boolean(editingClient?.id && editingClient.id !== clientRootId(editingClient))
+  const contactOnlyMode = addingContactPerson || editingSecondaryContact
 
   const focusPopup = useCallback((ref) => {
     window.requestAnimationFrame(() => {
@@ -731,7 +745,7 @@ export default function ClientsPage() {
     setContractFiles([])
     setSavedContractAttachments(clientContractAttachments(client))
     setRemovedContractPaths([])
-    setContractRecordId(client.id || '')
+    setContractRecordId(clientRootId(client))
     setEditingClient(client)
     setSelectedExistingClientId(null)
     setAddingNewClient(false)
@@ -764,7 +778,8 @@ export default function ClientsPage() {
       client_display_id: client.client_display_id || source.client_display_id || '',
       follow_up_id: '',
       follow_up_date: '',
-      comments: source.comments || client.comments || '',
+      connected_on_date: todayLocal(),
+      comments: '',
       contact_person: '',
       mobile: '',
       email: '',
@@ -775,9 +790,9 @@ export default function ClientsPage() {
     setConsultantOpen(false)
     setErrors({})
     setContractFiles([])
-    setSavedContractAttachments(clientContractAttachments(source))
+    setSavedContractAttachments([])
     setRemovedContractPaths([])
-    setContractRecordId(source.id || client.id || '')
+    setContractRecordId(clientRootId(client))
     setEditingClient(null)
     setSelectedExistingClientId(client.client_group_id || client.id)
     setAddingNewClient(false)
@@ -888,11 +903,25 @@ export default function ClientsPage() {
     const next = {}
     if (!form.client_group_id) next.client_name = 'Please select a valid client from the dropdown.'
     if (!form.contact_person.trim()) next.contact_person = 'Contact Person is required'
-    if (form.consultant_name.trim() && form.consultant_name !== '-' && !form.consultant_user_id && !resolveTypedConsultant()) next.consultant_name = 'Please select a valid consultant from the dropdown.'
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email'
     if (!form.mobile.trim() && !form.email.trim()) next.mobile = 'Enter mobile or email'
     return next
   }
+
+  const contactMetadataPayload = () => ({
+    client_group_id: form.client_group_id || selectedExistingClientId || '',
+    client_display_id: form.client_display_id || '',
+    client_name: form.client_name || '',
+    contact_person: form.contact_person || '',
+    mobile: form.mobile || '',
+    email: form.email || '',
+    designation: form.designation || '',
+    linkedin: form.linkedin || '',
+    connected_on_date: form.connected_on_date || '',
+    comments: form.comments || '',
+    follow_up_id: form.follow_up_id || '',
+    follow_up_date: form.follow_up_date || ''
+  })
 
   const handleAddContactPerson = async () => {
     const clientId = form.client_group_id || selectedExistingClientId
@@ -902,20 +931,13 @@ export default function ClientsPage() {
       setErrors(nextErrors)
       return
     }
-    const payload = { ...form }
-    delete payload.follow_up_id
-    delete payload.follow_up_date
+    const payload = contactMetadataPayload()
     if (import.meta.env.DEV) console.debug('[clients]', { actionType: 'add_contact_person', clientId, payload })
     contactSavingRef.current[clientId] = true
     setContactSaving(current => ({ ...current, [clientId]: true }))
     setSaving(true)
     try {
-      const contractBatch = await uploadPendingContracts()
-      if (contractBatch) {
-        payload.contract_upload_reservation = contractBatch.reservation
-        payload.new_contract_attachments = contractBatch.attachments
-      }
-      setSaveStep(contractBatch ? 'Finalizing contracts...' : 'Saving contact...')
+      setSaveStep('Saving contact...')
       const data = await saveClientMetadata({ method: 'POST', url: '/api/clients', payload })
       if (import.meta.env.DEV) console.debug('[clients]', { actionType: 'add_contact_person', clientId, status: 201 })
       setIsOpen(false)
@@ -928,7 +950,7 @@ export default function ClientsPage() {
       await fetchClients({ showLoading: false })
       await fetchClientOptions()
     } catch (err) {
-      setErrors(contractFiles.length ? { contract_document: err.message } : { contact_person: err.message })
+      setErrors({ contact_person: err.message })
     } finally {
       setContractUploading(false)
       setSaveStep('')
@@ -940,18 +962,20 @@ export default function ClientsPage() {
 
   const saveClientToApi = async (duplicateAction = '') => {
     const matchedConsultant = resolveTypedConsultant()
-    const payload = matchedConsultant
-      ? { ...form, consultant_name: matchedConsultant.name, consultant_user_id: matchedConsultant.id || '' }
-      : { ...form }
+    const payload = editingSecondaryContact
+      ? contactMetadataPayload()
+      : matchedConsultant
+        ? { ...form, consultant_name: matchedConsultant.name, consultant_user_id: matchedConsultant.id || '' }
+        : { ...form }
     if (duplicateAction) payload.duplicate_action = duplicateAction
-    const contractBatch = await uploadPendingContracts(editingClient?.id || '')
+    const contractBatch = editingSecondaryContact ? null : await uploadPendingContracts(contractRecordId || editingClient?.id || '')
     if (contractBatch) {
       payload.contract_upload_reservation = contractBatch.reservation
       payload.new_contract_attachments = contractBatch.attachments
     }
-    if (editingClient) payload.removed_contract_paths = removedContractPaths
+    if (editingClient && !editingSecondaryContact) payload.removed_contract_paths = removedContractPaths
 
-    setSaveStep(contractBatch ? 'Finalizing contracts...' : 'Saving client...')
+    setSaveStep(contractBatch ? 'Finalizing contracts...' : editingSecondaryContact ? 'Saving contact...' : 'Saving client...')
     const data = await saveClientMetadata({
       method: editingClient ? 'PATCH' : 'POST',
       url: editingClient ? `/api/clients/${editingClient.id}` : '/api/clients',
@@ -967,7 +991,7 @@ export default function ClientsPage() {
       await handleAddContactPerson()
       return
     }
-    const nextErrors = validate()
+    const nextErrors = contactOnlyMode ? validateContactPerson() : validate()
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors)
       return
@@ -995,10 +1019,10 @@ export default function ClientsPage() {
         setDuplicateMoreOpen(false)
         return
       }
-      const hasContractChanges = contractFiles.length > 0 || removedContractPaths.length > 0 || (
+      const hasContractChanges = !contactOnlyMode && (contractFiles.length > 0 || removedContractPaths.length > 0 || (
         editingClient && form.contract_signed === 'No' && savedContractAttachments.length > 0
-      )
-      if (editingClient && form.contract_signed === 'No' && savedContractAttachments.length > 0) {
+      ))
+      if (!contactOnlyMode && editingClient && form.contract_signed === 'No' && savedContractAttachments.length > 0) {
         setErrors({ contract_signed: err.message })
       } else {
         setErrors(hasContractChanges ? { contract_document: err.message } : { client_name: err.message })
@@ -1067,20 +1091,7 @@ export default function ClientsPage() {
 
   const mergeClientUpdate = useCallback((updatedClient) => {
     if (!updatedClient?.id) return
-    const updatedKey = followUpClientKey(updatedClient)
-    const merge = (client) => {
-      if (client.id === updatedClient.id) return { ...client, ...updatedClient }
-      if (updatedKey && followUpClientKey(client) === updatedKey) {
-        return {
-          ...client,
-          follow_ups: Array.isArray(updatedClient.follow_ups) ? updatedClient.follow_ups : client.follow_ups,
-          follow_up_date: updatedClient.follow_up_date,
-          comments: updatedClient.comments,
-          notes: updatedClient.notes
-        }
-      }
-      return client
-    }
+    const merge = (client) => client.id === updatedClient.id ? { ...client, ...updatedClient } : client
     setClients((current) => current.map(merge))
     setAllClients((current) => current.map(merge))
   }, [])
@@ -1214,28 +1225,29 @@ export default function ClientsPage() {
   const updateClientStatus = async (client, status) => {
     const previousClients = clients
     const previousAllClients = allClients
+    const rootId = clientRootId(client)
     const nextStatus = status === '-' ? '' : status
     setStatusUpdateError('')
-    setClients(current => current.map(row => row.id === client.id ? { ...row, status: nextStatus } : row))
-    setAllClients(current => current.map(row => row.id === client.id ? { ...row, status: nextStatus } : row))
-    setStatusSaving(current => ({ ...current, [client.id]: true }))
+    setClients(current => current.map(row => clientRootId(row) === rootId ? { ...row, status: nextStatus } : row))
+    setAllClients(current => current.map(row => clientRootId(row) === rootId ? { ...row, status: nextStatus } : row))
+    setStatusSaving(current => ({ ...current, [rootId]: true }))
     setTablePopover(null)
     try {
-      const response = await fetch(`/api/clients/${client.id}`, {
+      const response = await fetch(`/api/clients/${rootId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus })
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.detail || data.error || 'Unable to update client status.')
-      setClients(current => current.map(row => row.id === client.id ? { ...row, ...data } : row))
-      setAllClients(current => current.map(row => row.id === client.id ? { ...row, ...data } : row))
+      setClients(current => current.map(row => clientRootId(row) === rootId ? { ...row, status: data.status } : row))
+      setAllClients(current => current.map(row => clientRootId(row) === rootId ? { ...row, status: data.status } : row))
     } catch (err) {
       setClients(previousClients)
       setAllClients(previousAllClients)
       setStatusUpdateError(err.message)
     } finally {
-      setStatusSaving(current => ({ ...current, [client.id]: false }))
+      setStatusSaving(current => ({ ...current, [rootId]: false }))
     }
   }
 
@@ -1390,7 +1402,7 @@ export default function ClientsPage() {
         return (
           <td key={key}>
             <div>
-              <Link className="name-text" to={`/dashboard/clients/${client.id}`}>{client.is_locked && <Lock size={12} className="fb-lock-icon" />} {highlightText(client.client_name, aiFilters)}</Link>
+              <Link className="name-text" to={`/dashboard/clients/${clientRootId(client)}`}>{client.is_locked && <Lock size={12} className="fb-lock-icon" />} {highlightText(client.client_name, aiFilters)}</Link>
               <div className="sub-text candidate-location-text">{highlightText(formatLocationRegion(client.location, client.region) || '-', aiFilters)}</div>
             </div>
           </td>
@@ -1458,7 +1470,7 @@ export default function ClientsPage() {
         return (
           <td key={key}>
             <div className="candidate-columns-control mandate-status-control">
-              <button className={`badge ${STATUS_BADGE_MAP[client.status] || 'badge-not-converted'}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('client-status', client.id, event.currentTarget)} disabled={statusSaving[client.id]}>
+              <button className={`badge ${STATUS_BADGE_MAP[client.status] || 'badge-not-converted'}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('client-status', client.id, event.currentTarget)} disabled={statusSaving[clientRootId(client)]}>
                 {highlightText(dash(client.status), aiFilters)}
               </button>
             </div>
@@ -1488,8 +1500,8 @@ export default function ClientsPage() {
             <DocumentIconGroup
               attachments={attachments}
               openingKey={openingDocument}
-              keyPrefix={`contract-${client.id}`}
-              onOpen={(docKey, attachment) => openDocument(docKey, attachment.path, client.id)}
+              keyPrefix={`contract-${clientRootId(client)}`}
+              onOpen={(docKey, attachment) => openDocument(docKey, attachment.path, clientRootId(client))}
             />
           </td>
         )
@@ -1737,18 +1749,24 @@ export default function ClientsPage() {
 
       {isOpen && createPortal((
         <div className="modal-overlay">
-          <div className="modal-card modal-card-lg" ref={clientModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingClient ? 'Edit Client' : 'Add Client'}>
+          <div className="modal-card modal-card-lg" ref={clientModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={editingSecondaryContact ? 'Edit Contact Person' : addingContactPerson ? 'Add Contact Person' : editingClient ? 'Edit Client' : 'Add Client'}>
             <div className="modal-header">
-              <span className="modal-title">{editingClient ? 'Edit Client' : 'Add New Client'}</span>
+              <span className="modal-title">{editingSecondaryContact ? 'Edit Contact Person' : addingContactPerson ? 'Add Contact Person' : editingClient ? 'Edit Client' : 'Add New Client'}</span>
               <button className="modal-close" onClick={closeClientModal} aria-label="Close" disabled={saving || contractUploading}><X size={16} /></button>
             </div>
             <div className="modal-body">
               <div className="form-grid-2">
-                {(editingClient || addingNewClient) && !isClientFieldHidden('client_display_id') && (
+                {(editingClient || addingNewClient || addingContactPerson) && !isClientFieldHidden('client_display_id') && (
                   <div className="form-group">
                     <label className="form-label">Client ID</label>
                     <input value={form.client_display_id || ''} placeholder="Loading..." className={`form-control${errors.client_display_id ? ' is-error' : ''}`} disabled readOnly />
                     {errors.client_display_id && <span className="form-error">{errors.client_display_id}</span>}
+                  </div>
+                )}
+                {contactOnlyMode && !isClientFieldHidden('client_name') && (
+                  <div className="form-group">
+                    <label className="form-label">Client Name</label>
+                    <input value={form.client_name || ''} className="form-control" disabled readOnly />
                   </div>
                 )}
                 {[
@@ -1764,7 +1782,7 @@ export default function ClientsPage() {
                   ['sector', 'Sector', 'text'],
                   ['connected_on_date', 'Connected On Date', 'date'],
                   ['follow_up_date', 'Follow Up Date', 'date']
-                ].filter(([name]) => !isClientFieldHidden(name)).map(([name, label, type, required]) => (
+                ].filter(([name]) => !isClientFieldHidden(name) && (!contactOnlyMode || CONTACT_ONLY_FORM_FIELDS.has(name))).map(([name, label, type, required]) => (
                   <div className="form-group" key={name}>
                     <label className="form-label">{label} {required && <span className="req">*</span>}</label>
                     {name === 'client_name' && !editingClient ? (
@@ -1844,13 +1862,13 @@ export default function ClientsPage() {
                   <label className="form-label">Comments</label>
                   <textarea name="comments" value={form.comments} onChange={handleChange} className="form-control" rows={2} disabled={saving || isClientFieldDisabled('comments')} />
                 </div>}
-                {!isClientFieldHidden('status') && <div className="form-group">
+                {!contactOnlyMode && !isClientFieldHidden('status') && <div className="form-group">
                   <label className="form-label">Status</label>
                   <select name="status" value={form.status} onChange={handleChange} className="form-control" disabled={saving || isClientFieldDisabled('status')}>
                     {STATUS_OPTIONS.map((status) => <option key={status || '-'} value={status}>{status || '-'}</option>)}
                   </select>
                 </div>}
-                {!isClientFieldHidden('contract_signed') && <div className="form-group">
+                {!contactOnlyMode && !isClientFieldHidden('contract_signed') && <div className="form-group">
                   <label className="form-label">Contract Signed</label>
                   <select name="contract_signed" value={form.contract_signed} onChange={handleChange} className={`form-control${errors.contract_signed ? ' is-error' : ''}`} disabled={saving || isClientFieldDisabled('contract_signed')}>
                     <option value="No">No</option>
@@ -1858,7 +1876,7 @@ export default function ClientsPage() {
                   </select>
                   {errors.contract_signed && <span className="form-error">{errors.contract_signed}</span>}
                 </div>}
-                {form.contract_signed === 'Yes' && !isClientFieldHidden('contract_document') && (
+                {!contactOnlyMode && form.contract_signed === 'Yes' && !isClientFieldHidden('contract_document') && (
                   <div className="form-group">
                     <label className="form-label">Contract PDF</label>
                     <input type="file" accept="application/pdf,.pdf" multiple onChange={handleContractFiles} className={`form-control${errors.contract_document ? ' is-error' : ''}`} disabled={saving || contractUploading || isClientFieldDisabled('contract_document')} />
@@ -1877,7 +1895,7 @@ export default function ClientsPage() {
                     {errors.contract_document && <span className="form-error">{errors.contract_document}</span>}
                   </div>
                 )}
-                {form.contract_signed === 'Yes' && (
+                {!contactOnlyMode && form.contract_signed === 'Yes' && (
                   <>
                     {!isClientFieldHidden('terms_signed_type') && <div className="form-group">
                       <label className="form-label">Terms Signed</label>
@@ -1919,7 +1937,7 @@ export default function ClientsPage() {
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={closeClientModal} disabled={saving || contractUploading}>Cancel</button>
-              <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving || contractUploading}>{saveStep || (editingClient ? 'Update Client' : 'Save Client')}</button>
+              <button className="btn-primary" onClick={handleSave} id="save-client-btn" disabled={saving || contractUploading}>{saveStep || (editingSecondaryContact ? 'Update Contact' : addingContactPerson ? 'Save Contact' : editingClient ? 'Update Client' : 'Save Client')}</button>
             </div>
           </div>
         </div>
