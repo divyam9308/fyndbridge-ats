@@ -3,6 +3,19 @@ const { CANDIDATE_STATUSES } = require('./candidateStatuses')
 
 const MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const PREVIEW_ROW_LIMIT = 80
+const DAILY_CANDIDATE_STATUS_COLUMNS = Object.freeze([
+  'In Discussion',
+  'Not Interested',
+  'Interested',
+  'Rejected by Recruiter',
+  'Client Submission',
+  'Rejected by Client',
+  'Interview',
+  'Offered',
+  'Offer Declined',
+  'Dropout',
+  'Hired'
+])
 
 const COLORS = Object.freeze({
   navy: '07196B',
@@ -700,10 +713,10 @@ function buildConversionsSheet(workbook, report, mandates) {
 
 function buildCandidatesSheet(workbook, report) {
   const worksheet = workbook.addWorksheet('03 Candidates & Pipeline')
-  const dailyHeaders = ['Date', 'Candidates Uploaded', ...CANDIDATE_STATUSES]
+  const dailyHeaders = ['Date', 'Candidates Uploaded', ...DAILY_CANDIDATE_STATUS_COLUMNS]
   const dailyLastColumn = dailyHeaders.length
   configureWorksheet(worksheet, {
-    widths: [14, 13, 10, 12, 12, 10, 14, 9.5, 8, 12, 9.5, 15, 14],
+    widths: [14, 13, 12, 12, 10, 15, 14, 14, 10, 9.5, 12, 9.5, 8],
     frozenRows: 5,
     frozenColumns: 2,
     zoomScale: 85,
@@ -768,7 +781,7 @@ function buildCandidatesSheet(workbook, report) {
     const countCell = worksheet.getCell(row, 2)
     countCell.value = safeNumber(item.candidateCount)
     applyStyle(countCell, bodyStyle({ horizontal: 'center', fillColor: background, numFmt: NUMBER_FORMAT }))
-    CANDIDATE_STATUSES.forEach((status, statusIndex) => {
+    DAILY_CANDIDATE_STATUS_COLUMNS.forEach((status, statusIndex) => {
       const statusCell = worksheet.getCell(row, 3 + statusIndex)
       statusCell.value = safeNumber(item.statusCounts?.[status])
       applyStyle(statusCell, bodyStyle({ horizontal: 'center', fillColor: background, numFmt: NUMBER_FORMAT }))

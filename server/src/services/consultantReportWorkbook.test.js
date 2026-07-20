@@ -4,6 +4,20 @@ const ExcelJS = require('exceljs')
 const { CANDIDATE_STATUSES } = require('./candidateStatuses')
 const { buildConsultantReportWorkbook } = require('./consultantReportWorkbook')
 
+const DAILY_CANDIDATE_STATUS_COLUMNS = [
+  'In Discussion',
+  'Not Interested',
+  'Interested',
+  'Rejected by Recruiter',
+  'Client Submission',
+  'Rejected by Client',
+  'Interview',
+  'Offered',
+  'Offer Declined',
+  'Dropout',
+  'Hired'
+]
+
 function attendancePayload({ overall = false } = {}) {
   const metrics = [
     { key: 'workingDays', label: 'Working Days', value: 20, tone: 'blue' },
@@ -128,6 +142,7 @@ function mandateFixture() {
 }
 
 test('builds the aligned five-sheet individual consultant workbook with typed cells', async () => {
+  assert.deepEqual([...DAILY_CANDIDATE_STATUS_COLUMNS].sort(), [...CANDIDATE_STATUSES].sort())
   const output = await buildConsultantReportWorkbook({ report: reportFixture(), mandates: [mandateFixture()] })
   assert.match(output.fileName, /^Fyndbridge_Consultant_Report_Asha_Rao_/)
   assert.equal(output.mimeType, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -165,19 +180,20 @@ test('builds the aligned five-sheet individual consultant workbook with typed ce
   assert.equal(candidates.getCell('A19').value, 'Candidates Uploaded Each Date')
   assert.equal(candidates.getCell('A20').value, 'Date')
   assert.equal(candidates.getCell('B20').value, 'Candidates Uploaded')
-  CANDIDATE_STATUSES.forEach((status, index) => {
+  DAILY_CANDIDATE_STATUS_COLUMNS.forEach((status, index) => {
     assert.equal(candidates.getCell(20, 3 + index).value, status)
   })
   assert.ok(candidates.getCell('A21').value instanceof Date)
   assert.equal(candidates.getCell('A21').numFmt, 'dd-mmm-yyyy')
   assert.equal(candidates.getCell('B21').value, 1)
-  assert.equal(candidates.getCell('C21').value, 1)
+  assert.equal(candidates.getCell('E21').value, 1)
   assert.equal(candidates.getCell('B31').value, 11)
-  assert.equal(candidates.getCell('M31').value, 11)
+  assert.equal(candidates.getCell('H31').value, 11)
+  assert.equal(candidates.getCell('M27').value, 7)
   assert.equal(candidates.getCell('B50').value, 0)
   assert.ok(Array.from({ length: 30 }, (_, rowIndex) => {
     const row = 21 + rowIndex
-    const statusTotal = CANDIDATE_STATUSES.reduce((sum, _, statusIndex) => sum + candidates.getCell(row, 3 + statusIndex).value, 0)
+    const statusTotal = DAILY_CANDIDATE_STATUS_COLUMNS.reduce((sum, _, statusIndex) => sum + candidates.getCell(row, 3 + statusIndex).value, 0)
     return statusTotal === candidates.getCell(row, 2).value
   }).every(Boolean))
   assert.equal(
@@ -189,7 +205,7 @@ test('builds the aligned five-sheet individual consultant workbook with typed ce
   assert.equal(candidates.views[0].xSplit, 2)
   assert.deepEqual(
     Array.from({ length: 13 }, (_, index) => candidates.getColumn(index + 1).width),
-    [14, 13, 10, 12, 12, 10, 14, 9.5, 8, 12, 9.5, 15, 14]
+    [14, 13, 12, 12, 10, 15, 14, 14, 10, 9.5, 12, 9.5, 8]
   )
   assert.equal(summary.getCell('H28').value, 'Candidates Pending Status Assignment')
   assert.equal(summary.getCell('M28').value, 2)
