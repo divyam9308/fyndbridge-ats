@@ -177,6 +177,13 @@ function emptyStatusCounts() {
   return Object.fromEntries(CANDIDATE_STATUSES.map((status) => [status, 0]))
 }
 
+function emptyDailyCandidateCount() {
+  return {
+    candidateCount: 0,
+    statusCounts: emptyStatusCounts()
+  }
+}
+
 function rounded(value, digits = 1) {
   if (!Number.isFinite(value)) return null
   const factor = 10 ** digits
@@ -399,7 +406,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
   })
 
   const candidateCounts = emptyStatusCounts()
-  const dailyCandidateCounts = new Map(inclusiveDateRange(startDate, endDate).map((date) => [date, 0]))
+  const dailyCandidateCounts = new Map(inclusiveDateRange(startDate, endDate).map((date) => [date, emptyDailyCandidateCount()]))
   let pendingStatusAssignmentCount = 0
   for (const association of candidateRows) {
     if (!candidateAssociationMatches(association, consultant)) continue
@@ -417,13 +424,16 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
       continue
     }
     candidateCounts[status] += 1
-    dailyCandidateCounts.set(addedDate, (dailyCandidateCounts.get(addedDate) || 0) + 1)
+    const dailyCount = dailyCandidateCounts.get(addedDate) || emptyDailyCandidateCount()
+    dailyCount.candidateCount += 1
+    dailyCount.statusCounts[status] += 1
+    dailyCandidateCounts.set(addedDate, dailyCount)
   }
   const candidateOverview = {
     total: Object.values(candidateCounts).reduce((total, value) => total + value, 0),
     counts: candidateCounts
   }
-  const dailyCandidateUploads = [...dailyCandidateCounts].map(([date, candidateCount]) => ({ date, candidateCount }))
+  const dailyCandidateUploads = [...dailyCandidateCounts].map(([date, count]) => ({ date, ...count }))
   const candidatePipeline = buildCandidatePipeline(candidateOverview)
 
   const hasTrackedStage = (row, stageKeys) => stageKeys.some((key) => row._conversion[key].days !== null)
@@ -530,16 +540,21 @@ function aggregateConsultantReportFacts(entries = [], dateRange = {}) {
     total: Object.values(candidateCounts).reduce((total, value) => total + value, 0),
     counts: candidateCounts
   }
-  const dailyCandidateCounts = new Map(inclusiveDateRange(dateRange.startDate, dateRange.endDate).map((date) => [date, 0]))
+  const dailyCandidateCounts = new Map(inclusiveDateRange(dateRange.startDate, dateRange.endDate).map((date) => [date, emptyDailyCandidateCount()]))
   for (const entry of scopedEntries) {
     for (const item of entry.facts.dailyCandidateUploads || []) {
       if (!isValidDate(item?.date)) continue
-      dailyCandidateCounts.set(item.date, (dailyCandidateCounts.get(item.date) || 0) + (Number(item.candidateCount) || 0))
+      const dailyCount = dailyCandidateCounts.get(item.date) || emptyDailyCandidateCount()
+      dailyCount.candidateCount += Number(item.candidateCount) || 0
+      for (const status of CANDIDATE_STATUSES) {
+        dailyCount.statusCounts[status] += Number(item.statusCounts?.[status]) || 0
+      }
+      dailyCandidateCounts.set(item.date, dailyCount)
     }
   }
   const dailyCandidateUploads = [...dailyCandidateCounts]
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([date, candidateCount]) => ({ date, candidateCount }))
+    .map(([date, count]) => ({ date, ...count }))
 
   const warningMap = new Map()
   for (const entry of scopedEntries) {

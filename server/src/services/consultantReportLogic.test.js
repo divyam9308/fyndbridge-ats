@@ -206,9 +206,16 @@ test('candidate added-date scope uses inclusive Asia/Kolkata calendar boundaries
   assert.equal(result.candidateOverview.total, 2)
   assert.equal(result.candidateOverview.counts.Interested, 2)
   assert.equal(result.dailyCandidateUploads.length, 15)
-  assert.deepEqual(result.dailyCandidateUploads[0], { date: START, candidateCount: 1 })
-  assert.deepEqual(result.dailyCandidateUploads.at(-1), { date: END, candidateCount: 1 })
+  assert.equal(result.dailyCandidateUploads[0].date, START)
+  assert.equal(result.dailyCandidateUploads[0].candidateCount, 1)
+  assert.equal(result.dailyCandidateUploads[0].statusCounts.Interested, 1)
+  assert.equal(result.dailyCandidateUploads.at(-1).date, END)
+  assert.equal(result.dailyCandidateUploads.at(-1).candidateCount, 1)
+  assert.equal(result.dailyCandidateUploads.at(-1).statusCounts.Interested, 1)
   assert.equal(result.dailyCandidateUploads.find((item) => item.date === '2026-07-02').candidateCount, 0)
+  assert.ok(result.dailyCandidateUploads.every((item) => (
+    Object.values(item.statusCounts).reduce((sum, count) => sum + count, 0) === item.candidateCount
+  )))
   assert.equal(result.dailyCandidateUploads.reduce((sum, item) => sum + item.candidateCount, 0), result.candidateOverview.total)
 })
 
@@ -315,9 +322,16 @@ test('daily candidate uploads include every date and aggregate overall counts ch
 
   const result = aggregateConsultantReportFacts(entries, { startDate: START, endDate: END })
   assert.equal(result.dailyCandidateUploads.length, 15)
-  assert.deepEqual(result.dailyCandidateUploads[0], { date: START, candidateCount: 1 })
-  assert.deepEqual(result.dailyCandidateUploads.at(-1), { date: END, candidateCount: 1 })
+  assert.equal(result.dailyCandidateUploads[0].date, START)
+  assert.equal(result.dailyCandidateUploads[0].candidateCount, 1)
+  assert.equal(result.dailyCandidateUploads[0].statusCounts.Interested, 1)
+  assert.equal(result.dailyCandidateUploads.at(-1).date, END)
+  assert.equal(result.dailyCandidateUploads.at(-1).candidateCount, 1)
+  assert.equal(result.dailyCandidateUploads.at(-1).statusCounts.Interview, 1)
   assert.equal(result.dailyCandidateUploads[1].candidateCount, 0)
+  assert.ok(result.dailyCandidateUploads.every((item) => (
+    Object.values(item.statusCounts).reduce((sum, count) => sum + count, 0) === item.candidateCount
+  )))
   assert.equal(result.dailyCandidateUploads.reduce((sum, item) => sum + item.candidateCount, 0), result.candidateOverview.total)
 })
 

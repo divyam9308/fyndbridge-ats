@@ -172,11 +172,18 @@ function normalizedDailyCandidateUploads(report) {
   const suppliedCounts = new Map()
   for (const item of Array.isArray(report?.dailyCandidateUploads) ? report.dailyCandidateUploads : []) {
     if (!dateValue(item?.date)) continue
-    suppliedCounts.set(item.date, Math.max(0, Math.trunc(safeNumber(item.candidateCount))))
+    suppliedCounts.set(item.date, {
+      candidateCount: Math.max(0, Math.trunc(safeNumber(item.candidateCount))),
+      statusCounts: Object.fromEntries(CANDIDATE_STATUSES.map((status) => [
+        status,
+        Math.max(0, Math.trunc(safeNumber(item.statusCounts?.[status])))
+      ]))
+    })
   }
   return inclusiveReportDates(report?.meta?.startDate, report?.meta?.endDate).map((date) => ({
     date,
-    candidateCount: suppliedCounts.get(date) || 0
+    candidateCount: suppliedCounts.get(date)?.candidateCount || 0,
+    statusCounts: suppliedCounts.get(date)?.statusCounts || Object.fromEntries(CANDIDATE_STATUSES.map((status) => [status, 0]))
   }))
 }
 
@@ -693,15 +700,18 @@ function buildConversionsSheet(workbook, report, mandates) {
 
 function buildCandidatesSheet(workbook, report) {
   const worksheet = workbook.addWorksheet('03 Candidates & Pipeline')
+  const dailyHeaders = ['Date', 'Candidates Uploaded', ...CANDIDATE_STATUSES]
+  const dailyLastColumn = dailyHeaders.length
   configureWorksheet(worksheet, {
-    widths: [31, 14, 4, 4, 26, 13, 16],
+    widths: [14, 13, 10, 12, 12, 10, 14, 9.5, 8, 12, 9.5, 15, 14],
     frozenRows: 5,
-    zoomScale: 95,
-    orientation: 'portrait',
+    frozenColumns: 2,
+    zoomScale: 85,
+    orientation: 'landscape',
     fitToHeight: 0,
     tabColor: COLORS.purple
   })
-  writeSheetTitle(worksheet, 'Candidates & Pipeline', report, 7)
+  writeSheetTitle(worksheet, 'Candidates & Pipeline', report, dailyLastColumn)
   writeSection(worksheet, 4, 1, 2, 'Candidate Overview', COLORS.teal)
   writeSection(worksheet, 4, 5, 7, 'Candidate Pipeline', COLORS.purple)
   writeHeaders(worksheet, 5, 1, ['Candidate Status', 'Count'])
@@ -746,8 +756,9 @@ function buildCandidatesSheet(workbook, report) {
   const dailySectionRow = 19
   const dailyHeaderRow = dailySectionRow + 1
   const dailyDataStartRow = dailyHeaderRow + 1
-  writeSection(worksheet, dailySectionRow, 1, 7, 'Candidates Uploaded Each Date', COLORS.blue)
-  writeHeaders(worksheet, dailyHeaderRow, 1, ['Date', 'Candidates Uploaded'])
+  writeSection(worksheet, dailySectionRow, 1, dailyLastColumn, 'Candidates Uploaded Each Date', COLORS.blue)
+  writeHeaders(worksheet, dailyHeaderRow, 1, dailyHeaders)
+  worksheet.getRow(dailyHeaderRow).height = 42
   dailyCandidateUploads.forEach((item, index) => {
     const row = dailyDataStartRow + index
     const background = index % 2 ? COLORS.background : COLORS.white
@@ -757,10 +768,15 @@ function buildCandidatesSheet(workbook, report) {
     const countCell = worksheet.getCell(row, 2)
     countCell.value = safeNumber(item.candidateCount)
     applyStyle(countCell, bodyStyle({ horizontal: 'center', fillColor: background, numFmt: NUMBER_FORMAT }))
+    CANDIDATE_STATUSES.forEach((status, statusIndex) => {
+      const statusCell = worksheet.getCell(row, 3 + statusIndex)
+      statusCell.value = safeNumber(item.statusCounts?.[status])
+      applyStyle(statusCell, bodyStyle({ horizontal: 'center', fillColor: background, numFmt: NUMBER_FORMAT }))
+    })
     worksheet.getRow(row).height = 27
   })
   const lastRow = Math.max(dailyHeaderRow, dailyDataStartRow + dailyCandidateUploads.length - 1)
-  worksheet.pageSetup.printArea = `A1:G${lastRow}`
+  worksheet.pageSetup.printArea = `A1:${worksheet.getColumn(dailyLastColumn).letter}${lastRow}`
   worksheet.pageSetup.printTitlesRow = '1:5'
   return worksheet
 }
