@@ -349,7 +349,9 @@
   font-size: 9.5px;
   font-weight: 800;
 }
-.report-status-chip.is-ongoing { background: #e9f7f7; color: #15726e; }
+.report-status-chip.is-p1 { background: #e0f2fe; color: #075985; }
+.report-status-chip.is-p2 { background: #ede9fe; color: #5b21b6; }
+.report-status-chip.is-p3 { background: #fff3cd; color: #856404; }
 .report-status-chip.is-completed { background: #e9f7ee; color: #23733d; }
 .report-status-chip.is-scrapped { background: #f1f1f3; color: #696d78; }
 .report-conversion-table tr.is-ageing td { background: #fff9ef; }

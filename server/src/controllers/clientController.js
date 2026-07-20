@@ -9,6 +9,7 @@ const { resolveEntityFilterReferences } = require('../services/entityFilterRefer
 const { createConsultantAssignmentNotification, createClientFollowUpDueNotification } = require('../services/assignmentNotifications')
 const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
+const { normalizeMandateStatus } = require('../services/mandateStatuses')
 const {
   CONTACT_CLIENT_FIELDS,
   SHARED_CLIENT_FIELDS,
@@ -260,8 +261,10 @@ async function getNextClientDisplayId(req, res) {
 
 function deriveClientStatus(row, jobs = []) {
   if (row.status) return row.status
-  if (jobs.length && jobs.every((job) => job.status === 'Scrapped' || job.mandate_status === 'Scrapped')) return 'Inactive'
-  if (jobs.some((job) => ['Ongoing', 'Completed'].includes(job.status) || ['Ongoing', 'Completed'].includes(job.mandate_status))) return 'Active'
+  const statuses = jobs.map((job) => normalizeMandateStatus(job.mandate_status || job.status))
+  if (statuses.length && statuses.every((status) => status === 'Scrapped')) return 'Inactive'
+  const activeStatuses = ['Ongoing (P1)', 'Delivered (P2)', 'Paused (P3)', 'Completed']
+  if (statuses.some((status) => activeStatuses.includes(status))) return 'Active'
   return row.status || ''
 }
 

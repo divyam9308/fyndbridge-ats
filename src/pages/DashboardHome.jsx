@@ -49,6 +49,7 @@ import {
 } from '../constants/statusColors'
 import { buildDashboardDrilldownUrl } from '../utils/dashboardDrilldown'
 import { DASHBOARD_CANDIDATE_STATUSES } from '../utils/candidateStatuses'
+import { MANDATE_STATUSES } from '../utils/mandateStatuses'
 import './DashboardHome.css'
 
 const OVERALL = 'Overall (All Consultants)'
@@ -66,7 +67,6 @@ const chartColors = [
 ]
 const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const CANDIDATE_STATUSES = DASHBOARD_CANDIDATE_STATUSES
-const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
 const MAIN_CHART_ANIMATION_MS = 1500
 const DEFERRED_SECTION_DELAY_MS = 180
 const EMPTY_ARRAY = []
@@ -877,7 +877,7 @@ export default function DashboardHome() {
         <div className="ats-dashboard-entity-stack">
         <ExpandableCard onOpen={(event) => openCard(event, { type: 'trend', id: 'mandates-trend', title: 'Mandates Trend', subtitle: `${consultant} - ${periodLabel}`, icon: TrendingUp, trend: mandateTrend, statuses: MANDATE_STATUSES })}>
         <section className="ats-dashboard-card card-3d">
-          <SectionTitle icon={TrendingUp} title="Mandates Trend" subtitle="Ongoing, completed, and scrapped mandates" />
+          <SectionTitle icon={TrendingUp} title="Mandates Trend" subtitle="Ongoing (P1), Delivered (P2), Paused (P3), Completed, and Scrapped mandates" />
           <div className="ats-dashboard-chart">
             {mandateTrend.length ? (
               <StatusTrendLines data={mandateTrend} statuses={MANDATE_STATUSES} />

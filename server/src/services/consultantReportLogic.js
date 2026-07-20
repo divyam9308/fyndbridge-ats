@@ -19,7 +19,7 @@ const EMPTY_EXCEPTION_METRICS = Object.freeze([
   { key: 'withoutClientSubmission', label: 'Mandates with candidates but no Client Submission', tone: 'blue' },
   { key: 'withoutInterview', label: 'Mandates with Client Submission but no Interview', tone: 'purple' },
   { key: 'allRejected', label: 'Mandates where every candidate is Not Interested, Rejected by Recruiter or Rejected by Client', tone: 'red' },
-  { key: 'ageing', label: 'Ongoing mandates older than 45 days', tone: 'amber' },
+  { key: 'ageing', label: 'P1, P2 or P3 mandates older than 45 days', tone: 'amber' },
   { key: 'pendingStatusAssignment', label: 'Candidates Pending Status Assignment', tone: 'orange' }
 ])
 const EMPTY_POSITIVE_OUTCOME_METRICS = Object.freeze([
@@ -33,6 +33,7 @@ const EMPTY_POSITIVE_OUTCOME_METRICS = Object.freeze([
 
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 const same = (left, right) => clean(left).toLowerCase() === clean(right).toLowerCase()
+const AGEING_MANDATE_STATUSES = new Set(['Ongoing (P1)', 'Delivered (P2)', 'Paused (P3)'])
 
 function bad(message, statusCode = 400) {
   const error = new Error(message)
@@ -317,9 +318,9 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
     const currentHires = counts.Hired
     const conversion = Object.fromEntries(STAGES.map((stage) => [stage.key, stageTiming(jobAssociations, allocationDate, stage, warnings)]))
     let status = storedStatus
-    if (status === 'Ongoing' && (currentHires > 0 || conversion.hire.days !== null)) {
+    if (status !== 'Scrapped' && status !== 'Completed' && (currentHires > 0 || conversion.hire.days !== null)) {
       status = 'Completed'
-      warnings.add('ongoing_mandate_with_hire', 'Some Ongoing mandates have current or tracked Hire evidence and were presented as Completed.')
+      warnings.add('open_mandate_with_hire', 'Some P1, P2 or P3 mandates have current or tracked Hire evidence and were presented as Completed.')
     }
     if (status === 'Scrapped' && currentHires > 0) {
       warnings.add('scrapped_mandate_with_hire', 'Some Scrapped mandates contain a current Hired candidate; the stored Scrapped status was preserved.')
@@ -329,7 +330,9 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
     const client = relationRow(job.clients)
     const consultants = parseList(job.consultants)
     let durationLabel = '—'
-    if (status === 'Ongoing') durationLabel = `${ageDays} d (ongoing)`
+    if (status === 'Ongoing (P1)') durationLabel = `${ageDays} d (ongoing)`
+    if (status === 'Delivered (P2)') durationLabel = `${ageDays} d (delivered)`
+    if (status === 'Paused (P3)') durationLabel = `${ageDays} d (paused)`
     if (status === 'Completed') durationLabel = conversion.hire.days === null ? 'Not tracked' : `${conversion.hire.days} d (final)`
 
     return {
@@ -358,7 +361,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
       firstHireTrackingState: conversion.hire.trackingState,
       durationLabel,
       ageDays,
-      isAgeingWarning: status === 'Ongoing' && ageDays > 45,
+      isAgeingWarning: AGEING_MANDATE_STATUSES.has(status) && ageDays > 45,
       _associations: jobAssociations,
       _conversion: conversion
     }
@@ -366,7 +369,9 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
 
   const mandateSummary = {
     total: mandateRows.length,
-    ongoing: mandateRows.filter((row) => row.status === 'Ongoing').length,
+    p1: mandateRows.filter((row) => row.status === 'Ongoing (P1)').length,
+    p2: mandateRows.filter((row) => row.status === 'Delivered (P2)').length,
+    p3: mandateRows.filter((row) => row.status === 'Paused (P3)').length,
     completed: mandateRows.filter((row) => row.status === 'Completed').length,
     scrapped: mandateRows.filter((row) => row.status === 'Scrapped').length
   }
@@ -426,7 +431,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
     { key: 'withoutClientSubmission', label: 'Mandates with candidates but no Client Submission', value: mandateRows.filter((row) => row.candidatesAssigned > 0 && !hasSubmissionEvidence(row)).length, tone: 'blue' },
     { key: 'withoutInterview', label: 'Mandates with Client Submission but no Interview', value: mandateRows.filter((row) => hasSubmissionEvidence(row) && !hasInterviewEvidence(row)).length, tone: 'purple' },
     { key: 'allRejected', label: 'Mandates where every candidate is Not Interested, Rejected by Recruiter or Rejected by Client', value: mandateRows.filter((row) => row.candidatesAssigned > 0 && row._associations.every((association) => REJECTED_STATUSES.has(association.canonicalStatus))).length, tone: 'red' },
-    { key: 'ageing', label: 'Ongoing mandates older than 45 days', value: mandateRows.filter((row) => row.isAgeingWarning).length, tone: 'amber' },
+    { key: 'ageing', label: 'P1, P2 or P3 mandates older than 45 days', value: mandateRows.filter((row) => row.isAgeingWarning).length, tone: 'amber' },
     {
       key: 'pendingStatusAssignment',
       label: 'Candidates Pending Status Assignment',
@@ -478,9 +483,9 @@ function aggregateMetricItems(entries, field, fallbackItems) {
 function aggregateConsultantReportFacts(entries = []) {
   const scopedEntries = (entries || []).filter((entry) => entry?.consultant && entry?.facts)
   const mandateSummary = scopedEntries.reduce((summary, entry) => {
-    for (const key of ['total', 'ongoing', 'completed', 'scrapped']) summary[key] += Number(entry.facts.mandateSummary?.[key]) || 0
+    for (const key of ['total', 'p1', 'p2', 'p3', 'completed', 'scrapped']) summary[key] += Number(entry.facts.mandateSummary?.[key]) || 0
     return summary
-  }, { total: 0, ongoing: 0, completed: 0, scrapped: 0 })
+  }, { total: 0, p1: 0, p2: 0, p3: 0, completed: 0, scrapped: 0 })
 
   const conversionTotals = {}
   const conversionSummary = STAGES.map((stage) => {

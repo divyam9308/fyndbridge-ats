@@ -54,7 +54,7 @@ const JOB_TITLES = [
   'Support Engineer'
 ]
 
-const JOB_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
+const JOB_STATUSES = ['Ongoing (P1)', 'Delivered (P2)', 'Paused (P3)', 'Scrapped', 'Completed']
 
 const EXPERIENCE_RANGES = [
   '1-3 years',
@@ -134,6 +134,6 @@ export const DEMO_CLIENTS = CLIENT_SEEDS.map(([name, contact, phone, email, city
   city,
   state,
   status,
-  activeJobs: DEMO_JOBS.filter((job) => job.client === name && job.status === 'Ongoing').length,
+  activeJobs: DEMO_JOBS.filter((job) => job.client === name && job.status === 'Ongoing (P1)').length,
   notes: '',
 }))

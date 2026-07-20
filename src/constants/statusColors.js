@@ -19,7 +19,9 @@ const STATUS_COLORS = {
   'offer declined': '#F59E0B',
   dropout: '#92400E',
   hired: '#2563EB',
-  ongoing: '#0EA5E9',
+  'ongoing (p1)': '#0EA5E9',
+  'delivered (p2)': '#8B5CF6',
+  'paused (p3)': '#F59E0B',
   completed: '#22C55E',
   scrapped: '#64748B'
 }

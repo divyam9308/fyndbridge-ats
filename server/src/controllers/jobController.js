@@ -11,9 +11,9 @@ const { allocateNextDisplayId, isDisplayIdUniqueError } = require('../services/d
 const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
 const { resolveClientGroupScope } = require('../services/clientGroups')
+const { MANDATE_STATUSES, normalizeMandateStatus } = require('../services/mandateStatuses')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
-const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
 
 function logAndSendInternal(res, method, err) {
   console.error(`${method} error:`, err.message || err)
@@ -28,14 +28,6 @@ const nullable = (value) => {
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
 const preferredUserName = (primaryName, secondaryName, email) => clean(primaryName) || clean(secondaryName) || displayNameFromEmail(email)
 const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clean(value))
-const normalizeMandateStatus = (value) => {
-  const text = clean(value)
-  if (text === 'Completed') return 'Completed'
-  if (text === 'Scrapped' || text === 'Scrap') return 'Scrapped'
-  if (text === 'Ongoing') return 'Ongoing'
-  return text ? '-' : '-'
-}
-
 function parseList(value) {
   if (Array.isArray(value)) return value.map(clean).filter(Boolean)
   return String(value || '').split(',').map(clean).filter(Boolean)
@@ -154,7 +146,7 @@ function stripMandateAiColumns(row) {
 function formatJob(row) {
   const cleanRow = stripMandateAiColumns(row)
   const clientName = row.ai_client_name || row.ai_client_legacy_name || row.clients?.client_name || row.clients?.name || 'Unknown Client'
-  const mandateStatus = normalizeMandateStatus(row.mandate_status || row.status || row.priority)
+  const mandateStatus = normalizeMandateStatus(row.mandate_status || row.status || row.priority) || '-'
   const jdAttachments = normalizeAttachments(row.jd_attachments, {
     bucket: STORAGE_BUCKETS.JD,
     legacy: { path: row.jd_storage_path || row.jd_url, uploadedAt: row.updated_at || row.created_at }
@@ -432,8 +424,15 @@ async function payloadFromBody(body, partial = false) {
   if (!partial || body.team_lead !== undefined) payload.team_lead = nullable(body.team_lead)
   if (!partial || body.budget !== undefined) payload.budget = BUDGETS.includes(body.budget) ? body.budget : null
   if (!partial || body.mandate_status !== undefined || body.priority !== undefined || body.status !== undefined) {
-    const status = normalizeMandateStatus(body.mandate_status || body.priority || body.status)
-    payload.mandate_status = MANDATE_STATUSES.includes(status) ? status : '-'
+    const incomingStatus = body.mandate_status || body.priority || body.status
+    const status = normalizeMandateStatus(incomingStatus)
+    if (clean(incomingStatus) && !status) {
+      throw Object.assign(new Error(`Mandate status must be one of: ${MANDATE_STATUSES.join(', ')}`), { statusCode: 400 })
+    }
+    if (partial && !status) {
+      throw Object.assign(new Error(`Mandate status must be one of: ${MANDATE_STATUSES.join(', ')}`), { statusCode: 400 })
+    }
+    payload.mandate_status = status || 'Ongoing (P1)'
     payload.status = payload.mandate_status
   }
   if (!partial || body.vertical !== undefined) payload.vertical = nullable(body.vertical)
@@ -493,7 +492,7 @@ async function createJob(req, res) {
     payload.jd_attachments = normalizeAttachments([...uploadedAttachments, ...linkedAttachments], { bucket: STORAGE_BUCKETS.JD })
     payload.jd_url = payload.jd_attachments[0]?.path || null
     payload.jd_storage_path = payload.jd_attachments[0]?.path || null
-    if (!payload.mandate_status) payload.mandate_status = '-'
+    if (!payload.mandate_status) payload.mandate_status = 'Ongoing (P1)'
     if (!payload.status) payload.status = payload.mandate_status
     let data = null
     let error = null

@@ -9,8 +9,8 @@ const {
   createEntityFilter,
   normalizeWords
 } = require('./entityAiFilterCore')
+const { MANDATE_STATUSES } = require('./mandateStatuses')
 
-const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
 const MANDATE_SECTORS = [
   'Agriculture', 'Automotive', 'Consumer, Retail & Durables', 'EPC', 'Ecommerce', 'Education',
   'Financial Services', 'Healthcare', 'Hospitality', 'Logistics & Supply Chain', 'Manufacturing',
@@ -25,7 +25,9 @@ const MANDATE_FILTER_PERMISSION_KEYS = {
 }
 
 const STATUS_ALIASES = {
-  active: 'Ongoing', open: 'Ongoing', ongoing: 'Ongoing', 'in progress': 'Ongoing',
+  active: 'Ongoing (P1)', open: 'Ongoing (P1)', ongoing: 'Ongoing (P1)', 'in progress': 'Ongoing (P1)', p1: 'Ongoing (P1)',
+  delivered: 'Delivered (P2)', p2: 'Delivered (P2)',
+  paused: 'Paused (P3)', 'on hold': 'Paused (P3)', p3: 'Paused (P3)',
   completed: 'Completed', complete: 'Completed', closed: 'Completed', filled: 'Completed',
   scrapped: 'Scrapped', cancelled: 'Scrapped', canceled: 'Scrapped', abandoned: 'Scrapped'
 }
@@ -121,7 +123,7 @@ function prepareMandatePrompt(value) {
   const possessive = text.match(/^\s*(.+?)\s*'s\s+(?:mandates?|jobs?)\s*$/i)
   if (possessive) return `consultant contains ${possessive[1]}`
   text = text.replace(/^\s*(?:show|find|list|get|give me)\s+(?:me\s+)?/i, '')
-  text = text.replace(/^\s*(ongoing|active|open|completed|closed|scrapped|cancelled|canceled)\s+(?:mandates?|jobs?)\s+/i, 'status equals $1 and ')
+  text = text.replace(/^\s*(ongoing|active|open|p1|delivered|p2|paused|on hold|p3|completed|closed|scrapped|cancelled|canceled)\s+(?:mandates?|jobs?)\s+/i, 'status equals $1 and ')
   text = text.replace(/^\s*(?:all\s+)?(?:mandates?|jobs?|vacancies|openings)\s+/i, '')
   text = text.replace(/\bwithout (?:a )?jd\b/gi, 'jd missing')
   text = text.replace(/\bwith (?:a )?jd\b/gi, 'jd available')
@@ -142,7 +144,9 @@ function parseMandateSpecial(text, helpers) {
   if (/^team\s+lead\s+(?:exists|available|present)$/.test(normalized)) return helpers.condition('team_lead', 'is_not_empty')
   if (/^(?:with\s+)?(?:a\s+)?jd$|^jd\s+(?:uploaded|available|present)$/.test(normalized)) return helpers.condition('jd', 'equals', true)
   if (/^(?:without\s+)?(?:a\s+)?jd\s*(?:missing|not uploaded)?$|^jd\s+(?:missing|not uploaded|unavailable)$/.test(normalized)) return helpers.condition('jd', 'equals', false)
-  if (/^(?:ongoing|active|open)\s+(?:mandates?|jobs?)?$/.test(normalized)) return helpers.condition('status', 'equals', 'Ongoing')
+  if (/^(?:ongoing|active|open|p1)\s+(?:mandates?|jobs?)?$/.test(normalized)) return helpers.condition('status', 'equals', 'Ongoing (P1)')
+  if (/^(?:delivered|p2)\s+(?:mandates?|jobs?)?$/.test(normalized)) return helpers.condition('status', 'equals', 'Delivered (P2)')
+  if (/^(?:paused|on hold|p3)\s+(?:mandates?|jobs?)?$/.test(normalized)) return helpers.condition('status', 'equals', 'Paused (P3)')
   if (/^(?:completed|closed)\s+(?:mandates?|jobs?)?$/.test(normalized)) return helpers.condition('status', 'equals', 'Completed')
   if (/^(?:scrapped|cancelled|canceled)\s+(?:mandates?|jobs?)?$/.test(normalized)) return helpers.condition('status', 'equals', 'Scrapped')
   if (/^remote\s+(?:mandates?|jobs?)$/.test(normalized)) return helpers.condition('location', 'contains', 'Remote')

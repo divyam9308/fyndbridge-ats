@@ -54,7 +54,7 @@ function reportFixture({ overall = false } = {}) {
     consultant: overall
       ? { key: 'overall', name: 'Overall Consultants', isOverall: true }
       : { key: 'employee-1', name: 'Asha Rao', email: 'asha@example.com', employeeStatus: 'Active' },
-    mandateSummary: { total: 4, ongoing: 2, completed: 1, scrapped: 1 },
+    mandateSummary: { total: 6, p1: 2, p2: 1, p3: 1, completed: 1, scrapped: 1 },
     conversionSummary: [
       { key: 'clientSubmission', label: 'Mandate → First Client Submission', averageDays: 3.5, trackedMandates: 3, untrackedMandates: 1, tone: 'blue' },
       { key: 'interview', label: 'Mandate → First Interview', averageDays: 6, trackedMandates: 2, untrackedMandates: 2, tone: 'purple' },
@@ -75,7 +75,7 @@ function reportFixture({ overall = false } = {}) {
       { key: 'withoutClientSubmission', label: 'Mandates with candidates but no Client Submission', value: 1, tone: 'blue' },
       { key: 'withoutInterview', label: 'Mandates with Client Submission but no Interview', value: 1, tone: 'purple' },
       { key: 'allRejected', label: 'Mandates where every candidate is rejected', value: 0, tone: 'red' },
-      { key: 'ageing', label: 'Ongoing mandates older than 45 days', value: 1, tone: 'amber' },
+      { key: 'ageing', label: 'P1, P2 or P3 mandates older than 45 days', value: 1, tone: 'amber' },
       { key: 'pendingStatusAssignment', label: 'Candidates Pending Status Assignment', value: 2, tone: 'orange' }
     ],
     positiveOutcomes: [
@@ -98,7 +98,7 @@ function mandateFixture() {
     clientName: 'Private Client',
     role: 'Platform Engineer',
     budget: '₹30 LPA',
-    status: 'Ongoing',
+    status: 'Ongoing (P1)',
     sector: 'Technology',
     allocationDate: '2026-06-10',
     candidatesAssigned: 4,

@@ -18,6 +18,7 @@ const { createConsultantAssignmentNotification } = require('../services/assignme
 const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns, assertRowEditable } = require('../services/adminAccess')
 const { assertActiveAssignments } = require('../services/employeeStatus')
 const { resolveClientGroupScope } = require('../services/clientGroups')
+const { normalizeMandateStatus } = require('../services/mandateStatuses')
 const { CANDIDATE_STATUSES: VALID_STATUSES, candidateStatusError, cleanStatus: cleanCandidateStatus } = require('../services/candidateStatuses')
 const { removeUnreferencedDocuments, uploadDocuments } = require('../services/documentStorage')
 const { normalizeAttachment, normalizeAttachments, removalPlan } = require('../services/documentAttachments')
@@ -1051,7 +1052,7 @@ async function syncMandateStatusForJob(jobId) {
     .eq('id', id)
     .maybeSingle()
   if (jobError) throw jobError
-  if (!job || job.mandate_status === 'Scrapped' || job.status === 'Scrapped') return
+  if (!job || [job.mandate_status, job.status].some((status) => normalizeMandateStatus(status) === 'Scrapped')) return
 
   const { count, error: countError } = await supabase
     .from('candidate_associations')

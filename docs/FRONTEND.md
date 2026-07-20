@@ -241,7 +241,7 @@ Mandate (job) management page.
 - Create mandate: linked to a client, optional JD PDF upload, consultants array field
 - Edit mandate: `PATCH /api/jobs/:id`
 - Delete mandate: `DELETE /api/jobs/:id`
-- Mandate statuses: `Ongoing`, `Scrapped`, `Completed` (defined in `utils/mandateStatuses.js`)
+- Mandate statuses: `Ongoing (P1)`, `Delivered (P2)`, `Paused (P3)`, `Completed`, `Scrapped` (defined in `utils/mandateStatuses.js`)
 
 ---
 
@@ -304,7 +304,7 @@ Defines all valid candidate statuses and their UI colours:
 - Interested, Screening, Shortlisted, Interview Scheduled, Interviewed, Offer Extended, Offer Accepted, Offer Declined, Joined, Rejected, On Hold, Duplicate
 
 ### `mandateStatuses.js`
-Valid mandate statuses: `Ongoing`, `Scrapped`, `Completed`
+Valid mandate statuses: `Ongoing (P1)`, `Delivered (P2)`, `Paused (P3)`, `Completed`, `Scrapped`
 
 ### `candidateTableColumns.js`
 Column definitions array for the candidate table — field key, header label, width, render function.

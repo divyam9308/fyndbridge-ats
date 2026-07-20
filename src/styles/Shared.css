@@ -1648,7 +1648,9 @@
 .badge-rejected-client    { background: #F8D7DA; color: #721C24; }
 .badge-status-unset       { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-200); }
 .badge-mandate-completed  { background: #D4EDDA; color: #155724; }
-.badge-mandate-ongoing    { background: #FFF3CD; color: #856404; }
+.badge-mandate-p1         { background: #E0F2FE; color: #075985; }
+.badge-mandate-p2         { background: #EDE9FE; color: #5B21B6; }
+.badge-mandate-p3         { background: #FFF3CD; color: #856404; }
 .badge-mandate-scrapped   { background: #F8D7DA; color: #721C24; }
 .badge-open               { background: #17A2B8; color: #FFFFFF; }
 .badge-on-hold            { background: #FFF3CD; color: #856404; }

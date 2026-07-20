@@ -118,7 +118,7 @@ Confirmed columns:
 - JD fields `jd_url`, `jd_storage_path`
 - `created_at`, `updated_at`.
 
-The job controller returns compatibility aliases: `mandate_id=id`, `role=title`, `client/client_name`, `consultant=first consultants[]`, `priority=mandate_status`, and normalizes status to `Ongoing`, `Completed`, `Scrapped`, or `-`.
+The job controller returns compatibility aliases: `mandate_id=id`, `role=title`, `client/client_name`, `consultant=first consultants[]`, `priority=mandate_status`, and normalizes status to `Ongoing (P1)`, `Delivered (P2)`, `Paused (P3)`, `Completed`, `Scrapped`, or `-`.
 
 ### 3.5 Users, profiles, roles, and assignment references
 
@@ -165,7 +165,7 @@ Dashboard compatibility also includes `-` for an unset/unknown status. The clien
 
 ### 4.3 Mandate status
 
-Canonical list: `Ongoing`, `Completed`, `Scrapped`. Legacy values `Closed`, `Filled`, `Open`, `Active`, `Scrap`, and priority values `P1/P2/P3` are migrated/normalized by `server/supabase-clients-jobs-schema.sql` and `server/src/controllers/jobController.js`; do not mix legacy and canonical values in a report without stating the mapping.
+Canonical list: `Ongoing (P1)`, `Delivered (P2)`, `Paused (P3)`, `Completed`, `Scrapped`. Legacy `Open`/`Active`/`Ongoing`/`P1` values normalize to `Ongoing (P1)`; `Delivered`/`P2` normalize to `Delivered (P2)`; `Paused`/`On Hold`/`P3` normalize to `Paused (P3)`; `Closed`/`Filled` normalize to `Completed`; and `Scrap` normalizes to `Scrapped`.
 
 ### 4.4 Attendance status
 
@@ -353,7 +353,7 @@ Entity tables retain `created_at`, `updated_at`, and selected `created_by`/`upda
 | Hires | distinct association IDs where status = `Hired` | Confirm whether date filter is association creation, joining date, or status-change date. |
 | Clients | distinct `client_group_id` (fallback `clients.id`) | Physical rows may exceed business clients. |
 | Mandates | count distinct `jobs.id` | One job belongs to one physical client row. |
-| Open mandates | jobs with normalized `mandate_status='Ongoing'` | Legacy status mappings must be applied. |
+| Open mandates | jobs with normalized `mandate_status='Ongoing (P1)'` | P2 and P3 continue ageing in reports but are excluded from the P1-only low-allocation notification count. |
 | Consultant workload | count job-assignment pairs after unnesting `jobs.consultants` | One job may count for several consultants. |
 | Follow-ups due | child `client_follow_ups` by date/as-of | Confirm legacy parent migration completeness. |
 | Present today | team service’s Present list (`present` or `corrected`) after active/super-admin exclusion | Approved leave and correction semantics matter. |

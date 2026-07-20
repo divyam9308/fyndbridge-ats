@@ -168,10 +168,10 @@ Stores job mandates (open positions).
 | `consultants` | `text[]` | Array of consultant names, default `'{}'` |
 | `team_lead` | `text` | |
 | `budget` | `text` | Budget range string (e.g. `'20-25 lac'`) |
-| `mandate_status` | `text` | `'Ongoing'`, `'Scrapped'`, `'Completed'` |
+| `mandate_status` | `text` NOT NULL | `'Ongoing (P1)'`, `'Delivered (P2)'`, `'Paused (P3)'`, `'Completed'`, `'Scrapped'`; default `'Ongoing (P1)'` |
 | `vertical` | `text` | Industry vertical / domain |
 | `allocation_date` | `date` | When the mandate was allocated |
-| `status` | `text` NOT NULL | Default `'-'` |
+| `status` | `text` NOT NULL | Compatibility mirror of `mandate_status`; default `'Ongoing (P1)'` |
 | `salary_min` | `integer` | |
 | `salary_max` | `integer` | |
 | `experience_label` | `text` | Human-readable (e.g. "5-8 years") |

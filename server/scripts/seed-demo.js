@@ -110,7 +110,7 @@ function buildJobs() {
     return Array.from({ length: count }, (_, offset) => {
       const title = JOB_TITLES[(clientIndex * 3 + offset) % JOB_TITLES.length]
       const [salaryMin, salaryMax] = salaryRangeForIndex(jobId)
-      const statuses = ['Ongoing', 'Scrapped', 'Completed']
+      const statuses = ['Ongoing (P1)', 'Delivered (P2)', 'Paused (P3)', 'Scrapped', 'Completed']
       const status = statuses[(clientIndex + offset) % statuses.length]
       const completion = status === 'Completed' ? 100 : 22 + ((jobId * 9) % 69)
       return {

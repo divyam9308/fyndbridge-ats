@@ -25,7 +25,7 @@ function job(overrides = {}) {
     consultants: ['Asha Rao'],
     team_lead: 'Team Lead',
     budget: '20 LPA',
-    mandate_status: 'Ongoing',
+    mandate_status: 'Ongoing (P1)',
     vertical: 'Technology',
     allocation_date: START,
     created_at: `${START}T00:00:00.000Z`,
@@ -66,7 +66,7 @@ function byKey(rows) {
   return Object.fromEntries(rows.map((row) => [row.key, row]))
 }
 
-test('report uses exactly the shared eleven candidate statuses and three mandate statuses', () => {
+test('report uses exactly the shared eleven candidate statuses and five mandate statuses', () => {
   assert.deepEqual(CANDIDATE_STATUSES, [
     'Interested',
     'In Discussion',
@@ -80,10 +80,12 @@ test('report uses exactly the shared eleven candidate statuses and three mandate
     'Rejected by Recruiter',
     'Rejected by Client'
   ])
-  assert.equal(MANDATE_STATUSES.length, 3)
-  assert.deepEqual([...MANDATE_STATUSES].sort(), ['Completed', 'Ongoing', 'Scrapped'])
-  assert.equal(canonicalMandateStatus('open'), 'Ongoing')
-  assert.equal(canonicalMandateStatus('P1'), 'Ongoing')
+  assert.equal(MANDATE_STATUSES.length, 5)
+  assert.deepEqual([...MANDATE_STATUSES].sort(), ['Completed', 'Delivered (P2)', 'Ongoing (P1)', 'Paused (P3)', 'Scrapped'])
+  assert.equal(canonicalMandateStatus('open'), 'Ongoing (P1)')
+  assert.equal(canonicalMandateStatus('P1'), 'Ongoing (P1)')
+  assert.equal(canonicalMandateStatus('P2'), 'Delivered (P2)')
+  assert.equal(canonicalMandateStatus('P3'), 'Paused (P3)')
   assert.equal(canonicalMandateStatus('closed'), 'Completed')
   assert.equal(canonicalMandateStatus('Filled'), 'Completed')
   assert.equal(canonicalMandateStatus('scrap'), 'Scrapped')
@@ -111,7 +113,7 @@ test('mandate scope excludes team-lead-only mandates while candidate scope follo
 
   assert.equal(consultantMatches(consultantMandate, CONSULTANT.name), true)
   assert.equal(consultantMatches(teamLeadOnlyMandate, CONSULTANT.name), false)
-  assert.deepEqual(result.mandateSummary, { total: 1, ongoing: 1, completed: 0, scrapped: 0 })
+  assert.deepEqual(result.mandateSummary, { total: 1, p1: 1, p2: 0, p3: 0, completed: 0, scrapped: 0 })
   assert.equal(result.candidateOverview.total, 2)
   assert.equal(result.candidateOverview.counts.Interested, 1)
   assert.equal(result.candidateOverview.counts.Hired, 1)
@@ -180,7 +182,7 @@ test('candidate overview follows association owner and added date independently 
     }
   )
 
-  assert.deepEqual(result.mandateSummary, { total: 1, ongoing: 1, completed: 0, scrapped: 0 })
+  assert.deepEqual(result.mandateSummary, { total: 1, p1: 1, p2: 0, p3: 0, completed: 0, scrapped: 0 })
   assert.equal(result.mandates[0].candidatesAssigned, 1)
   assert.equal(result.candidateOverview.total, 3)
   assert.equal(result.candidateOverview.counts.Interested, 1)
@@ -217,7 +219,7 @@ test('candidate additions are not suppressed by an unsupported mandate status', 
   )
 
   assert.equal(result.mandateSummary.total, 1)
-  assert.deepEqual(result.mandateSummary, { total: 1, ongoing: 1, completed: 0, scrapped: 0 })
+  assert.deepEqual(result.mandateSummary, { total: 1, p1: 1, p2: 0, p3: 0, completed: 0, scrapped: 0 })
   assert.equal(result.candidateOverview.total, 2)
   assert.equal(result.candidateOverview.counts.Interested, 2)
   assert.equal(Object.values(result.candidateOverview.counts).reduce((sum, count) => sum + count, 0), 2)
@@ -411,10 +413,12 @@ test('conversion averages each mandate once instead of averaging every associati
   assert.equal(interview.untrackedMandates, 0)
 })
 
-test('ongoing age, completed final duration and scrapped duration follow their distinct rules', () => {
+test('P1, P2 and P3 continue ageing while completed and scrapped follow final rules', () => {
   const result = facts(
     [
       job({ id: 'ongoing', allocation_date: '2026-05-01' }),
+      job({ id: 'delivered', mandate_status: 'Delivered (P2)', allocation_date: '2026-05-02' }),
+      job({ id: 'paused', mandate_status: 'Paused (P3)', allocation_date: '2026-05-03' }),
       job({ id: 'completed', mandate_status: 'Completed', allocation_date: '2026-06-01' }),
       job({ id: 'scrapped', mandate_status: 'Scrapped', allocation_date: '2026-06-10' })
     ],
@@ -429,6 +433,10 @@ test('ongoing age, completed final duration and scrapped duration follow their d
   assert.equal(rows.ongoing.ageDays, 61)
   assert.equal(rows.ongoing.durationLabel, '61 d (ongoing)')
   assert.equal(rows.ongoing.isAgeingWarning, true)
+  assert.equal(rows.delivered.durationLabel, '60 d (delivered)')
+  assert.equal(rows.delivered.isAgeingWarning, true)
+  assert.equal(rows.paused.durationLabel, '59 d (paused)')
+  assert.equal(rows.paused.isAgeingWarning, true)
   assert.equal(rows.completed.firstHireDays, 9)
   assert.equal(rows.completed.durationLabel, '9 d (final)')
   assert.equal(rows.scrapped.durationLabel, '—')
@@ -442,9 +450,9 @@ test('legacy Ongoing plus Hired data is reconciled for display and emits a warni
   )
   assert.equal(result.mandates[0].status, 'Completed')
   assert.equal(result.mandates[0].counts.Hired, 1)
-  assert.equal(result.mandateSummary.ongoing, 0)
+  assert.equal(result.mandateSummary.p1, 0)
   assert.equal(result.mandateSummary.completed, 1)
-  assert.ok(result.warnings.some((warning) => warning.code === 'ongoing_mandate_with_hire'))
+  assert.ok(result.warnings.some((warning) => warning.code === 'open_mandate_with_hire'))
 })
 
 test('valid tracked Hire evidence keeps a mandate Completed after the candidate leaves Hired', () => {
@@ -457,7 +465,7 @@ test('valid tracked Hire evidence keeps a mandate Completed after the candidate 
   assert.equal(result.mandates[0].counts.Hired, 0)
   assert.equal(result.mandates[0].firstHireDays, 5)
   assert.equal(result.mandates[0].durationLabel, '5 d (final)')
-  assert.ok(result.warnings.some((warning) => warning.code === 'ongoing_mandate_with_hire'))
+  assert.ok(result.warnings.some((warning) => warning.code === 'open_mandate_with_hire'))
 })
 
 test('all exception metrics and positive outcomes use documented current-state evidence', () => {
@@ -524,12 +532,12 @@ test('recent main-report tables contain only the five newest mandates and conver
 
 test('modal pagination filters, searches, sorts and clamps out-of-range pages', () => {
   const rows = [
-    { key: 'a', consultant: 'Asha', teamLead: 'Lead', clientName: 'Zeta', role: 'Engineer', sector: 'Tech', status: 'Ongoing', allocationDate: '2026-07-03', candidatesAssigned: 1, ageDays: 12, firstClientSubmissionDays: null },
+    { key: 'a', consultant: 'Asha', teamLead: 'Lead', clientName: 'Zeta', role: 'Engineer', sector: 'Tech', status: 'Ongoing (P1)', allocationDate: '2026-07-03', candidatesAssigned: 1, ageDays: 12, firstClientSubmissionDays: null },
     { key: 'b', consultant: 'Asha', teamLead: 'Lead', clientName: 'Beta', role: 'Designer', sector: 'Design', status: 'Completed', allocationDate: '2026-07-02', candidatesAssigned: 9, ageDays: 8, firstClientSubmissionDays: 5 },
     { key: 'c', consultant: 'Asha', teamLead: 'Lead', clientName: 'Alpha', role: 'Analyst', sector: 'Finance', status: 'Completed', allocationDate: '2026-07-01', candidatesAssigned: 3, ageDays: 20, firstClientSubmissionDays: 2 },
-    { key: 'd', consultant: 'Asha', teamLead: 'Lead', clientName: 'Gamma', role: 'Engineer', sector: 'Tech', status: 'Ongoing', allocationDate: '2026-07-04', candidatesAssigned: 5, ageDays: 4, firstClientSubmissionDays: 8 },
+    { key: 'd', consultant: 'Asha', teamLead: 'Lead', clientName: 'Gamma', role: 'Engineer', sector: 'Tech', status: 'Ongoing (P1)', allocationDate: '2026-07-04', candidatesAssigned: 5, ageDays: 4, firstClientSubmissionDays: 8 },
     { key: 'e', consultant: 'Asha', teamLead: 'Lead', clientName: 'Delta', role: 'Engineer', sector: 'Tech', status: 'Scrapped', allocationDate: '2026-07-05', candidatesAssigned: 0, ageDays: 2, firstClientSubmissionDays: null },
-    { key: 'f', consultant: 'Asha', teamLead: 'Lead', clientName: 'Epsilon', role: 'Engineer', sector: 'Tech', status: 'Ongoing', allocationDate: '2026-07-06', candidatesAssigned: 2, ageDays: 1, firstClientSubmissionDays: 1 }
+    { key: 'f', consultant: 'Asha', teamLead: 'Lead', clientName: 'Epsilon', role: 'Engineer', sector: 'Tech', status: 'Ongoing (P1)', allocationDate: '2026-07-06', candidatesAssigned: 2, ageDays: 1, firstClientSubmissionDays: 1 }
   ]
 
   const pageTwo = paginateReportRows(rows, { search: '', status: 'all', page: 2, pageSize: 5, sort: 'newest', sortDirection: '' })
@@ -652,7 +660,7 @@ test('overall facts sum each consultant report and weight conversions by tracked
   const result = aggregateConsultantReportFacts(entries)
   const submission = result.conversionSummary.find((stage) => stage.key === 'clientSubmission')
 
-  assert.deepEqual(result.mandateSummary, { total: 5, ongoing: 3, completed: 1, scrapped: 1 })
+  assert.deepEqual(result.mandateSummary, { total: 5, p1: 3, p2: 0, p3: 0, completed: 1, scrapped: 1 })
   assert.equal(result.candidateOverview.total, 4)
   assert.equal(result.candidateOverview.counts['Client Submission'], 4)
   assert.equal(submission.trackedMandates, 5)

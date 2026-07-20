@@ -28,7 +28,7 @@ test('existing mandate synchronisation completes the linked mandate when any ass
 
 test('mandates with no current Hired association remain unchanged and Scrapped is never overwritten', () => {
   const source = functionSource('syncMandateStatusForJob', 'listCandidates')
-  assert.match(source, /job\.mandate_status === 'Scrapped' \|\| job\.status === 'Scrapped'/)
+  assert.match(source, /\[job\.mandate_status, job\.status\]\.some\(\(status\) => normalizeMandateStatus\(status\) === 'Scrapped'\)/)
   assert.match(source, /if \(count <= 0\) return/)
   assert.doesNotMatch(source, /mandate_status:\s*'Ongoing'/)
   assert.doesNotMatch(source, /mandate_status:\s*'Scrapped'/)

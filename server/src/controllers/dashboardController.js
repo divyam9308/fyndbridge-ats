@@ -2,9 +2,9 @@ const supabase = require('../services/supabaseAdmin')
 const { getDashboardAccess } = require('../services/dashboardAccess')
 const { DASHBOARD_CANDIDATE_STATUSES: CANDIDATE_STATUSES, normalizeDashboardCandidateStatus } = require('../services/candidateStatuses')
 const { dashboardPeriodRange } = require('../utils/dashboardPeriod')
+const { MANDATE_STATUSES, normalizeMandateStatus } = require('../services/mandateStatuses')
 
 const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
-const MANDATE_STATUSES = ['Ongoing', 'Completed', 'Scrapped']
 const EMPTY_DASHBOARD = {
   consultantOptions: [],
   kpis: { totalClients: 0, totalCandidates: 0, totalMandates: 0, activeClients: 0, placements: 0 },
@@ -66,14 +66,6 @@ function dayLabel(value) {
 function normalizeClientStatus(value) {
   const text = clean(value)
   return CLIENT_STATUSES.includes(text) ? text : '-'
-}
-
-function normalizeMandateStatus(value) {
-  const text = clean(value)
-  if (text === 'Completed') return 'Completed'
-  if (text === 'Scrapped' || text === 'Scrap') return 'Scrapped'
-  if (text === 'Ongoing') return 'Ongoing'
-  return 'Ongoing'
 }
 
 function matchesConsultant(record, consultant, fields) {

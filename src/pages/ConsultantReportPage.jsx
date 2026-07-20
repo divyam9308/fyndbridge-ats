@@ -146,7 +146,9 @@ function MandatesReport({ report, openModal }) {
   const summary = report.mandateSummary || {}
   const summaryCards = [
     { label: 'Total Mandates', value: summary.total ?? 0, tone: 'navy' },
-    { label: 'Ongoing', value: summary.ongoing ?? 0, tone: 'teal' },
+    { label: 'Ongoing (P1)', value: summary.p1 ?? 0, tone: 'teal' },
+    { label: 'Delivered (P2)', value: summary.p2 ?? 0, tone: 'purple' },
+    { label: 'Paused (P3)', value: summary.p3 ?? 0, tone: 'amber' },
     { label: 'Completed', value: summary.completed ?? 0, tone: 'green' },
     { label: 'Scrapped', value: summary.scrapped ?? 0, tone: 'neutral' }
   ]
@@ -158,7 +160,7 @@ function MandatesReport({ report, openModal }) {
     <div className="report-tab-panel">
       <section className="report-section">
         <ReportSectionHeader title="Mandate Summary" description={isOverall ? 'Combined mandate distribution across all consultants for the report period.' : 'Current mandate distribution for the selected consultant and report period.'} />
-        <div className="report-kpi-grid is-four">
+        <div className="report-kpi-grid is-six">
           {summaryCards.map((item) => <ReportKpiCard key={item.label} {...item} />)}
         </div>
       </section>
@@ -190,7 +192,7 @@ function MandatesReport({ report, openModal }) {
         {!isOverall && <><div className="report-subsection-heading">
           <div>
             <h3>Mandate Conversion & Ageing</h3>
-            <p>Latest five mandates. Ongoing mandates older than 45 days are softly highlighted.</p>
+            <p>Latest five mandates. P1, P2, and P3 mandates older than 45 days are softly highlighted.</p>
           </div>
           <button className="report-text-button" type="button" onClick={() => openModal('conversion')}>View All</button>
         </div>

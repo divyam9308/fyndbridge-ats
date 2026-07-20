@@ -1,8 +1,8 @@
 const OPERATORS = ['contains', 'equals', 'not_equals', 'starts_with', 'ends_with', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'between', 'before', 'after', 'on', 'is_empty', 'is_not_empty', 'in']
 const { CANDIDATE_STATUSES, canonicalCandidateStatus } = require('./candidateStatuses')
+const { MANDATE_STATUSES, normalizeMandateStatus: canonicalMandateStatus } = require('./mandateStatuses')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
-const MANDATE_STATUSES = ['Ongoing', 'Scrapped', 'Completed']
 
 const clean = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
 const lower = (value) => clean(value).toLowerCase()
@@ -98,11 +98,7 @@ function budgetNumber(value) {
 }
 
 function normalizeMandateStatus(value) {
-  const text = lower(value)
-  if (['ongoing', 'open', 'active', 'p1', 'p2', 'p3'].includes(text)) return 'Ongoing'
-  if (['scrap', 'scrapped'].includes(text)) return 'Scrapped'
-  if (['completed', 'complete', 'closed', 'filled'].includes(text)) return 'Completed'
-  return clean(value)
+  return canonicalMandateStatus(value) || clean(value)
 }
 
 function normalizeBoolean(value) {
@@ -423,7 +419,7 @@ function buildAiFilterPrompt(page, prompt) {
     'Use is_empty for blank/null/empty/- and is_not_empty for not blank.',
     'Detect IDs: CA10 -> candidate_id equals CA10; CL5 -> client_id equals CL5; JB10 -> job_id equals JB10.',
     'Normalize budget examples 20-25, 20 to 25, 20-25 lac, 20 lpa to 25 lpa as 20-25 lac.',
-    'Normalize mandate_status: ongoing/open/active -> Ongoing, scrapped/scrap -> Scrapped, completed/closed -> Completed.',
+    'Normalize mandate_status: ongoing/open/active/P1 -> Ongoing (P1), delivered/P2 -> Delivered (P2), paused/on hold/P3 -> Paused (P3), scrapped/scrap -> Scrapped, completed/closed -> Completed.',
     'Fields:',
     fields,
     `Request: ${clean(prompt)}`
@@ -682,9 +678,18 @@ function parsePrompt(page, prompt) {
     if (id.startsWith('JB') && config.fields.job_id) add('job_id', 'equals', id)
   }
 
-  if (config.fields.mandate_status) MANDATE_STATUSES.forEach(status => {
-    if (new RegExp(`\\b${status.toLowerCase()}\\b`).test(lower(text)) || (status === 'Scrapped' && /\bscrapped?\b/i.test(text)) || (status === 'Completed' && /\b(completed|closed)\b/i.test(text)) || (status === 'Ongoing' && /\b(ongoing|open|active)\b/i.test(text))) add('mandate_status', 'equals', status)
-  })
+  if (config.fields.mandate_status) {
+    const statusPatterns = [
+      ['Ongoing (P1)', /\b(?:ongoing|open|active|p1)\b/i],
+      ['Delivered (P2)', /\b(?:delivered|p2)\b/i],
+      ['Paused (P3)', /\b(?:paused|on hold|p3)\b/i],
+      ['Completed', /\b(?:completed|complete|closed|filled)\b/i],
+      ['Scrapped', /\b(?:scrapped?|cancelled|canceled|abandoned)\b/i]
+    ]
+    statusPatterns.forEach(([status, pattern]) => {
+      if (pattern.test(text)) add('mandate_status', 'equals', status)
+    })
+  }
   if (config.fields.status) {
     const statusAs = text.match(/\b([a-z][\w\s.-]*?)\s+as\s+status\b/i)
     if (statusAs) add('status', 'equals', statusAs[1].replace(/^(?:the\s+)?(?:client|candidate|mandate|job)\s+(?:has|is|with)?\s*/i, '').trim())

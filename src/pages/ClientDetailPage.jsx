@@ -8,7 +8,7 @@ import { useAuth } from '../context/useAuth'
 import { apiCandidateToUi, logCandidateCvOpen, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath, resolveCandidateCvHref } from '../utils/candidateUtils'
 import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateColumnPreference } from '../utils/candidateTableColumns'
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS, REQUIRED_CANDIDATE_STATUS_ERROR, isCandidateStatusSelected } from '../utils/candidateStatuses'
-import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
+import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, mandateStatusLabel, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
@@ -334,13 +334,15 @@ export default function ClientDetailPage() {
         ? 'Scrapped'
         : stats.Hired > 0
           ? 'Completed'
-          : savedStatus === '-' ? 'Ongoing' : savedStatus
+          : savedStatus === '-' ? 'Ongoing (P1)' : savedStatus
       return { ...group, relatedJob, status: derivedStatus, stats }
     }).sort((a, b) => compareText(`${a.title} ${a.relatedJob?.job_display_id || ''}`, `${b.title} ${b.relatedJob?.job_display_id || ''}`))
   }, [candidates, clientJobs])
 
   const jobCounts = useMemo(() => ({
-    ongoing: jobGroups.filter(job => job.status === 'Ongoing').length,
+    ongoing: jobGroups.filter(job => job.status === 'Ongoing (P1)').length,
+    delivered: jobGroups.filter(job => job.status === 'Delivered (P2)').length,
+    paused: jobGroups.filter(job => job.status === 'Paused (P3)').length,
     scrapped: jobGroups.filter(job => job.status === 'Scrapped').length,
     completed: jobGroups.filter(job => job.status === 'Completed').length,
   }), [jobGroups])
@@ -360,7 +362,7 @@ export default function ClientDetailPage() {
 
   const calculatedClientStatus = useMemo(() => {
     if (jobGroups.length && jobGroups.every(job => job.status === 'Scrapped')) return 'Inactive'
-    if (jobGroups.some(job => job.status === 'Ongoing' || job.status === 'Completed')) return 'Active'
+    if (jobGroups.some(job => ['Ongoing (P1)', 'Delivered (P2)', 'Paused (P3)', 'Completed'].includes(job.status))) return 'Active'
     return client?.status || '-'
   }, [client?.status, jobGroups])
 
@@ -686,7 +688,9 @@ export default function ClientDetailPage() {
           <h2 className="client-title-text">{client.name}</h2>
           <div className="client-metrics-grid">
             <div><span>Client Status</span><strong>{calculatedClientStatus}</strong></div>
-            <div><span>Ongoing Mandates</span><strong>{jobCounts.ongoing}</strong></div>
+            <div><span>Ongoing (P1) Mandates</span><strong>{jobCounts.ongoing}</strong></div>
+            <div><span>Delivered (P2) Mandates</span><strong>{jobCounts.delivered}</strong></div>
+            <div><span>Paused (P3) Mandates</span><strong>{jobCounts.paused}</strong></div>
             <div><span>Scrapped Mandates</span><strong>{jobCounts.scrapped}</strong></div>
             <div><span>Completed Mandates</span><strong>{jobCounts.completed}</strong></div>
           </div>
@@ -727,7 +731,7 @@ export default function ClientDetailPage() {
                   <td className="mandate-status-cell">
                     <div className="candidate-columns-control mandate-status-control">
                       <button className={`badge ${MANDATE_STATUS_BADGE_MAP[group.status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', group.relatedJob?.id, event.currentTarget)} disabled={!group.relatedJob?.id || statusSaving[group.relatedJob?.id]}>
-                        {group.status}
+                        {mandateStatusLabel(group.status)}
                       </button>
                     </div>
                   </td>
@@ -765,7 +769,7 @@ export default function ClientDetailPage() {
           <TablePopover anchorRect={tablePopover.anchorRect} width={150} onClose={() => setTablePopover(null)}>
             {MANDATE_STATUSES.map(status => (
               <button className="candidate-columns-action" type="button" key={status} onClick={() => updateMandateStatus(group, status)}>
-                {status}
+                {mandateStatusLabel(status)}
               </button>
             ))}
           </TablePopover>

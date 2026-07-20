@@ -17,7 +17,7 @@ import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import { AttachmentList, DocumentIconGroup } from '../components/DocumentAttachments'
 import { apiFetch, normalizeExternalUrl, openExternalUrl, openProtectedDocumentPath } from '../services/apiClient'
 import '../styles/Shared.css'
-import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, normalizeMandateStatus } from '../utils/mandateStatuses'
+import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, mandateStatusLabel, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { highlightText } from '../utils/aiFilterUi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
@@ -87,7 +87,7 @@ const EMPTY_FORM = {
   role: '',
   location: '',
   budget: '',
-  mandate_status: '',
+  mandate_status: 'Ongoing (P1)',
   vertical: '',
   allocation_date: '',
   jd_url: '',
@@ -485,7 +485,7 @@ export default function JobsPage() {
       role: job.role || job.title || '',
       location: job.location || job.city || '',
       budget: job.budget || '',
-      mandate_status: normalizeMandateStatus(job.mandate_status || job.status || job.priority) === '-' ? '' : normalizeMandateStatus(job.mandate_status || job.status || job.priority),
+      mandate_status: normalizeMandateStatus(job.mandate_status || job.status || job.priority) === '-' ? 'Ongoing (P1)' : normalizeMandateStatus(job.mandate_status || job.status || job.priority),
       vertical: job.vertical || '',
       allocation_date: job.allocation_date || todayLocal(),
       jd_url: job.jd_storage_path || job.jd_url || '',
@@ -1043,7 +1043,7 @@ export default function JobsPage() {
             <td key={column.key}>
               <div className="candidate-columns-control mandate-status-control">
                 <button className={`badge ${MANDATE_STATUS_BADGE_MAP[status] || ''}`} type="button" onMouseDown={event => event.stopPropagation()} onClick={(event) => toggleTablePopover('status', job.id, event.currentTarget)} disabled={statusSaving[job.id]}>
-                  {highlightText(dash(status), aiFilters)}
+                  {highlightText(mandateStatusLabel(status), aiFilters)}
                 </button>
               </div>
             </td>
@@ -1239,7 +1239,7 @@ export default function JobsPage() {
             ) : (
               MANDATE_STATUSES.map(status => (
                 <button className="candidate-columns-action" type="button" key={status} onClick={() => updateMandateStatus(job, status)}>
-                  {status}
+                  {mandateStatusLabel(status)}
                 </button>
               ))
             )}
@@ -1445,8 +1445,7 @@ export default function JobsPage() {
                 {!isJobFieldHidden('mandate_status') && <div className="form-group">
                   <label className="form-label">Mandate Status</label>
                   <select className="form-control" value={form.mandate_status} onChange={e => setForm(current => ({ ...current, mandate_status: e.target.value }))} disabled={saving || isJobFieldDisabled('mandate_status')}>
-                    <option value="">-</option>
-                    {MANDATE_STATUSES.map(value => <option key={value}>{value}</option>)}
+                    {MANDATE_STATUSES.map(value => <option key={value} value={value}>{mandateStatusLabel(value)}</option>)}
                   </select>
                 </div>}
                 {!isJobFieldHidden('vertical') && <div className="form-group">

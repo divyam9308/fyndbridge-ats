@@ -11,6 +11,10 @@ const migration = fs.readFileSync(
   path.join(root, 'supabase/migrations/20260715091118_attendance_realtime_and_low_mandate_notifications.sql'),
   'utf8'
 )
+const mandateStatusMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/20260720093624_mandate_priority_statuses.sql'),
+  'utf8'
+)
 
 test('attendance uses one scoped debounced Realtime channel without approval polling', () => {
   assert.match(attendanceRealtime, /realtime:attendance-page:/)
@@ -50,11 +54,12 @@ test('migration publishes only the missing holiday attendance table and preserve
 
 test('low mandate count is database-side, consultant-only, and serialized per consultant', () => {
   assert.match(migration, /for update;/i)
-  assert.match(migration, /from public\.jobs job[\s\S]*job\.mandate_status[\s\S]*= 'ongoing'/i)
+  assert.match(mandateStatusMigration, /from public\.jobs job[\s\S]*job\.mandate_status[\s\S]*= 'ongoing \(p1\)'/i)
+  assert.doesNotMatch(mandateStatusMigration, /job\.mandate_status[\s\S]{0,80}(delivered|paused|p2|p3)/i)
   assert.match(migration, /unnest\(coalesce\(job\.consultants/)
-  const reconcile = migration.slice(
-    migration.indexOf('create or replace function public.reconcile_low_mandate_allocation'),
-    migration.indexOf('create or replace function public.reconcile_low_mandates_after_job_change')
+  const reconcile = mandateStatusMigration.slice(
+    mandateStatusMigration.indexOf('create or replace function public.reconcile_low_mandate_allocation'),
+    mandateStatusMigration.indexOf('revoke all on function public.reconcile_low_mandate_allocation')
   )
   assert.doesNotMatch(reconcile, /team_lead/)
   assert.match(reconcile, /not exists \([\s\S]*from public\.admin_users admin_user/)

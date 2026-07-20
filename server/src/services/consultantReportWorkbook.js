@@ -27,7 +27,9 @@ const COLORS = Object.freeze({
 })
 
 const STATUS_COLORS = Object.freeze({
-  Ongoing: { fill: COLORS.tealLight, text: COLORS.teal },
+  'Ongoing (P1)': { fill: 'E0F2FE', text: '075985' },
+  'Delivered (P2)': { fill: 'EDE9FE', text: '5B21B6' },
+  'Paused (P3)': { fill: COLORS.amberLight, text: COLORS.amber },
   Completed: { fill: COLORS.greenLight, text: COLORS.green },
   Scrapped: { fill: 'F0F1F4', text: COLORS.muted }
 })
@@ -388,9 +390,11 @@ function buildSummarySheet(workbook, report) {
   const mandateSummary = report?.mandateSummary || {}
   const mandateCards = [
     { columns: [1, 3], label: 'Total Mandates', value: safeNumber(mandateSummary.total), tone: 'navy' },
-    { columns: [4, 6], label: 'Ongoing', value: safeNumber(mandateSummary.ongoing), tone: 'navy' },
-    { columns: [7, 9], label: 'Completed', value: safeNumber(mandateSummary.completed), tone: 'navy' },
-    { columns: [10, 13], label: 'Scrapped', value: safeNumber(mandateSummary.scrapped), tone: 'navy' }
+    { columns: [4, 5], label: 'Ongoing (P1)', value: safeNumber(mandateSummary.p1), tone: 'teal' },
+    { columns: [6, 7], label: 'Delivered (P2)', value: safeNumber(mandateSummary.p2), tone: 'purple' },
+    { columns: [8, 9], label: 'Paused (P3)', value: safeNumber(mandateSummary.p3), tone: 'amber' },
+    { columns: [10, 11], label: 'Completed', value: safeNumber(mandateSummary.completed), tone: 'green' },
+    { columns: [12, 13], label: 'Scrapped', value: safeNumber(mandateSummary.scrapped), tone: 'neutral' }
   ]
   mandateCards.forEach((item) => writeMetricCard(worksheet, 8, 9, item.columns[0], item.columns[1], item.label, item.value, item.tone, { numFmt: NUMBER_FORMAT }))
 
@@ -495,10 +499,12 @@ function writeOverallMandateNumbers(worksheet, report) {
   writeSection(worksheet, 4, 1, 20, 'Mandate Summary', COLORS.navy)
   const summary = report?.mandateSummary || {}
   const cards = [
-    { columns: [1, 5], label: 'Total Mandates', value: safeNumber(summary.total), tone: 'navy' },
-    { columns: [6, 10], label: 'Ongoing', value: safeNumber(summary.ongoing), tone: 'teal' },
-    { columns: [11, 15], label: 'Completed', value: safeNumber(summary.completed), tone: 'green' },
-    { columns: [16, 20], label: 'Scrapped', value: safeNumber(summary.scrapped), tone: 'neutral' }
+    { columns: [1, 3], label: 'Total Mandates', value: safeNumber(summary.total), tone: 'navy' },
+    { columns: [4, 6], label: 'Ongoing (P1)', value: safeNumber(summary.p1), tone: 'teal' },
+    { columns: [7, 9], label: 'Delivered (P2)', value: safeNumber(summary.p2), tone: 'purple' },
+    { columns: [10, 12], label: 'Paused (P3)', value: safeNumber(summary.p3), tone: 'amber' },
+    { columns: [13, 16], label: 'Completed', value: safeNumber(summary.completed), tone: 'green' },
+    { columns: [17, 20], label: 'Scrapped', value: safeNumber(summary.scrapped), tone: 'neutral' }
   ]
   cards.forEach((item) => writeMetricCard(worksheet, 5, 6, item.columns[0], item.columns[1], item.label, item.value, item.tone, { numFmt: NUMBER_FORMAT }))
 }

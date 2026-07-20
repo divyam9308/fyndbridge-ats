@@ -8,10 +8,10 @@ create table if not exists public.jobs (
   consultants text[] not null default '{}',
   team_lead text,
   budget text,
-  mandate_status text default '-',
+  mandate_status text not null default 'Ongoing (P1)',
   vertical text,
   allocation_date date,
-  status text not null default '-',
+  status text not null default 'Ongoing (P1)',
   salary_min integer,
   salary_max integer,
   experience_label text,
@@ -33,7 +33,7 @@ alter table public.jobs
   add column if not exists consultants text[] not null default '{}',
   add column if not exists team_lead text,
   add column if not exists budget text,
-  add column if not exists mandate_status text default '-',
+  add column if not exists mandate_status text default 'Ongoing (P1)',
   add column if not exists vertical text,
   add column if not exists allocation_date date,
   add column if not exists jd_url text,
@@ -49,7 +49,9 @@ begin
     set mandate_status = case
       when coalesce(mandate_status, priority, status) in ('Completed', 'Closed', 'Filled') then 'Completed'
       when coalesce(mandate_status, priority, status) in ('Scrapped', 'Scrap') then 'Scrapped'
-      when coalesce(mandate_status, priority, status) in ('Ongoing', 'Open', 'Active', 'P1', 'P2', 'P3') then 'Ongoing'
+      when coalesce(mandate_status, priority, status) in ('Ongoing', 'Open', 'Active', 'P1', 'Ongoing (P1)') then 'Ongoing (P1)'
+      when coalesce(mandate_status, priority, status) in ('Delivered', 'P2', 'Delivered (P2)') then 'Delivered (P2)'
+      when coalesce(mandate_status, priority, status) in ('Paused', 'On Hold', 'P3', 'Paused (P3)') then 'Paused (P3)'
       else coalesce(mandate_status, '-')
     end;
   else
@@ -57,7 +59,9 @@ begin
     set mandate_status = case
       when coalesce(mandate_status, status) in ('Completed', 'Closed', 'Filled') then 'Completed'
       when coalesce(mandate_status, status) in ('Scrapped', 'Scrap') then 'Scrapped'
-      when coalesce(mandate_status, status) in ('Ongoing', 'Open', 'Active', 'P1', 'P2', 'P3') then 'Ongoing'
+      when coalesce(mandate_status, status) in ('Ongoing', 'Open', 'Active', 'P1', 'Ongoing (P1)') then 'Ongoing (P1)'
+      when coalesce(mandate_status, status) in ('Delivered', 'P2', 'Delivered (P2)') then 'Delivered (P2)'
+      when coalesce(mandate_status, status) in ('Paused', 'On Hold', 'P3', 'Paused (P3)') then 'Paused (P3)'
       else coalesce(mandate_status, '-')
     end;
   end if;
@@ -65,9 +69,15 @@ end $$;
 
 update public.jobs
 set status = case
-  when mandate_status in ('Ongoing', 'Scrapped', 'Completed') then mandate_status
-  else 'Ongoing'
+  when mandate_status in ('Ongoing (P1)', 'Delivered (P2)', 'Paused (P3)', 'Scrapped', 'Completed') then mandate_status
+  else 'Ongoing (P1)'
 end;
+
+alter table public.jobs
+  alter column mandate_status set default 'Ongoing (P1)',
+  alter column mandate_status set not null,
+  alter column status set default 'Ongoing (P1)',
+  alter column status set not null;
 
 create index if not exists jobs_client_id_idx
   on public.jobs(client_id);

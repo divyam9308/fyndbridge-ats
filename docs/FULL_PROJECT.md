@@ -200,7 +200,7 @@ ATS FYNDBRIDGE/
 ### 3. Job / Mandate Management
 - Full CRUD for job mandates linked to clients
 - JD PDF upload (stored in `jds` bucket)
-- Mandate statuses: `Ongoing`, `Scrapped`, `Completed`
+- Mandate statuses: `Ongoing (P1)`, `Delivered (P2)`, `Paused (P3)`, `Completed`, `Scrapped`
 - Budget ranges (e.g. `20-25 lac`)
 - Multiple consultant assignment (`consultants` array)
 - Job Display ID: `JB###`

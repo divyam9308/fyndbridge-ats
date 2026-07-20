@@ -9,6 +9,7 @@ import CompactPagination from '../../components/CompactPagination'
 import { FyndbridgeLoader } from '../../components/FyndbridgeLoader'
 import ReportKpiCard from '../../components/ReportKpiCard'
 import { CANDIDATE_STATUSES } from '../../utils/candidateStatuses'
+import { MANDATE_STATUSES, mandateStatusClassName, mandateStatusLabel } from '../../utils/mandateStatuses'
 import { formatReportDate } from './reportFormatters'
 
 const STATUS_SHORT_LABELS = {
@@ -50,8 +51,8 @@ export function ReportSectionHeader({ title, description, action }) {
 
 function StatusChip({ status }) {
   const value = status || '—'
-  const className = String(value).toLowerCase().replaceAll(' ', '-').replace(/[^a-z-]/g, '')
-  return <span className={`report-status-chip is-${className}`}>{value}</span>
+  const className = mandateStatusClassName(value)
+  return <span className={`report-status-chip is-${className}`}>{mandateStatusLabel(value)}</span>
 }
 
 function MandateTableHead({ modal = false }) {
@@ -284,9 +285,7 @@ export function ReportDataModal({ kind, fetchRows, onClose }) {
             <span>Mandate status</span>
             <select value={status} onChange={(event) => { setLoading(true); setError(''); setStatus(event.target.value); setPage(1) }}>
               <option value="all">All statuses</option>
-              <option>Ongoing</option>
-              <option>Completed</option>
-              <option>Scrapped</option>
+              {MANDATE_STATUSES.map(value => <option key={value} value={value}>{mandateStatusLabel(value)}</option>)}
             </select>
           </label>
           <label>
