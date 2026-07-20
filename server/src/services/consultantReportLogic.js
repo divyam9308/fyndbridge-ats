@@ -1,6 +1,6 @@
 const { CANDIDATE_STATUSES, canonicalCandidateStatus } = require('./candidateStatuses')
 const { MANDATE_STATUSES, normalizeMandateStatus } = require('./filterEngine')
-const { localDate } = require('./attendanceUtils')
+const { addDays, localDate } = require('./attendanceUtils')
 
 const PAGE_SIZES = new Set([5, 10, 25, 50])
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -75,6 +75,12 @@ function dateOrdinal(value) {
 
 function daysBetween(start, end) {
   return dateOrdinal(end) - dateOrdinal(start)
+}
+
+function inclusiveDateRange(startDate, endDate) {
+  if (!isValidDate(startDate) || !isValidDate(endDate) || startDate > endDate) return []
+  const dayCount = daysBetween(startDate, endDate) + 1
+  return Array.from({ length: dayCount }, (_, index) => addDays(startDate, index))
 }
 
 function parseInteger(value, label, fallback) {
@@ -393,6 +399,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
   })
 
   const candidateCounts = emptyStatusCounts()
+  const dailyCandidateCounts = new Map(inclusiveDateRange(startDate, endDate).map((date) => [date, 0]))
   let pendingStatusAssignmentCount = 0
   for (const association of candidateRows) {
     if (!candidateAssociationMatches(association, consultant)) continue
@@ -410,11 +417,13 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
       continue
     }
     candidateCounts[status] += 1
+    dailyCandidateCounts.set(addedDate, (dailyCandidateCounts.get(addedDate) || 0) + 1)
   }
   const candidateOverview = {
     total: Object.values(candidateCounts).reduce((total, value) => total + value, 0),
     counts: candidateCounts
   }
+  const dailyCandidateUploads = [...dailyCandidateCounts].map(([date, candidateCount]) => ({ date, candidateCount }))
   const candidatePipeline = buildCandidatePipeline(candidateOverview)
 
   const hasTrackedStage = (row, stageKeys) => stageKeys.some((key) => row._conversion[key].days !== null)
@@ -458,6 +467,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
     mandateSummary,
     conversionSummary,
     candidateOverview,
+    dailyCandidateUploads,
     candidatePipeline,
     exceptions,
     positiveOutcomes,
@@ -480,7 +490,7 @@ function aggregateMetricItems(entries, field, fallbackItems) {
   }))
 }
 
-function aggregateConsultantReportFacts(entries = []) {
+function aggregateConsultantReportFacts(entries = [], dateRange = {}) {
   const scopedEntries = (entries || []).filter((entry) => entry?.consultant && entry?.facts)
   const mandateSummary = scopedEntries.reduce((summary, entry) => {
     for (const key of ['total', 'p1', 'p2', 'p3', 'completed', 'scrapped']) summary[key] += Number(entry.facts.mandateSummary?.[key]) || 0
@@ -520,6 +530,16 @@ function aggregateConsultantReportFacts(entries = []) {
     total: Object.values(candidateCounts).reduce((total, value) => total + value, 0),
     counts: candidateCounts
   }
+  const dailyCandidateCounts = new Map(inclusiveDateRange(dateRange.startDate, dateRange.endDate).map((date) => [date, 0]))
+  for (const entry of scopedEntries) {
+    for (const item of entry.facts.dailyCandidateUploads || []) {
+      if (!isValidDate(item?.date)) continue
+      dailyCandidateCounts.set(item.date, (dailyCandidateCounts.get(item.date) || 0) + (Number(item.candidateCount) || 0))
+    }
+  }
+  const dailyCandidateUploads = [...dailyCandidateCounts]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, candidateCount]) => ({ date, candidateCount }))
 
   const warningMap = new Map()
   for (const entry of scopedEntries) {
@@ -533,6 +553,7 @@ function aggregateConsultantReportFacts(entries = []) {
     mandateSummary,
     conversionSummary,
     candidateOverview,
+    dailyCandidateUploads,
     candidatePipeline: buildCandidatePipeline(candidateOverview),
     exceptions: aggregateMetricItems(scopedEntries, 'exceptions', EMPTY_EXCEPTION_METRICS),
     positiveOutcomes: aggregateMetricItems(scopedEntries, 'positiveOutcomes', EMPTY_POSITIVE_OUTCOME_METRICS),

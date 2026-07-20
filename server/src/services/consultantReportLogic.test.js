@@ -205,6 +205,11 @@ test('candidate added-date scope uses inclusive Asia/Kolkata calendar boundaries
 
   assert.equal(result.candidateOverview.total, 2)
   assert.equal(result.candidateOverview.counts.Interested, 2)
+  assert.equal(result.dailyCandidateUploads.length, 15)
+  assert.deepEqual(result.dailyCandidateUploads[0], { date: START, candidateCount: 1 })
+  assert.deepEqual(result.dailyCandidateUploads.at(-1), { date: END, candidateCount: 1 })
+  assert.equal(result.dailyCandidateUploads.find((item) => item.date === '2026-07-02').candidateCount, 0)
+  assert.equal(result.dailyCandidateUploads.reduce((sum, item) => sum + item.candidateCount, 0), result.candidateOverview.total)
 })
 
 test('candidate additions are not suppressed by an unsupported mandate status', () => {
@@ -281,6 +286,39 @@ test('overall pending status assignment sums consultant candidate additions in t
 
   const result = aggregateConsultantReportFacts(entries)
   assert.equal(result.exceptions.find((item) => item.key === 'pendingStatusAssignment').value, 2)
+})
+
+test('daily candidate uploads include every date and aggregate overall counts chronologically', () => {
+  const candidateAssociations = [
+    association('asha-job', 'Interested', {
+      id: 'asha-start',
+      created_at: '2026-06-30T18:30:00.000Z'
+    }),
+    association('bina-job', 'Interview', {
+      id: 'bina-end',
+      consultant_name: SECOND_CONSULTANT.name,
+      consultant_user_id: SECOND_CONSULTANT.user_id,
+      created_at: '2026-07-15T18:29:59.999Z'
+    })
+  ]
+  const entries = [CONSULTANT, SECOND_CONSULTANT].map((consultant) => ({
+    consultant,
+    facts: buildConsultantReportFacts({
+      jobs: [],
+      associations: [],
+      candidateAssociations,
+      consultant,
+      startDate: START,
+      endDate: END
+    })
+  }))
+
+  const result = aggregateConsultantReportFacts(entries, { startDate: START, endDate: END })
+  assert.equal(result.dailyCandidateUploads.length, 15)
+  assert.deepEqual(result.dailyCandidateUploads[0], { date: START, candidateCount: 1 })
+  assert.deepEqual(result.dailyCandidateUploads.at(-1), { date: END, candidateCount: 1 })
+  assert.equal(result.dailyCandidateUploads[1].candidateCount, 0)
+  assert.equal(result.dailyCandidateUploads.reduce((sum, item) => sum + item.candidateCount, 0), result.candidateOverview.total)
 })
 
 test('created-at fallback applies the company local date at UTC boundaries', () => {

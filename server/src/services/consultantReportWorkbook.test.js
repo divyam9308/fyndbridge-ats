@@ -43,6 +43,13 @@ function attendancePayload({ overall = false } = {}) {
 function reportFixture({ overall = false } = {}) {
   const counts = Object.fromEntries(CANDIDATE_STATUSES.map((status, index) => [status, index + 1]))
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0)
+  const dailyCandidateUploads = Array.from({ length: 30 }, (_, index) => {
+    const day = index + 1
+    return {
+      date: `2026-06-${String(day).padStart(2, '0')}`,
+      candidateCount: day === 1 ? 10 : day === 15 ? 20 : day === 30 ? total - 30 : 0
+    }
+  })
   return {
     meta: {
       startDate: '2026-06-01',
@@ -62,6 +69,7 @@ function reportFixture({ overall = false } = {}) {
       { key: 'hire', label: 'Mandate → First Hire', averageDays: 15, trackedMandates: 1, untrackedMandates: 3, tone: 'green' }
     ],
     candidateOverview: { total, counts },
+    dailyCandidateUploads,
     candidatePipeline: [
       { key: 'total', label: 'Total Candidates', count: total, percentage: 100 },
       { key: 'interested', label: 'Interested', count: counts.Interested, percentage: 12.5 },
@@ -146,7 +154,21 @@ test('builds the aligned five-sheet individual consultant workbook with typed ce
   assert.equal(mandates.views[0].xSplit, 2)
   assert.equal(mandates.views[0].showGridLines, false)
   assert.equal(workbook.getWorksheet('02 Conversion & Ageing').getCell('A4').value, 'Client Name')
-  assert.equal(workbook.getWorksheet('03 Candidates & Pipeline').getCell('A6').value, 'Total Candidates')
+  const candidates = workbook.getWorksheet('03 Candidates & Pipeline')
+  assert.equal(candidates.getCell('A6').value, 'Total Candidates')
+  assert.equal(candidates.getCell('A19').value, 'Candidates Uploaded Each Date')
+  assert.equal(candidates.getCell('A20').value, 'Date')
+  assert.equal(candidates.getCell('B20').value, 'Candidates Uploaded')
+  assert.ok(candidates.getCell('A21').value instanceof Date)
+  assert.equal(candidates.getCell('A21').numFmt, 'dd-mmm-yyyy')
+  assert.equal(candidates.getCell('B21').value, 10)
+  assert.equal(candidates.getCell('B35').value, 20)
+  assert.equal(candidates.getCell('B50').value, 36)
+  assert.equal(
+    Array.from({ length: 30 }, (_, index) => candidates.getCell(21 + index, 2).value).reduce((sum, value) => sum + value, 0),
+    candidates.getCell('B6').value
+  )
+  assert.equal(candidates.pageSetup.printArea, 'A1:G50')
   assert.equal(summary.getCell('H28').value, 'Candidates Pending Status Assignment')
   assert.equal(summary.getCell('M28').value, 2)
   assert.equal(workbook.getWorksheet('04 Attendance & Outcomes').getCell('A11').value, 'Candidates Pending Status Assignment')

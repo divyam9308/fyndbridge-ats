@@ -230,7 +230,7 @@ async function loadFacts(params, access) {
     ? aggregateConsultantReportFacts(access.target.consultants.map((consultant) => ({
       consultant,
       facts: buildConsultantReportFacts({ ...factInput, consultant })
-    })))
+    })), { startDate: params.startDate, endDate: params.endDate })
     : buildConsultantReportFacts({ ...factInput, consultant: access.target })
   facts.warnings.forEach((warning) => {
     console.warn('[consultant-report:data-quality]', {
@@ -425,6 +425,7 @@ function buildReportResponse({ params, access, user, facts, attendanceResult }) 
     conversionSummary: facts.conversionSummary,
     recentConversions: facts.recentConversions,
     candidateOverview: facts.candidateOverview,
+    dailyCandidateUploads: facts.dailyCandidateUploads,
     candidatePipeline: facts.candidatePipeline,
     exceptions: facts.exceptions,
     positiveOutcomes: facts.positiveOutcomes,

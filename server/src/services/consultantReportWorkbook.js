@@ -150,9 +150,34 @@ function formatGeneratedAt(value, timeZone = 'Asia/Kolkata') {
   }).format(date).replace(/\b(am|pm)\b/i, (period) => period.toUpperCase())
 }
 
+function inclusiveReportDates(startDate, endDate) {
+  const start = dateValue(startDate)
+  const end = dateValue(endDate)
+  if (!start || !end || start > end) return []
+  const dayCount = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1
+  if (dayCount < 1 || dayCount > 367) return []
+  return Array.from({ length: dayCount }, (_, index) => {
+    const date = new Date(start)
+    date.setUTCDate(date.getUTCDate() + index)
+    return date.toISOString().slice(0, 10)
+  })
+}
+
 function safeNumber(value, fallback = 0) {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
+}
+
+function normalizedDailyCandidateUploads(report) {
+  const suppliedCounts = new Map()
+  for (const item of Array.isArray(report?.dailyCandidateUploads) ? report.dailyCandidateUploads : []) {
+    if (!dateValue(item?.date)) continue
+    suppliedCounts.set(item.date, Math.max(0, Math.trunc(safeNumber(item.candidateCount))))
+  }
+  return inclusiveReportDates(report?.meta?.startDate, report?.meta?.endDate).map((date) => ({
+    date,
+    candidateCount: suppliedCounts.get(date) || 0
+  }))
 }
 
 function finiteOrText(value, text = 'Not tracked') {
@@ -673,7 +698,7 @@ function buildCandidatesSheet(workbook, report) {
     frozenRows: 5,
     zoomScale: 95,
     orientation: 'portrait',
-    fitToHeight: 1,
+    fitToHeight: 0,
     tabColor: COLORS.purple
   })
   writeSheetTitle(worksheet, 'Candidates & Pipeline', report, 7)
@@ -717,7 +742,26 @@ function buildCandidatesSheet(workbook, report) {
     })
     worksheet.getRow(row).height = 29
   })
-  worksheet.pageSetup.printArea = 'A1:G17'
+  const dailyCandidateUploads = normalizedDailyCandidateUploads(report)
+  const dailySectionRow = 19
+  const dailyHeaderRow = dailySectionRow + 1
+  const dailyDataStartRow = dailyHeaderRow + 1
+  writeSection(worksheet, dailySectionRow, 1, 7, 'Candidates Uploaded Each Date', COLORS.blue)
+  writeHeaders(worksheet, dailyHeaderRow, 1, ['Date', 'Candidates Uploaded'])
+  dailyCandidateUploads.forEach((item, index) => {
+    const row = dailyDataStartRow + index
+    const background = index % 2 ? COLORS.background : COLORS.white
+    const dateCell = worksheet.getCell(row, 1)
+    dateCell.value = dateValue(item.date)
+    applyStyle(dateCell, bodyStyle({ horizontal: 'center', fillColor: background, numFmt: DATE_FORMAT }))
+    const countCell = worksheet.getCell(row, 2)
+    countCell.value = safeNumber(item.candidateCount)
+    applyStyle(countCell, bodyStyle({ horizontal: 'center', fillColor: background, numFmt: NUMBER_FORMAT }))
+    worksheet.getRow(row).height = 27
+  })
+  const lastRow = Math.max(dailyHeaderRow, dailyDataStartRow + dailyCandidateUploads.length - 1)
+  worksheet.pageSetup.printArea = `A1:G${lastRow}`
+  worksheet.pageSetup.printTitlesRow = '1:5'
   return worksheet
 }
 
