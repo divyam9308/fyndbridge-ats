@@ -395,30 +395,53 @@
 .pipeline-stage.stage-5 { background: #edf8f0; border-color: #d6ebdc; }
 .pipeline-arrow { flex: 0 0 auto; margin: 0 7px; color: #9ba3b1; }
 
-.report-daily-candidates-section { overflow: hidden; }
+.report-daily-candidates-section {
+  overflow: hidden;
+  background: #fff;
+}
+.report-daily-chart-title {
+  margin: 0 0 12px;
+  color: #20242c;
+  font-size: 23px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -.02em;
+}
 .report-daily-chart {
   width: 100%;
-  height: 340px;
+  height: 320px;
   min-width: 0;
 }
-.report-daily-chart .recharts-line-curve {
+.report-daily-chart .recharts-area-curve {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 .report-chart-tooltip {
+  position: relative;
   display: grid;
-  min-width: 138px;
-  gap: 5px;
-  padding: 10px 12px;
-  border: 1px solid #dce2ec;
-  border-radius: 11px;
-  background: rgba(255, 255, 255, .98);
-  box-shadow: 0 12px 28px rgba(var(--brand-blue-rgb), .16);
-  color: #1d2940;
+  min-width: 132px;
+  gap: 6px;
+  padding: 11px 14px;
+  border: 1px solid #2d2d31;
+  border-radius: 4px;
+  background: #171719;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, .28);
+  color: #fff;
   pointer-events: none;
 }
-.report-chart-tooltip strong { color: var(--navy); font-size: 12px; line-height: 1.2; }
-.report-chart-tooltip span { color: #59657a; font-size: 11.5px; font-weight: 700; }
+.report-chart-tooltip::after {
+  position: absolute;
+  bottom: -7px;
+  left: 18px;
+  width: 0;
+  height: 0;
+  border: 7px solid transparent;
+  border-top-color: #171719;
+  border-bottom: 0;
+  content: '';
+}
+.report-chart-tooltip strong { color: #fff; font-size: 12.5px; line-height: 1.2; }
+.report-chart-tooltip span { color: #f1f1f3; font-size: 11.5px; font-weight: 600; }
 .report-daily-chart-empty {
   margin-top: 8px;
   color: #778194;
@@ -428,7 +451,7 @@
 .report-daily-chart-skeleton {
   display: grid;
   width: 100%;
-  height: 340px;
+  height: 320px;
   place-items: center;
   overflow: hidden;
   border: 1px solid #e2e6ed;

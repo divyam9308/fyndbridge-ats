@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BriefcaseBusiness, CalendarCheck2, ChevronDown, FileDown, LoaderCircle, Play, UsersRound } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useAuth } from '../context/useAuth'
 import FormattedDateInput from '../components/FormattedDateInput'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
@@ -25,7 +25,7 @@ const TABS = [
   { key: 'attendance', label: 'Attendance & Outcomes', Icon: CalendarCheck2 }
 ]
 const WARNING_POPUP_DURATION_MS = 5000
-const DAILY_CANDIDATE_LINE_COLOR = '#347CC4'
+const DAILY_CANDIDATE_LINE_COLOR = '#5B3FD3'
 
 function localDateValue(date) {
   const year = date.getFullYear()
@@ -257,7 +257,7 @@ function DailyCandidateTooltip({ active, payload }) {
   return (
     <div className="report-chart-tooltip">
       <strong>{formatDailyCandidateDate(point.date)}</strong>
-      <span>{candidateCount.toLocaleString('en-IN')} {candidateCount === 1 ? 'candidate' : 'candidates'}</span>
+      <span>{candidateCount.toLocaleString('en-IN')} {candidateCount === 1 ? 'Candidate' : 'Candidates'}</span>
     </div>
   )
 }
@@ -273,13 +273,11 @@ function DailyCandidatesChart({ report, loading }) {
   const totalUploaded = dailyData.reduce((sum, item) => sum + item.candidateCount, 0)
   const hasUploads = totalUploaded > 0
   const scopeLabel = isOverall ? 'across all included consultants' : `for ${consultantName}`
+  const weeklyTicks = dailyData.filter((_, index) => index % 7 === 0).map((item) => item.date)
 
   return (
     <section className="report-section report-daily-candidates-section">
-      <ReportSectionHeader
-        title="Candidates Uploaded Each Date"
-        description={`Daily total ${scopeLabel} — hover over a point to view the exact date and count.`}
-      />
+      <h2 className="report-daily-chart-title">Candidates Uploaded Each Date (Total)</h2>
       {loading ? (
         <div className="report-daily-chart-skeleton" role="status" aria-label="Loading daily candidate uploads">
           <span>Loading daily candidate totals…</span>
@@ -292,15 +290,23 @@ function DailyCandidatesChart({ report, loading }) {
             aria-label={`Daily candidate uploads ${scopeLabel} from ${formatDailyCandidateDate(report?.meta?.startDate)} to ${formatDailyCandidateDate(report?.meta?.endDate)}. ${totalUploaded} candidates in total.`}
           >
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailyData} margin={{ top: 12, right: 18, bottom: 8, left: 0 }}>
-                <CartesianGrid stroke="#E6EBF2" strokeDasharray="3 3" vertical={false} />
+              <AreaChart data={dailyData} margin={{ top: 8, right: 12, bottom: 4, left: 2 }}>
+                <defs>
+                  <linearGradient id="dailyCandidateAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={DAILY_CANDIDATE_LINE_COLOR} stopOpacity={0.28} />
+                    <stop offset="58%" stopColor={DAILY_CANDIDATE_LINE_COLOR} stopOpacity={0.09} />
+                    <stop offset="100%" stopColor={DAILY_CANDIDATE_LINE_COLOR} stopOpacity={0.01} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#ECEFF4" strokeWidth={1} />
                 <XAxis
                   dataKey="date"
+                  ticks={weeklyTicks}
                   axisLine={false}
                   tickLine={false}
                   interval="preserveStartEnd"
-                  minTickGap={28}
-                  tick={{ fill: '#758096', fontSize: 11 }}
+                  minTickGap={20}
+                  tick={{ fill: '#5E6470', fontSize: 11.5, fontWeight: 500 }}
                   tickFormatter={(value) => formatDailyCandidateDate(value, spansYears)}
                 />
                 <YAxis
@@ -308,23 +314,27 @@ function DailyCandidatesChart({ report, loading }) {
                   axisLine={false}
                   tickLine={false}
                   domain={[0, 'auto']}
-                  width={42}
-                  tick={{ fill: '#758096', fontSize: 11 }}
+                  tickCount={5}
+                  width={58}
+                  tick={{ fill: '#5E6470', fontSize: 11.5, fontWeight: 500 }}
+                  label={{ value: 'Candidates', angle: -90, position: 'insideLeft', fill: '#272B33', fontSize: 12, fontWeight: 700 }}
                 />
-                <Tooltip content={<DailyCandidateTooltip />} cursor={{ stroke: '#CBD5E1', strokeDasharray: '3 3' }} />
-                <Line
+                <Tooltip content={<DailyCandidateTooltip />} cursor={{ stroke: '#D9DCE5', strokeWidth: 1 }} />
+                <Area
                   type="monotone"
                   dataKey="candidateCount"
                   name="Candidates Uploaded"
                   stroke={DAILY_CANDIDATE_LINE_COLOR}
+                  fill="url(#dailyCandidateAreaGradient)"
+                  fillOpacity={1}
                   strokeWidth={3}
-                  dot={dailyData.length <= 120 ? { r: 2.5, fill: '#FFFFFF', stroke: DAILY_CANDIDATE_LINE_COLOR, strokeWidth: 2 } : false}
-                  activeDot={{ r: 5, fill: '#FFFFFF', stroke: DAILY_CANDIDATE_LINE_COLOR, strokeWidth: 3 }}
+                  dot={dailyData.length <= 120 ? { r: 3, fill: '#FFFFFF', stroke: DAILY_CANDIDATE_LINE_COLOR, strokeWidth: 2 } : false}
+                  activeDot={{ r: 5, fill: DAILY_CANDIDATE_LINE_COLOR, stroke: '#FFFFFF', strokeWidth: 2 }}
                   isAnimationActive
                   animationDuration={700}
                   animationEasing="ease-out"
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
           {!hasUploads && <p className="report-daily-chart-empty" role="status">No candidates were uploaded during the selected date range.</p>}
