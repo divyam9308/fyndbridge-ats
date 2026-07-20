@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BriefcaseBusiness, CalendarCheck2, ChevronDown, FileDown, LoaderCircle, Play, UsersRound } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useAuth } from '../context/useAuth'
 import FormattedDateInput from '../components/FormattedDateInput'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
@@ -24,6 +25,7 @@ const TABS = [
   { key: 'attendance', label: 'Attendance & Outcomes', Icon: CalendarCheck2 }
 ]
 const WARNING_POPUP_DURATION_MS = 5000
+const DAILY_CANDIDATE_LINE_COLOR = '#347CC4'
 
 function localDateValue(date) {
   const year = date.getFullYear()
@@ -70,6 +72,52 @@ function generatedLabel(value) {
 
 function dateRangeLabel(fromDate, toDate) {
   return `${formatReportDate(fromDate)} – ${formatReportDate(toDate)}`
+}
+
+function reportCalendarDate(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return null
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12))
+  if (date.getUTCFullYear() !== Number(match[1]) || date.getUTCMonth() !== Number(match[2]) - 1 || date.getUTCDate() !== Number(match[3])) return null
+  return date
+}
+
+function inclusiveReportDates(startDate, endDate) {
+  const start = reportCalendarDate(startDate)
+  const end = reportCalendarDate(endDate)
+  if (!start || !end || start > end) return []
+  const dayCount = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1
+  if (dayCount < 1 || dayCount > 367) return []
+  return Array.from({ length: dayCount }, (_, index) => {
+    const date = new Date(start)
+    date.setUTCDate(date.getUTCDate() + index)
+    return date.toISOString().slice(0, 10)
+  })
+}
+
+function formatDailyCandidateDate(value, includeYear = true) {
+  const date = reportCalendarDate(value)
+  if (!date) return '—'
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    ...(includeYear ? { year: 'numeric' } : {}),
+    timeZone: 'UTC'
+  }).format(date)
+}
+
+function normalizeDailyCandidateUploads(rows, startDate, endDate) {
+  const counts = new Map()
+  for (const item of Array.isArray(rows) ? rows : []) {
+    if (!reportCalendarDate(item?.date)) continue
+    const numericCount = Number(item.candidateCount)
+    const candidateCount = Number.isFinite(numericCount) ? Math.max(0, Math.trunc(numericCount)) : 0
+    counts.set(item.date, (counts.get(item.date) || 0) + candidateCount)
+  }
+  return inclusiveReportDates(startDate, endDate).map((date) => ({
+    date,
+    candidateCount: counts.get(date) || 0
+  }))
 }
 
 function displayEmployeeStatus(value) {
@@ -202,7 +250,100 @@ function MandatesReport({ report, openModal }) {
   )
 }
 
-function CandidatesReport({ report }) {
+function DailyCandidateTooltip({ active, payload }) {
+  const point = payload?.[0]?.payload
+  if (!active || !point) return null
+  const candidateCount = Number(point.candidateCount) || 0
+  return (
+    <div className="report-chart-tooltip">
+      <strong>{formatDailyCandidateDate(point.date)}</strong>
+      <span>{candidateCount.toLocaleString('en-IN')} {candidateCount === 1 ? 'candidate' : 'candidates'}</span>
+    </div>
+  )
+}
+
+function DailyCandidatesChart({ report, loading }) {
+  const dailyData = useMemo(
+    () => normalizeDailyCandidateUploads(report?.dailyCandidateUploads, report?.meta?.startDate, report?.meta?.endDate),
+    [report?.dailyCandidateUploads, report?.meta?.endDate, report?.meta?.startDate]
+  )
+  const isOverall = Boolean(report?.consultant?.isOverall)
+  const consultantName = report?.consultant?.name || 'this consultant'
+  const spansYears = report?.meta?.startDate?.slice(0, 4) !== report?.meta?.endDate?.slice(0, 4)
+  const totalUploaded = dailyData.reduce((sum, item) => sum + item.candidateCount, 0)
+  const hasUploads = totalUploaded > 0
+  const scopeLabel = isOverall ? 'across all included consultants' : `for ${consultantName}`
+
+  return (
+    <section className="report-section report-daily-candidates-section">
+      <ReportSectionHeader
+        title="Candidates Uploaded Each Date"
+        description={`Daily total ${scopeLabel} — hover over a point to view the exact date and count.`}
+      />
+      {loading ? (
+        <div className="report-daily-chart-skeleton" role="status" aria-label="Loading daily candidate uploads">
+          <span>Loading daily candidate totals…</span>
+        </div>
+      ) : (
+        <>
+          <div
+            className="report-daily-chart"
+            role="img"
+            aria-label={`Daily candidate uploads ${scopeLabel} from ${formatDailyCandidateDate(report?.meta?.startDate)} to ${formatDailyCandidateDate(report?.meta?.endDate)}. ${totalUploaded} candidates in total.`}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dailyData} margin={{ top: 12, right: 18, bottom: 8, left: 0 }}>
+                <CartesianGrid stroke="#E6EBF2" strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                  minTickGap={28}
+                  tick={{ fill: '#758096', fontSize: 11 }}
+                  tickFormatter={(value) => formatDailyCandidateDate(value, spansYears)}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  axisLine={false}
+                  tickLine={false}
+                  domain={[0, 'auto']}
+                  width={42}
+                  tick={{ fill: '#758096', fontSize: 11 }}
+                />
+                <Tooltip content={<DailyCandidateTooltip />} cursor={{ stroke: '#CBD5E1', strokeDasharray: '3 3' }} />
+                <Line
+                  type="monotone"
+                  dataKey="candidateCount"
+                  name="Candidates Uploaded"
+                  stroke={DAILY_CANDIDATE_LINE_COLOR}
+                  strokeWidth={3}
+                  dot={dailyData.length <= 120 ? { r: 2.5, fill: '#FFFFFF', stroke: DAILY_CANDIDATE_LINE_COLOR, strokeWidth: 2 } : false}
+                  activeDot={{ r: 5, fill: '#FFFFFF', stroke: DAILY_CANDIDATE_LINE_COLOR, strokeWidth: 3 }}
+                  isAnimationActive
+                  animationDuration={700}
+                  animationEasing="ease-out"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          {!hasUploads && <p className="report-daily-chart-empty" role="status">No candidates were uploaded during the selected date range.</p>}
+          <table className="report-chart-accessible-table">
+            <caption>Candidates uploaded for every date in the selected report range</caption>
+            <thead><tr><th>Date</th><th>Candidates Uploaded</th></tr></thead>
+            <tbody>
+              {dailyData.map((item) => (
+                <tr key={item.date}><td>{formatDailyCandidateDate(item.date)}</td><td>{item.candidateCount}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </section>
+  )
+}
+
+function CandidatesReport({ report, loading = false }) {
   const isOverall = Boolean(report?.consultant?.isOverall)
   const overview = report.candidateOverview || { total: 0, counts: {} }
   const pipeline = Array.isArray(report.candidatePipeline) ? report.candidatePipeline : []
@@ -216,6 +357,7 @@ function CandidatesReport({ report }) {
         <ReportSectionHeader title="Candidate Pipeline" description="Current primary stages for candidate additions in the selected period, with every percentage calculated from total candidates." />
         <CandidatePipeline stages={pipeline} total={overview.total} />
       </section>
+      <DailyCandidatesChart report={report} loading={loading} />
     </div>
   )
 }
@@ -809,7 +951,7 @@ export default function ConsultantReportPage() {
               aria-labelledby="consultant-report-tab-candidates"
               aria-hidden={activeTab !== 'candidates'}
             >
-              <CandidatesReport report={report} />
+              <CandidatesReport report={report} loading={optionsLoading || reportLoading} />
             </section>
             <section
               className={`report-tab-view${activeTab === 'attendance' ? ' is-active' : ''}`}

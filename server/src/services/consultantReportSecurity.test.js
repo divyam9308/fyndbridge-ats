@@ -357,3 +357,18 @@ test('candidate report facts use association ownership and added-date scope inde
   assert.match(reportService, /buildConsultantReportFacts\(\{\s*\.\.\.factInput,\s*consultant:\s*access\.target\s*\}\)/)
   assert.match(reportService, /candidates: 'candidate_associations\.created_at, attributed by consultant_user_id with a legacy consultant_name fallback;/)
 })
+
+test('Candidates report renders one responsive daily total series for individual and Overall Consultants data', () => {
+  assert.match(reportPage, /from 'recharts'/)
+  assert.match(reportPage, /function DailyCandidatesChart\(\{ report, loading \}\)/)
+  assert.match(reportPage, /report\?\.dailyCandidateUploads/)
+  assert.match(reportPage, /report\?\.consultant\?\.isOverall/)
+  assert.match(reportPage, /dataKey="candidateCount"/)
+  assert.match(reportPage, /name="Candidates Uploaded"/)
+  assert.match(reportPage, /<ResponsiveContainer width="100%" height="100%">/)
+  assert.match(reportPage, /<YAxis[\s\S]*?allowDecimals=\{false\}[\s\S]*?domain=\{\[0, 'auto'\]\}/)
+  assert.match(reportPage, /No candidates were uploaded during the selected date range\./)
+  assert.match(reportPage, /<DailyCandidatesChart report=\{report\} loading=\{loading\} \/>/)
+  assert.doesNotMatch(reportPage, /dataKey="Interested"[\s\S]*?DailyCandidatesChart|dataKey="Hired"[\s\S]*?DailyCandidatesChart/)
+  assert.match(reportStyles, /\.report-daily-chart\s*\{[\s\S]*?height:\s*340px/)
+})
