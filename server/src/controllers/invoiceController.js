@@ -9,8 +9,8 @@ const {
 
 const ENTITY_FIELDS = 'id, invoice_id, entity_display_id, legal_entity_name, optional_name, address, pan, place_of_supply, state, state_code, gstin, contact_person, email, sac, billing_entity, gst_component, igst_rate, cgst_rate, sgst_rate, created_at, updated_at'
 const INVOICE_FIELDS = 'id, invoice_entity_id, invoice_type, invoice_display_id, invoice_number, financial_year, sequence_number, invoice_date, consultant_name, candidate_name, professional_fee_text, model, ctc_lpa, model_percent, model_flat_fee, retainer_amount, project_amount, jra_adjustment_value, jra_base_value, jra_flat_fee, others_amount, sac, billing_entity, taxable_amount, gst_component, igst_rate, igst_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount, total_tax_amount, total_before_rounding, rounding_type, rounding_amount, grand_total, pdf_storage_path, status, cancelled_at, cancelled_by, created_at'
-const INVOICE_TOTAL_FIELDS = 'id, invoice_type, billing_entity, taxable_amount, total_tax_amount, total_before_rounding, grand_total, status'
 const INVOICE_TOTAL_PAGE_SIZE = 1000
+const PDF_VERSION_BATCH_SIZE = 200
 
 const SAFE_ERROR_MESSAGES = [
   /^Entity not found$/,
@@ -96,7 +96,7 @@ async function listTaxInvoiceTotalRows() {
   for (let from = 0; ; from += INVOICE_TOTAL_PAGE_SIZE) {
     const { data, error } = await supabase
       .from('invoices')
-      .select(INVOICE_TOTAL_FIELDS)
+      .select(INVOICE_FIELDS)
       .eq('invoice_type', 'tax_invoice')
       .eq('status', 'active')
       .order('id', { ascending: true })
@@ -108,6 +108,21 @@ async function listTaxInvoiceTotalRows() {
   return rows
 }
 
+async function listInvoicePdfVersions(invoiceIds) {
+  const versions = []
+  for (let offset = 0; offset < invoiceIds.length; offset += PDF_VERSION_BATCH_SIZE) {
+    const batch = invoiceIds.slice(offset, offset + PDF_VERSION_BATCH_SIZE)
+    const { data, error } = await supabase
+      .from('invoice_pdf_versions')
+      .select('*')
+      .in('invoice_id', batch)
+      .order('version_number', { ascending: false })
+    if (error) throw error
+    versions.push(...(data || []))
+  }
+  return versions
+}
+
 async function listEntities(req, res) {
   try {
     const [entitiesResult, taxInvoices] = await Promise.all([
@@ -115,8 +130,18 @@ async function listEntities(req, res) {
       listTaxInvoiceTotalRows()
     ])
     if (entitiesResult.error) throw entitiesResult.error
+    const versions = await listInvoicePdfVersions(taxInvoices.map(invoice => invoice.id))
+    const versionsByInvoice = new Map()
+    versions.forEach(version => versionsByInvoice.set(version.invoice_id, [
+      ...(versionsByInvoice.get(version.invoice_id) || []),
+      decoratePdfVersion(version)
+    ]))
     return res.json({
       data: entitiesResult.data || [],
+      invoices: taxInvoices.map(invoice => ({
+        ...decorateInvoice(invoice),
+        pdf_versions: versionsByInvoice.get(invoice.id) || []
+      })),
       totals: aggregateTaxInvoiceTotals(taxInvoices)
     })
   } catch (err) { return sendError(res, err) }

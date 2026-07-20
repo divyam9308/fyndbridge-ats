@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { Check, Download, FileClock, FileText, Pencil, Plus, ReceiptText, Save as SaveIcon, Search, Trash2, X } from 'lucide-react'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
+import ModelFields from '../components/InvoiceModelFields'
 import ReportKpiCard from '../components/ReportKpiCard'
 import {
   commitInvoicePreview, createInvoiceEntity, deleteInvoiceEntity, fetchInvoiceEntities,
@@ -10,9 +11,12 @@ import {
 } from '../services/invoiceApi'
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import { useDialogFocus } from '../hooks/useDialogFocus'
+import { useInvoiceRowControls } from '../hooks/useInvoiceRowControls'
 import { EMPTY_INVOICE, INVOICE_MODELS, INVOICE_TYPE_LABELS, calculateInvoicePreview, detectInvoiceGstComponent } from '../utils/invoiceModels'
-import { formatInrPaise } from '../utils/invoiceValues'
+import { formatDateDDMMYYYY } from '../utils/dateFormat'
+import { formatInrPaise, invoiceMoneyValues } from '../utils/invoiceValues'
 import '../styles/Shared.css'
+import './DashboardHome.css'
 import './InvoicePage.css'
 
 const EMPTY_ENTITY = {
@@ -30,6 +34,19 @@ const KPI_CARDS = [
   { key: 'taxValue', label: 'Total Tax Value', tone: 'amber' },
   { key: 'totalInvoiceValue', label: 'Total Invoice Value', tone: 'green' }
 ]
+const POPUP_COLUMNS = [
+  { key: 'iid', label: 'IID', width: 110 },
+  { key: 'number', label: 'Invoice Number', width: 190 },
+  { key: 'date', label: 'Invoice Date', width: 130 },
+  { key: 'entity', label: 'Legal Entity Name', width: 270 },
+  { key: 'bill', label: 'Bill Value', width: 155 },
+  { key: 'tax', label: 'Tax Value', width: 150 },
+  { key: 'total', label: 'Invoice Value', width: 170 },
+  { key: 'invoice', label: 'Invoice', width: 150 },
+  { key: 'action', label: 'Action', width: 140 }
+]
+const POPUP_TABLE_WIDTH = POPUP_COLUMNS.reduce((total, column) => total + column.width, 0)
+const POPUP_TABLE_STYLE = { width: `${POPUP_TABLE_WIDTH}px`, minWidth: `${POPUP_TABLE_WIDTH}px` }
 const EMPTY_INVOICE_TOTALS = Object.fromEntries(BILLING_ENTITIES.map(entity => [entity, {
   billValue: '0',
   taxValue: '0',
@@ -47,15 +64,6 @@ function Field({ label, children, full = false }) {
 function Input({ name, value, update, ...props }) {
   return <input className="form-control" name={name} value={value ?? ''} onChange={update} {...props} />
 }
-export function ModelFields({ form, update }) {
-  if (form.model === 'joining_percentage') return <><Field label="CTC"><Input name="ctc_lpa" value={form.ctc_lpa} update={update} inputMode="decimal" /></Field><Field label="Percent Value"><Input name="model_percent" value={form.model_percent} update={update} inputMode="decimal" /></Field></>
-  if (form.model === 'joining_flat_fee') return <Field label="Flat Fee (₹)"><Input name="model_flat_fee" value={form.model_flat_fee} update={update} inputMode="decimal" /></Field>
-  if (form.model === 'retainer') return <Field label="Retainer Amount (₹)"><Input name="retainer_amount" value={form.retainer_amount} update={update} inputMode="decimal" /></Field>
-  if (form.model === 'project') return <Field label="Project Amount (₹)"><Input name="project_amount" value={form.project_amount} update={update} inputMode="decimal" /></Field>
-  if (form.model === 'jra_adjustment_percentage') return <><Field label="CTC"><Input name="ctc_lpa" value={form.ctc_lpa} update={update} inputMode="decimal" /></Field><Field label="Percent Value"><Input name="model_percent" value={form.model_percent} update={update} inputMode="decimal" /></Field><Field label="Adjustment Value (₹)"><Input name="jra_adjustment_value" value={form.jra_adjustment_value} update={update} inputMode="decimal" /></Field></>
-  if (form.model === 'jra_adjustment_flat_fee') return <><Field label="Value (₹)"><Input name="jra_base_value" value={form.jra_base_value} update={update} inputMode="decimal" /></Field><Field label="Flat Fee / Adjustment (₹)"><Input name="jra_flat_fee" value={form.jra_flat_fee} update={update} inputMode="decimal" /></Field></>
-  return <Field label="Amount (₹)"><Input name="others_amount" value={form.others_amount} update={update} inputMode="decimal" /></Field>
-}
 function InvoiceTableSkeleton({ label }) {
   return (
     <div className="invoice-table-loading">
@@ -64,7 +72,7 @@ function InvoiceTableSkeleton({ label }) {
   )
 }
 
-function InvoiceBillingTotals({ totals, loading = false }) {
+function InvoiceBillingTotals({ totals, loading = false, onSelect }) {
   const combinedTotals = Object.fromEntries(KPI_CARDS.map(card => [
     card.key,
     BILLING_ENTITIES.reduce((sum, billingEntity) => sum + BigInt(totals?.[billingEntity]?.[card.key] || 0), 0n)
@@ -73,7 +81,7 @@ function InvoiceBillingTotals({ totals, loading = false }) {
 
   return <section className="invoice-billing-totals" aria-label="Tax invoice totals by billing entity">
     {BILLING_TOTAL_ROWS.map(billingEntity => <div className="invoice-billing-total-row" key={billingEntity}>
-      <div className="invoice-billing-total-entity"><span>Billing Entity</span><strong>{billingEntity}</strong></div>
+      <button className="invoice-billing-total-entity" type="button" onClick={() => onSelect(billingEntity)} disabled={loading} aria-haspopup="dialog" aria-label={`View ${billingEntity} invoices`}><span>Billing Entity</span><strong>{billingEntity}</strong></button>
       <div className="invoice-kpi-grid" aria-label={`${billingEntity} tax invoice totals`}>
         {KPI_CARDS.map(card => <ReportKpiCard
           key={card.key}
@@ -85,6 +93,76 @@ function InvoiceBillingTotals({ totals, loading = false }) {
       </div>
     </div>)}
   </section>
+}
+
+function compareInvoiceIid(leftInvoice, rightInvoice) {
+  const left = String(leftInvoice?.invoice_display_id || '').trim()
+  const right = String(rightInvoice?.invoice_display_id || '').trim()
+  if (!left && !right) return 0
+  if (!left) return 1
+  if (!right) return -1
+  return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' })
+}
+
+function InvoiceEntityInvoicesModal({ billingEntity, invoices, entities, onClose, onRefresh, onToast }) {
+  const [controlError, setControlError] = useState('')
+  const entityById = useMemo(() => new Map(entities.map(entity => [entity.id, entity])), [entities])
+  const rowControls = useInvoiceRowControls({
+    entities,
+    onRefresh,
+    onError: setControlError,
+    onToast
+  })
+  const dialogRef = useDialogFocus(onClose, { closeDisabled: rowControls.dialogOpen })
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [])
+  const title = `${billingEntity} Invoices`
+  const modal = <div className="ats-dashboard-modal-layer invoice-invoices-modal-layer" role="dialog" aria-modal="true" aria-labelledby="invoice-entity-popup-title">
+    <div className="ats-dashboard-modal-backdrop" aria-hidden="true" />
+    <section className="ats-dashboard-modal-card invoice-invoices-modal" ref={dialogRef} tabIndex={-1}>
+      <header className="ats-dashboard-modal-head">
+        <div className="ats-dashboard-title-left">
+          <span className="ats-dashboard-title-icon gradient-primary shadow-pop"><FileText size={20} /></span>
+          <span><h3 id="invoice-entity-popup-title">{title}</h3><p>{invoices.length} {invoices.length === 1 ? 'invoice' : 'invoices'}</p></span>
+        </div>
+        <button type="button" className="ats-dashboard-modal-close" onClick={onClose} aria-label={`Close ${title}`}><X size={18} /></button>
+      </header>
+      <div className="ats-dashboard-modal-body invoice-invoices-modal-body">
+        {controlError && <div className="invoice-table-error" role="alert">{controlError}</div>}
+        <div className="table-card invoice-popup-table-card">
+          <div className="invoice-popup-table-scroll">
+            <table className="data-table invoice-detail-table invoice-popup-table" style={POPUP_TABLE_STYLE}>
+              <colgroup>{POPUP_COLUMNS.map(column => <col key={column.key} style={{ width: `${column.width}px` }} />)}</colgroup>
+              <thead><tr>{POPUP_COLUMNS.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead>
+              <tbody>
+                {invoices.map(invoice => {
+                  const entity = entityById.get(invoice.invoice_entity_id) || { id: invoice.invoice_entity_id }
+                  const values = invoiceMoneyValues(invoice)
+                  return <tr key={invoice.id}>
+                    <td><span className="invoice-id">{display(invoice.invoice_display_id || invoice.invoice_number)}</span></td>
+                    <td className="invoice-number-cell" title={invoice.invoice_number || ''}>{display(invoice.invoice_number)}</td>
+                    <td>{formatDateDDMMYYYY(invoice.invoice_date)}</td>
+                    <td className="invoice-wrap-cell" title={entity.legal_entity_name || ''}>{display(entity.legal_entity_name)}</td>
+                    <td className="invoice-money-cell">{formatInrPaise(values.billValue)}</td>
+                    <td className="invoice-money-cell">{formatInrPaise(values.taxValue)}</td>
+                    <td className="invoice-money-cell invoice-total-cell">{formatInrPaise(values.totalInvoiceValue)}</td>
+                    <td>{rowControls.renderInvoiceControl(invoice)}</td>
+                    <td>{rowControls.renderActionControls(invoice, entity)}</td>
+                  </tr>
+                })}
+                {!invoices.length && <tr><td className="invoice-empty-cell" colSpan={POPUP_COLUMNS.length}>No invoices found for {billingEntity}.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+    {rowControls.dialogs}
+  </div>
+  return createPortal(modal, document.body)
 }
 
 function InvoiceTypeChooser({ onClose, onSelect }) {
@@ -247,6 +325,7 @@ function rate(entity) {
 export default function InvoicePage() {
   const { isAdmin, loading: adminLoading } = useAdminAccess({ loadPermissions: false, realtime: false })
   const [entities, setEntities] = useState([])
+  const [invoices, setInvoices] = useState([])
   const [invoiceTotals, setInvoiceTotals] = useState(EMPTY_INVOICE_TOTALS)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -255,11 +334,14 @@ export default function InvoicePage() {
   const [adding, setAdding] = useState(false)
   const [choosingInvoiceType, setChoosingInvoiceType] = useState(false)
   const [creatingInvoiceType, setCreatingInvoiceType] = useState('')
+  const [selectedEntityInvoiceView, setSelectedEntityInvoiceView] = useState('')
+  const [invoiceToast, setInvoiceToast] = useState('')
   const load = useCallback(async () => {
     setError('')
     try {
       const result = await fetchInvoiceEntities()
       setEntities(result.data || [])
+      setInvoices(result.invoices || [])
       setInvoiceTotals(result.totals || EMPTY_INVOICE_TOTALS)
     } catch (err) {
       setError(err.message)
@@ -268,16 +350,37 @@ export default function InvoicePage() {
     }
   }, [])
   useEffect(() => { if (!adminLoading && isAdmin) Promise.resolve().then(load); else if (!adminLoading) Promise.resolve().then(() => setLoading(false)) }, [adminLoading, isAdmin, load])
+  useEffect(() => {
+    if (!invoiceToast) return undefined
+    const timeout = window.setTimeout(() => setInvoiceToast(''), 3500)
+    return () => window.clearTimeout(timeout)
+  }, [invoiceToast])
   const filtered = useMemo(() => { const term = query.toLowerCase().trim(); return entities.filter(entity => !term || SEARCH_FIELDS.some(field => String(entity[field] || '').toLowerCase().includes(term))) }, [entities, query])
+  const popupInvoices = useMemo(() => {
+    if (!selectedEntityInvoiceView) return []
+    const selectedEntities = selectedEntityInvoiceView === COMBINED_BILLING_ENTITY
+      ? new Set(BILLING_ENTITIES)
+      : new Set([selectedEntityInvoiceView])
+    const seen = new Set()
+    return invoices
+      .filter(invoice => invoice.invoice_type === 'tax_invoice' && invoice.status === 'active' && selectedEntities.has(invoice.billing_entity))
+      .filter(invoice => {
+        if (!invoice.id || seen.has(invoice.id)) return false
+        seen.add(invoice.id)
+        return true
+      })
+      .sort(compareInvoiceIid)
+  }, [invoices, selectedEntityInvoiceView])
   const save = async form => { if (editing) await updateInvoiceEntity(editing.id, form); else await createInvoiceEntity(form); await load() }
   const remove = async entity => { if (!window.confirm(`Delete ${entity.entity_display_id || entity.invoice_id}?`)) return; try { await deleteInvoiceEntity(entity.id); await load() } catch (err) { setError(err.message) } }
   const canUseInvoice = !adminLoading && isAdmin
   return <div className="invoice-page">
+    {invoiceToast && <div className="notice-toast is-visible invoice-toast invoice-popup-toast" role="status" aria-live="polite"><Check size={17} /><span>{invoiceToast}</span><button className="notice-toast-close" type="button" onClick={() => setInvoiceToast('')} aria-label="Close notification"><X size={14} /></button></div>}
     <div className={`header-actions${!canUseInvoice ? ' is-pending-access' : ''}`} aria-hidden={!canUseInvoice}>
       <button className="btn-secondary" onClick={() => setChoosingInvoiceType(true)} disabled={!canUseInvoice}><FileText size={15} />Create Invoice</button>
       <button className="btn-primary" onClick={() => setAdding(true)} disabled={!canUseInvoice}><Plus size={15} />Add Entity</button>
     </div>
-    {canUseInvoice && <InvoiceBillingTotals totals={invoiceTotals} loading={loading} />}
+    {canUseInvoice && <InvoiceBillingTotals totals={invoiceTotals} loading={loading} onSelect={setSelectedEntityInvoiceView} />}
     <div className="table-card invoice-table-card"><div className="invoice-card-toolbar"><div className="invoice-search"><Search size={17} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search billing entities..." disabled={!canUseInvoice} /></div><span>{canUseInvoice ? `${filtered.length} ${filtered.length === 1 ? 'entity' : 'entities'}` : 'Access check'}</span></div>
       {error && canUseInvoice && <div className="invoice-table-error">{error}</div>}
       {adminLoading ? <InvoiceTableSkeleton label="Checking invoice access..." /> : !isAdmin ? <div className="invoice-access-panel"><div className="invoice-denied">Admin access required.</div></div> : loading ? <InvoiceTableSkeleton label="Loading entities..." /> : <div className="table-scroll"><table className="data-table invoice-table"><thead><tr>{INVOICE_TABLE_HEADERS.map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>
@@ -288,5 +391,6 @@ export default function InvoicePage() {
     {(adding || editing) && <EntityModal initial={editing} onClose={() => { setAdding(false); setEditing(null) }} onSave={save} />}
     {choosingInvoiceType && <InvoiceTypeChooser onClose={() => setChoosingInvoiceType(false)} onSelect={type => { setChoosingInvoiceType(false); setCreatingInvoiceType(type) }} />}
     {creatingInvoiceType && <CreateInvoiceModal key={creatingInvoiceType} entities={entities} invoiceType={creatingInvoiceType} onClose={() => setCreatingInvoiceType('')} onCreated={load} />}
+    {selectedEntityInvoiceView && <InvoiceEntityInvoicesModal billingEntity={selectedEntityInvoiceView} invoices={popupInvoices} entities={entities} onClose={() => setSelectedEntityInvoiceView('')} onRefresh={load} onToast={setInvoiceToast} />}
   </div>
 }

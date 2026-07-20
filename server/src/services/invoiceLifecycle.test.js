@@ -11,6 +11,7 @@ const controller = fs.readFileSync(path.join(root, 'server/src/controllers/invoi
 const routes = fs.readFileSync(path.join(root, 'server/src/routes/invoice.js'), 'utf8')
 const invoiceApi = fs.readFileSync(path.join(root, 'src/services/invoiceApi.js'), 'utf8')
 const detailPage = fs.readFileSync(path.join(root, 'src/pages/InvoiceEntityDetailPage.jsx'), 'utf8')
+const rowControls = fs.readFileSync(path.join(root, 'src/components/InvoiceRowControls.jsx'), 'utf8')
 
 test('invoice lifecycle migration preserves cancelled rows and audit metadata', () => {
   assert.match(migration, /status text not null default 'active'/)
@@ -69,9 +70,10 @@ test('permanent invoice deletion stays unavailable while individual PDF versions
   assert.match(versionDeleteSection, /invoice\.status === 'cancelled'[\s\S]*PDF versions of cancelled invoices cannot be deleted/)
   assert.doesNotMatch(invoiceApi, /export const deleteInvoice =/)
   assert.match(invoiceApi, /export const deleteInvoicePdfVersion =/)
-  assert.match(detailPage, /invoice-version-delete/)
-  assert.match(detailPage, /Delete PDF version/)
-  assert.doesNotMatch(detailPage, /invoice-delete-action|Delete invoice permanently|openAction\('delete'/)
+  assert.match(detailPage, /rowControls\.renderInvoiceControl\(invoice\)/)
+  assert.match(rowControls, /invoice-version-delete/)
+  assert.match(rowControls, /Delete PDF version/)
+  assert.doesNotMatch(rowControls, /invoice-delete-action|Delete invoice permanently|openAction\('delete'/)
 })
 
 test('PDF versions receive permanent per-invoice numbers that are never renumbered or reused', () => {
@@ -97,6 +99,6 @@ test('API and UI use stored PDF version numbers after deletions', () => {
   assert.match(regenerationSection, /p_invoice_id: existing\.id[\s\S]*p_storage_path: storagePath/)
   assert.match(versionDeleteSection, /\.order\('version_number', \{ ascending: false \}\)/)
   assert.doesNotMatch(versionDeleteSection, /pdf_version_counter/)
-  assert.match(detailPage, /versionNumber = version\.version_number/)
-  assert.doesNotMatch(detailPage, /pdf_versions\.length - index/)
+  assert.match(rowControls, /versionNumber = version\.version_number/)
+  assert.doesNotMatch(rowControls, /pdf_versions\.length - index/)
 })

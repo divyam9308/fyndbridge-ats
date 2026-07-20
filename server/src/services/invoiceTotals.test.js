@@ -55,5 +55,7 @@ test('main invoice response paginates and aggregates only active tax invoices', 
   assert.match(totalQuery, /\.eq\('invoice_type', 'tax_invoice'\)/)
   assert.match(totalQuery, /\.eq\('status', 'active'\)/)
   assert.match(totalQuery, /\.range\(from, from \+ INVOICE_TOTAL_PAGE_SIZE - 1\)/)
+  assert.match(entityList, /listInvoicePdfVersions\(taxInvoices\.map\(invoice => invoice\.id\)\)/)
+  assert.match(entityList, /invoices: taxInvoices\.map\(invoice => \(\{[\s\S]*pdf_versions:/)
   assert.match(entityList, /totals: aggregateTaxInvoiceTotals\(taxInvoices\)/)
 })

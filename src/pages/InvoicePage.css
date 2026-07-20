@@ -600,12 +600,31 @@
   display: grid;
   align-content: center;
   gap: 7px;
+  width: 100%;
   padding: 12px 16px;
   border: 1px solid rgba(var(--brand-blue-rgb), 0.15);
   border-radius: 14px;
   background: var(--navy);
   color: var(--white);
   box-shadow: 0 10px 24px rgba(var(--brand-blue-rgb), 0.14);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+.invoice-billing-total-entity:hover:not(:disabled) {
+  box-shadow: 0 14px 28px rgba(var(--brand-blue-rgb), 0.2);
+  transform: translateY(-1px);
+}
+.invoice-billing-total-entity:active:not(:disabled) {
+  transform: translateY(0);
+}
+.invoice-billing-total-entity:focus-visible {
+  outline: 3px solid rgba(var(--brand-gold-rgb), 0.34);
+  outline-offset: 2px;
+}
+.invoice-billing-total-entity:disabled {
+  cursor: wait;
 }
 .invoice-billing-total-entity span {
   color: rgba(255, 255, 255, 0.68);
@@ -625,6 +644,70 @@
 .invoice-billing-total-row .report-kpi {
   min-height: 92px;
   padding: 12px 14px 11px;
+}
+.invoice-invoices-modal-layer {
+  z-index: 9500;
+}
+.invoice-invoices-modal {
+  width: min(1080px, calc(100vw - 48px));
+  height: min(740px, calc(100vh - 48px));
+  max-height: min(740px, calc(100vh - 48px));
+}
+.invoice-invoices-modal .ats-dashboard-modal-head {
+  border-bottom: 1px solid rgba(var(--brand-blue-rgb), 0.1);
+}
+.invoice-invoices-modal-body.ats-dashboard-modal-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  max-height: none;
+  overflow: hidden;
+  padding: 0 22px 22px;
+}
+.invoice-invoices-modal-body .invoice-table-error {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.invoice-popup-table-card {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  border: 1px solid rgba(var(--brand-blue-rgb), 0.12);
+  border-radius: 16px;
+  background: var(--white);
+}
+.invoice-popup-table-scroll {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-color: rgba(var(--brand-blue-rgb), 0.25) transparent;
+}
+.invoice-popup-table {
+  table-layout: fixed;
+}
+.invoice-popup-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.invoice-popup-table td {
+  height: 58px;
+}
+.invoice-popup-table td.invoice-empty-cell {
+  max-width: none;
+  height: 180px;
+  color: var(--gray-500);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+.invoice-popup-toast {
+  z-index: 100010;
 }
 .invoice-type-switcher {
   display: flex;
