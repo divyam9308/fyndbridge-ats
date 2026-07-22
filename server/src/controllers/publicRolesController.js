@@ -12,6 +12,7 @@ const {
 } = require('../services/publicApplications')
 const { issueFormToken, validateSubmissionAbuse } = require('../services/publicApplicationAbuse')
 const { buildPublicRoleShareHtml, safeFrontendOrigin } = require('../services/publicRoleSharePreview')
+const { renderPublicRoleShareImage } = require('../services/publicRoleShareImage')
 
 const PUBLIC_ROLE_NOT_FOUND = 'This role is not available for applications.'
 const APPLICATION_SUCCESS = 'Your application has been submitted successfully.'
@@ -72,6 +73,19 @@ async function shareOpenRole(req, res) {
   }
 }
 
+async function shareOpenRoleImage(req, res) {
+  try {
+    const job = await getPublicJobBySlug(supabase, req.params.slug)
+    if (!job) return res.status(404).send(PUBLIC_ROLE_NOT_FOUND)
+    const image = await renderPublicRoleShareImage(publicRoleDto(job))
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300')
+    res.setHeader('Content-Type', 'image/jpeg')
+    return res.send(image)
+  } catch (error) {
+    return safePublicError(res, error, 'shareOpenRoleImage')
+  }
+}
+
 async function parsePublicResume(req, res) {
   try {
     const parsed = await parseResume(req.file.path)
@@ -122,6 +136,7 @@ module.exports = {
   countOpenRoles,
   getOpenRole,
   shareOpenRole,
+  shareOpenRoleImage,
   parsePublicResume,
   submitPublicApplication,
   publicRouteErrorHandler

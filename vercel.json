@@ -8,10 +8,14 @@
     "api/index.js": {
       "memory": 1024,
       "maxDuration": 60,
-      "includeFiles": "server/{eng.traineddata,node_modules/{pdfjs-dist/legacy/build/pdf.worker.mjs,{tesseract.js,tesseract.js-core,node-fetch,is-url,regenerator-runtime,wasm-feature-detect,node-readable-to-web-readable-stream,@napi-rs/canvas*}/**/*}}"
+      "includeFiles": "{public/assets/{public-role-share-background-v1.png,fyndbridge-official-logo.png},server/{eng.traineddata,node_modules/{pdfjs-dist/legacy/build/pdf.worker.mjs,{tesseract.js,tesseract.js-core,node-fetch,is-url,regenerator-runtime,wasm-feature-detect,node-readable-to-web-readable-stream,@napi-rs/canvas*}/**/*}}}"
     }
   },
   "rewrites": [
+    {
+      "source": "/share/open-roles/:slug/image.jpg",
+      "destination": "/api/public/open-roles/:slug/share-image.jpg"
+    },
     {
       "source": "/share/open-roles/:slug",
       "destination": "/api/public/open-roles/:slug/share"

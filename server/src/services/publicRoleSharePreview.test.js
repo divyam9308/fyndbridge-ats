@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { buildPublicRoleShareHtml } = require('./publicRoleSharePreview')
+const { buildPublicRoleShareHtml, publicExperienceLabel } = require('./publicRoleSharePreview')
 
 const root = path.resolve(__dirname, '../../..')
 
@@ -17,8 +17,16 @@ test('public role share preview exposes role, location and experience metadata o
   assert.match(html, /property="og:title" content="Finance &lt;Lead&gt;"/)
   assert.match(html, /property="og:description" content="Location: Mumbai &amp; Pune · Experience: 8 - 12 Years"/)
   assert.match(html, /name="twitter:description" content="Location: Mumbai &amp; Pune · Experience: 8 - 12 Years"/)
+  assert.match(html, /property="og:image" content="https:\/\/careers\.example\.com\/share\/open-roles\/finance-lead-jb100\/image\.jpg"/)
+  assert.match(html, /property="og:image:width" content="1200"/)
+  assert.match(html, /property="og:image:height" content="630"/)
   assert.match(html, /https:\/\/careers\.example\.com\/open-roles\/finance-lead-jb100/)
   assert.doesNotMatch(html, /<Lead>/)
+})
+
+test('experience preview labels make bare numeric ranges explicit without duplicating years', () => {
+  assert.equal(publicExperienceLabel('10-15'), '10-15 Years')
+  assert.equal(publicExperienceLabel('8 - 12 Years'), '8 - 12 Years')
 })
 
 test('copied mandate links use the preview route while direct preview keeps the public role page', () => {
@@ -34,6 +42,7 @@ test('copied mandate links use the preview route while direct preview keeps the 
   assert.match(jobsPage, /publicActionNotice && createPortal\([\s\S]*document\.body/)
   assert.match(jobsPage, /window\.open\(publicRoleUrl\(job\)/)
   assert.match(app, /app\.get\('\/share\/open-roles\/:slug', require\('\.\/controllers\/publicRolesController'\)\.shareOpenRole\)/)
+  assert.match(app, /app\.get\('\/share\/open-roles\/:slug\/image\.jpg', require\('\.\/controllers\/publicRolesController'\)\.shareOpenRoleImage\)/)
   assert.match(routes, /router\.get\('\/open-roles\/:slug\/share', controller\.shareOpenRole\)/)
   assert.ok(vercel.rewrites.some(rewrite => rewrite.source === '/share/open-roles/:slug' && rewrite.destination === '/api/public/open-roles/:slug/share'))
 })

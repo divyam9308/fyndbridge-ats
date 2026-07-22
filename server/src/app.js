@@ -40,6 +40,7 @@ app.use(cors({
 }))
 
 app.use(express.json())
+app.get('/share/open-roles/:slug/image.jpg', require('./controllers/publicRolesController').shareOpenRoleImage)
 app.get('/share/open-roles/:slug', require('./controllers/publicRolesController').shareOpenRole)
 app.use('/api/public', require('./routes/publicRoles'))
 app.use(attachUser)
