@@ -16,6 +16,10 @@ const optionalExpectedSalary = fs.readFileSync(
   path.join(root, 'supabase/migrations/20260722092234_make_public_application_expected_salary_optional.sql'),
   'utf8'
 )
+const optionalPublicFields = fs.readFileSync(
+  path.join(root, 'supabase/migrations/20260722181210_make_public_skills_linkedin_comments_optional.sql'),
+  'utf8'
+)
 
 test('production preflight fails before DDL instead of repairing unsafe live state', () => {
   const preflight = migration.match(/do \$\$[\s\S]*?end \$\$;/i)?.[0] || ''
@@ -205,6 +209,24 @@ test('public applications no longer require expected salary', () => {
     /alter table public\.public_applications\s+alter column expected_salary drop not null/i
   )
   assert.doesNotMatch(optionalExpectedSalary, /drop\s+column/i)
+})
+
+test('correction migration makes public skills, LinkedIn, and Comments optional without dropping their columns', () => {
+  const listingConstraint = optionalPublicFields.match(
+    /add constraint jobs_public_listing_complete([\s\S]*?)\) not valid;/i
+  )?.[1] || ''
+  const requiredTextConstraint = optionalPublicFields.match(
+    /add constraint public_applications_required_text_check([\s\S]*?)\) not valid;/i
+  )?.[1] || ''
+
+  assert.doesNotMatch(listingConstraint, /cardinality\(public_skills\)|array_to_string\(public_skills/i)
+  assert.match(listingConstraint, /array_position\(public_skills, null\) is null/i)
+  assert.match(optionalPublicFields, /alter column linkedin_url drop not null/i)
+  assert.match(optionalPublicFields, /alter column comments drop not null/i)
+  assert.doesNotMatch(requiredTextConstraint, /linkedin_url|comments/i)
+  assert.doesNotMatch(optionalPublicFields, /drop\s+column/i)
+  assert.match(optionalPublicFields, /validate constraint jobs_public_listing_complete/i)
+  assert.match(optionalPublicFields, /validate constraint public_applications_required_text_check/i)
 })
 
 test('migration has balanced dollar-quoted function blocks', () => {

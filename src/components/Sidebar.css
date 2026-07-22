@@ -97,6 +97,22 @@
   flex: 1;
 }
 
+.sidebar-count-badge {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--navy);
+  background: var(--gold);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Divider */
 .sidebar-divider {
   height: 1px;

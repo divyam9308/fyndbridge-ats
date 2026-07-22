@@ -119,7 +119,6 @@ const publicListingComplete = (job) => Boolean(
   String(job?.public_name || '').trim() &&
   String(job?.public_location || '').trim() &&
   String(job?.public_experience || '').trim() &&
-  normalizePublicSkills(job?.public_skills).length &&
   String(job?.application_deadline || '').trim() &&
   String(job?.public_jd || '').trim()
 )
@@ -266,7 +265,8 @@ export default function JobsPage() {
   const [publicSkillInput, setPublicSkillInput] = useState('')
   const [publicFieldsTouched, setPublicFieldsTouched] = useState({})
   const [publicActionSaving, setPublicActionSaving] = useState({})
-  const [publicActionNotice, setPublicActionNotice] = useState('')
+  const [publicActionNotice, setPublicActionNotice] = useState(null)
+  const publicNoticeSequenceRef = useRef(0)
   const modalRef = useRef(null)
   const duplicateModalRef = useRef(null)
   const roleInputRef = useRef(null)
@@ -421,6 +421,18 @@ export default function JobsPage() {
       window.removeEventListener('ats:jobs-updated', refreshJobs)
     }
   }, [fetchData, refreshClientOptions])
+
+  useEffect(() => {
+    if (!publicActionNotice) return undefined
+    const fadeTimer = window.setTimeout(() => {
+      setPublicActionNotice(current => current ? { ...current, visible: false } : current)
+    }, 4600)
+    const removeTimer = window.setTimeout(() => setPublicActionNotice(null), 5000)
+    return () => {
+      window.clearTimeout(fadeTimer)
+      window.clearTimeout(removeTimer)
+    }
+  }, [publicActionNotice?.id])
 
   useEffect(() => {
     if (!isOpen) return
@@ -732,7 +744,6 @@ export default function JobsPage() {
       if (!String(form.public_name || '').trim()) next.public_name = 'Public Role Name is required.'
       if (!String(form.public_location || '').trim()) next.public_location = 'Public Location is required.'
       if (!String(form.public_experience || '').trim()) next.public_experience = 'Public Experience is required.'
-      if (!normalizePublicSkills(form.public_skills).length) next.public_skills = 'At least one public skill is required.'
       if (!form.application_deadline) next.application_deadline = 'Application Deadline is required.'
       else if (form.application_deadline < indiaToday()) next.application_deadline = 'Application Deadline cannot be in the past in Asia/Kolkata.'
       if (!String(form.public_jd || '').trim()) next.public_jd = 'Public JD is required.'
@@ -1112,6 +1123,11 @@ export default function JobsPage() {
     })
   }
 
+  const showPublicActionNotice = (message, type = 'success') => {
+    publicNoticeSequenceRef.current += 1
+    setPublicActionNotice({ id: publicNoticeSequenceRef.current, message, type, visible: true })
+  }
+
   const addPublicSkill = () => {
     const skill = String(publicSkillInput || '').trim().replace(/[,;]+$/, '')
     if (!skill) return
@@ -1127,9 +1143,8 @@ export default function JobsPage() {
   }
 
   const updatePublicVisibility = async (job, isPublic) => {
-    if (!job?.id || publicActionSaving[job.id] || (job.is_locked && !isAdmin) || isJobFieldHidden('public_careers_listing') || isJobFieldDisabled('public_careers_listing')) return
+    if (!job?.id || isPublic || publicActionSaving[job.id] || (job.is_locked && !isAdmin) || isJobFieldHidden('public_careers_listing') || isJobFieldDisabled('public_careers_listing')) return
     setPublicActionSaving(current => ({ ...current, [job.id]: true }))
-    setPublicActionNotice('')
     try {
       const response = await apiFetch(`/api/jobs/${job.id}`, {
         method: 'PATCH',
@@ -1138,10 +1153,12 @@ export default function JobsPage() {
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || `Unable to ${isPublic ? 'publish' : 'unpublish'} this role.`)
-      setPublicActionNotice(isPublic ? 'Public role published.' : 'Public role unpublished. Saved public details were retained.')
-      await fetchData()
+      setJobs(current => current.map(row => row.id === job.id ? { ...row, ...payload } : row))
+      setAllJobs(current => current.map(row => row.id === job.id ? { ...row, ...payload } : row))
+      showPublicActionNotice('Mandate unpublished successfully.')
+      window.dispatchEvent(new Event('ats:public-roles-updated'))
     } catch (actionError) {
-      setPublicActionNotice(actionError.message || `Unable to ${isPublic ? 'publish' : 'unpublish'} this role.`)
+      showPublicActionNotice(actionError.message || 'Unable to unpublish this mandate.', 'error')
     } finally {
       setPublicActionSaving(current => ({ ...current, [job.id]: false }))
     }
@@ -1155,9 +1172,9 @@ export default function JobsPage() {
   const copyPublicLink = async job => {
     try {
       await navigator.clipboard.writeText(publicRoleUrl(job))
-      setPublicActionNotice('Public link copied.')
+      showPublicActionNotice('Public link copied.')
     } catch {
-      setPublicActionNotice('Could not copy the public link. Please use Preview Public Listing and copy it from the browser.')
+      showPublicActionNotice('Could not copy the public link. Please use Preview Public Listing and copy it from the browser.', 'error')
     }
   }
 
@@ -1232,7 +1249,15 @@ export default function JobsPage() {
           const state = job.public_state || publicListingState(job)
           const showPublicActions = !isJobFieldHidden('public_careers_listing')
           const publicActionDisabled = publicActionSaving[job.id] || (job.is_locked && !isAdmin) || isJobFieldDisabled('public_careers_listing')
-          return <td key={column.key}><div className="row-actions mandate-row-actions"><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)} disabled={job.is_locked && !isAdmin}><Pencil size={13} /></button>{showPublicActions && state === 'Published' && <button className="row-action-btn" type="button" title="Preview Public Listing" onClick={() => previewPublicListing(job)}><ExternalLink size={13} /></button>}{showPublicActions && state === 'Published' && <button className="row-action-btn" type="button" title="Copy Public Link" onClick={() => copyPublicLink(job)}><Copy size={13} /></button>}{showPublicActions && (job.is_public ? <button className="row-action-btn mandate-public-toggle-action" type="button" title="Unpublish" onClick={() => updatePublicVisibility(job, false)} disabled={publicActionDisabled}><Globe2 size={13} /></button> : <button className="row-action-btn mandate-public-toggle-action" type="button" title="Publish" onClick={() => updatePublicVisibility(job, true)} disabled={publicActionDisabled}><Globe2 size={13} /></button>)}{isAdmin && <RecordLockButton tableName="jobs" recordId={job.id} locked={job.is_locked} onChanged={updateJobLockState} />}</div></td>
+          return <td key={column.key}><div className="row-actions mandate-row-actions">
+            <button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)} disabled={job.is_locked && !isAdmin}><Pencil size={13} /></button>
+            {showPublicActions && state === 'Published' && <button className="row-action-btn" type="button" title="Preview Public Listing" onClick={() => previewPublicListing(job)}><ExternalLink size={13} /></button>}
+            {showPublicActions && state === 'Published' && <button className="row-action-btn" type="button" title="Copy Public Link" onClick={() => copyPublicLink(job)}><Copy size={13} /></button>}
+            {showPublicActions && (job.is_public
+              ? <button className="row-action-btn mandate-public-toggle-action" type="button" title="Unpublish mandate" onClick={() => updatePublicVisibility(job, false)} disabled={publicActionDisabled}>{publicActionSaving[job.id] ? <Loader2 size={13} className="spin" aria-label="Unpublishing mandate" /> : <Globe2 size={13} />}</button>
+              : <span className="mandate-public-disabled-wrap" title="Configure and publish this mandate from Edit Mandate"><button className="row-action-btn mandate-public-toggle-action is-disabled" type="button" aria-label="Configure and publish this mandate from Edit Mandate" disabled><Globe2 size={13} /></button></span>)}
+            {isAdmin && <RecordLockButton tableName="jobs" recordId={job.id} locked={job.is_locked} onChanged={updateJobLockState} />}
+          </div></td>
         }
       default:
         return null
@@ -1272,7 +1297,7 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {publicActionNotice && <div className="mandate-public-notice" role="status"><Globe2 size={15} /><span>{publicActionNotice}</span><button type="button" onClick={() => setPublicActionNotice('')} aria-label="Dismiss public listing notice"><X size={13} /></button></div>}
+      {publicActionNotice && <div className={`mandate-public-toast mandate-public-toast-${publicActionNotice.type}${publicActionNotice.visible ? ' is-visible' : ' is-hidden'}`} role={publicActionNotice.type === 'error' ? 'alert' : 'status'} aria-live="polite">{publicActionNotice.type === 'error' ? <AlertCircle size={16} /> : <Globe2 size={16} />}<span>{publicActionNotice.message}</span><button type="button" onClick={() => setPublicActionNotice(null)} aria-label="Dismiss public listing notice"><X size={13} /></button></div>}
 
       <div className="filter-bar candidates-filter-bar candidates-toolbar">
         <form onSubmit={applyAiFilter} className="candidate-ai-filter-form">
@@ -1687,11 +1712,6 @@ export default function JobsPage() {
                   </div>
                   {Boolean(form.is_public) && <>
                   <div className="form-group">
-                    <label className="form-label">Public Slug</label>
-                    <input className="form-control" value={form.public_slug || ''} placeholder="Generated once on first save" disabled readOnly />
-                    <span className="sub-text">The stable public URL does not change when the public role name is edited.</span>
-                  </div>
-                  <div className="form-group">
                     <label className="form-label">Public Role Name <span className="req">*</span></label>
                     <input className={`form-control${errors.public_name ? ' is-error' : ''}`} value={form.public_name} onChange={event => setPublicFormField('public_name', event.target.value)} disabled={saving || isJobFieldDisabled('public_careers_listing')} />
                     {errors.public_name && <span className="form-error">{errors.public_name}</span>}
@@ -1707,7 +1727,7 @@ export default function JobsPage() {
                     {errors.public_experience && <span className="form-error">{errors.public_experience}</span>}
                   </div>
                   <div className="form-group full">
-                    <label className="form-label">Public Skills <span className="req">*</span></label>
+                    <label className="form-label">Public Skills <span className="sub-text">(Optional)</span></label>
                     <div className={`tag-input-wrap mandate-public-skills${errors.public_skills ? ' is-error' : ''}`}>
                       {normalizePublicSkills(form.public_skills).map(skill => <span className="tag-chip" key={skill}>{skill}<button className="tag-chip-remove" type="button" onClick={() => removePublicSkill(skill)} disabled={saving || isJobFieldDisabled('public_careers_listing')} aria-label={`Remove ${skill}`}><X size={11} /></button></span>)}
                       <input className="tag-input-field" value={publicSkillInput} onChange={event => setPublicSkillInput(event.target.value)} onKeyDown={event => {

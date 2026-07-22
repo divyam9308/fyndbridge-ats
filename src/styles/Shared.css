@@ -2053,19 +2053,32 @@ textarea.form-control {
 .mandate-public-state-published { color: #166534; background: #dcfce7; border-color: #bbf7d0; }
 .mandate-row-actions { flex-wrap: nowrap; }
 .mandate-public-toggle-action { color: var(--brand-blue); }
-.mandate-public-notice {
-  margin: 0 0 10px;
-  padding: 9px 12px;
+.mandate-public-toggle-action.is-disabled { color: var(--gray-400); opacity: .52; cursor: not-allowed; }
+.mandate-public-disabled-wrap { display: inline-flex; }
+.mandate-public-toast {
+  position: fixed;
+  top: calc(var(--topbar-height) + 12px);
+  right: 24px;
+  z-index: 9100;
+  width: min(410px, calc(100vw - var(--sidebar-width) - 48px));
+  min-height: 44px;
+  padding: 10px 12px;
   display: flex;
   align-items: center;
-  gap: 7px;
-  color: var(--navy-darkest);
-  background: var(--gold-soft);
-  border: 1px solid rgba(var(--brand-gold-rgb), .3);
-  border-radius: 8px;
+  gap: 8px;
+  border: 1px solid;
+  border-radius: 9px;
+  box-shadow: 0 12px 30px rgb(15 23 42 / 16%);
   font-size: 12px;
+  font-weight: 700;
+  transition: opacity .38s ease, transform .38s ease, filter .38s ease;
 }
-.mandate-public-notice > button {
+.mandate-public-toast-success { color: #245a43; background: #edf8f1; border-color: #b9dfc7; }
+.mandate-public-toast-error { color: #8f1d18; background: #fff1f0; border-color: #efbbb6; }
+.mandate-public-toast.is-visible { opacity: 1; transform: translateY(0); filter: blur(0); }
+.mandate-public-toast.is-hidden { opacity: 0; transform: translateY(-6px); filter: blur(3px); }
+.mandate-public-toast > span { flex: 1; }
+.mandate-public-toast > button {
   margin-left: auto;
   padding: 0;
   display: grid;
@@ -2074,6 +2087,7 @@ textarea.form-control {
   border: 0;
   cursor: pointer;
 }
+@media (max-width: 900px) { .mandate-public-toast { right: 16px; width: calc(100vw - 32px); } }
 .mandate-public-section-title { display: flex; align-items: center; gap: 6px; }
 .mandate-public-switch-row { padding: 12px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 10px; }
 .mandate-public-switch { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }

@@ -59,7 +59,6 @@ function hasCompletePublicListing(job) {
     clean(job?.public_name) &&
     clean(job?.public_location) &&
     clean(job?.public_experience) &&
-    parseStringArray(job?.public_skills).length &&
     isDateOnly(job?.application_deadline) &&
     cleanMultiline(job?.public_jd)
   )
@@ -141,7 +140,6 @@ function validatePublicJobForPublish(job, now = new Date()) {
   if (!clean(job.public_name)) errors.public_name = 'Public role name is required'
   if (!clean(job.public_location)) errors.public_location = 'Public location is required'
   if (!clean(job.public_experience)) errors.public_experience = 'Public experience is required'
-  if (!parseStringArray(job.public_skills).length) errors.public_skills = 'At least one public skill is required'
   if (!isDateOnly(job.application_deadline)) errors.application_deadline = 'Application deadline is required'
   else if (clean(job.application_deadline) < indiaDate(now)) errors.application_deadline = 'Application deadline cannot be in the past'
   if (!cleanMultiline(job.public_jd)) errors.public_jd = 'Public job description is required'
@@ -171,6 +169,22 @@ async function listEligiblePublicJobs(supabase, now = new Date()) {
     .order('application_deadline', { ascending: true })
   if (error) throw error
   return (data || []).filter((job) => isPublicJobEligible(job, now)).map((job) => publicRoleDto(job))
+}
+
+async function countEligiblePublicJobs(supabase, now = new Date()) {
+  const { count, error } = await supabase
+    .from('jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_public', true)
+    .eq('mandate_status', 'Ongoing (P1)')
+    .gte('application_deadline', indiaDate(now))
+    .not('public_slug', 'is', null)
+    .not('public_name', 'is', null)
+    .not('public_location', 'is', null)
+    .not('public_experience', 'is', null)
+    .not('public_jd', 'is', null)
+  if (error) throw error
+  return count || 0
 }
 
 async function getPublicJobBySlug(supabase, slug, { internal = false, now = new Date() } = {}) {
@@ -214,7 +228,7 @@ function validatePublicApplication(body) {
   const errors = {}
   const requiredText = [
     'full_name', 'email', 'mobile_number', 'current_designation', 'current_organisation',
-    'location', 'linkedin_url', 'comments', 'open_to_relocate'
+    'location', 'open_to_relocate'
   ]
   for (const field of requiredText) if (!clean(body[field])) errors[field] = `${field} is required`
   const email = normalizeEmail(body.email)
@@ -256,8 +270,8 @@ function publicApplicationPayload(body) {
     skills: parseStringArray(body.skills),
     notice_period: Number(body.notice_period),
     current_salary: Number(body.current_salary),
-    linkedin_url: clean(body.linkedin_url),
-    comments: cleanMultiline(body.comments),
+    linkedin_url: clean(body.linkedin_url) || null,
+    comments: cleanMultiline(body.comments) || null,
     open_to_relocate: clean(body.open_to_relocate)
   }
 }
@@ -404,6 +418,7 @@ module.exports = {
   validatePublicJobForPublish,
   allocatePublicSlug,
   listEligiblePublicJobs,
+  countEligiblePublicJobs,
   getPublicJobBySlug,
   normalizeEmail,
   normalizeMobile,

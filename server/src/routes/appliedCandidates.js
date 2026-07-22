@@ -16,6 +16,7 @@ router.param('id', (req, res, next, id) => {
   return next()
 })
 router.get('/', controller.listAppliedCandidates)
+router.get('/count', controller.countAppliedCandidates)
 router.get('/:id', controller.getAppliedCandidate)
 router.get('/:id/cv', controller.getAppliedCandidateCv)
 router.post('/:id/convert', controller.convertAppliedCandidate)

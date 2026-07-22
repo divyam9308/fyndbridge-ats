@@ -3,6 +3,7 @@ const { parseResume } = require('../services/resumeParser')
 const { cleanupPublicResume } = require('../middleware/publicApplicationUpload')
 const {
   listEligiblePublicJobs,
+  countEligiblePublicJobs,
   getPublicJobBySlug,
   publicRoleDto,
   validatePublicApplication,
@@ -27,6 +28,14 @@ async function listOpenRoles(req, res) {
     return res.json({ data: await listEligiblePublicJobs(supabase) })
   } catch (error) {
     return safePublicError(res, error, 'listOpenRoles')
+  }
+}
+
+async function countOpenRoles(req, res) {
+  try {
+    return res.json({ count: await countEligiblePublicJobs(supabase) })
+  } catch (error) {
+    return safePublicError(res, error, 'countOpenRoles')
   }
 }
 
@@ -87,6 +96,7 @@ module.exports = {
   PUBLIC_ROLE_NOT_FOUND,
   APPLICATION_SUCCESS,
   listOpenRoles,
+  countOpenRoles,
   getOpenRole,
   parsePublicResume,
   submitPublicApplication,

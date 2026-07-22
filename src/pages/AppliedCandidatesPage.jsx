@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   Eye,
   FileText,
   Link2,
@@ -13,6 +15,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react'
+import { ConsultantPillGroup } from '../components/ConsultantPill'
 import PaginationBar from '../components/PaginationBar'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import { isColumnDisabled, isColumnHidden, useAdminAccess } from '../hooks/useAdminAccess'
@@ -37,7 +40,6 @@ const DEFAULT_FILTERS = {
   consultant: '',
   date_from: '',
   date_to: '',
-  status: '',
   location: '',
 }
 
@@ -101,14 +103,6 @@ const BLANK_FILL_PERMISSION_FIELDS = Object.freeze([
   ['cv', 'cv'],
 ])
 
-const APPLICATION_STATUSES = [
-  ['pending', 'Pending'],
-  ['converting', 'Converting'],
-  ['converted', 'Converted'],
-  ['linked_existing', 'Linked Existing'],
-  ['rejected', 'Rejected'],
-]
-
 const APPLIED_CANDIDATE_COLUMNS = [
   'Candidate Name', 'Applied Public Role', 'Internal Mandate/Role', 'Client Name', 'Client ID', 'Email', 'Mobile',
   'Current Designation', 'Current Organization', 'Experience', 'Current Location', 'Skills', 'Current CTC',
@@ -130,6 +124,31 @@ const relocateDisplay = value => {
   if (value === true || value === 'true' || value === 'Yes') return 'Yes'
   if (value === false || value === 'false' || value === 'No') return 'No'
   return display(value)
+}
+const initials = name => clean(name).split(/\s+/).filter(Boolean).map(word => word[0]).slice(0, 2).join('').toUpperCase()
+const avatarPalette = [
+  ['#7c3aed', '#a855f7'], ['#2563eb', '#3b82f6'], ['#059669', '#10b981'], ['#ea580c', '#f97316'],
+  ['#db2777', '#ec4899'], ['#4f46e5', '#6366f1'], ['#65a30d', '#84cc16'], ['#0891b2', '#06b6d4'],
+]
+const avatarColorsFor = value => {
+  const hash = [...clean(value)].reduce((sum, character) => sum + character.charCodeAt(0), 0)
+  const [start, end] = avatarPalette[hash % avatarPalette.length]
+  return { background: `linear-gradient(135deg, ${start}, ${end})`, color: '#fff' }
+}
+const formatCandidateCtc = value => {
+  const text = clean(value)
+  if (!text) return '-'
+  return `${text.includes('₹') ? text : `₹${text}`}${/lpa/i.test(text) ? '' : ' LPA'}`
+}
+const noticeMeta = value => {
+  const text = clean(value)
+  if (!text) return null
+  const numeric = Number(text.replace(/[^\d.]/g, ''))
+  const label = /days/i.test(text) ? text : `${text} Days`
+  if (!Number.isFinite(numeric)) return { label, tone: 'mid' }
+  if (numeric <= 30) return { label, tone: 'low' }
+  if (numeric < 60) return { label, tone: 'mid' }
+  return { label, tone: 'high' }
 }
 
 function formatAppliedDate(value) {
@@ -232,11 +251,14 @@ export default function AppliedCandidatesPage() {
   const [fillBlankFields, setFillBlankFields] = useState(false)
   const [confirmClosedRole, setConfirmClosedRole] = useState(false)
   const [rejectTarget, setRejectTarget] = useState(null)
-  const [rejectionReason, setRejectionReason] = useState('')
   const [rejectSaving, setRejectSaving] = useState(false)
+  const [expandedSkills, setExpandedSkills] = useState({})
   const requestRef = useRef(null)
   const drawerRequestRef = useRef(null)
   const conversionBusyRef = useRef(false)
+  const drawerRef = useRef(null)
+  const rejectDialogRef = useRef(null)
+  const modalReturnFocusRef = useRef(null)
 
   const reload = useCallback(() => setRefreshVersion(value => value + 1), [])
   const closeDrawer = useCallback(() => {
@@ -280,14 +302,33 @@ export default function AppliedCandidatesPage() {
 
   useEffect(() => {
     if (!drawer && !rejectTarget) return undefined
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     const onKeyDown = event => {
       if (event.key !== 'Escape' || conversionSaving || rejectSaving) return
       if (rejectTarget) setRejectTarget(null)
       else closeDrawer()
     }
+    window.requestAnimationFrame(() => {
+      const target = rejectTarget ? rejectDialogRef.current : drawerRef.current
+      ;(target?.querySelector('button:not([disabled]), input:not([disabled]), select:not([disabled])') || target)?.focus({ preventScroll: true })
+    })
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
   }, [closeDrawer, conversionSaving, drawer, rejectSaving, rejectTarget])
+
+  useEffect(() => {
+    if (drawer || rejectTarget) {
+      if (!modalReturnFocusRef.current) modalReturnFocusRef.current = document.activeElement
+      return
+    }
+    const returnTarget = modalReturnFocusRef.current
+    modalReturnFocusRef.current = null
+    if (returnTarget instanceof HTMLElement && document.contains(returnTarget)) returnTarget.focus({ preventScroll: true })
+  }, [drawer, rejectTarget])
 
   const filterOptions = useMemo(() => ({
     roles: [...new Set(rows.map(roleName).filter(value => value !== '-'))].sort(),
@@ -377,14 +418,13 @@ export default function AppliedCandidatesPage() {
     if (!clean(conversionForm.experience_years) || !Number.isFinite(experience) || experience < 0) next.experience_years = 'Experience must be zero or greater.'
     const notice = Number(conversionForm.notice_period)
     if (!clean(conversionForm.notice_period) || !Number.isInteger(notice) || notice < 0) next.notice_period = 'Notice Period must be a non-negative whole number.'
-    ;['current_salary', 'expected_salary'].forEach(field => {
-      const value = Number(conversionForm[field])
-      if (!clean(conversionForm[field]) || !Number.isInteger(value) || value <= 0 || value > 999999999) next[field] = 'CTC must be a positive whole LPA value.'
-    })
+    const currentSalary = Number(conversionForm.current_salary)
+    if (!clean(conversionForm.current_salary) || !Number.isInteger(currentSalary) || currentSalary <= 0 || currentSalary > 999999999) next.current_salary = 'CTC must be a positive whole LPA value.'
+    const expectedSalary = Number(conversionForm.expected_salary)
+    if (clean(conversionForm.expected_salary) && (!Number.isInteger(expectedSalary) || expectedSalary <= 0 || expectedSalary > 999999999)) next.expected_salary = 'CTC must be a positive whole LPA value.'
     if (!asList(conversionForm.skills).length) next.skills = 'At least one skill is required.'
     if (!['Yes', 'No', 'NA'].includes(conversionForm.open_to_relocate)) next.open_to_relocate = 'Select whether the candidate is open to relocate.'
-    if (!clean(conversionForm.linkedin_url)) next.linkedin_url = 'LinkedIn URL is required.'
-    else {
+    if (clean(conversionForm.linkedin_url)) {
       try {
         const url = new URL(clean(conversionForm.linkedin_url))
         if (!['http:', 'https:'].includes(url.protocol)) next.linkedin_url = 'Enter a valid LinkedIn URL.'
@@ -393,7 +433,6 @@ export default function AppliedCandidatesPage() {
     if (!clean(conversionForm.current_designation)) next.current_designation = 'Current Designation is required.'
     if (!clean(conversionForm.current_organisation)) next.current_organisation = 'Current Organization is required.'
     if (!clean(conversionForm.location)) next.location = 'Current Location is required.'
-    if (!clean(conversionForm.comments)) next.comments = 'Comments are required.'
     if (!isCandidateStatusSelected(conversionForm.status)) next.status = REQUIRED_CANDIDATE_STATUS_ERROR
     if (clean(conversionForm.consultant) && conversionForm.consultant !== '-' && !conversionForm.consultant_user_id) next.consultant = 'Select a valid consultant.'
     if (conversionNeedsConfirmation(drawer?.row) && !confirmClosedRole) next.confirm_closed_role = 'Confirm conversion for this closed or expired role.'
@@ -458,6 +497,7 @@ export default function AppliedCandidatesPage() {
       await convertAppliedCandidate(drawer.row.id, conversionPayload(action, selectedExistingId))
       closeDrawer()
       setNotice(action === 'link_existing' ? 'Existing candidate linked successfully.' : 'Candidate saved. The application has left the default pending list.')
+      window.dispatchEvent(new Event('ats:applied-candidates-updated'))
       reload()
     } catch (conversionError) {
       const isDuplicate = conversionError instanceof AppliedCandidatesApiError
@@ -478,33 +518,29 @@ export default function AppliedCandidatesPage() {
     }
   }
 
-  const leavePending = async row => {
-    try {
-      await updateAppliedCandidateStatus(row.id, 'pending')
-      closeDrawer()
-      setNotice('Application left pending for later review.')
-      reload()
-    } catch (statusError) {
-      setNotice(statusError.message || 'Application status could not be updated.')
-    }
-  }
-
   const submitReject = async () => {
     if (!rejectTarget || rejectSaving) return
-    if (!clean(rejectionReason)) return
     setRejectSaving(true)
     try {
-      await updateAppliedCandidateStatus(rejectTarget.id, 'rejected', rejectionReason)
+      await updateAppliedCandidateStatus(rejectTarget.id, 'rejected')
       setRejectTarget(null)
-      setRejectionReason('')
       closeDrawer()
       setNotice('Application rejected. Its staged CV and application row were deleted.')
+      window.dispatchEvent(new Event('ats:applied-candidates-updated'))
       reload()
     } catch (rejectError) {
       setNotice(rejectError.message || 'Application could not be rejected.')
     } finally {
       setRejectSaving(false)
     }
+  }
+
+  const renderAppliedSkills = row => {
+    const skills = asList(row.skills)
+    if (!skills.length) return <span className="candidate-empty-value">-</span>
+    const expanded = Boolean(expandedSkills[row.id])
+    const visible = expanded ? skills : skills.slice(0, 2)
+    return <div className={`table-chip-cell${expanded ? ' is-expanded' : ''}`}><div className="table-chip-list">{visible.map(skill => <span className="table-skill-chip" key={skill}>{skill}</span>)}</div>{skills.length > 2 && <button type="button" className="table-view-more" aria-expanded={expanded} onClick={() => setExpandedSkills(current => ({ ...current, [row.id]: !current[row.id] }))}><ChevronDown size={12} className={expanded ? 'is-open' : ''} />{expanded ? 'View less' : 'View more'}</button>}</div>
   }
 
   const hasFilters = Object.values(filters).some(Boolean) || Boolean(searchInput)
@@ -517,7 +553,6 @@ export default function AppliedCandidatesPage() {
         <input className="filter-input applied-filter-input" list="applied-role-options" value={filters.role} onChange={event => setFilter('role', event.target.value)} aria-label="Applied Role" placeholder="Applied Role" /><datalist id="applied-role-options">{filterOptions.roles.map(value => <option key={value} value={value} />)}</datalist>
         <input className="filter-input applied-filter-input" list="applied-client-options" value={filters.client} onChange={event => setFilter('client', event.target.value)} aria-label="Client" placeholder="Client" /><datalist id="applied-client-options">{filterOptions.clients.map(value => <option key={value} value={value} />)}</datalist>
         <input className="filter-input applied-filter-input" list="applied-consultant-options" value={filters.consultant} onChange={event => setFilter('consultant', event.target.value)} aria-label="Consultant" placeholder="Consultant" /><datalist id="applied-consultant-options">{filterOptions.consultants.map(value => <option key={value} value={value} />)}</datalist>
-        <select className="filter-select" value={filters.status} onChange={event => setFilter('status', event.target.value)} aria-label="Application Status"><option value="">Pending &amp; Converting</option>{APPLICATION_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         <input className="filter-input applied-filter-input" list="applied-location-options" value={filters.location} onChange={event => setFilter('location', event.target.value)} aria-label="Location" placeholder="Location" /><datalist id="applied-location-options">{filterOptions.locations.map(value => <option key={value} value={value} />)}</datalist>
         <label className="applied-date-filter"><span>From</span><input className="filter-input" type="date" value={filters.date_from} onChange={event => setFilter('date_from', event.target.value)} /></label>
         <label className="applied-date-filter"><span>To</span><input className="filter-input" type="date" value={filters.date_to} onChange={event => setFilter('date_to', event.target.value)} /></label>
@@ -542,15 +577,30 @@ export default function AppliedCandidatesPage() {
                   const pending = row.application_status === 'pending'
                   const canConvert = pending || row.application_status === 'converting'
                   return <tr key={row.id} className={drawer?.row?.id === row.id ? 'is-selected' : ''}>
-                    <td><span className="name-text">{display(row.full_name)}</span></td>
-                    <td>{roleName(row)}</td><td>{internalRole(row)}</td><td>{clientName(row)}</td><td>{display(row.client_display_id || row.client_id)}</td><td>{display(row.email)}</td><td>{display(row.mobile_number)}</td><td>{display(row.current_designation)}</td><td>{display(row.current_organisation)}</td><td>{display(row.experience_years)}</td><td>{display(row.location)}</td><td><div className="applied-table-skills">{asList(row.skills).map(skill => <span key={skill}>{skill}</span>)}</div></td><td>{row.current_salary === null || row.current_salary === undefined ? '-' : `₹ ${row.current_salary} LPA`}</td><td>{row.expected_salary === null || row.expected_salary === undefined ? '-' : `₹ ${row.expected_salary} LPA`}</td><td>{row.notice_period === null || row.notice_period === undefined ? '-' : `${row.notice_period} days`}</td><td>{relocateDisplay(row.open_to_relocate)}</td><td>{formatAppliedDate(row.created_at)}</td><td><span className={statusClass(row.application_status)}>{display(row.application_status).replace(/_/g, ' ')}</span></td>
+                    <td><div className="name-cell"><div className="name-avatar" style={avatarColorsFor(row.full_name)}>{initials(row.full_name)}</div><div className="candidate-name-content"><span className="name-text candidate-name-text">{display(row.full_name)}</span><span className="sub-text">Public applicant</span></div></div></td>
+                    <td><span className="applied-public-role">{roleName(row)}</span></td>
+                    <td><span className="applied-mandate-role">{internalRole(row)}</span></td>
+                    <td><span className="applied-client-name">{clientName(row)}</span></td>
+                    <td>{clean(row.client_display_id || row.client_id) ? <span className="candidate-id-chip candidate-client-id-chip">{display(row.client_display_id || row.client_id)}</span> : <span className="candidate-muted-dash">-</span>}</td>
+                    <td><a className="applied-email-link" href={`mailto:${clean(row.email)}`}>{display(row.email)}</a></td>
+                    <td><span className="applied-mobile-value">{display(row.mobile_number)}</span></td>
+                    <td><span className="applied-designation">{display(row.current_designation)}</span></td>
+                    <td><span className="applied-organisation">{display(row.current_organisation)}</span></td>
+                    <td>{clean(row.experience_years) ? `${row.experience_years} yrs` : <span className="candidate-empty-value">-</span>}</td>
+                    <td><span className="applied-location-value">{display(row.location)}</span></td>
+                    <td>{renderAppliedSkills(row)}</td>
+                    <td>{row.current_salary === null || row.current_salary === undefined ? <span className="candidate-empty-value">-</span> : <span className="candidate-money-value">{formatCandidateCtc(row.current_salary)}</span>}</td>
+                    <td>{row.expected_salary === null || row.expected_salary === undefined ? <span className="candidate-empty-value">-</span> : <span className="candidate-money-value">{formatCandidateCtc(row.expected_salary)}</span>}</td>
+                    <td>{(() => { const meta = noticeMeta(row.notice_period); return meta ? <span className={`candidate-notice-pill candidate-notice-pill-${meta.tone}`}>{meta.label}</span> : <span className="candidate-empty-value">-</span> })()}</td>
+                    <td>{clean(relocateDisplay(row.open_to_relocate)) !== '-' ? <span className={`candidate-relocate-pill${relocateDisplay(row.open_to_relocate) === 'Yes' ? ' is-yes' : ' is-no'}`}>{relocateDisplay(row.open_to_relocate)}</span> : <span className="candidate-empty-value">-</span>}</td>
+                    <td><span className="applied-date-value">{formatAppliedDate(row.created_at)}</span></td>
+                    <td><span className={statusClass(row.application_status)}>{display(row.application_status).replace(/_/g, ' ')}</span></td>
                     <td><button className="row-action-btn" type="button" title="View CV" onClick={() => openAppliedCandidateCv(row.id)}><FileText size={13} /></button></td>
-                    <td>{consultants(row).join(', ') || '-'}</td>
+                    <td><ConsultantPillGroup consultants={consultants(row)} /></td>
                     <td><div className="row-actions applied-row-actions">
                       <button className="row-action-btn" type="button" title="View Details" onClick={() => loadDrawer(row, 'details')}><Eye size={13} /></button>
                       {canConvert && <button className="row-action-btn applied-convert-action" type="button" title={pending ? 'Add to Candidates' : 'Retry Conversion'} onClick={() => loadDrawer(row, 'convert')}>{pending ? <Plus size={13} /> : <RotateCcw size={13} />}<span>{pending ? 'Add to Candidates' : 'Retry Conversion'}</span></button>}
-                      {pending && <button className="row-action-btn" type="button" title="Leave Pending" onClick={() => leavePending(row)}><RotateCcw size={13} /></button>}
-                      {pending && <button className="row-action-btn applied-reject-action" type="button" title="Reject" onClick={() => { setRejectTarget(row); setRejectionReason('') }}><XCircle size={13} /></button>}
+                      {pending && <button className="row-action-btn applied-reject-action" type="button" title="Reject" onClick={() => setRejectTarget(row)}><XCircle size={13} /></button>}
                     </div></td>
                   </tr>
                 })}
@@ -561,9 +611,11 @@ export default function AppliedCandidatesPage() {
       </div>
       <PaginationBar page={page} totalPages={totalPages} total={total} pageSize={pageSize} loading={loading} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1) }} />
 
-      {drawer && (
-        <div className="applied-content-overlay" role="presentation">
-          <aside className="applied-candidate-drawer" role="dialog" aria-modal="true" aria-label={drawer.mode === 'convert' ? 'Add to Candidates' : 'Applied Candidate Details'}>
+      {drawer && !rejectTarget && createPortal(
+        <div className="applied-content-overlay" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget && !conversionSaving) closeDrawer()
+        }}>
+          <aside ref={drawerRef} tabIndex={-1} className="applied-candidate-drawer" role="dialog" aria-modal="true" aria-label={drawer.mode === 'convert' ? 'Add to Candidates' : 'Applied Candidate Details'}>
             <header className="applied-drawer-header">
               <div><span>Public Roles application</span><h2>{drawer.mode === 'convert' ? 'Add to Candidates' : display(drawer.row.full_name)}</h2></div>
               <button className="modal-close" type="button" onClick={closeDrawer} disabled={conversionSaving} aria-label="Close drawer"><X size={17} /></button>
@@ -598,16 +650,16 @@ export default function AppliedCandidatesPage() {
                   {!isConversionFieldHidden('location') && <ConversionField label="Current Location" required missing={!clean(conversionForm.location)} error={conversionErrors.location}><input value={conversionForm.location} onChange={event => setConversionField('location', event.target.value)} disabled={isConversionFieldDisabled('location')} /></ConversionField>}
                   {!isConversionFieldHidden('notice_period') && <ConversionField label="Notice Period (days)" required missing={!clean(conversionForm.notice_period)} error={conversionErrors.notice_period}><input type="number" min="0" step="1" value={conversionForm.notice_period} onChange={event => setConversionField('notice_period', event.target.value)} disabled={isConversionFieldDisabled('notice_period')} /></ConversionField>}
                   {!isConversionFieldHidden('current_salary') && <ConversionField label="Current CTC (LPA)" required missing={!clean(conversionForm.current_salary)} error={conversionErrors.current_salary}><input type="number" min="1" step="1" value={conversionForm.current_salary} onChange={event => setConversionField('current_salary', event.target.value)} disabled={isConversionFieldDisabled('current_salary')} /></ConversionField>}
-                  {!isConversionFieldHidden('expected_salary') && <ConversionField label="Expected CTC (LPA)" required missing={!clean(conversionForm.expected_salary)} error={conversionErrors.expected_salary}><input type="number" min="1" step="1" value={conversionForm.expected_salary} onChange={event => setConversionField('expected_salary', event.target.value)} disabled={isConversionFieldDisabled('expected_salary')} /></ConversionField>}
-                  {!isConversionFieldHidden('linkedin_url') && <ConversionField label="LinkedIn" required missing={!clean(conversionForm.linkedin_url)} error={conversionErrors.linkedin_url}><input type="url" value={conversionForm.linkedin_url} onChange={event => setConversionField('linkedin_url', event.target.value)} disabled={isConversionFieldDisabled('linkedin_url')} /></ConversionField>}
+                  {!isConversionFieldHidden('expected_salary') && <ConversionField label="Expected CTC (LPA)" error={conversionErrors.expected_salary}><input type="number" min="1" step="1" value={conversionForm.expected_salary} onChange={event => setConversionField('expected_salary', event.target.value)} disabled={isConversionFieldDisabled('expected_salary')} /></ConversionField>}
+                  {!isConversionFieldHidden('linkedin_url') && <ConversionField label="LinkedIn" error={conversionErrors.linkedin_url}><input type="url" value={conversionForm.linkedin_url} onChange={event => setConversionField('linkedin_url', event.target.value)} disabled={isConversionFieldDisabled('linkedin_url')} /></ConversionField>}
                   {!isConversionFieldHidden('open_to_relocate') && <ConversionField label="Open to Relocate" required missing={!clean(conversionForm.open_to_relocate)} error={conversionErrors.open_to_relocate}><select value={conversionForm.open_to_relocate} onChange={event => setConversionField('open_to_relocate', event.target.value)} disabled={isConversionFieldDisabled('open_to_relocate')}><option value="">-</option><option value="Yes">Yes</option><option value="No">No</option><option value="NA">NA</option></select></ConversionField>}
                   {!isConversionFieldHidden('status') && <ConversionField label="Candidate Status" required missing={!isCandidateStatusSelected(conversionForm.status)} error={conversionErrors.status}><select value={conversionForm.status} onChange={event => setConversionField('status', event.target.value)} disabled={isConversionFieldDisabled('status')}>{CANDIDATE_STATUS_OPTIONS.map(value => <option key={value || '-'} value={value}>{value || '-'}</option>)}</select></ConversionField>}
                   {!isConversionFieldHidden('consultant') && <ConversionField label="Consultant" error={conversionErrors.consultant}><select value={conversionForm.consultant_user_id} onChange={event => { const user = selectableStaff.find(item => item.id === event.target.value); setConversionForm(current => ({ ...current, consultant: user?.name || '', consultant_user_id: user?.id || '' })); setConversionErrors(current => ({ ...current, consultant: '' })) }} disabled={isConversionFieldDisabled('consultant')}><option value="">-</option>{selectableStaff.map(user => <option key={user.id || user.name} value={user.id}>{user.name}</option>)}</select></ConversionField>}
                   {!isConversionFieldHidden('skills') && <ConversionField label="Skills" required full missing={!conversionForm.skills.length} error={conversionErrors.skills}><div className="applied-skill-editor"><div>{conversionForm.skills.map(skill => <span key={skill}>{skill}<button type="button" onClick={() => setConversionField('skills', conversionForm.skills.filter(item => item !== skill))} disabled={isConversionFieldDisabled('skills')}><X size={11} /></button></span>)}</div><label><input value={skillInput} onChange={event => setSkillInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); addSkill() } }} disabled={isConversionFieldDisabled('skills')} /><button type="button" onClick={addSkill} disabled={isConversionFieldDisabled('skills')}>Add</button></label></div></ConversionField>}
-                  {!isConversionFieldHidden('comments') && <ConversionField label="Comments" required full missing={!clean(conversionForm.comments)} error={conversionErrors.comments}><textarea rows="3" value={conversionForm.comments} onChange={event => setConversionField('comments', event.target.value)} disabled={isConversionFieldDisabled('comments')} /></ConversionField>}
+                  {!isConversionFieldHidden('comments') && <ConversionField label="Comments" full error={conversionErrors.comments}><textarea rows="3" value={conversionForm.comments} onChange={event => setConversionField('comments', event.target.value)} disabled={isConversionFieldDisabled('comments')} /></ConversionField>}
                 </div>
                 {duplicateState && <div className="applied-duplicate-panel">
-                  <div className="applied-warning"><Link2 size={18} /><div><strong>Existing candidate found</strong><span>{duplicateState.message || 'Choose an existing candidate explicitly or leave this application pending.'}</span></div></div>
+                  <div className="applied-warning"><Link2 size={18} /><div><strong>Existing candidate found</strong><span>{duplicateState.message || 'Choose the existing candidate that should receive this mandate association.'}</span></div></div>
                   <div className="applied-existing-list">{duplicateState.existing.map(candidate => {
                     const id = candidate.candidate_id || candidate.id
                     const identity = [
@@ -623,18 +675,29 @@ export default function AppliedCandidatesPage() {
                 <p className="applied-conversion-note">Successful save will remove this application from the default pending Applied Candidates list. The staged CV will be reused; no upload is required.</p>
                 <div className="applied-drawer-actions">
                   <button className="btn-secondary" type="button" onClick={closeDrawer} disabled={conversionSaving}>Cancel</button>
-                  {duplicateState && <button className="btn-secondary" type="button" onClick={() => leavePending(drawer.row)} disabled={conversionSaving}>Keep Pending</button>}
-                  {duplicateState && <button className="btn-secondary applied-danger-button" type="button" onClick={() => { setRejectTarget(drawer.row); setRejectionReason('') }} disabled={conversionSaving}>Reject</button>}
+                  {duplicateState && <button className="btn-secondary applied-danger-button" type="button" onClick={() => setRejectTarget(drawer.row)} disabled={conversionSaving}>Reject</button>}
                   {duplicateState && <button className="btn-primary" type="button" onClick={() => saveConversion('link_existing')} disabled={conversionSaving}>{conversionSaving ? <Loader2 size={14} className="spin" /> : <Link2 size={14} />}Link Existing Candidate</button>}
                   {!duplicateState && <button className="btn-primary" type="button" onClick={() => saveConversion('create')} disabled={conversionSaving}>{conversionSaving ? <Loader2 size={14} className="spin" /> : <Plus size={14} />}Save to Candidates</button>}
                 </div>
               </div>
             )}
           </aside>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {rejectTarget && <div className="applied-content-overlay applied-reject-overlay" role="presentation"><section className="applied-reject-dialog" role="dialog" aria-modal="true" aria-labelledby="applied-reject-title"><header><h2 id="applied-reject-title">Reject Application</h2><button className="modal-close" type="button" onClick={() => setRejectTarget(null)} disabled={rejectSaving} aria-label="Close rejection dialog"><X size={16} /></button></header><div><p>Rejecting permanently deletes this application row and its staged CV. A reason is required to confirm.</p><label className="form-group"><span className="form-label">Rejection Reason <b className="req">*</b></span><textarea className={`form-control${!clean(rejectionReason) ? ' is-error' : ''}`} rows="4" value={rejectionReason} onChange={event => setRejectionReason(event.target.value)} autoFocus /></label></div><footer><button className="btn-secondary" type="button" onClick={() => setRejectTarget(null)} disabled={rejectSaving}>Cancel</button><button className="btn-primary applied-danger-button" type="button" onClick={submitReject} disabled={rejectSaving || !clean(rejectionReason)}>{rejectSaving ? 'Rejecting...' : 'Reject and Delete'}</button></footer></section></div>}
+      {rejectTarget && createPortal(
+        <div className="applied-content-overlay applied-reject-overlay" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget && !rejectSaving) setRejectTarget(null)
+        }}>
+          <section ref={rejectDialogRef} tabIndex={-1} className="applied-reject-dialog" role="alertdialog" aria-modal="true" aria-labelledby="applied-reject-title" aria-describedby="applied-reject-description">
+            <header><h2 id="applied-reject-title">Reject Application</h2><button className="modal-close" type="button" onClick={() => setRejectTarget(null)} disabled={rejectSaving} aria-label="Close rejection dialog"><X size={16} /></button></header>
+            <div><p id="applied-reject-description">Reject {display(rejectTarget.full_name)} for {roleName(rejectTarget)}? This permanently deletes the application row and its staged CV.</p></div>
+            <footer><button className="btn-secondary" type="button" onClick={() => setRejectTarget(null)} disabled={rejectSaving}>Cancel</button><button className="btn-primary applied-danger-button" type="button" onClick={submitReject} disabled={rejectSaving}>{rejectSaving ? 'Rejecting...' : 'Reject Application'}</button></footer>
+          </section>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

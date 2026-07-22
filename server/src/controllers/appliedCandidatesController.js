@@ -1,6 +1,7 @@
 const supabase = require('../services/supabaseAdmin')
 const {
   listApplications,
+  countActiveApplications,
   getApplication,
   publicApplicationDto,
   claimApplication,
@@ -43,6 +44,14 @@ async function listAppliedCandidates(req, res) {
     return res.json(await listApplications(supabase, req.query))
   } catch (error) {
     return sendInternal(res, 'listAppliedCandidates', error)
+  }
+}
+
+async function countAppliedCandidates(req, res) {
+  try {
+    return res.json({ count: await countActiveApplications(supabase) })
+  } catch (error) {
+    return sendInternal(res, 'countAppliedCandidates', error)
   }
 }
 
@@ -101,7 +110,7 @@ async function duplicateResponse(res, candidates, admin) {
     duplicate: true,
     error: 'A candidate already exists with this email or mobile number.',
     existing,
-    actions: ['link_existing', 'keep_pending', 'reject']
+    actions: ['link_existing', 'reject']
   })
 }
 
@@ -331,7 +340,10 @@ async function convertAppliedCandidate(req, res) {
 
     const normalizedBody = { ...req.body, skills: req.body.skills === undefined ? application.skills : parseStringArray(req.body.skills) }
     let { candidate: candidatePayload, association: associationPayload } = candidateCreation.conversionPayload(application, normalizedBody)
-    const validationErrors = candidateCreation.validateCandidatePayload({ ...candidatePayload, ...associationPayload })
+    const validationErrors = candidateCreation.validateCandidatePayload(
+      { ...candidatePayload, ...associationPayload },
+      { requireExpectedSalary: false }
+    )
     if (Object.keys(validationErrors).length) {
       throw Object.assign(new Error('Please correct the candidate details.'), { statusCode: 400, errors: validationErrors, releaseClaim: true })
     }
@@ -510,6 +522,7 @@ async function convertAppliedCandidate(req, res) {
 
 module.exports = {
   listAppliedCandidates,
+  countAppliedCandidates,
   getAppliedCandidate,
   getAppliedCandidateCv,
   rejectAppliedCandidate,

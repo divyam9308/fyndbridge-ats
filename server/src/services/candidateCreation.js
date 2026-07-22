@@ -83,7 +83,7 @@ function conversionBlankFillPermissionPayload(fields) {
   return payload
 }
 
-function validateCandidatePayload(body, { requireStatus = true } = {}) {
+function validateCandidatePayload(body, { requireStatus = true, requireExpectedSalary = true } = {}) {
   const errors = {}
   if (!clean(body.full_name)) errors.full_name = 'full_name is required'
   if (!normalizeEmail(body.email) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(body.email))) errors.email = 'email must be a valid email address'
@@ -93,9 +93,13 @@ function validateCandidatePayload(body, { requireStatus = true } = {}) {
   if (!Number.isInteger(Number(body.notice_period)) || Number(body.notice_period) < 0) errors.notice_period = 'notice_period must be a whole number greater than or equal to 0'
   if (!['true', 'false', 'NA'].includes(body.open_to_relocate)) errors.open_to_relocate = 'open_to_relocate must be Yes, No, or NA'
   if (!Array.isArray(body.skills) || !body.skills.length || body.skills.some((skill) => !clean(skill))) errors.skills = 'skills must be a non-empty array of strings'
-  for (const field of ['current_salary', 'expected_salary']) {
-    const value = Number(body[field])
-    if (!Number.isInteger(value) || value <= 0 || value > 999999999) errors[field] = `${field} must be a positive integer with at most 9 digits`
+  const currentSalary = Number(body.current_salary)
+  if (!Number.isInteger(currentSalary) || currentSalary <= 0 || currentSalary > 999999999) {
+    errors.current_salary = 'current_salary must be a positive integer with at most 9 digits'
+  }
+  const expectedSalary = Number(body.expected_salary)
+  if ((requireExpectedSalary || clean(body.expected_salary)) && (!Number.isInteger(expectedSalary) || expectedSalary <= 0 || expectedSalary > 999999999)) {
+    errors.expected_salary = 'expected_salary must be a positive integer with at most 9 digits'
   }
   if (requireStatus) {
     const statusError = candidateStatusError(body.status)

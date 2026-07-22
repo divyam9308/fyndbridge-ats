@@ -5,6 +5,7 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   FileText,
   Loader2,
   MapPin,
@@ -53,9 +54,7 @@ const REQUIRED_LABELS = {
   location: 'Current Location',
   notice_period: 'Notice Period',
   current_salary: 'Current CTC',
-  linkedin_url: 'LinkedIn',
   open_to_relocate: 'Open to Relocate',
-  comments: 'Comments',
 }
 
 const clean = value => String(value ?? '').trim()
@@ -125,6 +124,7 @@ function validateApplicant(applicant, resume, captchaToken) {
 }
 
 function RoleCard({ role, onDetails, onApply }) {
+  const skills = publicSkills(role.public_skills)
   return (
     <article className="public-role-card" tabIndex="0" role="button" onClick={onDetails} onKeyDown={event => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -140,12 +140,12 @@ function RoleCard({ role, onDetails, onApply }) {
         <span><MapPin size={15} />{role.public_location}</span>
         <span><BriefcaseBusiness size={15} />{role.public_experience}</span>
       </div>
-      <div className="public-role-skills">
+      {skills.length > 0 && <div className="public-role-skills">
         <strong>Skills</strong>
         <div className="public-skill-list" aria-label="Skills">
-          {publicSkills(role.public_skills).map(skill => <span key={skill}>{skill}</span>)}
+          {skills.map(skill => <span key={skill}>{skill}</span>)}
         </div>
-      </div>
+      </div>}
       <div className="public-role-deadline">
         <CalendarDays size={17} />
         <span><strong>Application Deadline</strong>{publicDate(role.application_deadline)}</span>
@@ -158,6 +158,7 @@ function RoleCard({ role, onDetails, onApply }) {
 }
 
 function DetailsModal({ role, loading, error, onClose, onApply }) {
+  const skills = publicSkills(role?.public_skills)
   return (
     <div className="public-modal-overlay" role="presentation">
       <section className="public-modal-card public-details-modal" role="dialog" aria-modal="true" aria-labelledby="public-role-title">
@@ -184,11 +185,11 @@ function DetailsModal({ role, loading, error, onClose, onApply }) {
                   <strong>Experience</strong>
                   <span>{role.public_experience}</span>
                 </div>
-                <div className="public-detail-skills">
+                {skills.length > 0 && <div className="public-detail-skills">
                   <Star size={19} />
                   <strong>Skills</strong>
-                  <div className="public-skill-list">{publicSkills(role.public_skills).map(skill => <span key={skill}>{skill}</span>)}</div>
-                </div>
+                  <div className="public-skill-list">{skills.map(skill => <span key={skill}>{skill}</span>)}</div>
+                </div>}
                 <div>
                   <CalendarDays size={19} />
                   <strong>Application Deadline</strong>
@@ -207,6 +208,57 @@ function DetailsModal({ role, loading, error, onClose, onApply }) {
           <button type="button" className="public-secondary-button" onClick={onClose}>Close</button>
         </footer>
       </section>
+    </div>
+  )
+}
+
+function LocationFilter({ locations, selected, onChange }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const closeOutside = event => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false)
+    }
+    const closeOnEscape = event => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        rootRef.current?.querySelector('button')?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+
+  const allSelected = locations.length > 0 && selected.length === locations.length
+  const summary = !selected.length || allSelected
+    ? 'All Locations'
+    : selected.length === 1
+      ? selected[0]
+      : `${selected[0]} +${selected.length - 1}`
+  const toggle = location => onChange(selected.includes(location)
+    ? selected.filter(value => value !== location)
+    : [...selected, location])
+
+  return (
+    <div className="public-location-filter" ref={rootRef}>
+      <button type="button" className="public-location-trigger" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+        <MapPin size={18} /><span>{summary}</span><ChevronDown size={16} className={open ? 'is-open' : ''} />
+      </button>
+      {open && <div className="public-location-menu" role="listbox" aria-label="Filter by locations" aria-multiselectable="true">
+        <div className="public-location-actions">
+          <button type="button" onClick={() => onChange(locations)} disabled={allSelected}>Select All</button>
+          <button type="button" onClick={() => onChange([])} disabled={!selected.length}>Clear</button>
+        </div>
+        <div className="public-location-options">
+          {locations.map(location => <label key={location}><input type="checkbox" checked={selected.includes(location)} onChange={() => toggle(location)} /><span>{location}</span></label>)}
+        </div>
+      </div>}
     </div>
   )
 }
@@ -314,6 +366,12 @@ function ApplicationModal({ role, onClose }) {
         formStartedAt: parseMeta.formStartedAt,
         captchaToken,
       })
+      window.dispatchEvent(new Event('ats:applied-candidates-updated'))
+      try {
+        window.localStorage.setItem('ats:sidebar-counts-refresh', String(Date.now()))
+      } catch {
+        // A successful application must not be reported as failed when browser storage is unavailable.
+      }
       setNotice(response.message || 'Your application has been submitted successfully.')
       setStage('success')
     } catch (error) {
@@ -399,11 +457,11 @@ function ApplicationModal({ role, onClose }) {
                 <PublicField label="Mobile" error={errors.mobile_number}><input type="tel" value={applicant.mobile_number} onChange={event => setField('mobile_number', event.target.value)} /></PublicField>
                 <PublicField label="Current Designation" error={errors.current_designation}><input value={applicant.current_designation} onChange={event => setField('current_designation', event.target.value)} /></PublicField>
                 <PublicField label="Current Organization" error={errors.current_organisation}><input value={applicant.current_organisation} onChange={event => setField('current_organisation', event.target.value)} /></PublicField>
-                <PublicField label="Total Experience (years)" error={errors.experience_years}><input type="number" min="0" step="0.1" value={applicant.experience_years} onChange={event => setField('experience_years', event.target.value)} /></PublicField>
+                <PublicField label="Total Experience (years)" error={errors.experience_years}><input className="public-number-input" type="number" inputMode="decimal" min="0" step="0.1" value={applicant.experience_years} onKeyDown={event => { if (['e', 'E', '+', '-'].includes(event.key)) event.preventDefault() }} onChange={event => setField('experience_years', event.target.value)} /></PublicField>
                 <PublicField label="Current Location" error={errors.location}><input value={applicant.location} onChange={event => setField('location', event.target.value)} /></PublicField>
-                <PublicField label="Notice Period (days)" error={errors.notice_period}><input type="number" min="0" step="1" value={applicant.notice_period} onChange={event => setField('notice_period', event.target.value)} /></PublicField>
+                <PublicField label="Notice Period (days)" error={errors.notice_period}><input className="public-number-input" type="number" inputMode="numeric" min="0" step="1" value={applicant.notice_period} onKeyDown={event => { if (['e', 'E', '+', '-', '.'].includes(event.key)) event.preventDefault() }} onChange={event => setField('notice_period', event.target.value)} /></PublicField>
                 <PublicField label="Current CTC" error={errors.current_salary} adornment="₹" endAdornment="LPA"><input type="text" inputMode="decimal" value={applicant.current_salary} onChange={event => setField('current_salary', event.target.value)} /></PublicField>
-                <PublicField label="LinkedIn" error={errors.linkedin_url}><input type="url" placeholder="https://www.linkedin.com/in/..." value={applicant.linkedin_url} onChange={event => setField('linkedin_url', event.target.value)} /></PublicField>
+                <PublicField label="LinkedIn" required={false} error={errors.linkedin_url}><input type="url" placeholder="https://www.linkedin.com/in/..." value={applicant.linkedin_url} onChange={event => setField('linkedin_url', event.target.value)} /></PublicField>
                 <PublicField label="Open to Relocate" error={errors.open_to_relocate}>
                   <select value={applicant.open_to_relocate} onChange={event => setField('open_to_relocate', event.target.value)}>
                     <option value="">Select</option>
@@ -420,7 +478,7 @@ function ApplicationModal({ role, onClose }) {
                     }} placeholder="Type a skill" /><button type="button" onClick={addSkill}>Add</button></div>
                   </div>
                 </PublicField>
-                <PublicField label="Comments" error={errors.comments} full><textarea rows="4" value={applicant.comments} onChange={event => setField('comments', event.target.value)} /></PublicField>
+                <PublicField label="Comments" required={false} error={errors.comments} full><textarea rows="4" value={applicant.comments} onChange={event => setField('comments', event.target.value)} /></PublicField>
               </div>
               <div className="public-honeypot" aria-hidden="true"><label>Website<input name="website" tabIndex="-1" autoComplete="off" value={website} onChange={event => setWebsite(event.target.value)} /></label></div>
               <TurnstileWidget key={captchaRevision} siteKey={TURNSTILE_SITE_KEY} onTokenChange={turnstileToken} onError={turnstileError} />
@@ -447,10 +505,10 @@ function ApplicationModal({ role, onClose }) {
   )
 }
 
-function PublicField({ label, error, full = false, adornment = '', endAdornment = '', children }) {
+function PublicField({ label, error, full = false, required = true, adornment = '', endAdornment = '', children }) {
   return (
     <label className={`public-form-field${full ? ' is-full' : ''}${error ? ' is-error' : ''}`}>
-      <span>{label} <b>*</b></span>
+      <span>{label} {required ? <b>*</b> : <em>(Optional)</em>}</span>
       <div className={adornment || endAdornment ? 'public-adorned-input' : ''}>
         {adornment && <i>{adornment}</i>}
         {children}
@@ -468,8 +526,7 @@ export default function PublicRolesPage() {
   const [loading, setLoading] = useState(true)
   const [listError, setListError] = useState('')
   const [query, setQuery] = useState('')
-  const [locationFilter, setLocationFilter] = useState('')
-  const [experienceFilter, setExperienceFilter] = useState('')
+  const [locationFilters, setLocationFilters] = useState([])
   const [detailRole, setDetailRole] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
@@ -511,14 +568,14 @@ export default function PublicRolesPage() {
   }, [applicationRole, detailLoading, detailRole])
 
   const locations = useMemo(() => [...new Set(roles.map(role => clean(role.public_location)).filter(Boolean))].sort(), [roles])
-  const experiences = useMemo(() => [...new Set(roles.map(role => clean(role.public_experience)).filter(Boolean))].sort(), [roles])
   const filteredRoles = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return roles.filter(role => {
       const matchesSearch = !needle || `${role.public_name} ${publicSkills(role.public_skills).join(' ')}`.toLowerCase().includes(needle)
-      return matchesSearch && (!locationFilter || role.public_location === locationFilter) && (!experienceFilter || role.public_experience === experienceFilter)
+      const matchesLocation = !locationFilters.length || locationFilters.length === locations.length || locationFilters.includes(role.public_location)
+      return matchesSearch && matchesLocation
     })
-  }, [experienceFilter, locationFilter, query, roles])
+  }, [locationFilters, locations.length, query, roles])
 
   const openDetails = role => navigate(`/open-roles/${encodeURIComponent(role.slug)}`)
   const closeDetails = () => navigate('/open-roles')
@@ -529,20 +586,26 @@ export default function PublicRolesPage() {
 
   return (
     <div className="public-roles-page">
+      <header className="public-roles-header">
+        <picture>
+          <source srcSet="/assets/fyndbridge-official-logo-380.webp 380w, /assets/fyndbridge-official-logo.webp 543w" sizes="(max-width: 620px) 220px, 380px" type="image/webp" />
+          <img src="/assets/fyndbridge-official-logo.png" alt="FYNDBRIDGE" width="380" height="63" decoding="async" />
+        </picture>
+        <a className="public-back-home" href="https://fyndbridge.in/">Back to Home</a>
+      </header>
       <section className="public-roles-hero">
         <h1>Open Roles</h1>
         <p>Explore current mandates at FyndBridge. Find the right opportunity and apply online in just a few clicks.</p>
       </section>
       <section className="public-role-controls" aria-label="Filter open roles">
         <label className="public-search-control"><Search size={18} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by role, skill or keyword" aria-label="Search by role or skill" /></label>
-        <label className="public-select-control"><MapPin size={18} /><select value={locationFilter} onChange={event => setLocationFilter(event.target.value)} aria-label="Filter by location"><option value="">All locations</option>{locations.map(value => <option key={value}>{value}</option>)}</select></label>
-        <label className="public-select-control"><BriefcaseBusiness size={18} /><select value={experienceFilter} onChange={event => setExperienceFilter(event.target.value)} aria-label="Filter by experience"><option value="">All Experience</option>{experiences.map(value => <option key={value}>{value}</option>)}</select></label>
-        <button className="public-clear-filters" type="button" onClick={() => { setQuery(''); setLocationFilter(''); setExperienceFilter('') }} disabled={!query && !locationFilter && !experienceFilter}><RotateCcw size={16} />Clear Filters</button>
+        <LocationFilter locations={locations} selected={locationFilters} onChange={setLocationFilters} />
+        <button className="public-clear-filters" type="button" onClick={() => { setQuery(''); setLocationFilters([]) }} disabled={!query && !locationFilters.length}><RotateCcw size={16} />Clear Filters</button>
       </section>
       {loading && <div className="public-page-state"><Loader2 className="public-spin" size={28} /><h2>Loading open roles</h2><p>Please wait while we find current opportunities.</p></div>}
       {!loading && listError && <div className="public-page-state is-error"><AlertCircle size={30} /><h2>Roles could not be loaded</h2><p>{listError}</p><button type="button" className="public-secondary-button" onClick={() => window.location.reload()}>Try again</button></div>}
       {!loading && !listError && roles.length === 0 && <div className="public-page-state"><BriefcaseBusiness size={34} /><h2>No open roles right now</h2><p>Please check back soon for new opportunities.</p></div>}
-      {!loading && !listError && roles.length > 0 && filteredRoles.length === 0 && <div className="public-page-state"><Search size={32} /><h2>No roles match your filters</h2><p>Try a different role, skill, location, or experience level.</p><button type="button" className="public-secondary-button" onClick={() => { setQuery(''); setLocationFilter(''); setExperienceFilter('') }}>Clear filters</button></div>}
+      {!loading && !listError && roles.length > 0 && filteredRoles.length === 0 && <div className="public-page-state"><Search size={32} /><h2>No roles match your filters</h2><p>Try a different role, skill, or location.</p><button type="button" className="public-secondary-button" onClick={() => { setQuery(''); setLocationFilters([]) }}>Clear filters</button></div>}
       {!loading && !listError && filteredRoles.length > 0 && <section className="public-role-grid" aria-live="polite">{filteredRoles.map(role => <RoleCard key={role.slug} role={role} onDetails={() => openDetails(role)} onApply={() => openApplication(role)} />)}</section>}
       {slug && <DetailsModal role={detailRole} loading={detailLoading} error={detailError} onClose={closeDetails} onApply={() => detailRole && openApplication(detailRole)} />}
       {applicationRole && <ApplicationModal key={applicationRole.slug} role={applicationRole} onClose={() => setApplicationRole(null)} />}

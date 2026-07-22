@@ -8,6 +8,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'unit-test-service-role-key'
 
 const {
   claimApplication,
+  countActiveApplications,
   finalizeApplication,
   recordConversionCandidate,
   rejectApplication,
@@ -19,7 +20,8 @@ const {
   conversionPayload,
   conversionRequestPermissionPayload,
   insertAssociation,
-  removeCandidateIfUnassociated
+  removeCandidateIfUnassociated,
+  validateCandidatePayload
 } = require('./candidateCreation')
 
 const root = path.resolve(__dirname, '../../..')
@@ -107,6 +109,21 @@ test('pending conversion uses a conditional claim and finalizes only with its pr
   assert.ok(finalizeUpdate.filters.some(([field, value]) => field === 'processing_token' && value === claim.token))
 })
 
+test('Applied Candidates badge counts only active rows with an exact head count', async () => {
+  const calls = []
+  const builder = {
+    select(columns, options) { calls.push(['select', columns, options]); return this },
+    in(column, values) { calls.push(['in', column, values]); return this },
+    then(resolve) { return Promise.resolve({ count: 3, error: null }).then(resolve) }
+  }
+  const count = await countActiveApplications({ from: table => { assert.equal(table, 'public_applications'); return builder } })
+  assert.equal(count, 3)
+  assert.deepEqual(calls, [
+    ['select', 'id', { count: 'exact', head: true }],
+    ['in', 'application_status', ['pending', 'converting']]
+  ])
+})
+
 test('already-converted applications are idempotent and a lost claim race reconciles to the durable result', async () => {
   const converted = memorySupabase(application({
     application_status: 'converted',
@@ -169,7 +186,7 @@ test('finalized conversion removes the applied row and its staged CV', async () 
   assert.deepEqual(removedPaths, ['application-1/resume.pdf'])
 })
 
-test('rejection removes both the staged CV and the applied-candidate row', async () => {
+test('rejection needs no reason and removes both the staged CV and the applied-candidate row', async () => {
   let row = application({ cv_storage_path: 'application-1/resume.pdf' })
   const removedPaths = []
   const supabase = {
@@ -208,10 +225,32 @@ test('rejection removes both the staged CV and the applied-candidate row', async
     }
   }
 
-  const rejected = await rejectApplication(supabase, 'application-1', 'user-1', 'Not suitable')
+  const rejected = await rejectApplication(supabase, 'application-1', 'user-1', '')
   assert.equal(rejected.application_status, 'rejected')
+  assert.equal(rejected.rejection_reason, null)
   assert.equal(row, null)
   assert.deepEqual(removedPaths, ['application-1/resume.pdf'])
+})
+
+test('applied conversion allows a blank Expected CTC but still validates a supplied value', () => {
+  const payload = {
+    full_name: 'Staged Candidate',
+    email: 'staged@example.com',
+    mobile_number: '+919876543210',
+    experience_years: 8,
+    notice_period: 30,
+    open_to_relocate: 'true',
+    skills: ['Analysis'],
+    current_salary: 20,
+    expected_salary: null,
+    status: 'In Discussion'
+  }
+  assert.equal(validateCandidatePayload(payload, { requireExpectedSalary: false }).expected_salary, undefined)
+  assert.equal(
+    validateCandidatePayload({ ...payload, expected_salary: '18.5' }, { requireExpectedSalary: false }).expected_salary,
+    'expected_salary must be a positive integer with at most 9 digits'
+  )
+  assert.equal(validateCandidatePayload(payload).expected_salary, 'expected_salary must be a positive integer with at most 9 digits')
 })
 
 test('active conversions reject a second worker, while stale claims are reclaimed conditionally', async () => {

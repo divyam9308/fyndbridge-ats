@@ -9,6 +9,7 @@ const {
   publicJobPayload,
   publicJobDetailsChanged,
   validatePublicJobForPublish,
+  countEligiblePublicJobs,
   validatePublicApplication,
   publicApplicationPayload,
   parsedResumeDto
@@ -65,6 +66,7 @@ test('Asia/Kolkata eligibility exposes only complete, current, canonical P1 list
   assert.equal(publicJobState(publicJob({ mandate_status: 'Delivered (P2)' }), NOW), 'Closed')
   assert.equal(publicJobState(publicJob({ application_deadline: '2026-07-21' }), NOW), 'Expired')
   assert.equal(publicJobState(publicJob({ application_deadline: '2026-07-22' }), NOW), 'Published')
+  assert.equal(publicJobState(publicJob({ public_skills: [] }), NOW), 'Published')
 })
 
 test('public role DTO is an explicit allowlist and detail adds only the public JD', () => {
@@ -121,7 +123,23 @@ test('unchanged public fields do not block an internal status closure while real
   assert.equal(publicJobDetailsChanged(current, { ...current, public_location: 'Pune' }), true)
 })
 
-test('application validation requires every visible field and integer LPA salary values', () => {
+test('public role badge count uses a database-side exact head count', async () => {
+  const calls = []
+  const builder = {
+    select(columns, options) { calls.push(['select', columns, options]); return this },
+    eq(column, value) { calls.push(['eq', column, value]); return this },
+    gte(column, value) { calls.push(['gte', column, value]); return this },
+    not(column, operator, value) { calls.push(['not', column, operator, value]); return this },
+    then(resolve) { return Promise.resolve({ count: 4, error: null }).then(resolve) }
+  }
+  const count = await countEligiblePublicJobs({ from: table => { assert.equal(table, 'jobs'); return builder } }, NOW)
+  assert.equal(count, 4)
+  assert.deepEqual(calls[0], ['select', 'id', { count: 'exact', head: true }])
+  assert.ok(calls.some(call => call[0] === 'eq' && call[1] === 'is_public' && call[2] === true))
+  assert.ok(calls.some(call => call[0] === 'eq' && call[1] === 'mandate_status' && call[2] === 'Ongoing (P1)'))
+})
+
+test('application validation keeps LinkedIn and Comments optional and integer LPA salary values required', () => {
   assert.deepEqual(validatePublicApplication(validApplication()), {})
   assert.deepEqual(validatePublicApplication(validApplication({ open_to_relocate: 'false' })), {})
   assert.deepEqual(validatePublicApplication(validApplication({ open_to_relocate: 'NA' })), {})
@@ -133,9 +151,10 @@ test('application validation requires every visible field and integer LPA salary
     skills: []
   }))
   assert.equal(missing.full_name, 'full_name is required')
-  assert.equal(missing.comments, 'comments is required')
-  assert.equal(missing.linkedin_url, 'linkedin_url is required')
+  assert.equal(missing.comments, undefined)
+  assert.equal(missing.linkedin_url, undefined)
   assert.equal(missing.skills, 'At least one skill is required')
+  assert.equal(validatePublicApplication(validApplication({ linkedin_url: 'not-a-url' })).linkedin_url, 'Enter a valid LinkedIn URL')
 
   for (const current_salary of ['18.5', '0', '-1', '1000000000']) {
     assert.equal(
@@ -157,7 +176,13 @@ test('application payload normalizes identity once while preserving LPA numbers 
   assert.equal(payload.mobile_normalized, '919876543210')
   assert.equal(payload.current_salary, 18)
   assert.equal(Object.hasOwn(payload, 'expected_salary'), false)
+  assert.equal(payload.linkedin_url, 'https://www.linkedin.com/in/rahul-sharma')
+  assert.equal(payload.comments, 'Interested in this role.')
   assert.equal(payload.open_to_relocate, 'NA')
+
+  const optional = publicApplicationPayload(validApplication({ linkedin_url: '', comments: '' }))
+  assert.equal(optional.linkedin_url, null)
+  assert.equal(optional.comments, null)
 })
 
 test('parsed resume DTO allowlists candidate-safe fields and omits parser internals', () => {

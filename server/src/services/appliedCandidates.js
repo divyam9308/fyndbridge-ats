@@ -125,6 +125,15 @@ async function listApplications(supabase, queryParams = {}) {
   }
 }
 
+async function countActiveApplications(supabase) {
+  const { count, error } = await supabase
+    .from('public_applications')
+    .select('id', { count: 'exact', head: true })
+    .in('application_status', DEFAULT_LIST_STATUSES)
+  if (error) throw error
+  return count || 0
+}
+
 async function getApplication(supabase, applicationId) {
   const { data, error } = await supabase.from('public_applications').select(APPLICATION_SELECT).eq('id', applicationId).maybeSingle()
   if (error) throw error
@@ -247,7 +256,6 @@ async function removeFinalizedApplication(supabase, application) {
 
 async function rejectApplication(supabase, applicationId, userId, reason) {
   const rejectionReason = clean(reason)
-  if (!rejectionReason) throw Object.assign(new Error('Rejection reason is required.'), { statusCode: 400 })
   let application = await getApplication(supabase, applicationId)
   if (!application) throw Object.assign(new Error('Application not found.'), { statusCode: 404 })
 
@@ -257,7 +265,7 @@ async function rejectApplication(supabase, applicationId, userId, reason) {
       application_status: 'rejected',
       rejected_by: userId,
       rejected_at: now,
-      rejection_reason: rejectionReason,
+      rejection_reason: rejectionReason || null,
       updated_at: now
     }).eq('id', applicationId).eq('application_status', 'pending').select(APPLICATION_SELECT).maybeSingle()
     if (error) throw error
@@ -303,6 +311,7 @@ module.exports = {
   publicApplicationDto,
   parseStatuses,
   listApplications,
+  countActiveApplications,
   getApplication,
   staleConversionThreshold,
   claimApplication,

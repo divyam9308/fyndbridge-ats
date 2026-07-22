@@ -14,6 +14,7 @@ router.use((req, res, next) => {
   return next()
 })
 router.get('/open-roles', controller.listOpenRoles)
+router.get('/open-roles/count', controller.countOpenRoles)
 router.get('/open-roles/:slug', controller.getOpenRole)
 router.post(
   '/applications/parse-resume',
