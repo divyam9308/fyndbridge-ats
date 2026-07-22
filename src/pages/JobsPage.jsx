@@ -1685,6 +1685,7 @@ export default function JobsPage() {
                     </label>
                     {errors.is_public && <span className="form-error">{errors.is_public}</span>}
                   </div>
+                  {Boolean(form.is_public) && <>
                   <div className="form-group">
                     <label className="form-label">Public Slug</label>
                     <input className="form-control" value={form.public_slug || ''} placeholder="Generated once on first save" disabled readOnly />
@@ -1729,6 +1730,7 @@ export default function JobsPage() {
                     <span className="sub-text">Only this text is public. Internal JD files, Mandate Sheet links, client details and internal notes remain private.</span>
                     {errors.public_jd && <span className="form-error">{errors.public_jd}</span>}
                   </div>
+                  </>}
                 </>}
               </div>
             </div>
