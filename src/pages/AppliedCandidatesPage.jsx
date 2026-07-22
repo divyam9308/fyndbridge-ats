@@ -109,6 +109,14 @@ const APPLICATION_STATUSES = [
   ['rejected', 'Rejected'],
 ]
 
+const APPLIED_CANDIDATE_COLUMNS = [
+  'Candidate Name', 'Applied Public Role', 'Internal Mandate/Role', 'Client Name', 'Client ID', 'Email', 'Mobile',
+  'Current Designation', 'Current Organization', 'Experience', 'Current Location', 'Skills', 'Current CTC',
+  'Expected CTC', 'Notice Period', 'Open to Relocate', 'Applied On', 'Application Status', 'CV',
+  'Assigned Consultant', 'Actions',
+]
+const APPLIED_CANDIDATE_TABLE_WIDTH = 3440
+
 const clean = value => String(value ?? '').trim()
 const asList = value => (Array.isArray(value) ? value : String(value || '').split(','))
   .map(clean)
@@ -517,13 +525,18 @@ export default function AppliedCandidatesPage() {
       </div>
 
       {error && <div className="table-error-banner" role="alert"><AlertTriangle size={16} /><span>{error}</span><button type="button" className="filter-clear" onClick={reload}>Retry</button></div>}
-      <div className="table-card table-card-popovers">
-        {loading ? <FyndbridgeLoader fullHeight={false} label="Loading applied candidates..." /> : (
+      <div className="table-card table-card-popovers candidates-table-card" style={{ minWidth: `max(100%, ${APPLIED_CANDIDATE_TABLE_WIDTH}px)` }}>
+        {loading ? (
           <div className="table-wrapper candidates-table-scroll">
-            <table className="data-table fb-theme-table candidates-master-table applied-candidates-table" aria-label="Applied Candidates">
-              <thead><tr>
-                <th>Candidate Name</th><th>Applied Public Role</th><th>Internal Mandate/Role</th><th>Client Name</th><th>Client ID</th><th>Email</th><th>Mobile</th><th>Current Designation</th><th>Current Organization</th><th>Experience</th><th>Current Location</th><th>Skills</th><th>Current CTC</th><th>Expected CTC</th><th>Notice Period</th><th>Open to Relocate</th><th>Applied On</th><th>Application Status</th><th>CV</th><th>Assigned Consultant</th><th>Actions</th>
-              </tr></thead>
+            <table className="data-table fb-theme-table candidates-master-table applied-candidates-table table-loading-table" aria-label="Loading applied candidates" style={{ minWidth: APPLIED_CANDIDATE_TABLE_WIDTH }}>
+              <thead><tr>{APPLIED_CANDIDATE_COLUMNS.map(column => <th key={column}>{column}</th>)}</tr></thead>
+              <tbody><tr className="table-loading-row"><td className="table-loading-cell" colSpan={APPLIED_CANDIDATE_COLUMNS.length}><FyndbridgeLoader size={88} label="Loading applied candidates..." className="table-inline-loader" /></td></tr></tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="table-wrapper candidates-table-scroll">
+            <table className="data-table fb-theme-table candidates-master-table applied-candidates-table" aria-label="Applied Candidates" style={{ minWidth: APPLIED_CANDIDATE_TABLE_WIDTH }}>
+              <thead><tr>{APPLIED_CANDIDATE_COLUMNS.map(column => <th key={column}>{column}</th>)}</tr></thead>
               <tbody>
                 {!rows.length ? <tr><td colSpan="21" className="table-empty-cell"><div className="empty-state"><div className="empty-state-icon"><UserRoundCheck size={28} /></div><div className="empty-state-title">No applied candidates found</div><div className="empty-state-desc">Try changing the filters or wait for a new public application.</div></div></td></tr> : rows.map(row => {
                   const pending = row.application_status === 'pending'
