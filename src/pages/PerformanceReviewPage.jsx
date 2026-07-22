@@ -47,7 +47,7 @@ function normalizeScoreInput(value) {
 
 function preventNumberWheel(event) {
   if (document.activeElement === event.currentTarget) {
-    event.preventDefault()
+    event.currentTarget.blur()
   }
 }
 

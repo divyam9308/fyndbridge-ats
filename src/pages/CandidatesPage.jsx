@@ -2082,7 +2082,14 @@ export default function CandidatesPage() {
 
     switch (key) {
       case 'candidateDisplayId':
-        return <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>{c.candidateDisplayId || '-'}</td>
+        return (
+          <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>
+            <span className="candidate-display-id-value">
+              <span>{c.candidateDisplayId || '-'}</span>
+              {c.isPublicApplicationConversion && <span className="candidate-public-source-dot" role="img" aria-label="From Applied Candidates" title="From Applied Candidates" />}
+            </span>
+          </td>
+        )
       case 'date':
         return <td key={key}>{formatDate(c.createdAt)}</td>
       case 'consultant':
@@ -2408,9 +2415,8 @@ export default function CandidatesPage() {
                   const duplicateRowClass = isGroup
                     ? `candidate-mobile-group-row${groupIndex === 0 ? ' group-first' : ' group-child'}${isLastInGroup ? ' group-last' : ''}${isExpanded && groupIndex === 0 ? ' candidate-group-parent-expanded' : ''}${isExpanded && groupIndex > 0 ? ' candidate-group-child-expanded' : ''}`
                     : ''
-                  const rowClass = `${duplicateRowClass}${c.isPublicApplicationConversion ? `${duplicateRowClass ? ' ' : ''}candidate-public-application-row` : ''}`
                   return (
-                    <tr key={c.associationId || c.id} className={rowClass}>
+                    <tr key={c.associationId || c.id} className={duplicateRowClass}>
                       {activeColumns.map(column => renderCandidateCell(column, c, { mobile, isGroup, isExpanded, groupSize, groupIndex }))}
                     </tr>
                   )

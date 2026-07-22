@@ -27,6 +27,8 @@ const {
 const root = path.resolve(__dirname, '../../..')
 const appliedController = fs.readFileSync(path.join(root, 'server/src/controllers/appliedCandidatesController.js'), 'utf8')
 const candidateController = fs.readFileSync(path.join(root, 'server/src/controllers/candidateController.js'), 'utf8')
+const candidatePage = fs.readFileSync(path.join(root, 'src/pages/CandidatesPage.jsx'), 'utf8')
+const sharedCss = fs.readFileSync(path.join(root, 'src/styles/Shared.css'), 'utf8')
 
 function application(overrides = {}) {
   return {
@@ -498,4 +500,12 @@ test('controller contract marks only newly created candidates and reconciles dur
   assert.match(candidateController, /is_public_application_conversion:\s*Boolean\(row\.public_application_id\)/)
   assert.match(candidateController, /is_public_application_conversion:\s*false/)
   assert.doesNotMatch(candidateController, /public_application_id:\s*row\.public_application_id/)
+})
+
+test('main candidates table shows the public-application marker as a dot beside Candidate ID', () => {
+  assert.match(candidatePage, /candidate-display-id-value/)
+  assert.match(candidatePage, /candidate-public-source-dot/)
+  assert.match(candidatePage, /title="From Applied Candidates"/)
+  assert.match(sharedCss, /\.candidate-public-source-dot\s*\{[\s\S]*width:\s*7px;[\s\S]*border-radius:\s*50%;[\s\S]*background:\s*#dc3545;/)
+  assert.doesNotMatch(sharedCss, /candidate-public-application-row/)
 })

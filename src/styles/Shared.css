@@ -2031,9 +2031,19 @@ textarea.form-control {
   grid-column: 1 / -1;
 }
 
-/* Public application conversion marker is cell-scoped so duplicate connectors stay intact. */
-.candidates-master-table .candidate-public-application-row > td:first-child {
-  box-shadow: inset 4px 0 0 #dc3545;
+/* Compact source marker stays beside the Candidate ID in the always-left table area. */
+.candidates-master-table .candidate-display-id-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.candidates-master-table .candidate-public-source-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #dc3545;
 }
 
 .mandate-public-state {
