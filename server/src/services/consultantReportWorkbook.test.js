@@ -88,7 +88,7 @@ function reportFixture({ overall = false } = {}) {
       { key: 'offer', label: 'Mandate → First Offer', averageDays: 10, trackedMandates: 1, untrackedMandates: 3, tone: 'amber' },
       { key: 'hire', label: 'Mandate → First Hire', averageDays: 15, trackedMandates: 1, untrackedMandates: 3, tone: 'green' }
     ],
-    candidateOverview: { total, counts },
+    candidateOverview: { total, manualTotal: total - 7, appliedTotal: 7, counts },
     dailyCandidateUploads,
     candidatePipeline: [
       { key: 'total', label: 'Total Candidates', count: total, percentage: 100 },
@@ -177,6 +177,12 @@ test('builds the aligned five-sheet individual consultant workbook with typed ce
   assert.equal(workbook.getWorksheet('02 Conversion & Ageing').getCell('A4').value, 'Client Name')
   const candidates = workbook.getWorksheet('03 Candidates & Pipeline')
   assert.equal(candidates.getCell('A6').value, 'Total Candidates')
+  assert.equal(candidates.getCell('B6').value, reportFixture().candidateOverview.total)
+  const workbookText = workbook.worksheets.flatMap((sheet) => (
+    sheet.getSheetValues().flatMap((row) => Array.isArray(row) ? row : [])
+  )).filter((value) => typeof value === 'string')
+  assert.equal(workbookText.includes('Manually Added'), false)
+  assert.equal(workbookText.includes('Applied Candidates'), false)
   assert.equal(candidates.getCell('A19').value, 'Candidates Uploaded Each Date')
   assert.equal(candidates.getCell('A20').value, 'Date')
   assert.equal(candidates.getCell('B20').value, 'Candidates Uploaded')

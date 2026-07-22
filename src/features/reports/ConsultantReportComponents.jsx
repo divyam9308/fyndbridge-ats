@@ -329,10 +329,28 @@ export function ReportDataModal({ kind, fetchRows, onClose }) {
 
 export function CandidateOverview({ overview }) {
   const total = Number(overview?.total) || 0
+  const appliedTotal = Math.min(total, Math.max(0, Number(overview?.appliedTotal) || 0))
+  const manualTotal = total - appliedTotal
   const counts = overview?.counts || {}
   return (
     <div className="candidate-overview-grid">
-      <ReportKpiCard label="Total Candidates" value={total} tone="navy" />
+      <ReportKpiCard
+        label="Total Candidates"
+        tone="navy"
+        value={(
+          <span
+            className="candidate-total-equation"
+            aria-label={`${manualTotal} manually added plus ${appliedTotal} from Applied Candidates equals ${total} total candidates`}
+            title="Manually added + Applied Candidates = Total"
+          >
+            <span className="candidate-total-manual">{manualTotal}</span>
+            <span className="candidate-total-operator">+</span>
+            <span className="candidate-total-applied">{appliedTotal}</span>
+            <span className="candidate-total-operator">=</span>
+            <span className="candidate-total-combined">{total}</span>
+          </span>
+        )}
+      />
       {CANDIDATE_STATUSES.map((status) => (
         <ReportKpiCard key={status} label={status} value={Number(counts[status]) || 0} tone={STATUS_TONES[status]} />
       ))}

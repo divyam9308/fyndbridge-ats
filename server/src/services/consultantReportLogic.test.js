@@ -147,6 +147,21 @@ test('candidate aggregation counts association rows at mandate grain and reconci
   assert.equal(result.candidateOverview.total, 12)
 })
 
+test('candidate overview separates applied-candidate associations while preserving the full total', () => {
+  const result = facts(
+    [job({ id: 'job-1' })],
+    [
+      association('job-1', 'Interested', { id: 'manual-candidate' }),
+      association('job-1', 'Interview', { id: 'applied-candidate', from_applied_candidates: true })
+    ]
+  )
+
+  assert.equal(result.candidateOverview.manualTotal, 1)
+  assert.equal(result.candidateOverview.appliedTotal, 1)
+  assert.equal(result.candidateOverview.total, 2)
+  assert.equal(result.candidatePipeline.find((stage) => stage.key === 'total').count, 2)
+})
+
 test('candidate overview follows association owner and added date independently from mandate scope', () => {
   const result = facts(
     [job({ id: 'in-period-mandate' })],
@@ -691,6 +706,7 @@ test('overall facts sum each consultant report and weight conversions by tracked
       client_submission_at: '2026-07-03T12:00:00.000Z'
     }),
     association('asha-only', 'Client Submission', {
+      from_applied_candidates: true,
       client_submission_at: '2026-07-08T12:00:00.000Z'
     }),
     association('bina-only-one', 'Client Submission', {
@@ -714,6 +730,8 @@ test('overall facts sum each consultant report and weight conversions by tracked
 
   assert.deepEqual(result.mandateSummary, { total: 5, p1: 3, p2: 0, p3: 0, completed: 1, scrapped: 1 })
   assert.equal(result.candidateOverview.total, 4)
+  assert.equal(result.candidateOverview.manualTotal, 3)
+  assert.equal(result.candidateOverview.appliedTotal, 1)
   assert.equal(result.candidateOverview.counts['Client Submission'], 4)
   assert.equal(submission.trackedMandates, 5)
   assert.equal(submission.untrackedMandates, 0)

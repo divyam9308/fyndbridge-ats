@@ -365,6 +365,30 @@
   gap: 11px;
 }
 .candidate-overview-grid .report-kpi { min-height: 108px; }
+.candidate-total-equation {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+.report-kpi strong .candidate-total-manual {
+  color: #2f8a57;
+  font-size: 29px;
+}
+.report-kpi strong .candidate-total-applied {
+  color: #b04f78;
+  font-size: 17px;
+}
+.report-kpi strong .candidate-total-combined {
+  color: #315f9d;
+  font-size: 21px;
+}
+.report-kpi strong .candidate-total-operator {
+  color: #7b8494;
+  font-size: 13px;
+  font-weight: 750;
+}
 .candidate-pipeline {
   display: flex;
   align-items: stretch;

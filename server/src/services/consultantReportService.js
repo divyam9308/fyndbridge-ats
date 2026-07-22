@@ -197,7 +197,7 @@ async function fetchCandidateAssociations(startDate, endDate, consultant) {
   // logic apply the exact company-local inclusive date range.
   const queryStart = addDays(startDate, -1)
   const queryEnd = addDays(endDate, 2)
-  const select = 'id,candidate_id,job_id,status,consultant_name,consultant_user_id,created_at'
+  const select = 'id,candidate_id,job_id,status,consultant_name,consultant_user_id,created_at,from_applied_candidates'
   const queryFactory = () => supabase
     .from('candidate_associations')
     .select(select)

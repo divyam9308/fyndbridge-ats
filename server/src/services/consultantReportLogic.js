@@ -408,6 +408,7 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
   const candidateCounts = emptyStatusCounts()
   const dailyCandidateCounts = new Map(inclusiveDateRange(startDate, endDate).map((date) => [date, emptyDailyCandidateCount()]))
   let pendingStatusAssignmentCount = 0
+  let appliedTotal = 0
   for (const association of candidateRows) {
     if (!candidateAssociationMatches(association, consultant)) continue
     const addedDate = candidateAssociationDate(association)
@@ -424,13 +425,17 @@ function buildConsultantReportFacts({ jobs = [], associations = [], candidateAss
       continue
     }
     candidateCounts[status] += 1
+    if (association.from_applied_candidates === true) appliedTotal += 1
     const dailyCount = dailyCandidateCounts.get(addedDate) || emptyDailyCandidateCount()
     dailyCount.candidateCount += 1
     dailyCount.statusCounts[status] += 1
     dailyCandidateCounts.set(addedDate, dailyCount)
   }
+  const totalCandidates = Object.values(candidateCounts).reduce((total, value) => total + value, 0)
   const candidateOverview = {
-    total: Object.values(candidateCounts).reduce((total, value) => total + value, 0),
+    total: totalCandidates,
+    manualTotal: totalCandidates - appliedTotal,
+    appliedTotal,
     counts: candidateCounts
   }
   const dailyCandidateUploads = [...dailyCandidateCounts].map(([date, count]) => ({ date, ...count }))
@@ -533,11 +538,17 @@ function aggregateConsultantReportFacts(entries = [], dateRange = {}) {
   })
 
   const candidateCounts = emptyStatusCounts()
+  let appliedTotal = 0
   for (const entry of scopedEntries) {
     for (const status of CANDIDATE_STATUSES) candidateCounts[status] += Number(entry.facts.candidateOverview?.counts?.[status]) || 0
+    appliedTotal += Number(entry.facts.candidateOverview?.appliedTotal) || 0
   }
+  const totalCandidates = Object.values(candidateCounts).reduce((total, value) => total + value, 0)
+  appliedTotal = Math.min(totalCandidates, Math.max(0, appliedTotal))
   const candidateOverview = {
-    total: Object.values(candidateCounts).reduce((total, value) => total + value, 0),
+    total: totalCandidates,
+    manualTotal: totalCandidates - appliedTotal,
+    appliedTotal,
     counts: candidateCounts
   }
   const dailyCandidateCounts = new Map(inclusiveDateRange(dateRange.startDate, dateRange.endDate).map((date) => [date, emptyDailyCandidateCount()]))
