@@ -11,6 +11,7 @@ const {
   parsedResumeDto
 } = require('../services/publicApplications')
 const { issueFormToken, validateSubmissionAbuse } = require('../services/publicApplicationAbuse')
+const { buildPublicRoleShareHtml, safeFrontendOrigin } = require('../services/publicRoleSharePreview')
 
 const PUBLIC_ROLE_NOT_FOUND = 'This role is not available for applications.'
 const APPLICATION_SUCCESS = 'Your application has been submitted successfully.'
@@ -46,6 +47,27 @@ async function getOpenRole(req, res) {
     return res.json({ data: publicRoleDto(job, { detail: true }) })
   } catch (error) {
     return safePublicError(res, error, 'getOpenRole')
+  }
+}
+
+function requestFrontendOrigin(req) {
+  if (process.env.FRONTEND_URL) return safeFrontendOrigin(process.env.FRONTEND_URL)
+  const forwardedProtocol = String(req.get('x-forwarded-proto') || '').split(',')[0].trim()
+  const protocol = ['http', 'https'].includes(forwardedProtocol) ? forwardedProtocol : req.protocol
+  const host = String(req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim()
+  return safeFrontendOrigin(`${protocol}://${host}`)
+}
+
+async function shareOpenRole(req, res) {
+  try {
+    const job = await getPublicJobBySlug(supabase, req.params.slug)
+    if (!job) return res.status(404).send(PUBLIC_ROLE_NOT_FOUND)
+    const role = publicRoleDto(job)
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+    return res.send(buildPublicRoleShareHtml(role, requestFrontendOrigin(req)))
+  } catch (error) {
+    return safePublicError(res, error, 'shareOpenRole')
   }
 }
 
@@ -98,6 +120,7 @@ module.exports = {
   listOpenRoles,
   countOpenRoles,
   getOpenRole,
+  shareOpenRole,
   parsePublicResume,
   submitPublicApplication,
   publicRouteErrorHandler

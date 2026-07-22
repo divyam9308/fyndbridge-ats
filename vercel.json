@@ -13,6 +13,10 @@
   },
   "rewrites": [
     {
+      "source": "/share/open-roles/:slug",
+      "destination": "/api/public/open-roles/:slug/share"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index.js"
     },

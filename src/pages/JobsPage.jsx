@@ -1164,13 +1164,14 @@ export default function JobsPage() {
   }
 
   const publicRoleUrl = job => `${window.location.origin}/open-roles/${encodeURIComponent(job.public_slug)}`
+  const publicRoleShareUrl = job => `${window.location.origin}/share/open-roles/${encodeURIComponent(job.public_slug)}`
   const previewPublicListing = job => {
     const opened = window.open(publicRoleUrl(job), '_blank', 'noopener,noreferrer')
     if (opened) opened.opener = null
   }
   const copyPublicLink = async job => {
     try {
-      await navigator.clipboard.writeText(publicRoleUrl(job))
+      await navigator.clipboard.writeText(publicRoleShareUrl(job))
     } catch {
       showPublicActionNotice('Could not copy the public link. Please use Preview Public Listing and copy it from the browser.', 'error')
     }
