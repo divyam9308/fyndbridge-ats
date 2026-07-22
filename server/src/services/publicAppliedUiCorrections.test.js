@@ -20,6 +20,8 @@ test('Mandate publication fields stay checkbox-gated and omit the slug control',
   assert.doesNotMatch(jobsPage, />Public Slug</)
   assert.match(jobsPage, /Public Skills[\s\S]{0,100}\(Optional\)/)
   assert.match(jobsPage, /mandate-public-toast/)
+  assert.doesNotMatch(jobsPage, /Mandate unpublished successfully/)
+  assert.doesNotMatch(jobsPage, /Public link copied/)
 })
 
 test('public page uses the brand header, multi-location filter, and optional application context fields', () => {
@@ -44,8 +46,8 @@ test('Applied Candidates uses body portals, optional context fields, simple reje
   assert.match(appliedCss, /\.applied-content-overlay \{ position: fixed; inset: 0; z-index: 100000/)
   assert.match(appliedCss, /\.applied-convert-action \{ width: auto; min-width: 132px/)
   assert.match(appliedCss, /\.applied-candidates-table th \{[\s\S]*text-align: center/)
-  assert.match(appliedPage, /Application accepted/)
-  assert.match(appliedPage, /Application rejected/)
+  assert.doesNotMatch(appliedPage, /Application accepted/)
+  assert.doesNotMatch(appliedPage, /Application rejected/)
   assert.match(appliedPage, /setTimeout\(\(\) => setNotice\(null\), 5000\)/)
   assert.match(appliedCss, /\.applied-action-toast\.is-hidden/)
 })

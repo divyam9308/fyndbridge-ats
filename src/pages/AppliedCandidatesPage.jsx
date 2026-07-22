@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
-  CheckCircle2,
   ChevronDown,
   Eye,
   FileText,
@@ -513,11 +512,6 @@ export default function AppliedCandidatesPage() {
     try {
       await convertAppliedCandidate(drawer.row.id, conversionPayload(action, selectedExistingId))
       closeDrawer()
-      showNotice(
-        action === 'link_existing' ? 'The existing candidate was linked to this mandate.' : 'The candidate was added and removed from the pending applications list.',
-        'accepted',
-        'Application accepted',
-      )
       window.dispatchEvent(new Event('ats:applied-candidates-updated'))
       reload()
     } catch (conversionError) {
@@ -546,7 +540,6 @@ export default function AppliedCandidatesPage() {
       await updateAppliedCandidateStatus(rejectTarget.id, 'rejected')
       setRejectTarget(null)
       closeDrawer()
-      showNotice('The staged CV and application row were deleted.', 'rejected', 'Application rejected')
       window.dispatchEvent(new Event('ats:applied-candidates-updated'))
       reload()
     } catch (rejectError) {
@@ -569,7 +562,7 @@ export default function AppliedCandidatesPage() {
   return (
     <div className="candidates-page applied-candidates-page">
       {notice && <div className={`applied-action-toast applied-action-toast-${notice.tone}${notice.visible ? ' is-visible' : ' is-hidden'}`} role={notice.tone === 'error' ? 'alert' : 'status'} aria-live="polite">
-        {notice.tone === 'accepted' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+        <XCircle size={18} />
         <div><strong>{notice.title}</strong><span>{notice.message}</span></div>
         <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification"><X size={14} /></button>
       </div>}

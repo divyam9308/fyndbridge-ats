@@ -12,8 +12,6 @@
 .applied-action-toast span { color: var(--gray-600); font-size: 12px; line-height: 1.4; }
 .applied-action-toast > button { position: absolute; top: 9px; right: 9px; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; color: var(--gray-400); background: transparent; border: 0; border-radius: 7px; cursor: pointer; }
 .applied-action-toast > button:hover { color: var(--navy-darkest); background: var(--gray-100); }
-.applied-action-toast-accepted { color: #245a43; border-color: #b9dfc7; border-left-color: #2d9c5a; }
-.applied-action-toast-rejected,
 .applied-action-toast-error { color: #8f1d18; border-color: #efbbb6; border-left-color: #b42318; }
 .applied-action-toast.is-visible { opacity: 1; transform: translateY(0); filter: blur(0); }
 .applied-action-toast.is-hidden { opacity: 0; transform: translateY(-7px); filter: blur(3px); pointer-events: none; }

@@ -1155,7 +1155,6 @@ export default function JobsPage() {
       if (!response.ok) throw new Error(payload.error || `Unable to ${isPublic ? 'publish' : 'unpublish'} this role.`)
       setJobs(current => current.map(row => row.id === job.id ? { ...row, ...payload } : row))
       setAllJobs(current => current.map(row => row.id === job.id ? { ...row, ...payload } : row))
-      showPublicActionNotice('Mandate unpublished successfully.')
       window.dispatchEvent(new Event('ats:public-roles-updated'))
     } catch (actionError) {
       showPublicActionNotice(actionError.message || 'Unable to unpublish this mandate.', 'error')
@@ -1172,7 +1171,6 @@ export default function JobsPage() {
   const copyPublicLink = async job => {
     try {
       await navigator.clipboard.writeText(publicRoleUrl(job))
-      showPublicActionNotice('Public link copied.')
     } catch {
       showPublicActionNotice('Could not copy the public link. Please use Preview Public Listing and copy it from the browser.', 'error')
     }
