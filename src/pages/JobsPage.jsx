@@ -1164,7 +1164,10 @@ export default function JobsPage() {
   }
 
   const publicRoleUrl = job => `${window.location.origin}/open-roles/${encodeURIComponent(job.public_slug)}`
-  const publicRoleShareUrl = job => `${window.location.origin}/share/open-roles/${encodeURIComponent(job.public_slug)}`
+  const publicRoleShareUrl = job => {
+    const previewVersion = job.updated_at || job.public_slug
+    return `${window.location.origin}/share/open-roles/${encodeURIComponent(job.public_slug)}?v=${encodeURIComponent(previewVersion)}`
+  }
   const previewPublicListing = job => {
     const opened = window.open(publicRoleUrl(job), '_blank', 'noopener,noreferrer')
     if (opened) opened.opener = null
@@ -1172,6 +1175,7 @@ export default function JobsPage() {
   const copyPublicLink = async job => {
     try {
       await navigator.clipboard.writeText(publicRoleShareUrl(job))
+      showPublicActionNotice('Link copied', 'success')
     } catch {
       showPublicActionNotice('Could not copy the public link. Please use Preview Public Listing and copy it from the browser.', 'error')
     }
@@ -1296,7 +1300,7 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {publicActionNotice && <div className={`mandate-public-toast mandate-public-toast-${publicActionNotice.type}${publicActionNotice.visible ? ' is-visible' : ' is-hidden'}`} role={publicActionNotice.type === 'error' ? 'alert' : 'status'} aria-live="polite">{publicActionNotice.type === 'error' ? <AlertCircle size={16} /> : <Globe2 size={16} />}<span>{publicActionNotice.message}</span><button type="button" onClick={() => setPublicActionNotice(null)} aria-label="Dismiss public listing notice"><X size={13} /></button></div>}
+      {publicActionNotice && createPortal(<div className={`mandate-public-toast mandate-public-toast-${publicActionNotice.type}${publicActionNotice.visible ? ' is-visible' : ' is-hidden'}`} role={publicActionNotice.type === 'error' ? 'alert' : 'status'} aria-live="polite">{publicActionNotice.type === 'error' ? <AlertCircle size={16} /> : <Globe2 size={16} />}<span>{publicActionNotice.message}</span><button type="button" onClick={() => setPublicActionNotice(null)} aria-label="Dismiss public listing notice"><X size={13} /></button></div>, document.body)}
 
       <div className="filter-bar candidates-filter-bar candidates-toolbar">
         <form onSubmit={applyAiFilter} className="candidate-ai-filter-form">

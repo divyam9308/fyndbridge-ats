@@ -6,6 +6,7 @@ const path = require('node:path')
 const root = path.resolve(__dirname, '../../..')
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8')
 const jobsPage = read('src/pages/JobsPage.jsx')
+const sharedCss = read('src/styles/Shared.css')
 const publicRolesPage = read('src/pages/PublicRolesPage.jsx')
 const publicRolesCss = read('src/pages/PublicRolesPage.css')
 const appliedPage = read('src/pages/AppliedCandidatesPage.jsx')
@@ -21,7 +22,9 @@ test('Mandate publication fields stay checkbox-gated and omit the slug control',
   assert.match(jobsPage, /Public Skills[\s\S]{0,100}\(Optional\)/)
   assert.match(jobsPage, /mandate-public-toast/)
   assert.doesNotMatch(jobsPage, /Mandate unpublished successfully/)
-  assert.doesNotMatch(jobsPage, /Public link copied/)
+  assert.match(jobsPage, /showPublicActionNotice\('Link copied', 'success'\)/)
+  assert.match(jobsPage, /publicActionNotice && createPortal\([\s\S]*document\.body/)
+  assert.match(publicRolesCss + sharedCss, /mandate-public-toast\.is-hidden/)
 })
 
 test('public page uses the brand header, multi-location filter, and optional application context fields', () => {

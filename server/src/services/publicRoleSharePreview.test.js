@@ -23,12 +23,17 @@ test('public role share preview exposes role, location and experience metadata o
 
 test('copied mandate links use the preview route while direct preview keeps the public role page', () => {
   const jobsPage = fs.readFileSync(path.join(root, 'src/pages/JobsPage.jsx'), 'utf8')
+  const app = fs.readFileSync(path.join(root, 'server/src/app.js'), 'utf8')
   const routes = fs.readFileSync(path.join(root, 'server/src/routes/publicRoles.js'), 'utf8')
   const vercel = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8'))
 
   assert.match(jobsPage, /publicRoleShareUrl[\s\S]*\/share\/open-roles\//)
+  assert.match(jobsPage, /\?v=\$\{encodeURIComponent\(previewVersion\)\}/)
   assert.match(jobsPage, /clipboard\.writeText\(publicRoleShareUrl\(job\)\)/)
+  assert.match(jobsPage, /showPublicActionNotice\('Link copied', 'success'\)/)
+  assert.match(jobsPage, /publicActionNotice && createPortal\([\s\S]*document\.body/)
   assert.match(jobsPage, /window\.open\(publicRoleUrl\(job\)/)
+  assert.match(app, /app\.get\('\/share\/open-roles\/:slug', require\('\.\/controllers\/publicRolesController'\)\.shareOpenRole\)/)
   assert.match(routes, /router\.get\('\/open-roles\/:slug\/share', controller\.shareOpenRole\)/)
   assert.ok(vercel.rewrites.some(rewrite => rewrite.source === '/share/open-roles/:slug' && rewrite.destination === '/api/public/open-roles/:slug/share'))
 })

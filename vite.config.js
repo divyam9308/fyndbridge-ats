@@ -13,7 +13,6 @@ export default defineConfig({
       '/api': 'http://localhost:4000',
       '/share/open-roles': {
         target: 'http://localhost:4000',
-        rewrite: path => path.replace(/^\/share\/open-roles\/([^/?]+)/, '/api/public/open-roles/$1/share'),
       },
     },
   },

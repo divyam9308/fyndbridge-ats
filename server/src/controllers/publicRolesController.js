@@ -63,6 +63,7 @@ async function shareOpenRole(req, res) {
     const job = await getPublicJobBySlug(supabase, req.params.slug)
     if (!job) return res.status(404).send(PUBLIC_ROLE_NOT_FOUND)
     const role = publicRoleDto(job)
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300')
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
     return res.send(buildPublicRoleShareHtml(role, requestFrontendOrigin(req)))
