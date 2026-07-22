@@ -374,15 +374,15 @@
 }
 .report-kpi strong .candidate-total-manual {
   color: #2f8a57;
-  font-size: 29px;
+  font-size: 17px;
 }
 .report-kpi strong .candidate-total-applied {
   color: #b04f78;
   font-size: 17px;
 }
 .report-kpi strong .candidate-total-combined {
-  color: #315f9d;
-  font-size: 21px;
+  color: var(--navy);
+  font-size: 29px;
 }
 .report-kpi strong .candidate-total-operator {
   color: #7b8494;
