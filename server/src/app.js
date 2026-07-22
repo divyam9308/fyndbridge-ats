@@ -40,9 +40,11 @@ app.use(cors({
 }))
 
 app.use(express.json())
+app.use('/api/public', require('./routes/publicRoles'))
 app.use(attachUser)
 
 app.use('/api/candidates', requireAuth, require('./routes/candidates'))
+app.use('/api/applied-candidates', requireAuth, require('./routes/appliedCandidates'))
 app.use('/api/resumes', requireAuth, require('./routes/resumes'))
 app.use('/api/documents', requireAuth, require('./routes/documents'))
 app.use('/api/clients', requireAuth, require('./routes/clients'))

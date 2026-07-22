@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { AlertCircle, ChevronDown, FileText, Loader2, Pencil, Plus, Search, X, Lock } from 'lucide-react'
+import { AlertCircle, ChevronDown, Copy, ExternalLink, FileText, Globe2, Loader2, Pencil, Plus, Search, X, Lock } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
@@ -43,7 +43,8 @@ const MANDATE_PERMISSION_BY_COLUMN = {
   mandateStatus: 'mandate_status',
   sector: 'vertical',
   allocationDate: 'allocation_date',
-  jd: 'jd_storage_path'
+  jd: 'jd_storage_path',
+  publicState: 'public_careers_listing'
 }
 const MANDATE_TABLE_COLUMNS = [
   { key: 'jobId', label: 'Job ID', width: 130 },
@@ -57,7 +58,8 @@ const MANDATE_TABLE_COLUMNS = [
   { key: 'sector', label: 'Sector', width: 180 },
   { key: 'allocationDate', label: 'Date of Allocation', width: 180 },
   { key: 'jd', label: 'JD', width: 110 },
-  { key: 'action', label: 'Action', width: 130 }
+  { key: 'publicState', label: 'Public', width: 140, required: true },
+  { key: 'action', label: 'Action', width: 250 }
 ]
 const DEFAULT_MANDATE_COLUMN_KEYS = MANDATE_TABLE_COLUMNS.map(column => column.key)
 const REMOVED_MANDATE_COLUMN_KEYS = new Set(['location'])
@@ -91,13 +93,52 @@ const EMPTY_FORM = {
   vertical: '',
   allocation_date: '',
   jd_url: '',
-  jd_storage_path: ''
+  jd_storage_path: '',
+  is_public: false,
+  public_slug: '',
+  public_name: '',
+  public_location: '',
+  public_experience: '',
+  public_skills: [],
+  application_deadline: '',
+  public_jd: ''
 }
 
 const todayLocal = () => {
   const date = new Date()
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
   return date.toISOString().slice(0, 10)
+}
+const indiaToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
+const normalizePublicSkills = (value) => {
+  const values = Array.isArray(value) ? value : String(value || '').split(',')
+  return [...new Set(values.map(item => String(item || '').trim()).filter(Boolean))]
+}
+const publicListingComplete = (job) => Boolean(
+  String(job?.public_slug || '').trim() &&
+  String(job?.public_name || '').trim() &&
+  String(job?.public_location || '').trim() &&
+  String(job?.public_experience || '').trim() &&
+  normalizePublicSkills(job?.public_skills).length &&
+  String(job?.application_deadline || '').trim() &&
+  String(job?.public_jd || '').trim()
+)
+const publicListingState = (job) => {
+  if (!job?.is_public) return 'Not Public'
+  if (!publicListingComplete(job)) return 'Incomplete'
+  if (normalizeMandateStatus(job.mandate_status || job.status || job.priority) !== 'Ongoing (P1)') return 'Closed'
+  if (String(job.application_deadline || '') < indiaToday()) return 'Expired'
+  return 'Published'
+}
+const publicListingFormChanged = (form, job) => {
+  if (!job) return true
+  return Boolean(form.is_public) !== Boolean(job.is_public) ||
+    String(form.public_name || '').trim() !== String(job.public_name || '').trim() ||
+    String(form.public_location || '').trim() !== String(job.public_location || '').trim() ||
+    String(form.public_experience || '').trim() !== String(job.public_experience || '').trim() ||
+    JSON.stringify(normalizePublicSkills(form.public_skills)) !== JSON.stringify(normalizePublicSkills(job.public_skills)) ||
+    String(form.application_deadline || '') !== String(job.application_deadline || '') ||
+    String(form.public_jd || '').trim() !== String(job.public_jd || '').trim()
 }
 const dash = (value) => value || '-'
 const mutedDash = <span className="table-muted-dash">-</span>
@@ -222,6 +263,10 @@ export default function JobsPage() {
   const [teamLeadOpen, setTeamLeadOpen] = useState(false)
   const [consultantSearch, setConsultantSearch] = useState({})
   const [consultantPickerOpen, setConsultantPickerOpen] = useState({})
+  const [publicSkillInput, setPublicSkillInput] = useState('')
+  const [publicFieldsTouched, setPublicFieldsTouched] = useState({})
+  const [publicActionSaving, setPublicActionSaving] = useState({})
+  const [publicActionNotice, setPublicActionNotice] = useState('')
   const modalRef = useRef(null)
   const duplicateModalRef = useRef(null)
   const roleInputRef = useRef(null)
@@ -425,6 +470,8 @@ export default function JobsPage() {
     setTeamLeadOpen(false)
     setConsultantSearch({})
     setConsultantPickerOpen({})
+    setPublicSkillInput('')
+    setPublicFieldsTouched({})
     setAddingNewRole(false)
     setSavedJdAttachments([])
     setPendingJdFiles([])
@@ -474,6 +521,12 @@ export default function JobsPage() {
     setMandateDuplicate(null)
     setDuplicateBypass(false)
     setDuplicateMoreOpen(false)
+    const hasSavedPublicConfiguration = Boolean(
+      job.is_public || job.public_slug || job.public_name || job.public_location || job.public_experience ||
+      normalizePublicSkills(job.public_skills).length || job.application_deadline || job.public_jd
+    )
+    const experienceMinimum = job.experience_min ?? job.ai_experience_min_years
+    const defaultExperience = job.experience_label || (experienceMinimum !== undefined && experienceMinimum !== null ? `${experienceMinimum}+ years` : '')
     setForm({
       id: job.id,
       job_display_id: job.job_display_id || '',
@@ -489,8 +542,25 @@ export default function JobsPage() {
       vertical: job.vertical || '',
       allocation_date: job.allocation_date || todayLocal(),
       jd_url: job.jd_storage_path || job.jd_url || '',
-      jd_storage_path: job.jd_storage_path || ''
+      jd_storage_path: job.jd_storage_path || '',
+      is_public: Boolean(job.is_public),
+      public_slug: job.public_slug || '',
+      public_name: job.public_name || (!hasSavedPublicConfiguration ? job.role || job.title || '' : ''),
+      public_location: job.public_location || (!hasSavedPublicConfiguration ? job.location || job.city || '' : ''),
+      public_experience: job.public_experience || (!hasSavedPublicConfiguration ? defaultExperience : ''),
+      public_skills: normalizePublicSkills(job.public_skills).length ? normalizePublicSkills(job.public_skills) : (!hasSavedPublicConfiguration ? normalizePublicSkills(job.skills) : []),
+      application_deadline: job.application_deadline || '',
+      public_jd: job.public_jd || ''
     })
+    setPublicSkillInput('')
+    setPublicFieldsTouched(hasSavedPublicConfiguration ? {
+      public_name: true,
+      public_location: true,
+      public_experience: true,
+      public_skills: true,
+      application_deadline: true,
+      public_jd: true
+    } : {})
     setSavedJdAttachments(jobJdAttachments(job))
     setPendingJdFiles([])
     setPendingJdLinks([])
@@ -566,9 +636,10 @@ export default function JobsPage() {
     return userByNormalizedName.get(text.toLowerCase()) || null
   }
   const availableColumns = MANDATE_TABLE_COLUMNS.filter(column => !isColumnHidden(permissions, 'jobs', MANDATE_PERMISSION_BY_COLUMN[column.key], isAdmin))
+  const customizableColumns = availableColumns.filter(column => !column.required)
   const activeColumns = isDashboardEmbed
     ? availableColumns
-    : availableColumns.filter(column => visibleColumns.includes(column.key))
+    : availableColumns.filter(column => column.required || visibleColumns.includes(column.key))
   const mandateTableMinWidth = activeColumns.reduce((sum, column) => sum + (column.width || 140), 0)
   const hasActiveMandateFilters = Boolean(aiFilters) || Boolean(
     dashboardFilters && Object.values(dashboardFilters).some(value => String(value || '').trim())
@@ -586,7 +657,8 @@ export default function JobsPage() {
     mandate_status: 'mandate_status',
     vertical: 'vertical',
     jd_file: 'jd_storage_path',
-    comments: 'comments'
+    comments: 'comments',
+    public_careers_listing: 'public_careers_listing'
   }
   const isJobFieldHidden = (name) => isColumnHidden(permissions, 'jobs', jobFieldPermission[name] || name, isAdmin)
   const isJobFieldDisabled = (name) => isColumnDisabled(permissions, 'jobs', jobFieldPermission[name] || name, isAdmin)
@@ -603,7 +675,7 @@ export default function JobsPage() {
   }
 
   const proceedColumns = () => {
-    const allowed = availableColumns.map(column => column.key)
+    const allowed = customizableColumns.map(column => column.key)
     const next = pendingColumns.filter(key => allowed.includes(key))
     setVisibleColumns(next)
     storeMandateColumns(next)
@@ -614,7 +686,7 @@ export default function JobsPage() {
     try {
       const currentUser = JSON.parse(window.sessionStorage.getItem('fb_user') || '{}')
       const userId = session?.user?.id || currentUser?.id || currentUser?.email || 'anonymous'
-      const allowed = availableColumns.map(column => column.key)
+      const allowed = customizableColumns.map(column => column.key)
       const value = pendingColumns.filter(key => allowed.includes(key))
       const response = await fetch('/api/user-preferences/mandates_columns_preference', {
         method: 'PUT',
@@ -633,7 +705,7 @@ export default function JobsPage() {
   }
 
   const resetColumnsToSaved = () => {
-    const allowedKeys = new Set(availableColumns.map(column => column.key))
+    const allowedKeys = new Set(customizableColumns.map(column => column.key))
     const value = (savedColumns?.length ? savedColumns : DEFAULT_MANDATE_COLUMN_KEYS).filter(key => allowedKeys.has(key))
     setPendingColumns(value)
     setVisibleColumns(value)
@@ -656,6 +728,16 @@ export default function JobsPage() {
     })
     if (invalidConsultant) next.consultants = 'Please select a valid consultant from the dropdown.'
     if (teamLeadSearch.trim() && teamLeadSearch !== '-' && !resolveTeamLeadUser()) next.team_lead = 'Please select a valid team lead from the dropdown.'
+    if (form.is_public && publicListingFormChanged(form, editingJob) && !isJobFieldHidden('public_careers_listing') && !isJobFieldDisabled('public_careers_listing')) {
+      if (!String(form.public_name || '').trim()) next.public_name = 'Public Role Name is required.'
+      if (!String(form.public_location || '').trim()) next.public_location = 'Public Location is required.'
+      if (!String(form.public_experience || '').trim()) next.public_experience = 'Public Experience is required.'
+      if (!normalizePublicSkills(form.public_skills).length) next.public_skills = 'At least one public skill is required.'
+      if (!form.application_deadline) next.application_deadline = 'Application Deadline is required.'
+      else if (form.application_deadline < indiaToday()) next.application_deadline = 'Application Deadline cannot be in the past in Asia/Kolkata.'
+      if (!String(form.public_jd || '').trim()) next.public_jd = 'Public JD is required.'
+      if (normalizeMandateStatus(form.mandate_status) !== 'Ongoing (P1)') next.is_public = 'Only an Ongoing (P1) mandate can be published.'
+    }
     return next
   }
 
@@ -801,8 +883,19 @@ export default function JobsPage() {
         vertical: form.vertical,
         allocation_date: form.allocation_date
       }
+      if (!isJobFieldHidden('public_careers_listing') && !isJobFieldDisabled('public_careers_listing')) {
+        Object.assign(payload, {
+          is_public: Boolean(form.is_public),
+          public_name: String(form.public_name || '').trim(),
+          public_location: String(form.public_location || '').trim(),
+          public_experience: String(form.public_experience || '').trim(),
+          public_skills: normalizePublicSkills(form.public_skills),
+          application_deadline: form.application_deadline || '',
+          public_jd: String(form.public_jd || '').trim()
+        })
+      }
       const body = new FormData()
-      Object.entries(payload).forEach(([key, value]) => body.append(key, Array.isArray(value) ? value.join(',') : value ?? ''))
+      Object.entries(payload).forEach(([key, value]) => body.append(key, key === 'public_skills' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : value ?? ''))
       if (!editingJob && duplicateBypass) body.append('duplicate_action', 'add_duplicate')
       pendingJdFiles.forEach(file => body.append('jd_files', file))
       if (pendingJdLinks.length) body.append('jd_links', JSON.stringify(pendingJdLinks))
@@ -1007,6 +1100,67 @@ export default function JobsPage() {
     }
   }
 
+  const setPublicFormField = (field, value) => {
+    setPublicFieldsTouched(current => ({ ...current, [field]: true }))
+    setForm(current => ({ ...current, [field]: value }))
+    setErrors(current => {
+      if (!current[field] && !(field === 'is_public' && current.is_public)) return current
+      const next = { ...current }
+      delete next[field]
+      if (field === 'is_public') delete next.is_public
+      return next
+    })
+  }
+
+  const addPublicSkill = () => {
+    const skill = String(publicSkillInput || '').trim().replace(/[,;]+$/, '')
+    if (!skill) return
+    setPublicFieldsTouched(current => ({ ...current, public_skills: true }))
+    setForm(current => ({ ...current, public_skills: normalizePublicSkills([...(current.public_skills || []), skill]) }))
+    setPublicSkillInput('')
+    setErrors(current => ({ ...current, public_skills: '' }))
+  }
+
+  const removePublicSkill = (skill) => {
+    setPublicFieldsTouched(current => ({ ...current, public_skills: true }))
+    setForm(current => ({ ...current, public_skills: normalizePublicSkills(current.public_skills).filter(item => item !== skill) }))
+  }
+
+  const updatePublicVisibility = async (job, isPublic) => {
+    if (!job?.id || publicActionSaving[job.id] || (job.is_locked && !isAdmin) || isJobFieldHidden('public_careers_listing') || isJobFieldDisabled('public_careers_listing')) return
+    setPublicActionSaving(current => ({ ...current, [job.id]: true }))
+    setPublicActionNotice('')
+    try {
+      const response = await apiFetch(`/api/jobs/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_public: isPublic }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || `Unable to ${isPublic ? 'publish' : 'unpublish'} this role.`)
+      setPublicActionNotice(isPublic ? 'Public role published.' : 'Public role unpublished. Saved public details were retained.')
+      await fetchData()
+    } catch (actionError) {
+      setPublicActionNotice(actionError.message || `Unable to ${isPublic ? 'publish' : 'unpublish'} this role.`)
+    } finally {
+      setPublicActionSaving(current => ({ ...current, [job.id]: false }))
+    }
+  }
+
+  const publicRoleUrl = job => `${window.location.origin}/open-roles/${encodeURIComponent(job.public_slug)}`
+  const previewPublicListing = job => {
+    const opened = window.open(publicRoleUrl(job), '_blank', 'noopener,noreferrer')
+    if (opened) opened.opener = null
+  }
+  const copyPublicLink = async job => {
+    try {
+      await navigator.clipboard.writeText(publicRoleUrl(job))
+      setPublicActionNotice('Public link copied.')
+    } catch {
+      setPublicActionNotice('Could not copy the public link. Please use Preview Public Listing and copy it from the browser.')
+    }
+  }
+
   const toggleTablePopover = (type, id, element) => {
     if (!element) return
     const anchorRect = element.getBoundingClientRect()
@@ -1068,8 +1222,18 @@ export default function JobsPage() {
             </td>
           )
         }
+      case 'publicState':
+        {
+          const state = job.public_state || publicListingState(job)
+          return <td key={column.key}><span className={`mandate-public-state mandate-public-state-${state.toLowerCase().replace(/\s+/g, '-')}`}>{state}</span></td>
+        }
       case 'action':
-        return <td key={column.key}><div className="row-actions"><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)} disabled={job.is_locked && !isAdmin}><Pencil size={13} /></button>{isAdmin && <RecordLockButton tableName="jobs" recordId={job.id} locked={job.is_locked} onChanged={updateJobLockState} />}</div></td>
+        {
+          const state = job.public_state || publicListingState(job)
+          const showPublicActions = !isJobFieldHidden('public_careers_listing')
+          const publicActionDisabled = publicActionSaving[job.id] || (job.is_locked && !isAdmin) || isJobFieldDisabled('public_careers_listing')
+          return <td key={column.key}><div className="row-actions mandate-row-actions"><button className="row-action-btn" type="button" title="Edit Mandate" onClick={() => editJob(job)} disabled={job.is_locked && !isAdmin}><Pencil size={13} /></button>{showPublicActions && state === 'Published' && <button className="row-action-btn" type="button" title="Preview Public Listing" onClick={() => previewPublicListing(job)}><ExternalLink size={13} /></button>}{showPublicActions && state === 'Published' && <button className="row-action-btn" type="button" title="Copy Public Link" onClick={() => copyPublicLink(job)}><Copy size={13} /></button>}{showPublicActions && (job.is_public ? <button className="row-action-btn mandate-public-toggle-action" type="button" title="Unpublish" onClick={() => updatePublicVisibility(job, false)} disabled={publicActionDisabled}><Globe2 size={13} /></button> : <button className="row-action-btn mandate-public-toggle-action" type="button" title="Publish" onClick={() => updatePublicVisibility(job, true)} disabled={publicActionDisabled}><Globe2 size={13} /></button>)}{isAdmin && <RecordLockButton tableName="jobs" recordId={job.id} locked={job.is_locked} onChanged={updateJobLockState} />}</div></td>
+        }
       default:
         return null
     }
@@ -1092,12 +1256,12 @@ export default function JobsPage() {
           <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
           {columnsOpen && (
             <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsDropdownRef.current || columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => { setPendingColumns(visibleColumns); setColumnsOpen(false) }}>
-              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(availableColumns.map(column => column.key))}>Select All</button>
+              <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(customizableColumns.map(column => column.key))}>Select All</button>
               <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
               <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
               <button className="candidate-columns-action" type="button" onClick={resetColumnsToSaved}>Reset to Saved Preference</button>
               <div className="candidate-columns-divider" />
-              {availableColumns.map(column => (
+              {customizableColumns.map(column => (
                 <label className="candidate-column-option" key={column.key}>
                   <input type="checkbox" checked={pendingColumns.includes(column.key)} onChange={() => togglePendingColumn(column.key)} />
                   {column.label}
@@ -1107,6 +1271,8 @@ export default function JobsPage() {
           )}
         </div>
       </div>
+
+      {publicActionNotice && <div className="mandate-public-notice" role="status"><Globe2 size={15} /><span>{publicActionNotice}</span><button type="button" onClick={() => setPublicActionNotice('')} aria-label="Dismiss public listing notice"><X size={13} /></button></div>}
 
       <div className="filter-bar candidates-filter-bar candidates-toolbar">
         <form onSubmit={applyAiFilter} className="candidate-ai-filter-form">
@@ -1380,7 +1546,7 @@ export default function JobsPage() {
                           setAddingNewRole(false)
                           setRoleSelectionConfirmed(false)
                           setRoleSearch('')
-                          setForm(current => ({ ...current, role: '' }))
+                          setForm(current => ({ ...current, role: '', ...(!publicFieldsTouched.public_name ? { public_name: '' } : {}) }))
                           setRoleSuggestionsOpen(true)
                         }}>Switch</button>
                       </div>
@@ -1391,7 +1557,7 @@ export default function JobsPage() {
                       value={roleSearch}
                       onChange={e => {
                         setRoleSearch(e.target.value)
-                        setForm(current => ({ ...current, role: e.target.value }))
+                        setForm(current => ({ ...current, role: e.target.value, ...(!publicFieldsTouched.public_name ? { public_name: e.target.value } : {}) }))
                         if (!addingNewRole) setRoleSelectionConfirmed(false)
                         if (!addingNewRole) setRoleSuggestionsOpen(true)
                       }}
@@ -1407,7 +1573,7 @@ export default function JobsPage() {
                           setAddingNewRole(true)
                           setRoleSelectionConfirmed(true)
                           setRoleSearch('')
-                          setForm(current => ({ ...current, role: '' }))
+                          setForm(current => ({ ...current, role: '', ...(!publicFieldsTouched.public_name ? { public_name: '' } : {}) }))
                           setRoleSuggestionsOpen(false)
                           window.setTimeout(() => roleInputRef.current?.focus(), 0)
                         }}>
@@ -1417,7 +1583,7 @@ export default function JobsPage() {
                           <button type="button" key={`${job.role}-${job.job_display_id}`} onMouseDown={(event) => {
                             event.preventDefault()
                             setRoleSearch(job.role)
-                            setForm(current => ({ ...current, role: job.role }))
+                            setForm(current => ({ ...current, role: job.role, ...(!publicFieldsTouched.public_name ? { public_name: job.role } : {}) }))
                             setAddingNewRole(false)
                             setRoleSelectionConfirmed(true)
                             setRoleSuggestionsOpen(false)
@@ -1433,7 +1599,7 @@ export default function JobsPage() {
                 </div>}
                 {!isJobFieldHidden('location') && <div className="form-group">
                   <label className="form-label">Location</label>
-                  <input className="form-control" value={form.location} onChange={e => setForm(current => ({ ...current, location: e.target.value }))} disabled={saving || isJobFieldDisabled('location')} />
+                  <input className="form-control" value={form.location} onChange={e => setForm(current => ({ ...current, location: e.target.value, ...(!publicFieldsTouched.public_location ? { public_location: e.target.value } : {}) }))} disabled={saving || isJobFieldDisabled('location')} />
                 </div>}
                 {!isJobFieldHidden('budget') && <div className="form-group">
                   <label className="form-label">Budget</label>
@@ -1510,6 +1676,60 @@ export default function JobsPage() {
                     showExternalLinkIcon
                   />
                 </div>}
+                {!isJobFieldHidden('public_careers_listing') && <>
+                  <div className="form-section-title mandate-public-section-title"><Globe2 size={14} />Public Careers Listing</div>
+                  <div className="form-group full mandate-public-switch-row">
+                    <label className="mandate-public-switch">
+                      <input type="checkbox" checked={Boolean(form.is_public)} onChange={event => setPublicFormField('is_public', event.target.checked)} disabled={saving || isJobFieldDisabled('public_careers_listing')} />
+                      <span><strong>Publish this role</strong><small>Existing and new mandates remain private unless this is enabled and all public details are complete.</small></span>
+                    </label>
+                    {errors.is_public && <span className="form-error">{errors.is_public}</span>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Public Slug</label>
+                    <input className="form-control" value={form.public_slug || ''} placeholder="Generated once on first save" disabled readOnly />
+                    <span className="sub-text">The stable public URL does not change when the public role name is edited.</span>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Public Role Name <span className="req">*</span></label>
+                    <input className={`form-control${errors.public_name ? ' is-error' : ''}`} value={form.public_name} onChange={event => setPublicFormField('public_name', event.target.value)} disabled={saving || isJobFieldDisabled('public_careers_listing')} />
+                    {errors.public_name && <span className="form-error">{errors.public_name}</span>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Public Location <span className="req">*</span></label>
+                    <input className={`form-control${errors.public_location ? ' is-error' : ''}`} value={form.public_location} onChange={event => setPublicFormField('public_location', event.target.value)} disabled={saving || isJobFieldDisabled('public_careers_listing')} />
+                    {errors.public_location && <span className="form-error">{errors.public_location}</span>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Public Experience <span className="req">*</span></label>
+                    <input className={`form-control${errors.public_experience ? ' is-error' : ''}`} value={form.public_experience} onChange={event => setPublicFormField('public_experience', event.target.value)} placeholder="For example, 5-8 years" disabled={saving || isJobFieldDisabled('public_careers_listing')} />
+                    {errors.public_experience && <span className="form-error">{errors.public_experience}</span>}
+                  </div>
+                  <div className="form-group full">
+                    <label className="form-label">Public Skills <span className="req">*</span></label>
+                    <div className={`tag-input-wrap mandate-public-skills${errors.public_skills ? ' is-error' : ''}`}>
+                      {normalizePublicSkills(form.public_skills).map(skill => <span className="tag-chip" key={skill}>{skill}<button className="tag-chip-remove" type="button" onClick={() => removePublicSkill(skill)} disabled={saving || isJobFieldDisabled('public_careers_listing')} aria-label={`Remove ${skill}`}><X size={11} /></button></span>)}
+                      <input className="tag-input-field" value={publicSkillInput} onChange={event => setPublicSkillInput(event.target.value)} onKeyDown={event => {
+                        if (event.key !== 'Enter' && event.key !== ',') return
+                        event.preventDefault()
+                        addPublicSkill()
+                      }} placeholder="Type a public skill" disabled={saving || isJobFieldDisabled('public_careers_listing')} />
+                      <button className="tag-add-btn" type="button" onClick={addPublicSkill} disabled={saving || isJobFieldDisabled('public_careers_listing') || !publicSkillInput.trim()}>Add</button>
+                    </div>
+                    {errors.public_skills && <span className="form-error">{errors.public_skills}</span>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Application Deadline <span className="req">*</span></label>
+                    <input type="date" min={indiaToday()} className={`form-control${errors.application_deadline ? ' is-error' : ''}`} value={form.application_deadline} onChange={event => setPublicFormField('application_deadline', event.target.value)} disabled={saving || isJobFieldDisabled('public_careers_listing')} />
+                    {errors.application_deadline && <span className="form-error">{errors.application_deadline}</span>}
+                  </div>
+                  <div className="form-group full">
+                    <label className="form-label">Public JD <span className="req">*</span></label>
+                    <textarea rows="8" className={`form-control${errors.public_jd ? ' is-error' : ''}`} value={form.public_jd} onChange={event => setPublicFormField('public_jd', event.target.value)} disabled={saving || isJobFieldDisabled('public_careers_listing')} />
+                    <span className="sub-text">Only this text is public. Internal JD files, Mandate Sheet links, client details and internal notes remain private.</span>
+                    {errors.public_jd && <span className="form-error">{errors.public_jd}</span>}
+                  </div>
+                </>}
               </div>
             </div>
             <div className="modal-footer">

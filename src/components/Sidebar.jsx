@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import {
-  LayoutDashboard, Briefcase, Building2, ClipboardList, Users, LogOut, ShieldCheck, FileText, BookOpenText, CalendarCheck, ChartNoAxesCombined
+  LayoutDashboard, Briefcase, Building2, ClipboardList, Users, LogOut, ShieldCheck, FileText, BookOpenText, CalendarCheck, ChartNoAxesCombined, ExternalLink, UserRoundCheck
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
@@ -12,8 +12,10 @@ import './Sidebar.css'
 const navItems = [
   { to: '/dashboard',            label: 'Dashboard', key: 'dashboard', Icon: LayoutDashboard, end: true },
   { to: '/dashboard/jobs',       label: 'Mandates', key: 'mandates', Icon: Briefcase },
+  { to: '/open-roles',           label: 'Public Roles', key: 'public_roles', Icon: ExternalLink, external: true },
   { to: '/dashboard/clients',    label: 'Clients', key: 'clients', Icon: Building2 },
   { to: '/dashboard/candidates', label: 'Candidates', key: 'candidates', Icon: Users },
+  { to: '/dashboard/applied-candidates', label: 'Applied Candidates', key: 'applied_candidates', Icon: UserRoundCheck },
   { to: '/dashboard/attendance', label: 'Attendance', key: 'attendance', Icon: CalendarCheck },
   { to: '/dashboard/reports/consultant', label: 'Report', key: 'report', Icon: ChartNoAxesCombined },
   { to: '/dashboard/performance', label: 'PMS', key: 'performance_review', Icon: ClipboardList },
@@ -71,7 +73,12 @@ export default function Sidebar() {
 
       {/* Nav links */}
       <nav className="sidebar-nav">
-        {!pageViews.loading && navItems.filter(item => pageViews.canView(item.key)).map(({ to, label, Icon, end }) => (
+        {!pageViews.loading && navItems.filter(item => item.external || pageViews.canView(item.key)).map(({ to, label, Icon, end, external }) => external ? (
+          <a className="sidebar-nav-link" href={to} target="_blank" rel="noopener noreferrer" id="nav-public-roles" key={to}>
+            <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
+            <span className="sidebar-nav-label">{label}</span>
+          </a>
+        ) : (
           <NavLink
             key={to}
             to={to}

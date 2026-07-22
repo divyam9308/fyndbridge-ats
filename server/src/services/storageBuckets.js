@@ -4,7 +4,8 @@ const STORAGE_BUCKETS = {
   CONTRACT: 'contract-pdfs',
   INVOICE: 'invoice',
   EMPLOYEE_HANDBOOK: 'employee-handbook',
-  USER_MANUAL: 'user-manual'
+  USER_MANUAL: 'user-manual',
+  PUBLIC_APPLICATIONS: 'public-applications'
 }
 
 const STORAGE_BUCKET_TYPES = {

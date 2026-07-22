@@ -30,3 +30,4 @@ server/.env.*
 *.sw?
 .vercel
 .env*
+!server/.env.example

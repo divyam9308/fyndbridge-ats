@@ -5,6 +5,7 @@ const preloaders = {
   '/dashboard/clients/:clientId': () => import('../pages/ClientDetailPage'),
   '/dashboard/clients/:clientId/jobs/:jobId/candidates': () => import('../pages/ClientJobCandidatesPage'),
   '/dashboard/candidates': () => import('../pages/CandidatesPage'),
+  '/dashboard/applied-candidates': () => import('../pages/AppliedCandidatesPage'),
   '/dashboard/performance': () => import('../pages/PerformanceReviewPage'),
   '/dashboard/attendance': () => import('../pages/AttendancePage'),
   '/dashboard/reports/consultant': () => import('../pages/ConsultantReportPage'),

@@ -12,6 +12,14 @@ const { isAdmin, getColumnPermissions, stripHiddenFields, assertCanUpdateColumns
 const { assertActiveAssignments } = require('../services/employeeStatus')
 const { resolveClientGroupScope } = require('../services/clientGroups')
 const { MANDATE_STATUSES, normalizeMandateStatus } = require('../services/mandateStatuses')
+const {
+  PUBLIC_JOB_FIELDS,
+  publicJobPayload,
+  publicJobDetailsChanged,
+  publicJobState,
+  validatePublicJobForPublish,
+  allocatePublicSlug
+} = require('../services/publicApplications')
 
 const BUDGETS = ['0-5 lac', '5-10 lac', '10-15 lac', '15-20 lac', '20-25 lac', '25-30 lac', '30-35 lac', '35-40 lac', '40-50 lac', '50-60 lac', '60-70 lac', '70-80 lac', '80-100 lac', '100-150 lac', '>150 lac']
 
@@ -174,6 +182,7 @@ function formatJob(row) {
     mandate_status: mandateStatus,
     status: mandateStatus,
     priority: mandateStatus,
+    public_state: publicJobState(row),
     duplicate_confirmed: undefined,
     clients: undefined
   }
@@ -395,7 +404,7 @@ async function listJobs(req, res) {
     const totalPages = Math.max(1, Math.ceil(total / limit))
     return res.json({ data: await stripHiddenFields('jobs', rows, await isAdmin(req.user)), total, page, totalPages, limit })
   } catch (err) {
-    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message, ...(err.errors ? { errors: err.errors } : {}) })
     return logAndSendInternal(res, 'listJobs', err)
   }
 }
@@ -439,6 +448,7 @@ async function payloadFromBody(body, partial = false) {
   if (!partial || body.allocation_date !== undefined) payload.allocation_date = body.allocation_date || todayLocal()
   if (!partial || body.jd_url !== undefined) payload.jd_url = nullable(normalizeStoragePath(body.jd_storage_path || body.jd_url, STORAGE_BUCKETS.JD))
   if (!partial || body.jd_storage_path !== undefined) payload.jd_storage_path = nullable(normalizeStoragePath(body.jd_storage_path || body.jd_url, STORAGE_BUCKETS.JD))
+  Object.assign(payload, publicJobPayload(body, partial))
   return payload
 }
 
@@ -448,6 +458,17 @@ function missingJobColumn(error) {
   return match?.[1] || match?.[2] || null
 }
 
+function isPublicSlugUniqueError(error) {
+  return error?.code === '23505' && /public_slug|jobs_public_slug_unique/i.test(String(error.message || ''))
+}
+
+function asPublicSchemaError(error) {
+  if (!error || !PUBLIC_JOB_FIELDS.some((field) => String(error.message || '').includes(field))) return error
+  error.statusCode = 503
+  error.message = 'Public Careers Listing schema is not ready. Apply the feature migration before saving public fields.'
+  return error
+}
+
 async function insertJob(payload) {
   let next = payload
   let result = null
@@ -455,6 +476,11 @@ async function insertJob(payload) {
     result = await supabase.from('jobs').insert(next).select('*, clients(name, client_name, client_display_id)').single()
     const col = missingJobColumn(result.error)
     if (!col) break
+    if (PUBLIC_JOB_FIELDS.includes(col)) {
+      result.error.statusCode = 503
+      result.error.message = 'Public Careers Listing schema is not ready. Apply the feature migration before saving public fields.'
+      break
+    }
     next = { ...next }
     delete next[col]
   }
@@ -468,6 +494,11 @@ async function updateJobRow(id, payload) {
     result = await supabase.from('jobs').update(next).eq('id', id).select('*, clients(name, client_name, client_display_id)').maybeSingle()
     const col = missingJobColumn(result.error)
     if (!col) break
+    if (PUBLIC_JOB_FIELDS.includes(col)) {
+      result.error.statusCode = 503
+      result.error.message = 'Public Careers Listing schema is not ready. Apply the feature migration before saving public fields.'
+      break
+    }
     next = { ...next }
     delete next[col]
   }
@@ -478,6 +509,8 @@ async function createJob(req, res) {
   const files = requestFiles(req, 'jd_file', 'jd_files')
   let uploadedAttachments = []
   try {
+    const requestedPublicFields = Object.fromEntries(PUBLIC_JOB_FIELDS.filter((field) => Object.prototype.hasOwnProperty.call(req.body, field)).map((field) => [field, req.body[field]]))
+    if (Object.keys(requestedPublicFields).length) await assertCanUpdateColumns('jobs', requestedPublicFields, await isAdmin(req.user))
     const payload = await payloadFromBody(req.body)
     payload.client_id = await assertClientExists(payload.client_id)
     const duplicateAction = clean(req.body.duplicate_action)
@@ -494,14 +527,19 @@ async function createJob(req, res) {
     payload.jd_storage_path = payload.jd_attachments[0]?.path || null
     if (!payload.mandate_status) payload.mandate_status = 'Ongoing (P1)'
     if (!payload.status) payload.status = payload.mandate_status
+    validatePublicJobForPublish(payload)
     let data = null
     let error = null
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const insertPayload = { ...payload, job_display_id: await nextJobDisplayId() }
+      if (!insertPayload.public_slug && insertPayload.public_name) {
+        insertPayload.public_slug = await allocatePublicSlug(supabase, insertPayload.public_name, insertPayload.job_display_id)
+      }
       const result = await insertJob(insertPayload)
       data = result.data
       error = result.error
       if (!error) break
+      if (isPublicSlugUniqueError(error)) continue
       if (!isDisplayIdUniqueError(error, 'job_display_id')) break
     }
     if (error) throw error
@@ -528,7 +566,7 @@ async function createJob(req, res) {
         return logAndSendInternal(res, 'createJob duplicate lookup', duplicateError)
       }
     }
-    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message, ...(err.errors ? { errors: err.errors } : {}) })
     return logAndSendInternal(res, 'createJob', err)
   } finally {
     await cleanupTempFiles(files)
@@ -546,9 +584,17 @@ async function updateJob(req, res) {
     await assertRowEditable('jobs', req.params.id, admin)
     await assertCanUpdateColumns('jobs', req.body, admin)
     const payload = await payloadFromBody(req.body, true)
-    const { data: currentJob, error: currentJobError } = await supabase.from('jobs').select('client_id, title, consultants, team_lead, jd_attachments, jd_storage_path, jd_url, created_at, updated_at').eq('id', req.params.id).maybeSingle()
-    if (currentJobError) throw currentJobError
+    const { data: currentJob, error: currentJobError } = await supabase.from('jobs').select('client_id, title, consultants, team_lead, jd_attachments, jd_storage_path, jd_url, created_at, updated_at, job_display_id, mandate_status, status, is_public, public_slug, public_name, public_location, public_experience, public_skills, application_deadline, public_jd').eq('id', req.params.id).maybeSingle()
+    if (currentJobError) throw asPublicSchemaError(currentJobError)
     if (!currentJob) return res.status(404).json({ error: 'Mandate not found' })
+    const nextPublicJob = { ...currentJob, ...payload }
+    if (!currentJob.public_slug && nextPublicJob.public_name) {
+      payload.public_slug = await allocatePublicSlug(supabase, nextPublicJob.public_name, currentJob.job_display_id)
+      nextPublicJob.public_slug = payload.public_slug
+    }
+    const publishingPublicJob = !currentJob.is_public && nextPublicJob.is_public
+    const publicDetailsChanged = publicJobDetailsChanged(currentJob, nextPublicJob)
+    if (nextPublicJob.is_public && (publishingPublicJob || publicDetailsChanged)) validatePublicJobForPublish(nextPublicJob)
     const nextClientId = await assertClientExists(payload.client_id || currentJob.client_id)
     if (Object.prototype.hasOwnProperty.call(payload, 'client_id') || nextClientId !== currentJob.client_id) payload.client_id = nextClientId
     const nextTitle = Object.prototype.hasOwnProperty.call(payload, 'title') ? payload.title : currentJob.title
@@ -610,7 +656,7 @@ async function updateJob(req, res) {
     if (uploadedAttachments.length && !attachmentRowUpdated) {
       try { await removeDocuments(STORAGE_BUCKETS.JD, uploadedAttachments) } catch (cleanupError) { console.error('updateJob storage rollback:', cleanupError.message) }
     }
-    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message })
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message, ...(err.errors ? { errors: err.errors } : {}) })
     return logAndSendInternal(res, 'updateJob', err)
   } finally {
     await cleanupTempFiles(files)

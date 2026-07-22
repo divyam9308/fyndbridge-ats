@@ -23,6 +23,7 @@ const PAGE_VIEW_DEFAULTS = {
   performance_review: 'everyone',
   attendance: 'everyone',
   report: 'everyone',
+  applied_candidates: 'everyone',
   invoice: 'admin_only',
   user_manual: 'everyone'
 }
@@ -94,6 +95,7 @@ const COLUMN_DEFS = {
     ['Date of Allocation', 'allocation_date', ['allocation_date']],
     ['JD', 'jd_storage_path', ['jd_url', 'jd_storage_path', 'jd_attachments', 'jd_file', 'jd_files', 'jd_links', 'removed_jd_paths']],
     ['Status', 'mandate_status', ['mandate_status', 'status', 'priority']],
+    ['Public Careers Listing', 'public_careers_listing', ['is_public', 'public_slug', 'public_name', 'public_location', 'public_experience', 'public_skills', 'application_deadline', 'public_jd', 'public_state']],
     ['Comments', 'comments', ['comments', 'notes']]
   ]
 }

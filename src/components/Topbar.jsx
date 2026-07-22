@@ -8,6 +8,7 @@ const pageTitles = {
   '/dashboard/jobs':       { title: 'Mandates', crumb: 'Home / Mandates' },
   '/dashboard/clients':    { title: 'Clients',     crumb: 'Home / Clients' },
   '/dashboard/candidates': { title: 'Candidates',  crumb: 'Home / Candidates' },
+  '/dashboard/applied-candidates': { title: 'Applied Candidates', crumb: 'Home / Applied Candidates' },
   '/dashboard/performance': { title: 'PMS', crumb: 'Home / PMS' },
   '/dashboard/attendance': { title: 'Attendance', crumb: 'Home / Attendance' },
   '/dashboard/reports/consultant': { title: 'Report', crumb: 'Home / Report' },

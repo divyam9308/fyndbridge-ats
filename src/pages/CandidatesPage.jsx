@@ -236,6 +236,7 @@ const apiCandidateToUi = (row) => ({
   consultantName: row.consultant_name || '',
   consultantUserId: row.consultant_user_id || '',
   isLocked: Boolean(row.is_locked),
+  isPublicApplicationConversion: Boolean(row.is_public_application_conversion),
   createdAt: row.created_at || '',
 })
 
@@ -2404,9 +2405,10 @@ export default function CandidatesPage() {
               </thead>
               <tbody>
                 {visibleCandidates.map(({ candidate: c, mobile, isGroup, isExpanded, groupSize, groupIndex, isLastInGroup }) => {
-                  const rowClass = isGroup
+                  const duplicateRowClass = isGroup
                     ? `candidate-mobile-group-row${groupIndex === 0 ? ' group-first' : ' group-child'}${isLastInGroup ? ' group-last' : ''}${isExpanded && groupIndex === 0 ? ' candidate-group-parent-expanded' : ''}${isExpanded && groupIndex > 0 ? ' candidate-group-child-expanded' : ''}`
                     : ''
+                  const rowClass = `${duplicateRowClass}${c.isPublicApplicationConversion ? `${duplicateRowClass ? ' ' : ''}candidate-public-application-row` : ''}`
                   return (
                     <tr key={c.associationId || c.id} className={rowClass}>
                       {activeColumns.map(column => renderCandidateCell(column, c, { mobile, isGroup, isExpanded, groupSize, groupIndex }))}

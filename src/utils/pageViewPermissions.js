@@ -1,6 +1,7 @@
 export const PAGE_VIEW_DEFAULTS = {
   dashboard: 'everyone',
   candidates: 'everyone',
+  applied_candidates: 'everyone',
   clients: 'everyone',
   mandates: 'everyone',
   performance_review: 'everyone',
@@ -13,6 +14,7 @@ export const PAGE_VIEW_DEFAULTS = {
 export const PAGE_VIEW_ROUTES = {
   dashboard: '/dashboard',
   candidates: '/dashboard/candidates',
+  applied_candidates: '/dashboard/applied-candidates',
   clients: '/dashboard/clients',
   mandates: '/dashboard/jobs',
   performance_review: '/dashboard/performance',
@@ -25,6 +27,7 @@ export const PAGE_VIEW_ROUTES = {
 export const PAGE_VIEW_ITEMS = [
   ['dashboard', 'Dashboard'],
   ['candidates', 'Candidates'],
+  ['applied_candidates', 'Applied Candidates'],
   ['clients', 'Clients'],
   ['mandates', 'Mandates'],
   ['performance_review', 'PMS / Performance Review'],

@@ -2030,6 +2030,57 @@ textarea.form-control {
   border-bottom: 1px solid var(--gray-100);
   grid-column: 1 / -1;
 }
+
+/* Public application conversion marker is cell-scoped so duplicate connectors stay intact. */
+.candidates-master-table .candidate-public-application-row > td:first-child {
+  box-shadow: inset 4px 0 0 #dc3545;
+}
+
+.mandate-public-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.mandate-public-state-not-public { color: var(--gray-600); background: var(--gray-50); }
+.mandate-public-state-incomplete { color: #8a5a00; background: var(--gold-soft); border-color: rgba(var(--brand-gold-rgb), .35); }
+.mandate-public-state-closed { color: #7f1d1d; background: #fee2e2; border-color: #fecaca; }
+.mandate-public-state-expired { color: #9a3412; background: #ffedd5; border-color: #fed7aa; }
+.mandate-public-state-published { color: #166534; background: #dcfce7; border-color: #bbf7d0; }
+.mandate-row-actions { flex-wrap: nowrap; }
+.mandate-public-toggle-action { color: var(--brand-blue); }
+.mandate-public-notice {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--navy-darkest);
+  background: var(--gold-soft);
+  border: 1px solid rgba(var(--brand-gold-rgb), .3);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.mandate-public-notice > button {
+  margin-left: auto;
+  padding: 0;
+  display: grid;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.mandate-public-section-title { display: flex; align-items: center; gap: 6px; }
+.mandate-public-switch-row { padding: 12px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 10px; }
+.mandate-public-switch { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.mandate-public-switch input { margin-top: 3px; accent-color: var(--brand-blue); }
+.mandate-public-switch span { display: grid; gap: 2px; color: var(--navy-darkest); font-size: 13px; }
+.mandate-public-switch small { color: var(--gray-500); font-weight: 400; line-height: 1.45; }
+.mandate-public-skills.is-error { border-color: var(--danger); }
 /* Amber highlight for low-confidence extracted fields */
 .form-control.low-confidence {
   border-color: var(--gold) !important;

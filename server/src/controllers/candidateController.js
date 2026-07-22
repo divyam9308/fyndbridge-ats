@@ -22,6 +22,7 @@ const { normalizeMandateStatus } = require('../services/mandateStatuses')
 const { CANDIDATE_STATUSES: VALID_STATUSES, candidateStatusError, cleanStatus: cleanCandidateStatus } = require('../services/candidateStatuses')
 const { removeUnreferencedDocuments, uploadDocuments } = require('../services/documentStorage')
 const { normalizeAttachment, normalizeAttachments, removalPlan } = require('../services/documentAttachments')
+const candidateCreation = require('../services/candidateCreation')
 
 const CANDIDATE_FIELDS = [
   'full_name',
@@ -304,42 +305,7 @@ async function getNextCandidateDisplayId(req, res) {
 }
 
 async function findCandidateRowsByIdentity(email, mobileNumber, columns = '*') {
-  const normalizedEmail = normalizeDuplicateEmail(email)
-  const normalizedMobile = normalizeDuplicateMobile(mobileNumber)
-  const queries = []
-
-  if (isDuplicateValue(normalizedEmail)) {
-    // Keep the final exact comparison below because ilike treats % and _ as wildcards.
-    queries.push(supabase
-      .from('candidates')
-      .select(columns)
-      .ilike('email', normalizedEmail)
-      .limit(10000))
-  }
-
-  if (isDuplicateValue(normalizedMobile)) {
-    // Candidate mobile values are stored without formatting, with an optional leading +.
-    queries.push(supabase
-      .from('candidates')
-      .select(columns)
-      .in('mobile_number', [normalizedMobile, `+${normalizedMobile}`])
-      .limit(10000))
-  }
-
-  if (!queries.length) return []
-
-  const results = await Promise.all(queries)
-  const candidatesById = new Map()
-  for (const { data, error } of results) {
-    if (error) throw error
-    for (const candidate of data || []) candidatesById.set(candidate.id, candidate)
-  }
-
-  return [...candidatesById.values()].filter((candidate) => {
-    const emailMatches = isDuplicateValue(normalizedEmail) && normalizeDuplicateEmail(candidate.email) === normalizedEmail
-    const mobileMatches = isDuplicateValue(normalizedMobile) && normalizeDuplicateMobile(candidate.mobile_number) === normalizedMobile
-    return emailMatches || mobileMatches
-  })
+  return candidateCreation.findCandidateRowsByIdentity(supabase, email, mobileNumber, columns)
 }
 
 async function findCandidateAnyDuplicate(email, mobileNumber) {
@@ -678,7 +644,8 @@ function flattenAssociation(row) {
     notes: row.notes || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    is_locked: Boolean(candidate.is_locked)
+    is_locked: Boolean(candidate.is_locked),
+    is_public_application_conversion: Boolean(row.public_application_id)
   }
 }
 
@@ -726,7 +693,8 @@ function flattenCandidateOnly(candidate) {
     notes: null,
     created_at: candidate.created_at,
     updated_at: candidate.updated_at,
-    is_locked: Boolean(candidate.is_locked)
+    is_locked: Boolean(candidate.is_locked),
+    is_public_application_conversion: false
   }
 }
 
@@ -836,33 +804,11 @@ function missingCandidateColumn(error) {
 }
 
 async function insertCandidate(payload) {
-  let insertPayload = payload
-  let result = null
-  for (let i = 0; i <= CANDIDATE_FIELDS.length; i++) {
-    result = await supabase.from('candidates').insert(insertPayload).select('*').single()
-    const missingColumn = missingCandidateColumn(result.error)
-    if (!missingColumn) break
-    insertPayload = withoutColumn(insertPayload, missingColumn)
-  }
-  return result
+  return candidateCreation.insertCandidate(supabase, payload)
 }
 
 async function insertCandidateWithDisplayId(payload) {
-  const candidateDisplayId = await nextCandidateDisplayId()
-  const result = await insertCandidate({ ...payload, candidate_display_id: candidateDisplayId })
-  if (result.error || !result.data) return result
-  if (result.data.candidate_display_id === candidateDisplayId) return result
-
-  const update = await supabase
-    .from('candidates')
-    .update({ candidate_display_id: candidateDisplayId })
-    .eq('id', result.data.id)
-    .select('*')
-    .single()
-
-  if (!update.error) return update
-  await supabase.from('candidates').delete().eq('id', result.data.id)
-  return { data: null, error: update.error }
+  return candidateCreation.insertCandidateWithDisplayId(supabase, payload)
 }
 
 async function updateCandidateRow(candidateId, payload) {
@@ -1001,23 +947,7 @@ function parseJsonFilter(value) {
 }
 
 async function insertAssociation(payload) {
-  const nextPayload = { ...payload }
-  nextPayload.status = cleanCandidateStatus(nextPayload.status)
-
-  let insertPayload = nextPayload
-  let result = null
-  for (let i = 0; i <= ASSOCIATION_FIELDS.length; i++) {
-    result = await supabase
-      .from('candidate_associations')
-      .insert(insertPayload)
-      .select('*, candidates(*)')
-      .single()
-    const missingColumn = missingAssociationColumn(result.error)
-    if (!missingColumn) break
-    insertPayload = withoutColumn(insertPayload, missingColumn)
-  }
-
-  return result
+  return candidateCreation.insertAssociation(supabase, payload)
 }
 
 async function updateAssociation(associationId, payload) {
@@ -1025,8 +955,6 @@ async function updateAssociation(associationId, payload) {
   if (Object.prototype.hasOwnProperty.call(nextPayload, 'status')) {
     nextPayload.status = cleanCandidateStatus(nextPayload.status)
   }
-
- 
 
   let updatePayload = nextPayload
   let result = null

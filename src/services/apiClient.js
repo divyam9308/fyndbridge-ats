@@ -1,5 +1,3 @@
-import { supabase } from './supabaseClient'
-
 const API_UNAUTHORIZED_EVENT = 'fb:api-unauthorized'
 const API_INACTIVE_EVENT = 'fb:account-inactive'
 const documentOpenLocks = new Map()
@@ -17,10 +15,12 @@ const DOCUMENT_OPEN_TYPES = {
 
 const isPrivateApiUrl = (value) => {
   const text = String(value || '')
-  return text.startsWith('/api/') && !text.startsWith('/api/health') && !text.startsWith('/api/auth')
+  const isPublicApi = text === '/api/public' || text.startsWith('/api/public/')
+  return text.startsWith('/api/') && !text.startsWith('/api/health') && !text.startsWith('/api/auth') && !isPublicApi
 }
 
 export async function getAccessToken() {
+  const { supabase } = await import('./supabaseClient')
   return supabase ? (await supabase.auth.getSession()).data.session?.access_token || '' : ''
 }
 

@@ -1,12 +1,19 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import LoginPage from './pages/LoginPage'
-import { AuthProvider, RequireAuth } from './context/AuthContext'
 import UpdateAvailable from './components/UpdateAvailable'
-import PageViewGuard from './components/PageViewGuard'
 import AuthenticatedShellSkeleton from './components/AuthenticatedShellSkeleton'
 import { loadAuthenticatedShell } from './utils/routePreload'
 
+let authModuleRequest = null
+const loadAuthModule = () => {
+  if (!authModuleRequest) authModuleRequest = import('./context/AuthContext')
+  return authModuleRequest
+}
+
+const AuthProvider = lazy(() => loadAuthModule().then(module => ({ default: module.AuthProvider })))
+const RequireAuth = lazy(() => loadAuthModule().then(module => ({ default: module.RequireAuth })))
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const PageViewGuard = lazy(() => import('./components/PageViewGuard'))
 const AuthenticatedShell = lazy(loadAuthenticatedShell)
 const DashboardHome = lazy(() => import('./pages/DashboardHome'))
 const JobsPage = lazy(() => import('./pages/JobsPage'))
@@ -23,8 +30,11 @@ const InvoicePage = lazy(() => import('./pages/InvoicePage'))
 const InvoiceEntityDetailPage = lazy(() => import('./pages/InvoiceEntityDetailPage'))
 const AttendancePage = lazy(() => import('./pages/AttendancePage'))
 const ConsultantReportPage = lazy(() => import('./pages/ConsultantReportPage'))
+const AppliedCandidatesPage = lazy(() => import('./pages/AppliedCandidatesPage'))
+const PublicLayout = lazy(() => import('./components/public/PublicLayout'))
+const PublicRolesPage = lazy(() => import('./pages/PublicRolesPage'))
 
-function App() {
+function AuthenticatedRoutes() {
   const [aiQuotaNotice, setAiQuotaNotice] = useState('')
 
   useEffect(() => {
@@ -42,7 +52,7 @@ function App() {
   }, [])
 
   return (
-    <BrowserRouter>
+    <Suspense fallback={null}>
       <AuthProvider>
         {aiQuotaNotice && (
           <div className="global-ai-notice" role="status">
@@ -61,6 +71,7 @@ function App() {
             <Route path="clients/:clientId" element={<PageViewGuard pageKey="clients"><ClientDetailPage /></PageViewGuard>} />
             <Route path="clients/:clientId/jobs/:jobId/candidates" element={<PageViewGuard pageKey="clients"><ClientJobCandidatesPage /></PageViewGuard>} />
             <Route path="candidates" element={<PageViewGuard pageKey="candidates"><CandidatesPage /></PageViewGuard>} />
+            <Route path="applied-candidates" element={<PageViewGuard pageKey="applied_candidates"><AppliedCandidatesPage /></PageViewGuard>} />
             <Route path="performance" element={<PageViewGuard pageKey="performance_review"><PerformanceReviewPage /></PageViewGuard>} />
             <Route path="attendance" element={<PageViewGuard pageKey="attendance"><AttendancePage /></PageViewGuard>} />
             <Route path="reports/consultant" element={<PageViewGuard pageKey="report"><ConsultantReportPage /></PageViewGuard>} />
@@ -80,6 +91,20 @@ function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </AuthProvider>
+    </Suspense>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/open-roles" element={<Suspense fallback={<div className="public-route-loading" role="status">Loading open roles...</div>}><PublicLayout /></Suspense>}>
+          <Route index element={<PublicRolesPage />} />
+          <Route path=":slug" element={<PublicRolesPage />} />
+        </Route>
+        <Route path="*" element={<AuthenticatedRoutes />} />
+      </Routes>
     </BrowserRouter>
   )
 }
