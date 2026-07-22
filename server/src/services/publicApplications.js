@@ -225,9 +225,9 @@ function validatePublicApplication(body) {
   if (!clean(body.experience_years) || !Number.isFinite(experience) || experience < 0) errors.experience_years = 'Experience must be zero or greater'
   const notice = safeInteger(body.notice_period)
   if (!clean(body.notice_period) || !Number.isInteger(notice) || notice < 0) errors.notice_period = 'Notice period must be a whole number'
-  for (const field of ['current_salary', 'expected_salary']) {
-    const value = safeInteger(body[field])
-    if (!Number.isInteger(value) || value <= 0 || value > 999999999) errors[field] = 'CTC must be a positive whole LPA value with at most 9 digits'
+  const currentSalary = safeInteger(body.current_salary)
+  if (!Number.isInteger(currentSalary) || currentSalary <= 0 || currentSalary > 999999999) {
+    errors.current_salary = 'CTC must be a positive whole LPA value with at most 9 digits'
   }
   const skills = parseStringArray(body.skills)
   if (!skills.length) errors.skills = 'At least one skill is required'
@@ -256,7 +256,6 @@ function publicApplicationPayload(body) {
     skills: parseStringArray(body.skills),
     notice_period: Number(body.notice_period),
     current_salary: Number(body.current_salary),
-    expected_salary: Number(body.expected_salary),
     linkedin_url: clean(body.linkedin_url),
     comments: cleanMultiline(body.comments),
     open_to_relocate: clean(body.open_to_relocate)

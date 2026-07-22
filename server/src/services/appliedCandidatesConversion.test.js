@@ -10,6 +10,7 @@ const {
   claimApplication,
   finalizeApplication,
   recordConversionCandidate,
+  removeFinalizedApplication,
   releaseApplicationClaim
 } = require('./appliedCandidates')
 const {
@@ -121,6 +122,50 @@ test('already-converted applications are idempotent and a lost claim race reconc
   assert.equal(reconciled.idempotent, true)
   assert.equal(reconciled.token, null)
   assert.equal(reconciled.application.converted_candidate_id, 'candidate-race')
+})
+
+test('finalized conversion removes the applied row and its staged CV', async () => {
+  let rowExists = true
+  const removedPaths = []
+  const supabase = {
+    from(table) {
+      assert.equal(table, 'public_applications')
+      const builder = {
+        delete() { return builder },
+        eq() { return builder },
+        in() { return builder },
+        select() { return builder },
+        async maybeSingle() {
+          if (!rowExists) return { data: null, error: null }
+          rowExists = false
+          return { data: { id: 'application-1' }, error: null }
+        }
+      }
+      return builder
+    },
+    storage: {
+      from(bucket) {
+        assert.equal(bucket, 'public-applications')
+        return {
+          async remove(paths) {
+            removedPaths.push(...paths)
+            return { data: paths, error: null }
+          }
+        }
+      }
+    }
+  }
+
+  const result = await removeFinalizedApplication(supabase, application({
+    application_status: 'converted',
+    converted_candidate_id: 'candidate-1',
+    converted_association_id: 'association-1',
+    cv_storage_path: 'application-1/resume.pdf'
+  }))
+
+  assert.deepEqual(result, { removed: true, cvRemoved: true })
+  assert.equal(rowExists, false)
+  assert.deepEqual(removedPaths, ['application-1/resume.pdf'])
 })
 
 test('active conversions reject a second worker, while stale claims are reclaimed conditionally', async () => {
@@ -363,6 +408,7 @@ test('controller contract marks only newly created candidates and reconciles dur
   assert.match(appliedController, /catch \(candidateCleanupFailure\)[\s\S]*recordConversionCandidate\(supabase, claim\.application\.id, claim\.token, insertedCandidateId\)/)
   assert.ok(appliedController.indexOf('findAssociationByMarker(application.id)') < linkStart)
   assert.match(appliedController, /claim\?\.token\s*&&\s*!cleanupFailure[\s\S]*!error\.preserveClaim/)
+  assert.ok((appliedController.match(/removeFinalizedApplication\(supabase,/g) || []).length >= 5)
 
   assert.match(candidateController, /is_public_application_conversion:\s*Boolean\(row\.public_application_id\)/)
   assert.match(candidateController, /is_public_application_conversion:\s*false/)

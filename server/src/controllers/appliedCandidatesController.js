@@ -7,6 +7,7 @@ const {
   releaseApplicationClaim,
   recordConversionCandidate,
   finalizeApplication,
+  removeFinalizedApplication,
   rejectApplication,
   signedCv
 } = require('../services/appliedCandidates')
@@ -288,6 +289,7 @@ async function convertAppliedCandidate(req, res) {
       const durableMarker = await findAssociationByMarker(initial.id)
       if (durableMarker) {
         const finalized = await finalizeRecoveredMarker(initial, durableMarker, req.user.id, initial.processing_token)
+        await removeFinalizedApplication(supabase, finalized)
         return res.json({ data: {
           application_status: finalized.application_status,
           candidate_id: durableMarker.candidate_id,
@@ -298,6 +300,7 @@ async function convertAppliedCandidate(req, res) {
     claim = await claimApplication(supabase, req.params.id)
     const application = claim.application
     if (claim.idempotent) {
+      await removeFinalizedApplication(supabase, application)
       return res.json({ data: {
         application_status: application.application_status,
         candidate_id: application.converted_candidate_id,
@@ -308,6 +311,7 @@ async function convertAppliedCandidate(req, res) {
     const recovered = await findAssociationByMarker(application.id)
     if (recovered) {
       const finalized = await finalizeRecoveredMarker(application, recovered, req.user.id, claim.token)
+      await removeFinalizedApplication(supabase, finalized)
       return res.json({ data: { application_status: finalized.application_status, candidate_id: recovered.candidate_id, association_id: recovered.id } })
     }
 
@@ -370,6 +374,7 @@ async function convertAppliedCandidate(req, res) {
         user_id: req.user.id
       })
       await notifyConversion(req, existing, association)
+      await removeFinalizedApplication(supabase, finalized)
       return res.json({ data: { application_status: finalized.application_status, candidate_id: existing.id, association_id: association.id } })
     }
 
@@ -449,6 +454,7 @@ async function convertAppliedCandidate(req, res) {
       user_id: req.user.id
     })
     await notifyConversion(req, convertedCandidate, durableAssociation)
+    await removeFinalizedApplication(supabase, finalized)
     return res.json({ data: {
       application_status: finalized.application_status,
       candidate_id: durableAssociation.candidate_id,

@@ -220,6 +220,31 @@ async function finalizeApplication(supabase, applicationId, token, values) {
   return data
 }
 
+async function removeFinalizedApplication(supabase, application) {
+  if (!application?.id || !['converted', 'linked_existing'].includes(application.application_status)) {
+    throw Object.assign(new Error('Only a converted application can be removed.'), { statusCode: 409 })
+  }
+  const objectPath = validateStagedResumePath(application)
+  let cleanup = await supabase.storage.from(PUBLIC_APPLICATION_BUCKET).remove([objectPath])
+  if (cleanup.error) cleanup = await supabase.storage.from(PUBLIC_APPLICATION_BUCKET).remove([objectPath])
+  if (cleanup.error) {
+    throw Object.assign(new Error('The candidate was added, but the staged CV could not be removed. Retry the conversion cleanup.'), {
+      statusCode: 502
+    })
+  }
+
+  const { data, error } = await supabase
+    .from('public_applications')
+    .delete()
+    .eq('id', application.id)
+    .in('application_status', ['converted', 'linked_existing'])
+    .select('id')
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return { removed: false, cvRemoved: false }
+  return { removed: true, cvRemoved: true }
+}
+
 async function rejectApplication(supabase, applicationId, userId, reason) {
   const rejectionReason = clean(reason)
   if (!rejectionReason) throw Object.assign(new Error('Rejection reason is required.'), { statusCode: 400 })
@@ -257,6 +282,7 @@ module.exports = {
   releaseApplicationClaim,
   recordConversionCandidate,
   finalizeApplication,
+  removeFinalizedApplication,
   rejectApplication,
   signedCv
 }

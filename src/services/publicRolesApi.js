@@ -61,7 +61,6 @@ export async function submitPublicApplication({ roleSlug, resume, applicant, web
   body.append('skills', JSON.stringify(applicant.skills))
   body.append('notice_period', applicant.notice_period)
   body.append('current_salary', applicant.current_salary)
-  body.append('expected_salary', applicant.expected_salary)
   body.append('linkedin_url', applicant.linkedin_url)
   body.append('open_to_relocate', applicant.open_to_relocate)
   body.append('comments', applicant.comments)

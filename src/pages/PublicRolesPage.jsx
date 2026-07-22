@@ -38,7 +38,6 @@ const EMPTY_APPLICANT = {
   skills: [],
   notice_period: '',
   current_salary: '',
-  expected_salary: '',
   linkedin_url: '',
   open_to_relocate: '',
   comments: '',
@@ -54,7 +53,6 @@ const REQUIRED_LABELS = {
   location: 'Current Location',
   notice_period: 'Notice Period',
   current_salary: 'Current CTC',
-  expected_salary: 'Expected CTC',
   linkedin_url: 'LinkedIn',
   open_to_relocate: 'Open to Relocate',
   comments: 'Comments',
@@ -110,10 +108,10 @@ function validateApplicant(applicant, resume, captchaToken) {
   if (clean(applicant.experience_years) && (!Number.isFinite(Number(applicant.experience_years)) || Number(applicant.experience_years) < 0)) errors.experience_years = 'Enter valid experience of zero or more years.'
   const notice = Number(applicant.notice_period)
   if (clean(applicant.notice_period) && (!Number.isInteger(notice) || notice < 0)) errors.notice_period = 'Notice Period must be a non-negative whole number of days.'
-  ;['current_salary', 'expected_salary'].forEach(key => {
-    const value = Number(applicant[key])
-    if (clean(applicant[key]) && (!Number.isInteger(value) || value <= 0 || value > 999999999)) errors[key] = 'CTC must be a positive whole LPA value.'
-  })
+  const currentSalary = Number(applicant.current_salary)
+  if (clean(applicant.current_salary) && (!Number.isInteger(currentSalary) || currentSalary <= 0 || currentSalary > 999999999)) {
+    errors.current_salary = 'CTC must be a positive whole LPA value.'
+  }
   if (clean(applicant.linkedin_url)) {
     try {
       const url = new URL(clean(applicant.linkedin_url))
@@ -269,7 +267,6 @@ function ApplicationModal({ role, onClose }) {
       setApplicant(current => replacing ? {
         ...nextApplicant,
         notice_period: current.notice_period,
-        expected_salary: current.expected_salary,
         open_to_relocate: current.open_to_relocate,
         comments: current.comments,
       } : nextApplicant)
@@ -406,7 +403,6 @@ function ApplicationModal({ role, onClose }) {
                 <PublicField label="Current Location" error={errors.location}><input value={applicant.location} onChange={event => setField('location', event.target.value)} /></PublicField>
                 <PublicField label="Notice Period (days)" error={errors.notice_period}><input type="number" min="0" step="1" value={applicant.notice_period} onChange={event => setField('notice_period', event.target.value)} /></PublicField>
                 <PublicField label="Current CTC" error={errors.current_salary} adornment="₹" endAdornment="LPA"><input type="text" inputMode="decimal" value={applicant.current_salary} onChange={event => setField('current_salary', event.target.value)} /></PublicField>
-                <PublicField label="Expected CTC" error={errors.expected_salary} adornment="₹" endAdornment="LPA"><input type="text" inputMode="decimal" value={applicant.expected_salary} onChange={event => setField('expected_salary', event.target.value)} /></PublicField>
                 <PublicField label="LinkedIn" error={errors.linkedin_url}><input type="url" placeholder="https://www.linkedin.com/in/..." value={applicant.linkedin_url} onChange={event => setField('linkedin_url', event.target.value)} /></PublicField>
                 <PublicField label="Open to Relocate" error={errors.open_to_relocate}>
                   <select value={applicant.open_to_relocate} onChange={event => setField('open_to_relocate', event.target.value)}>

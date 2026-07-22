@@ -12,6 +12,10 @@ const rateLimitTimestampFix = fs.readFileSync(
   path.join(root, 'supabase/migrations/20260722091050_fix_public_application_rate_limit_timestamp.sql'),
   'utf8'
 )
+const optionalExpectedSalary = fs.readFileSync(
+  path.join(root, 'supabase/migrations/20260722092234_make_public_application_expected_salary_optional.sql'),
+  'utf8'
+)
 
 test('production preflight fails before DDL instead of repairing unsafe live state', () => {
   const preflight = migration.match(/do \$\$[\s\S]*?end \$\$;/i)?.[0] || ''
@@ -193,6 +197,14 @@ test('rate-limit timestamp fix avoids the PostgreSQL CURRENT_TIME name collision
     rateLimitTimestampFix,
     /grant execute on function public\.consume_public_application_rate_limit[\s\S]*to service_role/i
   )
+})
+
+test('public applications no longer require expected salary', () => {
+  assert.match(
+    optionalExpectedSalary,
+    /alter table public\.public_applications\s+alter column expected_salary drop not null/i
+  )
+  assert.doesNotMatch(optionalExpectedSalary, /drop\s+column/i)
 })
 
 test('migration has balanced dollar-quoted function blocks', () => {

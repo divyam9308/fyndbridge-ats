@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Briefcase, Building2, Check, ChevronLeft, ChevronRight, Search, Trash2, Users, X } from 'lucide-react'
+import { Briefcase, Building2, Check, ChevronLeft, ChevronRight, FileUser, Search, Trash2, Users, X } from 'lucide-react'
 import { deleteRecords, fetchDeletionRecords, previewRecordDeletion } from '../../services/adminAccessApi'
 
 const ENTITY_META = {
@@ -10,6 +10,13 @@ const ENTITY_META = {
     plural: 'candidate rows',
     Icon: Users,
     description: 'Delete selected candidate rows while preserving their clients, mandates and uploaded resume files.'
+  },
+  applied_candidate: {
+    title: 'Delete Applied Candidates',
+    singular: 'applied candidate row',
+    plural: 'applied candidate rows',
+    Icon: FileUser,
+    description: 'Delete selected unconverted applied candidate rows and their staged CV files.'
   },
   mandate: {
     title: 'Delete Mandates',
@@ -39,12 +46,16 @@ function formatDate(value) {
 }
 
 function RecordDetails({ entityType, row }) {
-  if (entityType === 'candidate') {
+  if (entityType === 'candidate' || entityType === 'applied_candidate') {
     return (
       <>
         <strong>{display(row.label)} {row.display_id ? <em>{row.display_id}</em> : null}</strong>
         <span>{display(row.mandate)} · {display(row.client)}</span>
-        <small>{display(row.consultant)} · {display(row.mobile_number)} · {display(row.email)} · {display(row.status)}</small>
+        <small>
+          {entityType === 'candidate' ? `${display(row.consultant)} · ` : ''}
+          {display(row.mobile_number)} · {display(row.email)} · {display(row.status)}
+          {entityType === 'applied_candidate' ? ` · ${formatDate(row.created_at)}` : ''}
+        </small>
       </>
     )
   }
@@ -70,6 +81,11 @@ function confirmationText(entityType, preview, deleteLinked) {
   const candidates = Number(preview?.candidateRowsAffected || 0)
   const mandates = Number(preview?.mandatesDeleted || 0)
   const clients = Number(preview?.clientsDeleted || 0)
+  if (entityType === 'applied_candidate') {
+    const applications = Number(preview?.appliedCandidatesDeleted || 0)
+    const cvFilesDeleted = Number(preview?.cvFilesDeleted || 0)
+    return `You are about to permanently delete ${applications} selected unconverted applied candidate ${applications === 1 ? 'row' : 'rows'} and ${cvFilesDeleted} staged CV ${cvFilesDeleted === 1 ? 'file' : 'files'} from the private Storage bucket.`
+  }
   if (entityType === 'candidate') {
     return `You are about to permanently delete ${candidates} selected candidate ${candidates === 1 ? 'row' : 'rows'} and their row-specific notifications and dependencies. Their clients and mandates will remain.`
   }
@@ -86,6 +102,15 @@ function confirmationText(entityType, preview, deleteLinked) {
 }
 
 function successText(result) {
+  if (result.entityType === 'applied_candidate') {
+    const applications = Number(result.appliedCandidatesDeleted || 0)
+    const deleted = Number(result.cvFilesDeleted || 0)
+    const pending = Number(result.cvFilesPendingCleanup || 0)
+    const cleanup = pending
+      ? ` ${pending} staged CV ${pending === 1 ? 'file could' : 'files could'} not be removed; check the server log.`
+      : ` ${deleted} staged CV ${deleted === 1 ? 'file was' : 'files were'} deleted.`
+    return `Deleted ${applications} applied candidate ${applications === 1 ? 'row' : 'rows'}.${cleanup}`
+  }
   const parts = []
   if (result.clientsDeleted) parts.push(`${result.clientsDeleted} ${result.clientsDeleted === 1 ? 'client' : 'clients'}`)
   if (result.mandatesDeleted) parts.push(`${result.mandatesDeleted} ${result.mandatesDeleted === 1 ? 'mandate' : 'mandates'}`)
@@ -165,6 +190,8 @@ export default function RecordManagementModal({ open, onClose, onSuccess }) {
   const meta = ENTITY_META[entityType]
   const searchPlaceholder = entityType === 'candidate'
     ? 'Search by candidate, CA ID, mandate, client, email or mobile'
+    : entityType === 'applied_candidate'
+      ? 'Search by applicant, role, client, email, mobile or status'
     : entityType === 'mandate'
       ? 'Search by mandate, JB ID, client, consultant or status'
       : 'Search by client, CL ID, consultant, location or status'
@@ -303,7 +330,7 @@ export default function RecordManagementModal({ open, onClose, onSuccess }) {
             <span>Page {page} of {totalPages}</span>
             <button type="button" onClick={() => setPage(current => Math.min(totalPages, current + 1))} disabled={page >= totalPages || loading}>Next<ChevronRight size={16} /></button>
           </div>
-          {entityType !== 'candidate' ? (
+          {entityType === 'mandate' || entityType === 'client' ? (
             <label className="admin-record-linked-option">
               <input type="checkbox" checked={deleteLinked} onChange={event => setDeleteLinked(event.target.checked)} />
               <span>
@@ -338,16 +365,26 @@ export default function RecordManagementModal({ open, onClose, onSuccess }) {
               <p className="admin-record-confirm-copy">{confirmationText(entityType, preview, deleteLinked)}</p>
               <div className="admin-record-impact-grid">
                 <span><small>Selected</small><strong>{preview.selectedCount}</strong></span>
-                {entityType !== 'candidate' ? <span><small>Mandates deleted</small><strong>{preview.mandatesDeleted}</strong></span> : null}
-                <span><small>Candidate rows {deleteLinked || entityType === 'candidate' ? 'deleted' : 'retained'}</small><strong>{deleteLinked || entityType === 'candidate' ? preview.candidateRowsDeleted : preview.candidateRowsRetained}</strong></span>
-                <span><small>Dependencies removed</small><strong>{Number(preview.notificationsDeleted || 0) + Number(preview.followUpsDeleted || 0)}</strong></span>
+                {entityType === 'applied_candidate' ? (
+                  <>
+                    <span><small>Applied rows deleted</small><strong>{preview.appliedCandidatesDeleted}</strong></span>
+                    <span><small>Staged CVs deleted</small><strong>{preview.cvFilesDeleted}</strong></span>
+                    <span><small>Main Candidates affected</small><strong>0</strong></span>
+                  </>
+                ) : (
+                  <>
+                    {entityType !== 'candidate' ? <span><small>Mandates deleted</small><strong>{preview.mandatesDeleted}</strong></span> : null}
+                    <span><small>Candidate rows {deleteLinked || entityType === 'candidate' ? 'deleted' : 'retained'}</small><strong>{deleteLinked || entityType === 'candidate' ? preview.candidateRowsDeleted : preview.candidateRowsRetained}</strong></span>
+                    <span><small>Dependencies removed</small><strong>{Number(preview.notificationsDeleted || 0) + Number(preview.followUpsDeleted || 0)}</strong></span>
+                  </>
+                )}
               </div>
               <div className="admin-record-labels">
                 {(preview.labels || []).slice(0, 8).map(item => <span key={item.id}>{display(item.label)}</span>)}
                 {(preview.labels || []).length > 8 ? <span>+{preview.labels.length - 8} more</span> : null}
               </div>
               <ul className="admin-record-warnings">
-                <li>Uploaded resume files will be preserved.</li>
+                <li>{entityType === 'applied_candidate' ? 'Only unconverted applications are available here; converted candidates are removed automatically.' : 'Uploaded resume files will be preserved.'}</li>
                 <li>Database and display IDs will not be renumbered.</li>
                 <li>This deletion is permanent and cannot be undone.</li>
               </ul>

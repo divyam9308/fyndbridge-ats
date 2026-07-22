@@ -49,7 +49,6 @@ function validApplication(overrides = {}) {
     skills: ['Financial Planning', 'Budgeting'],
     notice_period: '30',
     current_salary: '18',
-    expected_salary: '22',
     linkedin_url: 'https://www.linkedin.com/in/rahul-sharma',
     comments: 'Interested in this role.',
     open_to_relocate: 'true',
@@ -157,7 +156,7 @@ test('application payload normalizes identity once while preserving LPA numbers 
   assert.equal(payload.mobile_number, '+919876543210')
   assert.equal(payload.mobile_normalized, '919876543210')
   assert.equal(payload.current_salary, 18)
-  assert.equal(payload.expected_salary, 22)
+  assert.equal(Object.hasOwn(payload, 'expected_salary'), false)
   assert.equal(payload.open_to_relocate, 'NA')
 })
 

@@ -9,7 +9,8 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'test-service-role-key'
 const {
   normalizeEntityType,
   normalizeIds,
-  normalizeDeleteLinked
+  normalizeDeleteLinked,
+  normalizeAppliedCvCleanupItems
 } = require('./recordDeletion')
 
 const projectRoot = path.resolve(__dirname, '../../..')
@@ -27,9 +28,9 @@ const displayIdSearchMigration = fs.readFileSync(
   path.join(projectRoot, 'supabase/migrations/20260716095921_record_management_display_id_search.sql'),
   'utf8'
 )
-
 test('record deletion request validation accepts only supported entities and UUIDs', () => {
   assert.equal(normalizeEntityType('candidate'), 'candidate')
+  assert.equal(normalizeEntityType('APPLIED_CANDIDATE'), 'applied_candidate')
   assert.equal(normalizeEntityType('MANDATE'), 'mandate')
   assert.throws(() => normalizeEntityType('invoice'), /Invalid entity type/)
 
@@ -40,6 +41,18 @@ test('record deletion request validation accepts only supported entities and UUI
   assert.equal(normalizeDeleteLinked(undefined), false)
   assert.equal(normalizeDeleteLinked(true), true)
   assert.throws(() => normalizeDeleteLinked('true'), /boolean/)
+})
+
+test('applied candidate CV cleanup accepts only application-owned PDF paths', () => {
+  const id = '97d9fbd9-9b3e-4d44-b147-88476ec61fde'
+  assert.deepEqual(normalizeAppliedCvCleanupItems([
+    { id, path: `public-applications/${id}/resume.pdf` },
+    { id, path: `${id}/resume.pdf` }
+  ]), [`${id}/resume.pdf`])
+  assert.throws(
+    () => normalizeAppliedCvCleanupItems([{ id, path: 'someone-else/resume.pdf' }]),
+    /cleanup path is invalid/
+  )
 })
 
 test('all record-management API routes independently require Super Admin', () => {
@@ -70,6 +83,15 @@ test('bulk deletion never removes resume storage objects or renumbers IDs', () =
   assert.doesNotMatch(modal, /storage\.remove/)
   assert.match(modal, /Uploaded resume files will be preserved\./)
   assert.match(modal, /IDs will not be renumbered\./)
+})
+
+test('applied candidate deletion is limited to unconverted rows and removes their staged files', () => {
+  assert.match(modal, /Delete Applied Candidates/)
+  assert.match(modal, /Only unconverted applications are available here/)
+  assert.match(deletionService, /STORAGE_BUCKETS\.PUBLIC_APPLICATIONS\)\.remove\(paths\)/)
+  assert.match(deletionService, /DELETABLE_APPLICATION_STATUSES = Object\.freeze\(\['pending', 'rejected'\]\)/)
+  assert.match(deletionService, /from\('admin_users'\)[\s\S]*eq\('role', 'super_admin'\)/)
+  assert.doesNotMatch(deletionService, /admin_delete_applied_candidates/)
 })
 
 test('record selector searches and displays CA, JB and CL IDs', () => {
