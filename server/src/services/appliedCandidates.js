@@ -248,17 +248,44 @@ async function removeFinalizedApplication(supabase, application) {
 async function rejectApplication(supabase, applicationId, userId, reason) {
   const rejectionReason = clean(reason)
   if (!rejectionReason) throw Object.assign(new Error('Rejection reason is required.'), { statusCode: 400 })
-  const now = new Date().toISOString()
-  const { data, error } = await supabase.from('public_applications').update({
-    application_status: 'rejected',
-    rejected_by: userId,
-    rejected_at: now,
-    rejection_reason: rejectionReason,
-    updated_at: now
-  }).eq('id', applicationId).eq('application_status', 'pending').select(APPLICATION_SELECT).maybeSingle()
-  if (error) throw error
-  if (!data) throw Object.assign(new Error('Only pending applications can be rejected.'), { statusCode: 409 })
-  return data
+  let application = await getApplication(supabase, applicationId)
+  if (!application) throw Object.assign(new Error('Application not found.'), { statusCode: 404 })
+
+  if (application.application_status === 'pending') {
+    const now = new Date().toISOString()
+    const { data, error } = await supabase.from('public_applications').update({
+      application_status: 'rejected',
+      rejected_by: userId,
+      rejected_at: now,
+      rejection_reason: rejectionReason,
+      updated_at: now
+    }).eq('id', applicationId).eq('application_status', 'pending').select(APPLICATION_SELECT).maybeSingle()
+    if (error) throw error
+    if (!data) throw Object.assign(new Error('Only pending applications can be rejected.'), { statusCode: 409 })
+    application = data
+  } else if (application.application_status !== 'rejected') {
+    throw Object.assign(new Error('Only pending applications can be rejected.'), { statusCode: 409 })
+  }
+
+  const objectPath = validateStagedResumePath(application)
+  let cleanup = await supabase.storage.from(PUBLIC_APPLICATION_BUCKET).remove([objectPath])
+  if (cleanup.error) cleanup = await supabase.storage.from(PUBLIC_APPLICATION_BUCKET).remove([objectPath])
+  if (cleanup.error) {
+    throw Object.assign(new Error('The application was rejected, but its staged CV could not be removed. Retry the rejection cleanup.'), {
+      statusCode: 502
+    })
+  }
+
+  const { data: removed, error: deleteError } = await supabase
+    .from('public_applications')
+    .delete()
+    .eq('id', application.id)
+    .eq('application_status', 'rejected')
+    .select('id')
+    .maybeSingle()
+  if (deleteError) throw deleteError
+  if (!removed) throw Object.assign(new Error('The rejected application could not be removed and can be safely retried.'), { statusCode: 409 })
+  return application
 }
 
 async function signedCv(supabase, application) {

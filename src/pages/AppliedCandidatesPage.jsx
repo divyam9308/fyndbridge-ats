@@ -498,7 +498,7 @@ export default function AppliedCandidatesPage() {
       setRejectTarget(null)
       setRejectionReason('')
       closeDrawer()
-      setNotice('Application rejected and retained in staging history.')
+      setNotice('Application rejected. Its staged CV and application row were deleted.')
       reload()
     } catch (rejectError) {
       setNotice(rejectError.message || 'Application could not be rejected.')
@@ -634,7 +634,7 @@ export default function AppliedCandidatesPage() {
         </div>
       )}
 
-      {rejectTarget && <div className="applied-content-overlay applied-reject-overlay" role="presentation"><section className="applied-reject-dialog" role="dialog" aria-modal="true" aria-labelledby="applied-reject-title"><header><h2 id="applied-reject-title">Reject Application</h2><button className="modal-close" type="button" onClick={() => setRejectTarget(null)} disabled={rejectSaving} aria-label="Close rejection dialog"><X size={16} /></button></header><div><p>Rejecting keeps the application and CV in staging history. A reason is required.</p><label className="form-group"><span className="form-label">Rejection Reason <b className="req">*</b></span><textarea className={`form-control${!clean(rejectionReason) ? ' is-error' : ''}`} rows="4" value={rejectionReason} onChange={event => setRejectionReason(event.target.value)} autoFocus /></label></div><footer><button className="btn-secondary" type="button" onClick={() => setRejectTarget(null)} disabled={rejectSaving}>Cancel</button><button className="btn-primary applied-danger-button" type="button" onClick={submitReject} disabled={rejectSaving || !clean(rejectionReason)}>{rejectSaving ? 'Rejecting...' : 'Reject'}</button></footer></section></div>}
+      {rejectTarget && <div className="applied-content-overlay applied-reject-overlay" role="presentation"><section className="applied-reject-dialog" role="dialog" aria-modal="true" aria-labelledby="applied-reject-title"><header><h2 id="applied-reject-title">Reject Application</h2><button className="modal-close" type="button" onClick={() => setRejectTarget(null)} disabled={rejectSaving} aria-label="Close rejection dialog"><X size={16} /></button></header><div><p>Rejecting permanently deletes this application row and its staged CV. A reason is required to confirm.</p><label className="form-group"><span className="form-label">Rejection Reason <b className="req">*</b></span><textarea className={`form-control${!clean(rejectionReason) ? ' is-error' : ''}`} rows="4" value={rejectionReason} onChange={event => setRejectionReason(event.target.value)} autoFocus /></label></div><footer><button className="btn-secondary" type="button" onClick={() => setRejectTarget(null)} disabled={rejectSaving}>Cancel</button><button className="btn-primary applied-danger-button" type="button" onClick={submitReject} disabled={rejectSaving || !clean(rejectionReason)}>{rejectSaving ? 'Rejecting...' : 'Reject and Delete'}</button></footer></section></div>}
     </div>
   )
 }

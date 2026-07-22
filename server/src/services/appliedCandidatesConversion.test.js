@@ -10,6 +10,7 @@ const {
   claimApplication,
   finalizeApplication,
   recordConversionCandidate,
+  rejectApplication,
   removeFinalizedApplication,
   releaseApplicationClaim
 } = require('./appliedCandidates')
@@ -165,6 +166,51 @@ test('finalized conversion removes the applied row and its staged CV', async () 
 
   assert.deepEqual(result, { removed: true, cvRemoved: true })
   assert.equal(rowExists, false)
+  assert.deepEqual(removedPaths, ['application-1/resume.pdf'])
+})
+
+test('rejection removes both the staged CV and the applied-candidate row', async () => {
+  let row = application({ cv_storage_path: 'application-1/resume.pdf' })
+  const removedPaths = []
+  const supabase = {
+    from(table) {
+      assert.equal(table, 'public_applications')
+      const state = { update: null, deleting: false, filters: [] }
+      const builder = {
+        select() { return builder },
+        update(values) { state.update = values; return builder },
+        delete() { state.deleting = true; return builder },
+        eq(field, value) { state.filters.push([field, value]); return builder },
+        async maybeSingle() {
+          const matches = state.filters.every(([field, value]) => row?.[field] === value)
+          if (!matches) return { data: null, error: null }
+          if (state.deleting) {
+            const removed = row
+            row = null
+            return { data: { id: removed.id }, error: null }
+          }
+          if (state.update) row = { ...row, ...state.update }
+          return { data: row ? { ...row } : null, error: null }
+        }
+      }
+      return builder
+    },
+    storage: {
+      from(bucket) {
+        assert.equal(bucket, 'public-applications')
+        return {
+          async remove(paths) {
+            removedPaths.push(...paths)
+            return { data: paths, error: null }
+          }
+        }
+      }
+    }
+  }
+
+  const rejected = await rejectApplication(supabase, 'application-1', 'user-1', 'Not suitable')
+  assert.equal(rejected.application_status, 'rejected')
+  assert.equal(row, null)
   assert.deepEqual(removedPaths, ['application-1/resume.pdf'])
 })
 
