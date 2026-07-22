@@ -238,7 +238,7 @@ export default function AppliedCandidatesPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState(null)
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [drawer, setDrawer] = useState(null)
   const [drawerLoading, setDrawerLoading] = useState(false)
@@ -259,8 +259,13 @@ export default function AppliedCandidatesPage() {
   const drawerRef = useRef(null)
   const rejectDialogRef = useRef(null)
   const modalReturnFocusRef = useRef(null)
+  const noticeSequenceRef = useRef(0)
 
   const reload = useCallback(() => setRefreshVersion(value => value + 1), [])
+  const showNotice = useCallback((message, tone, title) => {
+    noticeSequenceRef.current += 1
+    setNotice({ id: noticeSequenceRef.current, message, tone, title, visible: true })
+  }, [])
   const closeDrawer = useCallback(() => {
     drawerRequestRef.current?.controller.abort()
     drawerRequestRef.current = null
@@ -299,6 +304,18 @@ export default function AppliedCandidatesPage() {
   }, [filters, page, pageSize, refreshVersion])
 
   useEffect(() => () => drawerRequestRef.current?.controller.abort(), [])
+
+  useEffect(() => {
+    if (!notice) return undefined
+    const fadeTimer = window.setTimeout(() => {
+      setNotice(current => current ? { ...current, visible: false } : current)
+    }, 4600)
+    const removeTimer = window.setTimeout(() => setNotice(null), 5000)
+    return () => {
+      window.clearTimeout(fadeTimer)
+      window.clearTimeout(removeTimer)
+    }
+  }, [notice?.id])
 
   useEffect(() => {
     if (!drawer && !rejectTarget) return undefined
@@ -361,7 +378,7 @@ export default function AppliedCandidatesPage() {
     const controller = new AbortController()
     const requestId = Symbol(`applied-candidate-${row.id}`)
     drawerRequestRef.current = { controller, requestId }
-    setNotice('')
+    setNotice(null)
     setDrawer({ mode, row })
     setDrawerLoading(true)
     setDuplicateState(null)
@@ -496,7 +513,11 @@ export default function AppliedCandidatesPage() {
     try {
       await convertAppliedCandidate(drawer.row.id, conversionPayload(action, selectedExistingId))
       closeDrawer()
-      setNotice(action === 'link_existing' ? 'Existing candidate linked successfully.' : 'Candidate saved. The application has left the default pending list.')
+      showNotice(
+        action === 'link_existing' ? 'The existing candidate was linked to this mandate.' : 'The candidate was added and removed from the pending applications list.',
+        'accepted',
+        'Application accepted',
+      )
       window.dispatchEvent(new Event('ats:applied-candidates-updated'))
       reload()
     } catch (conversionError) {
@@ -525,11 +546,11 @@ export default function AppliedCandidatesPage() {
       await updateAppliedCandidateStatus(rejectTarget.id, 'rejected')
       setRejectTarget(null)
       closeDrawer()
-      setNotice('Application rejected. Its staged CV and application row were deleted.')
+      showNotice('The staged CV and application row were deleted.', 'rejected', 'Application rejected')
       window.dispatchEvent(new Event('ats:applied-candidates-updated'))
       reload()
     } catch (rejectError) {
-      setNotice(rejectError.message || 'Application could not be rejected.')
+      showNotice(rejectError.message || 'Application could not be rejected.', 'error', 'Action failed')
     } finally {
       setRejectSaving(false)
     }
@@ -547,7 +568,11 @@ export default function AppliedCandidatesPage() {
 
   return (
     <div className="candidates-page applied-candidates-page">
-      {notice && <div className="applied-page-notice" role="status"><CheckCircle2 size={16} /><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="Dismiss notice"><X size={14} /></button></div>}
+      {notice && <div className={`applied-action-toast applied-action-toast-${notice.tone}${notice.visible ? ' is-visible' : ' is-hidden'}`} role={notice.tone === 'error' ? 'alert' : 'status'} aria-live="polite">
+        {notice.tone === 'accepted' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+        <div><strong>{notice.title}</strong><span>{notice.message}</span></div>
+        <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification"><X size={14} /></button>
+      </div>}
       <div className="filter-bar candidates-filter-bar applied-filter-bar">
         <label className="applied-search"><Search size={15} /><input className="filter-input" value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder="Search candidate, email or mobile" /></label>
         <input className="filter-input applied-filter-input" list="applied-role-options" value={filters.role} onChange={event => setFilter('role', event.target.value)} aria-label="Applied Role" placeholder="Applied Role" /><datalist id="applied-role-options">{filterOptions.roles.map(value => <option key={value} value={value} />)}</datalist>
@@ -581,23 +606,23 @@ export default function AppliedCandidatesPage() {
                     <td><span className="applied-public-role">{roleName(row)}</span></td>
                     <td><span className="applied-mandate-role">{internalRole(row)}</span></td>
                     <td><span className="applied-client-name">{clientName(row)}</span></td>
-                    <td>{clean(row.client_display_id || row.client_id) ? <span className="candidate-id-chip candidate-client-id-chip">{display(row.client_display_id || row.client_id)}</span> : <span className="candidate-muted-dash">-</span>}</td>
+                    <td className="applied-cell-center">{clean(row.client_display_id || row.client_id) ? <span className="candidate-id-chip candidate-client-id-chip">{display(row.client_display_id || row.client_id)}</span> : <span className="candidate-muted-dash">-</span>}</td>
                     <td><a className="applied-email-link" href={`mailto:${clean(row.email)}`}>{display(row.email)}</a></td>
                     <td><span className="applied-mobile-value">{display(row.mobile_number)}</span></td>
                     <td><span className="applied-designation">{display(row.current_designation)}</span></td>
                     <td><span className="applied-organisation">{display(row.current_organisation)}</span></td>
-                    <td>{clean(row.experience_years) ? `${row.experience_years} yrs` : <span className="candidate-empty-value">-</span>}</td>
+                    <td className="applied-cell-center">{clean(row.experience_years) ? `${row.experience_years} yrs` : <span className="candidate-empty-value">-</span>}</td>
                     <td><span className="applied-location-value">{display(row.location)}</span></td>
                     <td>{renderAppliedSkills(row)}</td>
-                    <td>{row.current_salary === null || row.current_salary === undefined ? <span className="candidate-empty-value">-</span> : <span className="candidate-money-value">{formatCandidateCtc(row.current_salary)}</span>}</td>
-                    <td>{row.expected_salary === null || row.expected_salary === undefined ? <span className="candidate-empty-value">-</span> : <span className="candidate-money-value">{formatCandidateCtc(row.expected_salary)}</span>}</td>
-                    <td>{(() => { const meta = noticeMeta(row.notice_period); return meta ? <span className={`candidate-notice-pill candidate-notice-pill-${meta.tone}`}>{meta.label}</span> : <span className="candidate-empty-value">-</span> })()}</td>
-                    <td>{clean(relocateDisplay(row.open_to_relocate)) !== '-' ? <span className={`candidate-relocate-pill${relocateDisplay(row.open_to_relocate) === 'Yes' ? ' is-yes' : ' is-no'}`}>{relocateDisplay(row.open_to_relocate)}</span> : <span className="candidate-empty-value">-</span>}</td>
-                    <td><span className="applied-date-value">{formatAppliedDate(row.created_at)}</span></td>
-                    <td><span className={statusClass(row.application_status)}>{display(row.application_status).replace(/_/g, ' ')}</span></td>
-                    <td><button className="row-action-btn" type="button" title="View CV" onClick={() => openAppliedCandidateCv(row.id)}><FileText size={13} /></button></td>
+                    <td className="applied-cell-center">{row.current_salary === null || row.current_salary === undefined ? <span className="candidate-empty-value">-</span> : <span className="candidate-money-value">{formatCandidateCtc(row.current_salary)}</span>}</td>
+                    <td className="applied-cell-center">{row.expected_salary === null || row.expected_salary === undefined ? <span className="candidate-empty-value">-</span> : <span className="candidate-money-value">{formatCandidateCtc(row.expected_salary)}</span>}</td>
+                    <td className="applied-cell-center">{(() => { const meta = noticeMeta(row.notice_period); return meta ? <span className={`candidate-notice-pill candidate-notice-pill-${meta.tone}`}>{meta.label}</span> : <span className="candidate-empty-value">-</span> })()}</td>
+                    <td className="applied-cell-center">{clean(relocateDisplay(row.open_to_relocate)) !== '-' ? <span className={`candidate-relocate-pill${relocateDisplay(row.open_to_relocate) === 'Yes' ? ' is-yes' : ' is-no'}`}>{relocateDisplay(row.open_to_relocate)}</span> : <span className="candidate-empty-value">-</span>}</td>
+                    <td className="applied-cell-center"><span className="applied-date-value">{formatAppliedDate(row.created_at)}</span></td>
+                    <td className="applied-cell-center"><span className={statusClass(row.application_status)}>{display(row.application_status).replace(/_/g, ' ')}</span></td>
+                    <td className="applied-cell-center"><button className="row-action-btn" type="button" title="View CV" onClick={() => openAppliedCandidateCv(row.id)}><FileText size={13} /></button></td>
                     <td><ConsultantPillGroup consultants={consultants(row)} /></td>
-                    <td><div className="row-actions applied-row-actions">
+                    <td className="applied-cell-center"><div className="row-actions applied-row-actions">
                       <button className="row-action-btn" type="button" title="View Details" onClick={() => loadDrawer(row, 'details')}><Eye size={13} /></button>
                       {canConvert && <button className="row-action-btn applied-convert-action" type="button" title={pending ? 'Add to Candidates' : 'Retry Conversion'} onClick={() => loadDrawer(row, 'convert')}>{pending ? <Plus size={13} /> : <RotateCcw size={13} />}<span>{pending ? 'Add to Candidates' : 'Retry Conversion'}</span></button>}
                       {pending && <button className="row-action-btn applied-reject-action" type="button" title="Reject" onClick={() => setRejectTarget(row)}><XCircle size={13} /></button>}

@@ -44,6 +44,10 @@ test('Applied Candidates uses body portals, optional context fields, simple reje
   assert.match(appliedCss, /\.applied-content-overlay \{ position: fixed; inset: 0; z-index: 100000/)
   assert.match(appliedCss, /\.applied-convert-action \{ width: auto; min-width: 132px/)
   assert.match(appliedCss, /\.applied-candidates-table th \{[\s\S]*text-align: center/)
+  assert.match(appliedPage, /Application accepted/)
+  assert.match(appliedPage, /Application rejected/)
+  assert.match(appliedPage, /setTimeout\(\(\) => setNotice\(null\), 5000\)/)
+  assert.match(appliedCss, /\.applied-action-toast\.is-hidden/)
 })
 
 test('sidebar count badges are event-driven and Applied count remains behind page permission middleware', () => {

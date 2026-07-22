@@ -58,6 +58,7 @@ const REQUIRED_LABELS = {
 }
 
 const clean = value => String(value ?? '').trim()
+const releaseNumberInputOnWheel = event => event.currentTarget.blur()
 const publicSkills = value => (Array.isArray(value) ? value : String(value || '').split(','))
   .map(clean)
   .filter(Boolean)
@@ -125,6 +126,7 @@ function validateApplicant(applicant, resume, captchaToken) {
 
 function RoleCard({ role, onDetails, onApply }) {
   const skills = publicSkills(role.public_skills)
+  const visibleSkills = skills.slice(0, 3)
   return (
     <article className="public-role-card" tabIndex="0" role="button" onClick={onDetails} onKeyDown={event => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -143,7 +145,8 @@ function RoleCard({ role, onDetails, onApply }) {
       {skills.length > 0 && <div className="public-role-skills">
         <strong>Skills</strong>
         <div className="public-skill-list" aria-label="Skills">
-          {skills.map(skill => <span key={skill}>{skill}</span>)}
+          {visibleSkills.map(skill => <span key={skill}>{skill}</span>)}
+          {skills.length > visibleSkills.length && <span>+{skills.length - visibleSkills.length}</span>}
         </div>
       </div>}
       <div className="public-role-deadline">
@@ -457,9 +460,9 @@ function ApplicationModal({ role, onClose }) {
                 <PublicField label="Mobile" error={errors.mobile_number}><input type="tel" value={applicant.mobile_number} onChange={event => setField('mobile_number', event.target.value)} /></PublicField>
                 <PublicField label="Current Designation" error={errors.current_designation}><input value={applicant.current_designation} onChange={event => setField('current_designation', event.target.value)} /></PublicField>
                 <PublicField label="Current Organization" error={errors.current_organisation}><input value={applicant.current_organisation} onChange={event => setField('current_organisation', event.target.value)} /></PublicField>
-                <PublicField label="Total Experience (years)" error={errors.experience_years}><input className="public-number-input" type="number" inputMode="decimal" min="0" step="0.1" value={applicant.experience_years} onKeyDown={event => { if (['e', 'E', '+', '-'].includes(event.key)) event.preventDefault() }} onChange={event => setField('experience_years', event.target.value)} /></PublicField>
+                <PublicField label="Total Experience (years)" error={errors.experience_years}><input className="public-number-input" type="number" inputMode="decimal" min="0" step="0.1" value={applicant.experience_years} onWheel={releaseNumberInputOnWheel} onKeyDown={event => { if (['e', 'E', '+', '-'].includes(event.key)) event.preventDefault() }} onChange={event => setField('experience_years', event.target.value)} /></PublicField>
                 <PublicField label="Current Location" error={errors.location}><input value={applicant.location} onChange={event => setField('location', event.target.value)} /></PublicField>
-                <PublicField label="Notice Period (days)" error={errors.notice_period}><input className="public-number-input" type="number" inputMode="numeric" min="0" step="1" value={applicant.notice_period} onKeyDown={event => { if (['e', 'E', '+', '-', '.'].includes(event.key)) event.preventDefault() }} onChange={event => setField('notice_period', event.target.value)} /></PublicField>
+                <PublicField label="Notice Period (days)" error={errors.notice_period}><input className="public-number-input" type="number" inputMode="numeric" min="0" step="1" value={applicant.notice_period} onWheel={releaseNumberInputOnWheel} onKeyDown={event => { if (['e', 'E', '+', '-', '.'].includes(event.key)) event.preventDefault() }} onChange={event => setField('notice_period', event.target.value)} /></PublicField>
                 <PublicField label="Current CTC" error={errors.current_salary} adornment="₹" endAdornment="LPA"><input type="text" inputMode="decimal" value={applicant.current_salary} onChange={event => setField('current_salary', event.target.value)} /></PublicField>
                 <PublicField label="LinkedIn" required={false} error={errors.linkedin_url}><input type="url" placeholder="https://www.linkedin.com/in/..." value={applicant.linkedin_url} onChange={event => setField('linkedin_url', event.target.value)} /></PublicField>
                 <PublicField label="Open to Relocate" error={errors.open_to_relocate}>
@@ -588,14 +591,13 @@ export default function PublicRolesPage() {
     <div className="public-roles-page">
       <header className="public-roles-header">
         <picture>
-          <source srcSet="/assets/fyndbridge-official-logo-380.webp 380w, /assets/fyndbridge-official-logo.webp 543w" sizes="(max-width: 620px) 220px, 380px" type="image/webp" />
+          <source srcSet="/assets/fyndbridge-official-logo-380.webp 380w, /assets/fyndbridge-official-logo.webp 543w" sizes="(max-width: 620px) 180px, 290px" type="image/webp" />
           <img src="/assets/fyndbridge-official-logo.png" alt="FYNDBRIDGE" width="380" height="63" decoding="async" />
         </picture>
         <a className="public-back-home" href="https://fyndbridge.in/">Back to Home</a>
       </header>
       <section className="public-roles-hero">
         <h1>Open Roles</h1>
-        <p>Explore current mandates at FyndBridge. Find the right opportunity and apply online in just a few clicks.</p>
       </section>
       <section className="public-role-controls" aria-label="Filter open roles">
         <label className="public-search-control"><Search size={18} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by role, skill or keyword" aria-label="Search by role or skill" /></label>
