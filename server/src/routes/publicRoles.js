@@ -15,7 +15,6 @@ router.use((req, res, next) => {
 })
 router.get('/open-roles', controller.listOpenRoles)
 router.get('/open-roles/count', controller.countOpenRoles)
-router.get('/open-roles/:slug/share-image.jpg', controller.shareOpenRoleImage)
 router.get('/open-roles/:slug/share', controller.shareOpenRole)
 router.get('/open-roles/:slug', controller.getOpenRole)
 router.post(

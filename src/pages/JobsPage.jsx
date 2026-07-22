@@ -1165,7 +1165,7 @@ export default function JobsPage() {
 
   const publicRoleUrl = job => `${window.location.origin}/open-roles/${encodeURIComponent(job.public_slug)}`
   const publicRoleShareUrl = job => {
-    const previewVersion = job.updated_at || job.public_slug
+    const previewVersion = `text-only-v1-${job.updated_at || job.public_slug}`
     return `${window.location.origin}/share/open-roles/${encodeURIComponent(job.public_slug)}?v=${encodeURIComponent(previewVersion)}`
   }
   const previewPublicListing = job => {
