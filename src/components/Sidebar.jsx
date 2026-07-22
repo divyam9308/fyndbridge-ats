@@ -12,14 +12,17 @@ import './Sidebar.css'
 const navItems = [
   { to: '/dashboard',            label: 'Dashboard', key: 'dashboard', Icon: LayoutDashboard, end: true },
   { to: '/dashboard/jobs',       label: 'Mandates', key: 'mandates', Icon: Briefcase },
-  { to: '/open-roles',           label: 'Public Roles', key: 'public_roles', Icon: ExternalLink, external: true },
   { to: '/dashboard/clients',    label: 'Clients', key: 'clients', Icon: Building2 },
   { to: '/dashboard/candidates', label: 'Candidates', key: 'candidates', Icon: Users },
-  { to: '/dashboard/applied-candidates', label: 'Applied Candidates', key: 'applied_candidates', Icon: UserRoundCheck },
   { to: '/dashboard/attendance', label: 'Attendance', key: 'attendance', Icon: CalendarCheck },
   { to: '/dashboard/reports/consultant', label: 'Report', key: 'report', Icon: ChartNoAxesCombined },
   { to: '/dashboard/performance', label: 'PMS', key: 'performance_review', Icon: ClipboardList },
   { to: '/dashboard/user-manual', label: 'User Manual', key: 'user_manual', Icon: BookOpenText },
+]
+
+const trailingNavItems = [
+  { to: '/open-roles', label: 'Public Roles', key: 'public_roles', Icon: ExternalLink, external: true },
+  { to: '/dashboard/applied-candidates', label: 'Applied Candidates', key: 'applied_candidates', Icon: UserRoundCheck },
 ]
 
 export default function Sidebar() {
@@ -56,6 +59,29 @@ export default function Sidebar() {
     navigate(to)
   }
 
+  const renderNavItem = ({ to, label, Icon, end, external }) => external ? (
+    <a className="sidebar-nav-link" href={to} target="_blank" rel="noopener noreferrer" id="nav-public-roles" key={to}>
+      <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
+      <span className="sidebar-nav-label">{label}</span>
+    </a>
+  ) : (
+    <NavLink
+      key={to}
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        `sidebar-nav-link${isActive ? ' active' : ''}`
+      }
+      id={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}
+      onPointerEnter={() => preload(to)}
+      onPointerDown={(event) => navigateFromPerformancePointer(event, to)}
+      onFocus={() => preload(to)}
+    >
+      <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
+      <span className="sidebar-nav-label">{label}</span>
+    </NavLink>
+  )
+
   return (
     <aside className="sidebar" role="navigation" aria-label="Main navigation">
       {/* Logo */}
@@ -73,28 +99,7 @@ export default function Sidebar() {
 
       {/* Nav links */}
       <nav className="sidebar-nav">
-        {!pageViews.loading && navItems.filter(item => item.external || pageViews.canView(item.key)).map(({ to, label, Icon, end, external }) => external ? (
-          <a className="sidebar-nav-link" href={to} target="_blank" rel="noopener noreferrer" id="nav-public-roles" key={to}>
-            <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
-            <span className="sidebar-nav-label">{label}</span>
-          </a>
-        ) : (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              `sidebar-nav-link${isActive ? ' active' : ''}`
-            }
-            id={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}
-            onPointerEnter={() => preload(to)}
-            onPointerDown={(event) => navigateFromPerformancePointer(event, to)}
-            onFocus={() => preload(to)}
-          >
-            <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
-            <span className="sidebar-nav-label">{label}</span>
-          </NavLink>
-        ))}
+        {!pageViews.loading && navItems.filter(item => pageViews.canView(item.key)).map(renderNavItem)}
         {!pageViews.loading && pageViews.canView('invoice') && (
           <>
           <NavLink
@@ -125,6 +130,7 @@ export default function Sidebar() {
           </NavLink>
           </>
         )}
+        {!pageViews.loading && trailingNavItems.filter(item => item.external || pageViews.canView(item.key)).map(renderNavItem)}
       </nav>
 
       {/* Bottom user + logout */}
