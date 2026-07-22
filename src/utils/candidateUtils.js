@@ -48,6 +48,7 @@ export const apiCandidateToUi = (row) => ({
   consultant: row.consultant_name || '',
   consultantName: row.consultant_name || '',
   consultantUserId: row.consultant_user_id || '',
+  isPublicApplicationConversion: Boolean(row.is_public_application_conversion),
   createdAt: row.created_at || '',
 })
 

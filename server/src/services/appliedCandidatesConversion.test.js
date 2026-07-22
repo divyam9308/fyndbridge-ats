@@ -30,6 +30,9 @@ const candidateController = fs.readFileSync(path.join(root, 'server/src/controll
 const candidatePage = fs.readFileSync(path.join(root, 'src/pages/CandidatesPage.jsx'), 'utf8')
 const sharedCss = fs.readFileSync(path.join(root, 'src/styles/Shared.css'), 'utf8')
 const durableSourceMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20260722201214_persist_public_application_candidate_source.sql'), 'utf8')
+const associationOriginMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20260722202739_persist_applied_candidate_association_origin.sql'), 'utf8')
+const candidateUtils = fs.readFileSync(path.join(root, 'src/utils/candidateUtils.js'), 'utf8')
+const clientDetailPage = fs.readFileSync(path.join(root, 'src/pages/ClientDetailPage.jsx'), 'utf8')
 
 function application(overrides = {}) {
   return {
@@ -333,10 +336,12 @@ test('association insertion keeps provenance only when explicitly provided and f
     candidate_id: 'candidate-1',
     job_id: 'job-1',
     status: 'Interested',
-    public_application_id: 'application-1'
+    public_application_id: 'application-1',
+    from_applied_candidates: true
   }, { requirePublicMarker: true })
   assert.equal(marked.error, null)
   assert.equal(inserted[0].public_application_id, 'application-1')
+  assert.equal(inserted[0].from_applied_candidates, true)
 
   await insertAssociation(supabase, {
     candidate_id: 'candidate-2',
@@ -488,7 +493,9 @@ test('controller contract marks only newly created candidates and reconciles dur
 
   assert.ok(linkStart >= 0 && createStart > linkStart)
   assert.doesNotMatch(linkBlock, /public_application_id/)
+  assert.match(linkBlock, /if \(!association\)[\s\S]*from_applied_candidates:\s*true/)
   assert.match(createBlock, /public_application_id:\s*application\.id/)
+  assert.match(createBlock, /from_applied_candidates:\s*true/)
   assert.match(createBlock, /requirePublicMarker:\s*true/)
   assert.match(createBlock, /removeCandidateIfUnassociated\(supabase, candidate\.id\)/)
   assert.ok(appliedController.indexOf('recordConversionCandidate(supabase, application.id, claim.token, candidate.id)') < appliedController.indexOf('public_application_id: application.id'))
@@ -498,7 +505,8 @@ test('controller contract marks only newly created candidates and reconciles dur
   assert.match(appliedController, /claim\?\.token\s*&&\s*!cleanupFailure[\s\S]*!error\.preserveClaim/)
   assert.ok((appliedController.match(/removeFinalizedApplication\(supabase,/g) || []).length >= 5)
 
-  assert.match(candidateController, /is_public_application_conversion:\s*candidate\.source === 'public_application'/)
+  assert.match(candidateController, /is_public_application_conversion:\s*Boolean\(row\.from_applied_candidates\)/)
+  assert.match(candidateController, /is_public_application_conversion:\s*false/)
   assert.doesNotMatch(candidateController, /public_application_id:\s*row\.public_application_id/)
 })
 
@@ -508,6 +516,15 @@ test('conversion provenance survives staging cleanup and repairs the reported CA
   assert.match(durableSourceMigration, /association\.public_application_id is not null/)
   assert.match(durableSourceMigration, /candidate\.candidate_display_id[\s\S]*CA844/i)
   assert.match(durableSourceMigration, /association\.consultant_name[\s\S]*prasobh krishnan/i)
+})
+
+test('red-dot provenance is association-specific in main Candidates and Client Details', () => {
+  assert.match(associationOriginMigration, /add column if not exists from_applied_candidates boolean not null default false/)
+  assert.match(associationOriginMigration, /candidate\.candidate_display_id[\s\S]*CA844/i)
+  assert.match(associationOriginMigration, /association\.consultant_name[\s\S]*prasobh krishnan/i)
+  assert.match(candidateUtils, /isPublicApplicationConversion:\s*Boolean\(row\.is_public_application_conversion\)/)
+  assert.match(clientDetailPage, /candidate-public-source-dot/)
+  assert.match(clientDetailPage, /title="From Applied Candidates"/)
 })
 
 test('main candidates table shows the public-application marker as a dot beside Candidate ID', () => {

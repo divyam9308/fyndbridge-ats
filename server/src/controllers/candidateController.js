@@ -645,7 +645,7 @@ function flattenAssociation(row) {
     created_at: row.created_at,
     updated_at: row.updated_at,
     is_locked: Boolean(candidate.is_locked),
-    is_public_application_conversion: candidate.source === 'public_application'
+    is_public_application_conversion: Boolean(row.from_applied_candidates)
   }
 }
 
@@ -694,7 +694,7 @@ function flattenCandidateOnly(candidate) {
     created_at: candidate.created_at,
     updated_at: candidate.updated_at,
     is_locked: Boolean(candidate.is_locked),
-    is_public_application_conversion: candidate.source === 'public_application'
+    is_public_application_conversion: false
   }
 }
 

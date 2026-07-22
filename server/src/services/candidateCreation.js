@@ -212,7 +212,7 @@ async function insertAssociation(supabase, payload, { requirePublicMarker = fals
     if (!column || !ASSOCIATION_FIELDS.includes(column)) break
     insertPayload = without(insertPayload, column)
   }
-  if (requirePublicMarker && payload.public_application_id && missingColumn(result?.error) === 'public_application_id') {
+  if (requirePublicMarker && ['public_application_id', 'from_applied_candidates'].includes(missingColumn(result?.error))) {
     result.error.statusCode = 503
     result.error.message = 'Applied Candidates schema is not ready. Apply the feature migration before converting.'
   }

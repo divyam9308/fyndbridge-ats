@@ -609,7 +609,15 @@ export default function ClientDetailPage() {
       return `₹${normalized} LPA`
     }
     switch (key) {
-      case 'candidateDisplayId': return <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.candidateDisplayId || '-'}</td>
+      case 'candidateDisplayId':
+        return (
+          <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            <span className="candidate-display-id-value">
+              <span>{c.candidateDisplayId || '-'}</span>
+              {c.isPublicApplicationConversion && <span className="candidate-public-source-dot" role="img" aria-label="From Applied Candidates" title="From Applied Candidates" />}
+            </span>
+          </td>
+        )
       case 'date': return <td key={key}>{formatDate(c.createdAt)}</td>
       case 'consultant': return <td key={key}><ConsultantPill name={c.consultant} /></td>
       case 'client': return <td key={key}>{c.client || '-'}</td>

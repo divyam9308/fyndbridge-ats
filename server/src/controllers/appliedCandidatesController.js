@@ -372,8 +372,9 @@ async function convertAppliedCandidate(req, res) {
         const result = await candidateCreation.insertAssociation(supabase, {
           ...associationPayload,
           candidate_id: existing.id,
+          from_applied_candidates: true,
           created_by: req.user.id
-        })
+        }, { requirePublicMarker: true })
         if (result.error?.code === '23505') association = await findExactAssociation(existing.id, application.job_id)
         else if (result.error) throw result.error
         else association = result.data
@@ -429,6 +430,7 @@ async function convertAppliedCandidate(req, res) {
       ...associationPayload,
       candidate_id: candidate.id,
       public_application_id: application.id,
+      from_applied_candidates: true,
       created_by: req.user.id
     }, { requirePublicMarker: true })
     if (associationResult.error) {
