@@ -4,8 +4,8 @@ const { publicExperienceLabel } = require('./publicRoleSharePreview')
 
 const WIDTH = 1200
 const HEIGHT = 630
-const BACKGROUND_PATH = path.resolve(__dirname, '../../../public/assets/public-role-share-background-v1.png')
-const LOGO_PATH = path.resolve(__dirname, '../../../public/assets/fyndbridge-official-logo.png')
+const BACKGROUND_PATH = path.resolve(__dirname, '../../assets/public-role-share-background-v1.png')
+const LOGO_PATH = path.resolve(__dirname, '../../assets/fyndbridge-official-logo.png')
 
 let assetsPromise
 
