@@ -10,6 +10,7 @@ import {
   MapPin,
   RotateCcw,
   Search,
+  Star,
   Upload,
   X,
 } from 'lucide-react'
@@ -133,15 +134,23 @@ function RoleCard({ role, onDetails, onApply }) {
         onDetails()
       }
     }} aria-label={`View ${role.public_name}`}>
-      <div className="public-role-card-icon"><BriefcaseBusiness size={22} /></div>
-      <h2>{role.public_name}</h2>
+      <div className="public-role-card-heading">
+        <div className="public-role-card-icon"><BriefcaseBusiness size={22} /></div>
+        <h2>{role.public_name}</h2>
+      </div>
       <div className="public-role-meta">
         <span><MapPin size={15} />{role.public_location}</span>
         <span><BriefcaseBusiness size={15} />{role.public_experience}</span>
-        <span><CalendarDays size={15} />Apply by {publicDate(role.application_deadline)}</span>
       </div>
-      <div className="public-skill-list" aria-label="Skills">
-        {publicSkills(role.public_skills).map(skill => <span key={skill}>{skill}</span>)}
+      <div className="public-role-skills">
+        <strong>Skills</strong>
+        <div className="public-skill-list" aria-label="Skills">
+          {publicSkills(role.public_skills).map(skill => <span key={skill}>{skill}</span>)}
+        </div>
+      </div>
+      <div className="public-role-deadline">
+        <CalendarDays size={17} />
+        <span><strong>Application Deadline</strong>{publicDate(role.application_deadline)}</span>
       </div>
       <div className="public-role-card-actions">
         <button type="button" className="public-primary-button" onKeyDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); onApply() }}>Apply</button>
@@ -155,8 +164,8 @@ function DetailsModal({ role, loading, error, onClose, onApply }) {
     <div className="public-modal-overlay" role="presentation">
       <section className="public-modal-card public-details-modal" role="dialog" aria-modal="true" aria-labelledby="public-role-title">
         <header className="public-modal-header">
-          <div>
-            <span className="public-eyebrow">Open role</span>
+          <div className="public-details-heading">
+            <div className="public-role-card-icon"><BriefcaseBusiness size={24} /></div>
             <h2 id="public-role-title">{role?.public_name || 'Role details'}</h2>
           </div>
           <button type="button" className="public-icon-button" onClick={onClose} aria-label="Close role details"><X size={20} /></button>
@@ -167,11 +176,27 @@ function DetailsModal({ role, loading, error, onClose, onApply }) {
           {!loading && role && (
             <>
               <div className="public-detail-meta">
-                <span><MapPin size={16} />{role.public_location}</span>
-                <span><BriefcaseBusiness size={16} />{role.public_experience}</span>
-                <span><CalendarDays size={16} />Apply by {publicDate(role.application_deadline)}</span>
+                <div>
+                  <MapPin size={19} />
+                  <strong>Location</strong>
+                  <span>{role.public_location}</span>
+                </div>
+                <div>
+                  <BriefcaseBusiness size={19} />
+                  <strong>Experience</strong>
+                  <span>{role.public_experience}</span>
+                </div>
+                <div className="public-detail-skills">
+                  <Star size={19} />
+                  <strong>Skills</strong>
+                  <div className="public-skill-list">{publicSkills(role.public_skills).map(skill => <span key={skill}>{skill}</span>)}</div>
+                </div>
+                <div>
+                  <CalendarDays size={19} />
+                  <strong>Application Deadline</strong>
+                  <span>{publicDate(role.application_deadline)}</span>
+                </div>
               </div>
-              <div className="public-skill-list">{publicSkills(role.public_skills).map(skill => <span key={skill}>{skill}</span>)}</div>
               <div className="public-jd-block">
                 <h3>JD</h3>
                 <div>{String(role.public_jd || '').split(/\r?\n/).map((line, index) => <p key={`${index}-${line.slice(0, 20)}`}>{line || '\u00a0'}</p>)}</div>
@@ -509,14 +534,13 @@ export default function PublicRolesPage() {
   return (
     <div className="public-roles-page">
       <section className="public-roles-hero">
-        <span className="public-eyebrow">Build what comes next</span>
         <h1>Open Roles</h1>
-        <p>Explore opportunities with organisations shaping the future. Apply securely in a few focused steps.</p>
+        <p>Explore current mandates at FyndBridge. Find the right opportunity and apply online in just a few clicks.</p>
       </section>
       <section className="public-role-controls" aria-label="Filter open roles">
-        <label className="public-search-control"><Search size={18} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by role or skill" aria-label="Search by role or skill" /></label>
-        <select value={locationFilter} onChange={event => setLocationFilter(event.target.value)} aria-label="Filter by location"><option value="">All locations</option>{locations.map(value => <option key={value}>{value}</option>)}</select>
-        <select value={experienceFilter} onChange={event => setExperienceFilter(event.target.value)} aria-label="Filter by experience"><option value="">All experience</option>{experiences.map(value => <option key={value}>{value}</option>)}</select>
+        <label className="public-search-control"><Search size={18} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by role, skill or keyword" aria-label="Search by role or skill" /></label>
+        <label className="public-select-control"><MapPin size={18} /><select value={locationFilter} onChange={event => setLocationFilter(event.target.value)} aria-label="Filter by location"><option value="">All locations</option>{locations.map(value => <option key={value}>{value}</option>)}</select></label>
+        <label className="public-select-control"><BriefcaseBusiness size={18} /><select value={experienceFilter} onChange={event => setExperienceFilter(event.target.value)} aria-label="Filter by experience"><option value="">All Experience</option>{experiences.map(value => <option key={value}>{value}</option>)}</select></label>
         <button className="public-clear-filters" type="button" onClick={() => { setQuery(''); setLocationFilter(''); setExperienceFilter('') }} disabled={!query && !locationFilter && !experienceFilter}><RotateCcw size={16} />Clear Filters</button>
       </section>
       {loading && <div className="public-page-state"><Loader2 className="public-spin" size={28} /><h2>Loading open roles</h2><p>Please wait while we find current opportunities.</p></div>}

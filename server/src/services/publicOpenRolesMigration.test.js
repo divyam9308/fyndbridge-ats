@@ -8,6 +8,10 @@ const migration = fs.readFileSync(
   path.join(root, 'supabase/migrations/20260722065251_public_open_roles_and_applications.sql'),
   'utf8'
 )
+const rateLimitTimestampFix = fs.readFileSync(
+  path.join(root, 'supabase/migrations/20260722091050_fix_public_application_rate_limit_timestamp.sql'),
+  'utf8'
+)
 
 test('production preflight fails before DDL instead of repairing unsafe live state', () => {
   const preflight = migration.match(/do \$\$[\s\S]*?end \$\$;/i)?.[0] || ''
@@ -177,6 +181,16 @@ test('durable rate limiting is atomic, hashed, and callable only by service_role
   )
   assert.match(
     migration,
+    /grant execute on function public\.consume_public_application_rate_limit[\s\S]*to service_role/i
+  )
+})
+
+test('rate-limit timestamp fix avoids the PostgreSQL CURRENT_TIME name collision', () => {
+  assert.match(rateLimitTimestampFix, /request_now timestamptz := clock_timestamp\(\)/i)
+  assert.match(rateLimitTimestampFix, /expires_at <= request_now/i)
+  assert.doesNotMatch(rateLimitTimestampFix, /\bcurrent_time\s+timestamptz/i)
+  assert.match(
+    rateLimitTimestampFix,
     /grant execute on function public\.consume_public_application_rate_limit[\s\S]*to service_role/i
   )
 })
