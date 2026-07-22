@@ -29,6 +29,7 @@ const appliedController = fs.readFileSync(path.join(root, 'server/src/controller
 const candidateController = fs.readFileSync(path.join(root, 'server/src/controllers/candidateController.js'), 'utf8')
 const candidatePage = fs.readFileSync(path.join(root, 'src/pages/CandidatesPage.jsx'), 'utf8')
 const sharedCss = fs.readFileSync(path.join(root, 'src/styles/Shared.css'), 'utf8')
+const durableSourceMigration = fs.readFileSync(path.join(root, 'supabase/migrations/20260722201214_persist_public_application_candidate_source.sql'), 'utf8')
 
 function application(overrides = {}) {
   return {
@@ -497,9 +498,16 @@ test('controller contract marks only newly created candidates and reconciles dur
   assert.match(appliedController, /claim\?\.token\s*&&\s*!cleanupFailure[\s\S]*!error\.preserveClaim/)
   assert.ok((appliedController.match(/removeFinalizedApplication\(supabase,/g) || []).length >= 5)
 
-  assert.match(candidateController, /is_public_application_conversion:\s*Boolean\(row\.public_application_id\)/)
-  assert.match(candidateController, /is_public_application_conversion:\s*false/)
+  assert.match(candidateController, /is_public_application_conversion:\s*candidate\.source === 'public_application'/)
   assert.doesNotMatch(candidateController, /public_application_id:\s*row\.public_application_id/)
+})
+
+test('conversion provenance survives staging cleanup and repairs the reported CA844 row', () => {
+  const payload = conversionPayload(application(), {})
+  assert.equal(payload.candidate.source, 'public_application')
+  assert.match(durableSourceMigration, /association\.public_application_id is not null/)
+  assert.match(durableSourceMigration, /candidate\.candidate_display_id[\s\S]*CA844/i)
+  assert.match(durableSourceMigration, /association\.consultant_name[\s\S]*prasobh krishnan/i)
 })
 
 test('main candidates table shows the public-application marker as a dot beside Candidate ID', () => {

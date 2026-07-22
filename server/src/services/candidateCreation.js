@@ -263,6 +263,7 @@ function conversionPayload(application, body, adoptedResume = {}) {
     notice_period: body.notice_period ?? application.notice_period,
     open_to_relocate: relocateValue === true ? 'true' : relocateValue === false ? 'false' : relocateValue,
     linkedin_url: body.linkedin_url ?? application.linkedin_url,
+    source: 'public_application',
     client_id: application.client_id,
     ...adoptedResume
   }, CANDIDATE_FIELDS)
