@@ -877,6 +877,10 @@
   letter-spacing: 0.1em;
 }
 
+.candidates-master-table th.candidate-centered-heading {
+  text-align: center;
+}
+
 .fb-theme-table td,
 .candidates-master-table td {
   color: #1f2937;
@@ -2036,6 +2040,8 @@ textarea.form-control {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  background: #e8f1ff;
+  color: #2563eb;
 }
 
 .candidates-master-table .candidate-public-source-dot {
