@@ -124,6 +124,12 @@ function publicJobPayload(body, partial = false) {
   return payload
 }
 
+function unpublishClosedMandatePayload(payload, { partial = false } = {}) {
+  if (!partial || !Object.prototype.hasOwnProperty.call(payload || {}, 'mandate_status')) return payload
+  if (normalizeMandateStatus(payload.mandate_status) === 'Ongoing (P1)') return payload
+  return { ...payload, is_public: false }
+}
+
 function publicJobDetailsChanged(current, next) {
   const textFields = ['public_name', 'public_location', 'public_experience', 'application_deadline']
   if (textFields.some((field) => clean(current?.[field]) !== clean(next?.[field]))) return true
@@ -411,6 +417,7 @@ module.exports = {
   publicRoleDto,
   buildPublicSlug,
   publicJobPayload,
+  unpublishClosedMandatePayload,
   publicJobDetailsChanged,
   validatePublicJobForPublish,
   allocatePublicSlug,

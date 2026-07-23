@@ -15,6 +15,7 @@ const { MANDATE_STATUSES, normalizeMandateStatus } = require('../services/mandat
 const {
   PUBLIC_JOB_FIELDS,
   publicJobPayload,
+  unpublishClosedMandatePayload,
   publicJobDetailsChanged,
   publicJobState,
   validatePublicJobForPublish,
@@ -449,7 +450,7 @@ async function payloadFromBody(body, partial = false) {
   if (!partial || body.jd_url !== undefined) payload.jd_url = nullable(normalizeStoragePath(body.jd_storage_path || body.jd_url, STORAGE_BUCKETS.JD))
   if (!partial || body.jd_storage_path !== undefined) payload.jd_storage_path = nullable(normalizeStoragePath(body.jd_storage_path || body.jd_url, STORAGE_BUCKETS.JD))
   Object.assign(payload, publicJobPayload(body, partial))
-  return payload
+  return unpublishClosedMandatePayload(payload, { partial })
 }
 
 function missingJobColumn(error) {

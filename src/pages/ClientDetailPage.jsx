@@ -412,7 +412,8 @@ export default function ClientDetailPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Unable to update mandate status.')
-      setClientJobs(rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: status, status } : row))
+      setClientJobs(rows => rows.map(row => row.id === job.id ? { ...row, ...data } : row))
+      window.dispatchEvent(new Event('ats:public-roles-updated'))
       setTablePopover(null)
     } catch (err) {
       setError(err.message)

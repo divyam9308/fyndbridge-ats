@@ -198,7 +198,7 @@ async function syncHiredMandate(jobId, status) {
   const { data: job, error } = await supabase.from('jobs').select('id, mandate_status, status').eq('id', jobId).maybeSingle()
   if (error) throw error
   if (!job || [job.mandate_status, job.status].some((value) => normalizeMandateStatus(value) === 'Scrapped')) return
-  const { error: updateError } = await supabase.from('jobs').update({ mandate_status: 'Completed', status: 'Completed', updated_at: new Date().toISOString() }).eq('id', jobId)
+  const { error: updateError } = await supabase.from('jobs').update({ mandate_status: 'Completed', status: 'Completed', is_public: false, updated_at: new Date().toISOString() }).eq('id', jobId)
   if (updateError) throw updateError
 }
 
