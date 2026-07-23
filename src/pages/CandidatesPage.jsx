@@ -2108,9 +2108,9 @@ export default function CandidatesPage() {
       case 'client':
         return <td key={key}>{highlightText(c.client || '-', aiFilters)}</td>
       case 'clientId':
-        return <td key={key}>{clientIdValue !== '-' ? <span className="candidate-id-chip candidate-client-id-chip">{clientIdValue}</span> : <span className="candidate-muted-dash">-</span>}</td>
+        return <td key={key} style={{ textAlign: 'center' }}>{clientIdValue !== '-' ? <span className="candidate-id-chip candidate-client-id-chip">{clientIdValue}</span> : <span className="candidate-muted-dash">-</span>}</td>
       case 'jobId':
-        return <td key={key}>{jobIdValue !== '-' ? <span className="candidate-id-chip candidate-job-id-chip">{jobIdValue}</span> : <span className="candidate-muted-dash">-</span>}</td>
+        return <td key={key} style={{ textAlign: 'center' }}>{jobIdValue !== '-' ? <span className="candidate-id-chip candidate-job-id-chip">{jobIdValue}</span> : <span className="candidate-muted-dash">-</span>}</td>
       case 'job':
         return <td key={key} className="cell-ellipsis">{highlightText(c.job || '-', aiFilters)}</td>
       case 'name':
@@ -2160,7 +2160,7 @@ export default function CandidatesPage() {
       case 'expectedSalary':
         return <td key={key}>{c.expectedSalary ? <span className="candidate-money-value">{formatCandidateCtc(c.expectedSalary)}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'relocate':
-        return <td key={key}>{c.openToRelocate ? <span className={`candidate-relocate-pill${c.openToRelocate === 'Yes' ? ' is-yes' : ' is-no'}`}>{c.openToRelocate}</span> : <span className="candidate-empty-value">-</span>}</td>
+        return <td key={key} style={{ textAlign: 'center' }}>{c.openToRelocate ? <span className={`candidate-relocate-pill${c.openToRelocate === 'Yes' ? ' is-yes' : ' is-no'}`}>{c.openToRelocate}</span> : <span className="candidate-empty-value">-</span>}</td>
       case 'comments':
         return <td key={key}>{renderCommentsCell(c)}</td>
       case 'linkedin':
@@ -2193,7 +2193,7 @@ export default function CandidatesPage() {
       case 'cv': {
         const attachments = candidateCvAttachments(c)
         return (
-          <td key={key}>
+          <td key={key} style={{ textAlign: 'center' }}>
             <DocumentIconGroup
               attachments={attachments}
               keyPrefix={`cv-${c.associationId || c.id}`}

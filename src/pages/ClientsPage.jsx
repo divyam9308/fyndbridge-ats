@@ -1484,7 +1484,7 @@ export default function ClientsPage() {
       case 'billingEntity':
         return <td key={key}>{client.contract_signed ? dash(client.billing_entity) : '-'}</td>
       case 'contractSigned':
-        return <td key={key}>{client.contract_signed ? 'Yes' : 'No'}</td>
+        return <td key={key} style={{ textAlign: 'center' }}>{client.contract_signed ? 'Yes' : 'No'}</td>
       case 'contractDocument':
         return null
       case 'gstin':
@@ -1496,7 +1496,7 @@ export default function ClientsPage() {
       case 'contractPdf': {
         const attachments = clientContractAttachments(client)
         return (
-          <td key={key}>
+          <td key={key} style={{ textAlign: 'center' }}>
             <DocumentIconGroup
               attachments={attachments}
               openingKey={openingDocument}
