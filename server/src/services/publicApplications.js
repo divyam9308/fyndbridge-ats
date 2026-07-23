@@ -59,8 +59,7 @@ function hasCompletePublicListing(job) {
     clean(job?.public_name) &&
     clean(job?.public_location) &&
     clean(job?.public_experience) &&
-    isDateOnly(job?.application_deadline) &&
-    cleanMultiline(job?.public_jd)
+    isDateOnly(job?.application_deadline)
   )
 }
 
@@ -142,7 +141,6 @@ function validatePublicJobForPublish(job, now = new Date()) {
   if (!clean(job.public_experience)) errors.public_experience = 'Public experience is required'
   if (!isDateOnly(job.application_deadline)) errors.application_deadline = 'Application deadline is required'
   else if (clean(job.application_deadline) < indiaDate(now)) errors.application_deadline = 'Application deadline cannot be in the past'
-  if (!cleanMultiline(job.public_jd)) errors.public_jd = 'Public job description is required'
   if (normalizeMandateStatus(job.mandate_status) !== 'Ongoing (P1)') {
     errors.is_public = 'Only Ongoing (P1) mandates can be published'
   }
@@ -182,7 +180,6 @@ async function countEligiblePublicJobs(supabase, now = new Date()) {
     .not('public_name', 'is', null)
     .not('public_location', 'is', null)
     .not('public_experience', 'is', null)
-    .not('public_jd', 'is', null)
   if (error) throw error
   return count || 0
 }

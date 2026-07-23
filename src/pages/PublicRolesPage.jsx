@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import TurnstileWidget from '../components/public/TurnstileWidget'
+import PublicJdContent from '../components/PublicJdContent'
 import {
   fetchPublicRole,
   fetchPublicRoles,
@@ -199,10 +200,10 @@ function DetailsModal({ role, loading, error, onClose, onApply }) {
                   <span>{publicDate(role.application_deadline)}</span>
                 </div>
               </div>
-              <div className="public-jd-block">
+              {role.public_jd && <div className="public-jd-block">
                 <h3>JD</h3>
-                <div>{String(role.public_jd || '').split(/\r?\n/).map((line, index) => <p key={`${index}-${line.slice(0, 20)}`}>{line || '\u00a0'}</p>)}</div>
-              </div>
+                <div><PublicJdContent value={role.public_jd} /></div>
+              </div>}
             </>
           )}
         </div>

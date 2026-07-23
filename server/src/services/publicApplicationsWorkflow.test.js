@@ -62,7 +62,7 @@ test('Asia/Kolkata eligibility exposes only complete, current, canonical P1 list
   assert.equal(publicJobState(publicJob(), NOW), 'Published')
   assert.equal(isPublicJobEligible(publicJob(), NOW), true)
   assert.equal(publicJobState(publicJob({ is_public: false }), NOW), 'Not Public')
-  assert.equal(publicJobState(publicJob({ public_jd: '' }), NOW), 'Incomplete')
+  assert.equal(publicJobState(publicJob({ public_jd: '' }), NOW), 'Published')
   assert.equal(publicJobState(publicJob({ mandate_status: 'Delivered (P2)' }), NOW), 'Closed')
   assert.equal(publicJobState(publicJob({ application_deadline: '2026-07-21' }), NOW), 'Expired')
   assert.equal(publicJobState(publicJob({ application_deadline: '2026-07-22' }), NOW), 'Published')
@@ -105,6 +105,7 @@ test('public job input ignores caller-supplied slugs and validates publishing fi
   assert.equal(Object.hasOwn(payload, 'public_slug'), false)
   assert.deepEqual(payload.public_skills, ['Budgeting', 'Forecasting'])
   assert.doesNotThrow(() => validatePublicJobForPublish({ ...publicJob(), ...payload }, NOW))
+  assert.doesNotThrow(() => validatePublicJobForPublish(publicJob({ public_jd: '' }), NOW))
 
   assert.throws(
     () => validatePublicJobForPublish(publicJob({ mandate_status: 'Completed' }), NOW),

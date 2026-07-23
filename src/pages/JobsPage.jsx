@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { AlertCircle, ChevronDown, Copy, ExternalLink, FileText, Globe2, Loader2, Pencil, Plus, Search, X, Lock } from 'lucide-react'
+import { AlertCircle, Bold, ChevronDown, Copy, ExternalLink, FileText, Globe2, Heading2, Italic, List, ListOrdered, Loader2, Pencil, Plus, Quote, Search, X, Lock } from 'lucide-react'
 import NewActionDropdown from '../components/NewActionDropdown'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
@@ -119,8 +119,7 @@ const publicListingComplete = (job) => Boolean(
   String(job?.public_name || '').trim() &&
   String(job?.public_location || '').trim() &&
   String(job?.public_experience || '').trim() &&
-  String(job?.application_deadline || '').trim() &&
-  String(job?.public_jd || '').trim()
+  String(job?.application_deadline || '').trim()
 )
 const publicListingState = (job) => {
   if (!job?.is_public) return 'Not Public'
@@ -267,6 +266,7 @@ export default function JobsPage() {
   const [publicActionSaving, setPublicActionSaving] = useState({})
   const [publicActionNotice, setPublicActionNotice] = useState(null)
   const publicNoticeSequenceRef = useRef(0)
+  const publicJdRef = useRef(null)
   const modalRef = useRef(null)
   const duplicateModalRef = useRef(null)
   const roleInputRef = useRef(null)
@@ -746,7 +746,6 @@ export default function JobsPage() {
       if (!String(form.public_experience || '').trim()) next.public_experience = 'Public Experience is required.'
       if (!form.application_deadline) next.application_deadline = 'Application Deadline is required.'
       else if (form.application_deadline < indiaToday()) next.application_deadline = 'Application Deadline cannot be in the past in Asia/Kolkata.'
-      if (!String(form.public_jd || '').trim()) next.public_jd = 'Public JD is required.'
       if (normalizeMandateStatus(form.mandate_status) !== 'Ongoing (P1)') next.is_public = 'Only an Ongoing (P1) mandate can be published.'
     }
     return next
@@ -1120,6 +1119,47 @@ export default function JobsPage() {
       delete next[field]
       if (field === 'is_public') delete next.is_public
       return next
+    })
+  }
+
+  const formatPublicJd = (type) => {
+    const textarea = publicJdRef.current
+    if (!textarea) return
+    const value = String(form.public_jd || '')
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const selected = value.slice(start, end)
+    const lineFormat = {
+      heading: { prefix: '## ' },
+      bullet: { prefix: '- ' },
+      ordered: { prefix: '1. ', numbered: true },
+      quote: { prefix: '> ' }
+    }[type]
+    let selectionStart
+    let selectionEnd
+
+    if (lineFormat) {
+      const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+      const nextLineBreak = value.indexOf('\n', end)
+      const lineEnd = nextLineBreak === -1 ? value.length : nextLineBreak
+      const replacement = value.slice(lineStart, lineEnd).split('\n')
+        .map((line, index) => `${lineFormat.numbered ? `${index + 1}. ` : lineFormat.prefix}${line}`)
+        .join('\n')
+      selectionStart = lineStart
+      selectionEnd = lineStart + replacement.length
+      setPublicFormField('public_jd', `${value.slice(0, lineStart)}${replacement}${value.slice(lineEnd)}`)
+    } else {
+      const marker = type === 'bold' ? '**' : '*'
+      const placeholder = selected || (type === 'bold' ? 'bold text' : 'italic text')
+      const replacement = `${marker}${placeholder}${marker}`
+      selectionStart = start + marker.length
+      selectionEnd = selectionStart + placeholder.length
+      setPublicFormField('public_jd', `${value.slice(0, start)}${replacement}${value.slice(end)}`)
+    }
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(selectionStart, selectionEnd)
     })
   }
 
@@ -1748,8 +1788,20 @@ export default function JobsPage() {
                     {errors.application_deadline && <span className="form-error">{errors.application_deadline}</span>}
                   </div>
                   <div className="form-group full">
-                    <label className="form-label">Public JD <span className="req">*</span></label>
-                    <textarea rows="8" className={`form-control${errors.public_jd ? ' is-error' : ''}`} value={form.public_jd} onChange={event => setPublicFormField('public_jd', event.target.value)} disabled={saving || isJobFieldDisabled('public_careers_listing')} />
+                    <label className="form-label">Public JD <span className="sub-text">(Optional)</span></label>
+                    <div className={`public-jd-editor${errors.public_jd ? ' is-error' : ''}`}>
+                      <div className="public-jd-toolbar" role="toolbar" aria-label="Public JD text formatting">
+                        {[
+                          ['bold', Bold, 'Bold'],
+                          ['italic', Italic, 'Italic'],
+                          ['heading', Heading2, 'Heading'],
+                          ['bullet', List, 'Bulleted list'],
+                          ['ordered', ListOrdered, 'Numbered list'],
+                          ['quote', Quote, 'Quote']
+                        ].map(([type, Icon, label]) => <button key={type} type="button" onClick={() => formatPublicJd(type)} disabled={saving || isJobFieldDisabled('public_careers_listing')} aria-label={label} title={label}><Icon size={16} /></button>)}
+                      </div>
+                      <textarea ref={publicJdRef} rows="8" className="form-control" value={form.public_jd} onChange={event => setPublicFormField('public_jd', event.target.value)} placeholder="Add a public job description, if needed" disabled={saving || isJobFieldDisabled('public_careers_listing')} />
+                    </div>
                     <span className="sub-text">Only this text is public. Internal JD files, Mandate Sheet links, client details and internal notes remain private.</span>
                     {errors.public_jd && <span className="form-error">{errors.public_jd}</span>}
                   </div>

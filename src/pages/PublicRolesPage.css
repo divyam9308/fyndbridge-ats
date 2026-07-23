@@ -111,6 +111,9 @@
 .public-jd-block h3 { margin: 0 0 12px; color: #30332f; font-size: 15px; font-weight: 600; }
 .public-jd-block > div { max-height: min(300px, 37vh); padding: 18px 20px; overflow-y: auto; background: #fbfbf8; border: 1px solid #dddeda; border-radius: 7px; scrollbar-color: #929790 transparent; scrollbar-width: thin; }
 .public-jd-block p { margin: 0 0 8px; color: #3e4758; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+.public-jd-block h4 { margin: 14px 0 8px; color: #30332f; font-size: 15px; line-height: 1.45; }
+.public-jd-block ul, .public-jd-block ol { margin: 0 0 12px; padding-left: 24px; color: #3e4758; font-size: 14px; line-height: 1.65; }
+.public-jd-block blockquote { margin: 10px 0; padding: 8px 12px; border-left: 3px solid #bd9a55; color: #596171; background: #f6f4ee; }
 .public-stepper { padding: 14px 24px; display: flex; align-items: center; justify-content: center; gap: 12px; color: #8a93a3; background: #fafbfc; border-bottom: 1px solid var(--public-line); font-size: 12px; font-weight: 700; }
 .public-stepper span { display: flex; align-items: center; gap: 7px; }
 .public-stepper b { width: 23px; height: 23px; display: grid; place-items: center; color: #737e91; background: #e9ecf1; border-radius: 50%; }

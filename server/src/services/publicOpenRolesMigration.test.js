@@ -20,6 +20,10 @@ const optionalPublicFields = fs.readFileSync(
   path.join(root, 'supabase/migrations/20260722181210_make_public_skills_linkedin_comments_optional.sql'),
   'utf8'
 )
+const optionalPublicJd = fs.readFileSync(
+  path.join(root, 'supabase/migrations/20260723090831_make_public_jd_optional.sql'),
+  'utf8'
+)
 
 test('production preflight fails before DDL instead of repairing unsafe live state', () => {
   const preflight = migration.match(/do \$\$[\s\S]*?end \$\$;/i)?.[0] || ''
@@ -227,6 +231,16 @@ test('correction migration makes public skills, LinkedIn, and Comments optional 
   assert.doesNotMatch(optionalPublicFields, /drop\s+column/i)
   assert.match(optionalPublicFields, /validate constraint jobs_public_listing_complete/i)
   assert.match(optionalPublicFields, /validate constraint public_applications_required_text_check/i)
+})
+
+test('Public JD correction keeps the column but removes it from listing completeness', () => {
+  const listingConstraint = optionalPublicJd.match(
+    /add constraint jobs_public_listing_complete([\s\S]*?)\) not valid;/i
+  )?.[1] || ''
+
+  assert.doesNotMatch(listingConstraint, /public_jd/i)
+  assert.doesNotMatch(optionalPublicJd, /drop\s+column/i)
+  assert.match(optionalPublicJd, /validate constraint jobs_public_listing_complete/i)
 })
 
 test('migration has balanced dollar-quoted function blocks', () => {
