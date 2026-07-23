@@ -680,12 +680,12 @@ export default function AppliedCandidatesPage() {
                   <div className="applied-warning"><Link2 size={18} /><div><strong>Existing candidate found</strong><span>{duplicateState.message || 'Choose the existing candidate that should receive this mandate association.'}</span></div></div>
                   <div className="applied-existing-list">{duplicateState.existing.map(candidate => {
                     const id = candidate.candidate_id || candidate.id
+                    const candidateDisplayId = !isConversionFieldHidden('candidate_display_id') ? candidate.candidate_display_id : ''
                     const identity = [
-                      !isConversionFieldHidden('candidate_display_id') && candidate.candidate_display_id,
                       !isConversionFieldHidden('email') && candidate.email,
                       !isConversionFieldHidden('mobile_number') && candidate.mobile_number,
                     ].filter(Boolean)
-                    return <label key={id}><input type="radio" name="existing-candidate" value={id} checked={selectedExistingId === id} onChange={() => setSelectedExistingId(id)} /><span><strong>{!isConversionFieldHidden('full_name') ? display(candidate.full_name || candidate.name) : 'Existing candidate'}</strong><small>{identity.length ? identity.join(' · ') : 'Protected candidate record'}</small></span></label>
+                    return <label key={id}><input type="radio" name="existing-candidate" value={id} checked={selectedExistingId === id} onChange={() => setSelectedExistingId(id)} /><span><strong>{!isConversionFieldHidden('full_name') ? display(candidate.full_name || candidate.name) : 'Existing candidate'}</strong><small>{candidateDisplayId && <span className="candidate-id-pill">{candidateDisplayId}</span>}{candidateDisplayId && identity.length ? ' · ' : ''}{identity.length ? identity.join(' · ') : (candidateDisplayId ? '' : 'Protected candidate record')}</small></span></label>
                   })}</div>
                   <label className="applied-fill-blank"><input type="checkbox" checked={fillBlankFields} onChange={event => setFillBlankFields(event.target.checked)} disabled={!BLANK_FILL_PERMISSION_FIELDS.some(([, permissionField]) => canEditConversionField(permissionField))} />Fill only permitted blank fields on the selected existing candidate with reviewed values</label>
                   {conversionErrors.duplicate && <small className="form-error">{conversionErrors.duplicate}</small>}

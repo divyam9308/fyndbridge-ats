@@ -2084,7 +2084,7 @@ export default function CandidatesPage() {
       case 'candidateDisplayId':
         return (
           <td key={key} style={{ fontFamily:'monospace', fontSize:12 }}>
-            <span className="candidate-id-chip candidate-display-id-value">
+            <span className="candidate-id-pill candidate-display-id-value">
               <span>{c.candidateDisplayId || '-'}</span>
               {c.isPublicApplicationConversion && <span className="candidate-public-source-dot" role="img" aria-label="From Applied Candidates" title="From Applied Candidates" />}
             </span>
@@ -2483,7 +2483,12 @@ export default function CandidatesPage() {
             <div className="candidate-detail-grid">
               {[
                 ['Date', formatDate(selectedCandidate.createdAt)],
-                ['Candidate ID', selectedCandidate.candidateDisplayId || '-'],
+                ['Candidate ID', selectedCandidate.candidateDisplayId ? (
+                  <span className="candidate-id-pill candidate-display-id-value">
+                    <span>{selectedCandidate.candidateDisplayId}</span>
+                    {selectedCandidate.isPublicApplicationConversion && <span className="candidate-public-source-dot" role="img" aria-label="From Applied Candidates" title="From Applied Candidates" />}
+                  </span>
+                ) : '-'],
                 ['Consultant', selectedCandidate.consultant || '-'],
                 ['Client', selectedCandidate.client || '-'],
                 ['Role', selectedCandidate.job || '-'],

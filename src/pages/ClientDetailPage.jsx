@@ -613,7 +613,7 @@ export default function ClientDetailPage() {
       case 'candidateDisplayId':
         return (
           <td key={key} style={{ fontFamily: 'monospace', fontSize: 12 }}>
-            <span className="candidate-display-id-value">
+            <span className="candidate-id-pill candidate-display-id-value">
               <span>{c.candidateDisplayId || '-'}</span>
               {c.isPublicApplicationConversion && <span className="candidate-public-source-dot" role="img" aria-label="From Applied Candidates" title="From Applied Candidates" />}
             </span>

@@ -1002,6 +1002,21 @@
   line-height: 1;
 }
 
+.candidate-id-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .data-table .table-client-id-chip,
 .candidates-master-table .candidate-client-id-chip {
   background: #eaf8ef;
@@ -2036,15 +2051,13 @@ textarea.form-control {
 }
 
 /* Compact source marker stays beside the Candidate ID in the always-left table area. */
-.candidates-master-table .candidate-display-id-value {
+.candidate-display-id-value {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #e8f1ff;
-  color: #2563eb;
 }
 
-.candidates-master-table .candidate-public-source-dot {
+.candidate-public-source-dot {
   width: 7px;
   height: 7px;
   flex: 0 0 7px;
