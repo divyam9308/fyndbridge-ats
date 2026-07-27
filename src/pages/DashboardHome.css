@@ -34,9 +34,6 @@
   min-width: 0;
   color: var(--gray-700);
   padding-bottom: 18px;
-  background-image:
-    radial-gradient(circle at 0% 0%, oklch(0.95 0.05 290 / 0.42), transparent 38%),
-    radial-gradient(circle at 100% 0%, oklch(0.95 0.05 200 / 0.34), transparent 38%);
 }
 
 .modern-dashboard .gradient-primary { background-image: var(--modern-gradient-primary); }
