@@ -1,13 +1,15 @@
 const supabase = require('../services/supabaseAdmin')
 const { getDashboardAccess } = require('../services/dashboardAccess')
-const { DASHBOARD_CANDIDATE_STATUSES: CANDIDATE_STATUSES, normalizeDashboardCandidateStatus } = require('../services/candidateStatuses')
-const { dashboardPeriodRange } = require('../utils/dashboardPeriod')
+const { DASHBOARD_CANDIDATE_STATUSES: CANDIDATE_STATUSES } = require('../services/candidateStatuses')
+const { scopeDashboardCandidateAssociations } = require('../services/dashboardCandidateAnalytics')
+const { fetchEveryPage } = require('../services/supabasePagination')
+const { currentDashboardFinancialYear, dashboardPeriodRange } = require('../utils/dashboardPeriod')
 const { MANDATE_STATUSES, normalizeMandateStatus } = require('../services/mandateStatuses')
 
 const CLIENT_STATUSES = ['-', 'Active', 'Inactive', 'Converted', 'Not Converted', 'Follow Up Required', 'Not Hiring', 'Not Adding Consultants', "Didn't Pick Up"]
 const EMPTY_DASHBOARD = {
   consultantOptions: [],
-  kpis: { totalClients: 0, totalCandidates: 0, totalMandates: 0, activeClients: 0, placements: 0 },
+  kpis: { totalClients: 0, totalCandidates: 0, pendingCandidates: 0, totalMandates: 0, activeClients: 0, placements: 0 },
   clientStatusData: CLIENT_STATUSES.map((name) => ({ name, value: 0 })),
   candidateStatusData: CANDIDATE_STATUSES.map((name) => ({ name, value: 0 })),
   mandateStatusData: MANDATE_STATUSES.map((name) => ({ name, value: 0 })),
@@ -229,16 +231,16 @@ async function getDashboardStats(req, res) {
   const access = await getDashboardAccess(req.user)
   const requestedConsultant = clean(req.query.consultant) || 'Overall (All Consultants)'
   const consultant = access.restrictedToSelf && access.consultantName ? access.consultantName : requestedConsultant
-  const period = clean(req.query.period) || 'This Month'
+  const period = clean(req.query.period) || currentDashboardFinancialYear()
   const range = dashboardPeriodRange(period)
   const sectionErrors = {}
 
   const settled = await Promise.allSettled([
-    supabase.from('user_profiles').select('user_id, name, email').order('name'),
-    supabase.from('clients').select('id, client_group_id, client_name, name, status, consultant_name, connected_on_date, created_at, updated_at, contract_signed, billing_entity'),
-    supabase.from('candidates').select('id, full_name, created_by, updated_by, created_at, updated_at'),
-    supabase.from('candidate_associations').select('id, candidate_id, consultant_name, status, job_title, client_name, created_at, updated_at'),
-    supabase.from('jobs').select('id, title, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at')
+    fetchEveryPage(() => supabase.from('user_profiles').select('user_id, name, email').order('name').order('user_id')),
+    fetchEveryPage(() => supabase.from('clients').select('id, client_group_id, client_name, name, status, consultant_name, connected_on_date, created_at, updated_at, contract_signed, billing_entity').order('id')),
+    fetchEveryPage(() => supabase.from('candidates').select('id, full_name, created_by, updated_by, created_at, updated_at').order('id')),
+    fetchEveryPage(() => supabase.from('candidate_associations').select('id, candidate_id, consultant_name, consultant_user_id, status, job_title, client_name, created_at, updated_at').order('id')),
+    fetchEveryPage(() => supabase.from('jobs').select('id, title, consultants, team_lead, mandate_status, status, allocation_date, created_at, updated_at').order('id'))
   ])
 
   const readResult = (index, key) => {
@@ -247,11 +249,7 @@ async function getDashboardStats(req, res) {
       sectionErrors[key] = result.reason?.message || 'Unable to load data.'
       return []
     }
-    if (result.value.error) {
-      sectionErrors[key] = result.value.error.message || 'Unable to load data.'
-      return []
-    }
-    return result.value.data || []
+    return result.value || []
   }
 
   try {
@@ -266,33 +264,26 @@ async function getDashboardStats(req, res) {
       .filter(Boolean)
       .filter((name, index, list) => list.findIndex((item) => same(item, name)) === index)
 
-    const candidateById = new Map(candidates.map((row) => [row.id, row]))
     const allUniqueClients = dedupeClients(clients)
     const clientOwnershipAvailable = allUniqueClients.length > 0 && allUniqueClients.every((row) => clean(row.consultant_name))
     const uniqueClients = allUniqueClients
       .filter((client) => withinPeriod(client.connected_on_date || client.created_at, range))
       .filter((client) => !clientOwnershipAvailable || matchesConsultant(client, consultant, ['consultant_name']))
 
-    const allAssociations = associations.map((row) => ({
-      ...row,
-      full_name: candidateById.get(row.candidate_id)?.full_name || '',
-      candidate_created_at: candidateById.get(row.candidate_id)?.created_at || row.created_at
-    }))
-    const filteredAssociations = allAssociations
-      .filter((row) => withinPeriod(row.created_at || row.candidate_created_at, range))
-      .filter((row) => matchesConsultant(row, consultant, ['consultant_name']))
-
-    const filteredCandidateIds = new Set(
-      filteredAssociations.map((row) => row.candidate_id).filter(Boolean)
-    )
-    const filteredCandidates = candidates.filter((row) => filteredCandidateIds.has(row.id))
+    const candidateAssociationScope = scopeDashboardCandidateAssociations({
+      associations,
+      consultant,
+      profiles,
+      range
+    })
+    const filteredAssociations = candidateAssociationScope.eligible
 
     const filteredMandates = jobs
       .filter((row) => withinPeriod(row.allocation_date || row.created_at, range))
       .filter((row) => matchesConsultant(row, consultant, ['consultants', 'team_lead']))
 
     const activeClients = uniqueClients.filter((client) => normalizeClientStatus(client.status) === 'Active')
-    const hiredAssociations = filteredAssociations.filter((row) => normalizeDashboardCandidateStatus(row.status) === 'Hired')
+    const hiredAssociations = filteredAssociations.filter((row) => row.canonicalStatus === 'Hired')
     const billingEntityData = [
       {
         label: 'FCS Billing Entity',
@@ -305,20 +296,21 @@ async function getDashboardStats(req, res) {
     ]
 
     const clientTrend = statusTrend(uniqueClients, CLIENT_STATUSES, (row) => normalizeClientStatus(row.status), (row) => row.connected_on_date || row.created_at, period, range)
-    const candidateTrend = statusTrend(filteredAssociations, CANDIDATE_STATUSES, (row) => normalizeDashboardCandidateStatus(row.status), (row) => row.created_at || row.candidate_created_at, period, range)
+    const candidateTrend = statusTrend(filteredAssociations, CANDIDATE_STATUSES, (row) => row.dashboardStatus, (row) => row.created_at, period, range)
     const mandateTrend = statusTrend(filteredMandates, MANDATE_STATUSES, (row) => normalizeMandateStatus(row.mandate_status || row.status), (row) => row.allocation_date || row.created_at, period, range)
 
     return res.json({
       consultantOptions,
       kpis: {
         totalClients: uniqueClients.length,
-        totalCandidates: filteredCandidates.length,
+        totalCandidates: filteredAssociations.length,
+        pendingCandidates: candidateAssociationScope.pendingCount,
         totalMandates: filteredMandates.length,
         activeClients: activeClients.length,
         placements: hiredAssociations.length
       },
       clientStatusData: countByStatus(uniqueClients, CLIENT_STATUSES, (row) => normalizeClientStatus(row.status)),
-      candidateStatusData: countByStatus(filteredAssociations, CANDIDATE_STATUSES, (row) => normalizeDashboardCandidateStatus(row.status)),
+      candidateStatusData: countByStatus(filteredAssociations, CANDIDATE_STATUSES, (row) => row.dashboardStatus),
       mandateStatusData: countByStatus(filteredMandates, MANDATE_STATUSES, (row) => normalizeMandateStatus(row.mandate_status || row.status)),
       billingEntityData,
       clientTrend,

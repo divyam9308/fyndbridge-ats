@@ -30,6 +30,7 @@ import {
 import {
   DASHBOARD_FINANCIAL_YEARS,
   DASHBOARD_QUARTERS,
+  DEFAULT_DASHBOARD_MONTH,
   DEFAULT_DASHBOARD_PERIOD,
   dashboardFinancialYearForDate,
   dashboardFinancialYearMonths,
@@ -601,7 +602,7 @@ export default function DashboardHome() {
   const navigate = useNavigate()
   const [consultant, setConsultant] = useState(OVERALL)
   const [financialYear, setFinancialYear] = useState(() => dashboardFinancialYearForDate(new Date()))
-  const [selectedMonth, setSelectedMonth] = useState(() => DEFAULT_DASHBOARD_PERIOD.slice(6))
+  const [selectedMonth, setSelectedMonth] = useState(DEFAULT_DASHBOARD_MONTH)
   const [period, setPeriod] = useState(DEFAULT_DASHBOARD_PERIOD)
   const [consultantOpen, setConsultantOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState(null)

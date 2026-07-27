@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { applyDashboardPeriod, dashboardPeriodRange } = require('./dashboardPeriod')
+const { applyDashboardPeriod, currentDashboardFinancialYear, dashboardPeriodRange } = require('./dashboardPeriod')
 const NOW = new Date(2026, 6, 13, 12, 0, 0, 0)
 
 function dateParts(date) {
@@ -11,6 +11,18 @@ test('current financial year starts in April and ends today', () => {
   const range = dashboardPeriodRange('FY 2026-27', NOW)
   assert.deepEqual(dateParts(range.start), [2026, 4, 1, 0, 0, 0, 0])
   assert.deepEqual(dateParts(range.end), [2026, 7, 13, 23, 59, 59, 999])
+})
+
+test('backend default financial year handles January through March and the April boundary', () => {
+  assert.equal(currentDashboardFinancialYear(new Date('2026-01-01T12:00:00+05:30')), 'FY 2025-26')
+  assert.equal(currentDashboardFinancialYear(new Date('2026-03-31T12:00:00+05:30')), 'FY 2025-26')
+  assert.equal(currentDashboardFinancialYear(new Date('2026-04-01T12:00:00+05:30')), 'FY 2026-27')
+})
+
+test('January through March financial-year range starts in the previous calendar year', () => {
+  const range = dashboardPeriodRange('FY 2025-26', new Date(2026, 2, 31, 12))
+  assert.deepEqual(dateParts(range.start), [2025, 4, 1, 0, 0, 0, 0])
+  assert.deepEqual(dateParts(range.end), [2026, 3, 31, 23, 59, 59, 999])
 })
 
 test('completed quarters keep their end date and the current quarter ends today', () => {

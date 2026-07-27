@@ -1,8 +1,14 @@
+const { getFinancialYearForDate, localDate } = require('../services/attendanceUtils')
+
+function currentDashboardFinancialYear(currentDate = new Date()) {
+  return getFinancialYearForDate(currentDate)
+}
+
 function dashboardPeriodRange(period, currentDate = new Date()) {
   if (!period) return null
   const now = new Date(currentDate)
-  const year = now.getFullYear()
-  const todayEnd = new Date(year, now.getMonth(), now.getDate(), 23, 59, 59, 999)
+  const [year, todayMonth, day] = localDate(now).split('-').map(Number)
+  const todayEnd = new Date(year, todayMonth - 1, day, 23, 59, 59, 999)
   const cappedEnd = requestedEnd => requestedEnd < todayEnd ? requestedEnd : todayEnd
   const financialYear = String(period).match(/^FY (\d{4})-\d{2}$/)
   if (financialYear) {
@@ -25,7 +31,7 @@ function dashboardPeriodRange(period, currentDate = new Date()) {
     const monthIndex = Number(month[2]) - 1
     return { start: new Date(monthYear, monthIndex, 1), end: cappedEnd(new Date(monthYear, monthIndex + 1, 0, 23, 59, 59, 999)) }
   }
-  if (period === 'This Month') return { start: new Date(year, now.getMonth(), 1), end: todayEnd }
+  if (period === 'This Month') return { start: new Date(year, todayMonth - 1, 1), end: todayEnd }
   if (period === 'Q1') return { start: new Date(year, 3, 1), end: cappedEnd(new Date(year, 5, 30, 23, 59, 59, 999)) }
   if (period === 'Q2') return { start: new Date(year, 6, 1), end: cappedEnd(new Date(year, 8, 30, 23, 59, 59, 999)) }
   if (period === 'Q3') return { start: new Date(year, 9, 1), end: cappedEnd(new Date(year, 11, 31, 23, 59, 59, 999)) }
@@ -49,4 +55,4 @@ function applyDashboardPeriod(query, column, period, { fallbackColumn = '', date
   return query.lte(column, end)
 }
 
-module.exports = { applyDashboardPeriod, dashboardPeriodRange }
+module.exports = { applyDashboardPeriod, currentDashboardFinancialYear, dashboardPeriodRange }
