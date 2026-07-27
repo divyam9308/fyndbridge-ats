@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import DashboardAttendanceButton from './DashboardAttendanceButton'
 import './OnlineUsersStrip.css'
 
 const AVATAR_GRADIENTS = [
@@ -58,7 +59,7 @@ function OnlineUserAvatar({ user, index, onShow, onHide, firstAway }) {
   return <button type="button" className={`online-users-avatar is-${user.status || 'online'}${firstAway ? ' is-first-away' : ''}`} style={{ '--avatar-gradient': user.avatar_color || AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }} aria-label={`${user.name || user.email || 'User'} is ${statusLabel(user.status).toLowerCase()}`} onMouseEnter={show} onMouseLeave={onHide} onFocus={show} onBlur={onHide}>{userInitials(user)}</button>
 }
 
-export default function OnlineUsersStrip({ users = [] }) {
+export default function OnlineUsersStrip({ users = [], showAttendance = false }) {
   const visibleUsers = users.filter(user => user.status === 'online' || user.status === 'away')
   const onlineUsers = visibleUsers.filter(user => user.status === 'online')
   const awayUsers = visibleUsers.filter(user => user.status === 'away')
@@ -84,6 +85,7 @@ export default function OnlineUsersStrip({ users = [] }) {
     <div className="ats-online-users-list">
       {orderedUsers.map((user, index) => <OnlineUserAvatar key={user.id || user.email} user={user} index={index} firstAway={onlineUsers.length > 0 && user.status === 'away' && index === onlineUsers.length} onShow={setActive} onHide={() => setActive(null)} />)}
     </div>
+    {showAttendance ? <DashboardAttendanceButton /> : null}
     {active ? createPortal(<div className="online-users-tooltip" style={tooltipPosition(active.rect)} role="tooltip"><UserDetails user={active.user} /></div>, document.body) : null}
   </section>
 }

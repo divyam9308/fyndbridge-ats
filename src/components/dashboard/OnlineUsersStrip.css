@@ -52,12 +52,151 @@
 
 .ats-online-users-list {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 10px;
   min-width: 0;
   overflow-x: auto;
   padding: 5px 4px;
   scrollbar-width: thin;
+}
+
+.dashboard-attendance-control {
+  position: relative;
+  display: grid;
+  min-width: 84px;
+  flex: 0 0 auto;
+  justify-items: center;
+  gap: 3px;
+  padding-left: 16px;
+  border-left: 1px solid #e4e8f1;
+}
+
+.dashboard-attendance-button {
+  position: relative;
+  display: inline-grid;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #0b3aa4;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(11, 58, 164, 0.24);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  isolation: isolate;
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.dashboard-attendance-button::after {
+  position: absolute;
+  z-index: -1;
+  inset: -5px;
+  border: 2px solid rgba(37, 99, 235, 0.42);
+  border-radius: inherit;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dashboard-attendance-button.is-reminder::after {
+  animation: dashboard-attendance-reminder 3s ease-out infinite;
+}
+
+.dashboard-attendance-button:hover:not(:disabled),
+.dashboard-attendance-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(11, 58, 164, 0.3);
+}
+
+.dashboard-attendance-button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.25);
+  outline-offset: 3px;
+}
+
+.dashboard-attendance-button:disabled {
+  cursor: default;
+}
+
+.dashboard-attendance-control.is-clock-out .dashboard-attendance-button {
+  background: #c2410c;
+  box-shadow: 0 4px 12px rgba(194, 65, 12, 0.24);
+}
+
+.dashboard-attendance-control.is-clock-out .dashboard-attendance-button::after {
+  border-color: rgba(234, 88, 12, 0.42);
+}
+
+.dashboard-attendance-control.is-complete .dashboard-attendance-button {
+  background: #16864b;
+  box-shadow: 0 4px 12px rgba(22, 134, 75, 0.2);
+}
+
+.dashboard-attendance-control.is-error .dashboard-attendance-button {
+  background: #64748b;
+  box-shadow: 0 4px 12px rgba(71, 85, 105, 0.2);
+}
+
+.dashboard-attendance-status {
+  max-width: 84px;
+  overflow: hidden;
+  color: #526079;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1.1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-attendance-message {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 11px);
+  right: 0;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 9px 11px;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #166534;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dashboard-attendance-message.is-error {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.dashboard-attendance-spinner {
+  animation: dashboard-attendance-spin 0.85s linear infinite;
+}
+
+@keyframes dashboard-attendance-reminder {
+  0%, 74%, 100% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  82% {
+    opacity: 1;
+  }
+  94% {
+    opacity: 0;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes dashboard-attendance-spin {
+  to { transform: rotate(360deg); }
 }
 
 .online-users-avatar {
@@ -215,8 +354,20 @@
     height: 36px;
     flex-basis: 36px;
   }
+
+  .dashboard-attendance-control {
+    min-width: 54px;
+    padding-left: 11px;
+  }
+
+  .dashboard-attendance-status {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .online-users-avatar { transition: none; }
+  .online-users-avatar,
+  .dashboard-attendance-button { transition: none; }
+  .dashboard-attendance-button.is-reminder::after,
+  .dashboard-attendance-spinner { animation: none; }
 }

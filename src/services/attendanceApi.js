@@ -1,11 +1,13 @@
 import { apiFetch, invalidateApiJsonCache } from './apiClient'
 async function request(path,init={}){const response=await apiFetch(`/api/attendance${path}`,{...init,headers:{'Content-Type':'application/json',...(init.headers||{})}}),payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||'Attendance request failed.');return payload.data}
 const body=value=>({method:'POST',body:JSON.stringify(value||{})})
+export const ATTENDANCE_TODAY_CHANGED_EVENT='fb:attendance-today-changed'
+const notifyTodayChanged=value=>{if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent(ATTENDANCE_TODAY_CHANGED_EVENT,{detail:value||null}))}
 export const getAttendancePermissions=()=>request('/permissions')
 export const updateAttendancePermissions=value=>request('/permissions',{method:'PUT',body:JSON.stringify(value)})
 export const getTodayAttendance=()=>request('/today')
-export const clockIn=()=>request('/clock-in',body())
-export const clockOut=()=>request('/clock-out',body())
+export const clockIn=async()=>{const value=await request('/clock-in',body());notifyTodayChanged(value);return value}
+export const clockOut=async()=>{const value=await request('/clock-out',body());notifyTodayChanged(value);return value}
 export const getMonthlyAttendance=(year,month,userId='')=>request(`/month?year=${year}&month=${month}${userId?`&user_id=${encodeURIComponent(userId)}`:''}`)
 export const getLeaveBalance=(financialYear='',asOf='')=>request(`/balance?${financialYear?`financial_year=${encodeURIComponent(financialYear)}`:''}${financialYear&&asOf?'&':''}${asOf?`as_of=${encodeURIComponent(asOf)}`:''}`)
 export const previewLeaveRequest=value=>request('/leave/preview',body(value))
