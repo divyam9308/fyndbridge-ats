@@ -9,7 +9,9 @@ const missingColumn = (error, column) => (
 )
 const displayNameFromEmail = (email) => clean(email).split('@')[0] || clean(email) || '-'
 const preferredName = (profile, fallbackEmail) => clean(profile?.name || profile?.full_name) || displayNameFromEmail(profile?.email || fallbackEmail)
-const CLEANUP_RULE = "cleared_at IS NOT NULL AND status = 'read'"
+const NOTIFICATION_RETENTION_DAYS = 7
+const CLEANUP_RULE = "cleared_at IS NOT NULL AND status = 'read' AND cleared_at <= now() - interval '7 days'"
+const cleanupCutoff = () => new Date(Date.now() - NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
 async function profileMap(userIds = []) {
   const ids = [...new Set(userIds.map(clean).filter(Boolean))]
@@ -239,26 +241,29 @@ async function assertNotificationCleanupColumns() {
   throw error
 }
 
-const applyCleanupEligibility = (query) => query
+const applyCleanupEligibility = (query, cutoff) => query
   .not('cleared_at', 'is', null)
   .eq('status', 'read')
+  .lte('cleared_at', cutoff)
 
 async function cleanupOldNotifications(req, res) {
   try {
     if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' })
     const dryRun = String(req.query.dryRun || req.body?.dryRun || '').toLowerCase() === 'true'
+    const cutoff = cleanupCutoff()
 
     await assertNotificationCleanupColumns()
 
     const beforeCount = await countRows('notifications')
     const pendingUnreadBefore = await countRows('notifications', (query) => query.eq('status', 'pending'))
     const clientFollowUpsBefore = await countRows('client_follow_ups')
-    const eligibleCount = await countRows('notifications', applyCleanupEligibility)
+    const eligibleCount = await countRows('notifications', (query) => applyCleanupEligibility(query, cutoff))
 
     let deletedCount = 0
     if (!dryRun) {
       const { data, error } = await applyCleanupEligibility(
-        supabase.from('notifications').delete()
+        supabase.from('notifications').delete(),
+        cutoff
       ).select('id')
       if (error) throw error
       deletedCount = (data || []).length
@@ -270,6 +275,8 @@ async function cleanupOldNotifications(req, res) {
     const payload = {
       dryRun,
       rule: CLEANUP_RULE,
+      retention_days: NOTIFICATION_RETENTION_DAYS,
+      cutoff,
       before_count: beforeCount,
       eligible_count: eligibleCount,
       deleted_count: deletedCount,
