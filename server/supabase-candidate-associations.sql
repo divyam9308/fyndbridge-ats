@@ -123,6 +123,9 @@ begin
 end;
 $$;
 
+revoke all on function public.handle_new_user()
+  from public, anon, authenticated, service_role;
+
 drop trigger if exists on_auth_user_created on auth.users;
 
 create trigger on_auth_user_created

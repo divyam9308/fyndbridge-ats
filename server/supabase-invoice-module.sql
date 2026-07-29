@@ -204,8 +204,9 @@ as $$
   select 'IID' || nextval('invoice_display_id_seq')::text;
 $$;
 
-revoke all on function next_invoice_display_id() from public;
-grant execute on function next_invoice_display_id() to authenticated, service_role;
+revoke all on function next_invoice_display_id()
+  from public, anon, authenticated, service_role;
+grant execute on function next_invoice_display_id() to service_role;
 create index if not exists invoices_invoice_entity_id_created_at_idx
   on invoices (invoice_entity_id, created_at desc);
 
