@@ -25,10 +25,11 @@ export default function ClientJobCandidatesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const openDocument = async (key, path) => {
+  const openDocument = async (key, path, recordId) => {
     setOpeningDocument(key)
     try {
       await openProtectedDocumentPath('cv', path, {
+        recordId,
         missingMessage: 'CV is missing or needs to be reuploaded',
         notFoundMessage: 'Document file not found. Please re-upload the CV.'
       })
@@ -250,7 +251,7 @@ export default function ClientJobCandidatesPage() {
                     <td><ConsultantPill name={c.consultant} /></td>
                     <td>
                       {resolveCandidateCvHref(c) ? (
-                        <a href="#" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={(event) => { event.preventDefault(); event.stopPropagation(); event.nativeEvent?.stopImmediatePropagation?.(); logCandidateCvOpen(c); openDocument(`cv-${c.associationId || c.id}`, resolveCandidateCvHref(c)) }}>
+                        <a href="#" rel="noopener noreferrer" className="cv-table-link" title="Open CV" onClick={(event) => { event.preventDefault(); event.stopPropagation(); event.nativeEvent?.stopImmediatePropagation?.(); logCandidateCvOpen(c); openDocument(`cv-${c.associationId || c.id}`, resolveCandidateCvHref(c), c.candidateId) }}>
                           {openingDocument === `cv-${c.associationId || c.id}` ? <Loader2 size={15} className="spin" /> : <FileText size={15} strokeWidth={2} />}
                         </a>
                       ) : (
