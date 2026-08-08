@@ -114,9 +114,9 @@ test('creation chooser, URL-backed switcher, global tax KPIs, and proforma colum
   assert.match(detailPage, /No \{typeLabel\.toLowerCase\(\)\}s found for this entity\./)
 })
 
-test('billing-entity invoice popup reuses invoice row controls and active tax-invoice totals data', () => {
+test('billing-entity invoice popup shows active and cancelled tax invoices with shared read-only controls', () => {
   const popupColumns = invoicePage.slice(invoicePage.indexOf('const POPUP_COLUMNS'), invoicePage.indexOf('const POPUP_TABLE_WIDTH'))
-  const labels = ['IID', 'Invoice Number', 'Invoice Date', 'Legal Entity Name', 'Bill Value', 'Tax Value', 'Invoice Value', 'Invoice', 'Action']
+  const labels = ['IID', 'Invoice Number', 'Invoice Date', 'Legal Entity Name', 'Bill Value', 'Tax Value', 'Invoice Value', 'Status', 'Invoice', 'Action']
   let previousIndex = -1
   for (const label of labels) {
     const index = popupColumns.indexOf(`label: '${label}'`)
@@ -125,7 +125,8 @@ test('billing-entity invoice popup reuses invoice row controls and active tax-in
   }
   assert.match(invoicePage, /<button className="invoice-billing-total-entity" type="button"[\s\S]*aria-haspopup="dialog"/)
   assert.match(invoicePage, /selectedEntityInvoiceView === COMBINED_BILLING_ENTITY[\s\S]*new Set\(BILLING_ENTITIES\)/)
-  assert.match(invoicePage, /invoice\.invoice_type === 'tax_invoice' && invoice\.status === 'active'/)
+  assert.match(invoicePage, /const POPUP_INVOICE_STATUSES = new Set\(\['active', 'cancelled'\]\)/)
+  assert.match(invoicePage, /invoice\.invoice_type === 'tax_invoice' && POPUP_INVOICE_STATUSES\.has\(invoice\.status\)/)
   assert.match(invoicePage, /\.sort\(compareInvoiceIid\)/)
   assert.match(invoicePage, /localeCompare\(right, undefined, \{ numeric: true/)
   assert.match(invoicePage, /rowControls\.renderInvoiceControl\(invoice\)/)
@@ -133,10 +134,16 @@ test('billing-entity invoice popup reuses invoice row controls and active tax-in
   assert.match(detailPage, /rowControls\.renderInvoiceControl\(invoice\)/)
   assert.match(detailPage, /rowControls\.renderActionControls\(invoice, entity\)/)
   assert.match(rowControlHook, /cancelInvoiceRequest\(action\.entity\.id, action\.invoice\.id, action\.invoice\.invoice_type\)/)
+  assert.match(rowControlHook, /else await onRefresh\?\.\(\)/)
+  assert.match(invoiceApi, /export const cancelInvoice[\s\S]*invalidateApiJsonCache\('\/api\/invoice\/entities'\)/)
   assert.match(rowControlHook, /openProtectedDocumentPath\('invoice', path/)
   assert.match(invoicePage, /ats-dashboard-modal-layer[\s\S]*ats-dashboard-modal-card[\s\S]*ats-dashboard-modal-head[\s\S]*ats-dashboard-modal-body/)
   assert.match(invoicePage, /formatDateDDMMYYYY\(invoice\.invoice_date\)/)
   assert.match(invoicePage, /invoiceMoneyValues\(invoice\)/)
+  assert.match(invoicePage, /invoice-status-badge is-\$\{cancelled \? 'cancelled' : 'active'\}/)
+  assert.match(invoicePage, /cancelled \? 'Cancelled' : 'Active'/)
+  assert.match(rowControls, /disabled=\{cancelled \|\| rowBusy\}/)
+  assert.match(rowControls, /!cancelled && <button className="invoice-version-delete"/)
 })
 
 test('tax and proforma previews offer separate save and save-and-download actions', () => {

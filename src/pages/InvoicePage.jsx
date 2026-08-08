@@ -29,6 +29,7 @@ const INVOICE_TABLE_HEADERS = ['Entity ID', 'Default Billing Entity', 'Legal Ent
 const BILLING_ENTITIES = ['FCS', 'FCAPL']
 const COMBINED_BILLING_ENTITY = 'FCS + FCAPL'
 const BILLING_TOTAL_ROWS = [...BILLING_ENTITIES, COMBINED_BILLING_ENTITY]
+const POPUP_INVOICE_STATUSES = new Set(['active', 'cancelled'])
 const KPI_CARDS = [
   { key: 'billValue', label: 'Total Bill Value', tone: 'navy' },
   { key: 'taxValue', label: 'Total Tax Value', tone: 'amber' },
@@ -42,6 +43,7 @@ const POPUP_COLUMNS = [
   { key: 'bill', label: 'Bill Value', width: 155 },
   { key: 'tax', label: 'Tax Value', width: 150 },
   { key: 'total', label: 'Invoice Value', width: 170 },
+  { key: 'status', label: 'Status', width: 105 },
   { key: 'invoice', label: 'Invoice', width: 150 },
   { key: 'action', label: 'Action', width: 140 }
 ]
@@ -141,7 +143,8 @@ function InvoiceEntityInvoicesModal({ billingEntity, invoices, entities, onClose
                 {invoices.map(invoice => {
                   const entity = entityById.get(invoice.invoice_entity_id) || { id: invoice.invoice_entity_id }
                   const values = invoiceMoneyValues(invoice)
-                  return <tr key={invoice.id}>
+                  const cancelled = invoice.status === 'cancelled'
+                  return <tr key={invoice.id} className={cancelled ? 'is-cancelled' : undefined}>
                     <td><span className="invoice-id">{display(invoice.invoice_display_id || invoice.invoice_number)}</span></td>
                     <td className="invoice-number-cell" title={invoice.invoice_number || ''}>{display(invoice.invoice_number)}</td>
                     <td>{formatDateDDMMYYYY(invoice.invoice_date)}</td>
@@ -149,6 +152,7 @@ function InvoiceEntityInvoicesModal({ billingEntity, invoices, entities, onClose
                     <td className="invoice-money-cell">{formatInrPaise(values.billValue)}</td>
                     <td className="invoice-money-cell">{formatInrPaise(values.taxValue)}</td>
                     <td className="invoice-money-cell invoice-total-cell">{formatInrPaise(values.totalInvoiceValue)}</td>
+                    <td><span className={`invoice-status-badge is-${cancelled ? 'cancelled' : 'active'}`}>{cancelled ? 'Cancelled' : 'Active'}</span></td>
                     <td>{rowControls.renderInvoiceControl(invoice)}</td>
                     <td>{rowControls.renderActionControls(invoice, entity)}</td>
                   </tr>
@@ -363,7 +367,7 @@ export default function InvoicePage() {
       : new Set([selectedEntityInvoiceView])
     const seen = new Set()
     return invoices
-      .filter(invoice => invoice.invoice_type === 'tax_invoice' && invoice.status === 'active' && selectedEntities.has(invoice.billing_entity))
+      .filter(invoice => invoice.invoice_type === 'tax_invoice' && POPUP_INVOICE_STATUSES.has(invoice.status) && selectedEntities.has(invoice.billing_entity))
       .filter(invoice => {
         if (!invoice.id || seen.has(invoice.id)) return false
         seen.add(invoice.id)

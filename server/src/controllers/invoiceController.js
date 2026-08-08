@@ -91,14 +91,14 @@ const decorateInvoice = row => ({ ...row })
 const decoratePdfVersion = row => ({ ...row })
 const rpcRow = data => Array.isArray(data) ? data[0] : data
 
-async function listTaxInvoiceTotalRows() {
+async function listTaxInvoiceRows() {
   const rows = []
   for (let from = 0; ; from += INVOICE_TOTAL_PAGE_SIZE) {
     const { data, error } = await supabase
       .from('invoices')
       .select(INVOICE_FIELDS)
       .eq('invoice_type', 'tax_invoice')
-      .eq('status', 'active')
+      .in('status', ['active', 'cancelled'])
       .order('id', { ascending: true })
       .range(from, from + INVOICE_TOTAL_PAGE_SIZE - 1)
     if (error) throw error
@@ -127,9 +127,10 @@ async function listEntities(req, res) {
   try {
     const [entitiesResult, taxInvoices] = await Promise.all([
       supabase.from('invoice_entities').select(ENTITY_FIELDS).order('created_at', { ascending: false }),
-      listTaxInvoiceTotalRows()
+      listTaxInvoiceRows()
     ])
     if (entitiesResult.error) throw entitiesResult.error
+    const activeTaxInvoices = taxInvoices.filter(invoice => invoice.status === 'active')
     const versions = await listInvoicePdfVersions(taxInvoices.map(invoice => invoice.id))
     const versionsByInvoice = new Map()
     versions.forEach(version => versionsByInvoice.set(version.invoice_id, [
@@ -142,7 +143,7 @@ async function listEntities(req, res) {
         ...decorateInvoice(invoice),
         pdf_versions: versionsByInvoice.get(invoice.id) || []
       })),
-      totals: aggregateTaxInvoiceTotals(taxInvoices)
+      totals: aggregateTaxInvoiceTotals(activeTaxInvoices)
     })
   } catch (err) { return sendError(res, err) }
 }

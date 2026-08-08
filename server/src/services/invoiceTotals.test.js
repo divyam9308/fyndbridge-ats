@@ -41,10 +41,10 @@ test('invoice totals preserve legacy rounded-total fallbacks without floating-po
   assert.equal(totals.FCAPL.totalInvoiceValue, '14600')
 })
 
-test('main invoice response paginates and aggregates only active tax invoices', () => {
+test('main invoice response paginates active and cancelled tax-invoice history while aggregating only active invoices', () => {
   const controller = fs.readFileSync(path.resolve(__dirname, '../controllers/invoiceController.js'), 'utf8')
   const totalQuery = controller.slice(
-    controller.indexOf('async function listTaxInvoiceTotalRows'),
+    controller.indexOf('async function listTaxInvoiceRows'),
     controller.indexOf('async function listEntities')
   )
   const entityList = controller.slice(
@@ -53,9 +53,11 @@ test('main invoice response paginates and aggregates only active tax invoices', 
   )
 
   assert.match(totalQuery, /\.eq\('invoice_type', 'tax_invoice'\)/)
-  assert.match(totalQuery, /\.eq\('status', 'active'\)/)
+  assert.match(totalQuery, /\.in\('status', \['active', 'cancelled'\]\)/)
+  assert.doesNotMatch(totalQuery, /\.eq\('status', 'active'\)/)
   assert.match(totalQuery, /\.range\(from, from \+ INVOICE_TOTAL_PAGE_SIZE - 1\)/)
+  assert.match(entityList, /const activeTaxInvoices = taxInvoices\.filter\(invoice => invoice\.status === 'active'\)/)
   assert.match(entityList, /listInvoicePdfVersions\(taxInvoices\.map\(invoice => invoice\.id\)\)/)
   assert.match(entityList, /invoices: taxInvoices\.map\(invoice => \(\{[\s\S]*pdf_versions:/)
-  assert.match(entityList, /totals: aggregateTaxInvoiceTotals\(taxInvoices\)/)
+  assert.match(entityList, /totals: aggregateTaxInvoiceTotals\(activeTaxInvoices\)/)
 })
