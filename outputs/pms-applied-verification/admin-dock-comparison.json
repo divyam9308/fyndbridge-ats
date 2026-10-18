@@ -1,0 +1,22 @@
+{
+  "applied": {
+    "transition": "transform 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s",
+    "radius": "24px",
+    "background": "rgba(255, 255, 255, 0.96)",
+    "border": "1px solid rgba(0, 18, 100, 0.18)",
+    "shadow": "rgba(0, 18, 100, 0.22) 0px 22px 52px 0px",
+    "gap": "14px",
+    "padding": "14px 16px"
+  },
+  "admin": {
+    "transition": "transform 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s",
+    "radius": "24px",
+    "background": "rgba(255, 255, 255, 0.96)",
+    "border": "1px solid rgba(0, 18, 100, 0.18)",
+    "shadow": "rgba(0, 18, 100, 0.22) 0px 22px 52px 0px",
+    "gap": "14px",
+    "padding": "14px 16px"
+  },
+  "identical": true,
+  "saveAndCancelVerified": true
+}

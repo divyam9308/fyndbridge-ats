@@ -1,0 +1,12 @@
+{
+  "originalCommit": "6356794",
+  "idleIntervalMs": 1200,
+  "idleCommits": 1738,
+  "observedAfterNavigationMs": 5100,
+  "afterNavigation": {
+    "url": "http://127.0.0.1:4175/dashboard/applied-candidates",
+    "pmsVisible": true,
+    "appliedVisible": false
+  },
+  "releasedByQuarterClick": true
+}

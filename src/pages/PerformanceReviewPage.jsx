@@ -408,8 +408,18 @@ export default function PerformanceReviewPage() {
   const { staff: staffUsers, loading: loadingStaff } = useStaffDirectory({ enabled: isSuperAdmin })
   const ownUserId = currentUserId(user)
   const ownName = displayName(user)
-  const [selectorUsers, setSelectorUsers] = useState([{ id: ownUserId, name: ownName, email: user?.email || '' }])
-  const [selectedUserId, setSelectedUserId] = useState(ownUserId)
+  const selectorUsers = useMemo(() => {
+    const byId = new Map([[ownUserId, { id: ownUserId, name: ownName, email: user?.email || '' }]])
+    if (isSuperAdmin) staffUsers.forEach(profile => {
+      const id = profile.id || profile.user_id
+      if (id) byId.set(id, { id, name: profile.name, email: profile.email || '' })
+    })
+    return [...byId.values()]
+  }, [isSuperAdmin, ownName, ownUserId, staffUsers, user?.email])
+  const [selection, setSelection] = useState(() => ({ ownerId: ownUserId, userId: ownUserId }))
+  const selectedUserId = selection.ownerId === ownUserId && selectorUsers.some(profile => profile.id === selection.userId)
+    ? selection.userId : ownUserId
+  const setSelectedUserId = userId => setSelection({ ownerId: ownUserId, userId })
   const [period, setPeriod] = useState(() => currentPerformancePeriod())
   const effectiveUserId = isSuperAdmin ? selectedUserId : ownUserId
   const [rows, setRows] = useState(() => normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS))
@@ -440,27 +450,6 @@ export default function PerformanceReviewPage() {
     })
     return normalized
   }, [])
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setSelectedUserId(ownUserId)
-      setSelectorUsers([{ id: ownUserId, name: ownName, email: user?.email || '' }])
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [ownName, ownUserId, user?.email])
-
-  useEffect(() => {
-    if (!isSuperAdmin) return undefined
-    const timer = window.setTimeout(() => {
-      const byId = new Map([[ownUserId, { id: ownUserId, name: ownName, email: user?.email || '' }]])
-      staffUsers.forEach(profile => {
-        const id = profile.id || profile.user_id
-        if (id) byId.set(id, { id, name: profile.name, email: profile.email || '' })
-      })
-      setSelectorUsers([...byId.values()])
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [isSuperAdmin, ownName, ownUserId, staffUsers, user?.email])
 
   useEffect(() => {
     let active = true

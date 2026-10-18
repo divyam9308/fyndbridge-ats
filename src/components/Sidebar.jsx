@@ -1,4 +1,4 @@
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useCallback, useEffect, useState } from 'react'
 import {
   LayoutDashboard, Briefcase, Building2, ClipboardList, Users, LogOut, ShieldCheck, FileText, BookOpenText, CalendarCheck, ChartNoAxesCombined, ExternalLink, UserRoundCheck
@@ -28,8 +28,6 @@ const trailingNavItems = [
 
 export default function Sidebar() {
   const { user, signOut } = useAuth()
-  const location = useLocation()
-  const navigate = useNavigate()
   const { isAdmin, isSuperAdmin } = useAdminAccess({ loadPermissions: false })
   const pageViews = usePageViewPermissions({ isAdmin, isSuperAdmin })
   const canViewAppliedCandidates = !pageViews.loading && pageViews.canView('applied_candidates')
@@ -106,14 +104,6 @@ export default function Sidebar() {
     preloadRoute(to)
   }
 
-  const navigateFromPerformancePointer = (event, to) => {
-    if (location.pathname !== '/dashboard/performance') return
-    if (event.isPrimary === false || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
-    event.preventDefault()
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
-    navigate(to)
-  }
-
   const renderNavItem = ({ to, label, key, Icon, end, external }) => external ? (
     <a className="sidebar-nav-link" href={to} target="_blank" rel="noopener noreferrer" id="nav-public-roles" key={to}>
       <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
@@ -130,7 +120,6 @@ export default function Sidebar() {
       }
       id={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}
       onPointerEnter={() => preload(to)}
-      onPointerDown={(event) => navigateFromPerformancePointer(event, to)}
       onFocus={() => preload(to)}
     >
       <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
@@ -166,7 +155,6 @@ export default function Sidebar() {
             }
             id="nav-invoice"
             onPointerEnter={() => preload('/invoice')}
-            onPointerDown={(event) => navigateFromPerformancePointer(event, '/invoice')}
             onFocus={() => preload('/invoice')}
           >
             <span className="nav-icon"><FileText size={17} strokeWidth={1.8} /></span>
@@ -179,7 +167,6 @@ export default function Sidebar() {
             }
             id="nav-admin-panel"
             onPointerEnter={() => preload('/dashboard/admin')}
-            onPointerDown={(event) => navigateFromPerformancePointer(event, '/dashboard/admin')}
             onFocus={() => preload('/dashboard/admin')}
           >
             <span className="nav-icon"><ShieldCheck size={17} strokeWidth={1.8} /></span>

@@ -1,0 +1,8 @@
+{
+  "idleIntervalMs": 1200,
+  "idleCommits": 0,
+  "coldModuleDelayMs": 350,
+  "coldNavigationMs": 883,
+  "repeatedNavigations": 3,
+  "pointerWorkaroundPresent": false
+}

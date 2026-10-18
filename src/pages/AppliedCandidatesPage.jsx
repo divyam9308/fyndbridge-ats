@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   ChevronDown,
+  CircleCheck,
   Eye,
   FileText,
   Link2,
@@ -17,13 +18,16 @@ import {
 import { ConsultantPillGroup } from '../components/ConsultantPill'
 import PaginationBar from '../components/PaginationBar'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
+import { AppliedCandidateDeleteDialog, AppliedCandidateSelectionDock } from '../components/AppliedCandidateBulkDelete'
 import { isColumnDisabled, isColumnHidden, useAdminAccess } from '../hooks/useAdminAccess'
 import { useStaffDirectory } from '../hooks/useStaffDirectory'
 import {
   AppliedCandidatesApiError,
+  bulkDeleteAppliedCandidates,
   convertAppliedCandidate,
   fetchAppliedCandidate,
   fetchAppliedCandidates,
+  fetchAppliedCandidateDeletionFailures,
   openAppliedCandidateCv,
   updateAppliedCandidateStatus,
 } from '../services/appliedCandidatesApi'
@@ -103,12 +107,13 @@ const BLANK_FILL_PERMISSION_FIELDS = Object.freeze([
 ])
 
 const APPLIED_CANDIDATE_COLUMNS = [
-  'Candidate Name', 'Applied Public Role', 'Internal Mandate/Role', 'Client Name', 'Client ID', 'Email', 'Mobile',
+  'Select', 'Candidate Name', 'Applied Public Role', 'Internal Mandate/Role', 'Client Name', 'Client ID', 'Email', 'Mobile',
   'Current Designation', 'Current Organization', 'Experience', 'Current Location', 'Skills', 'Current CTC',
   'Expected CTC', 'Notice Period', 'Open to Relocate', 'Applied On', 'Application Status', 'CV',
   'Assigned Consultant', 'Actions',
 ]
-const APPLIED_CANDIDATE_TABLE_WIDTH = 3440
+const APPLIED_CANDIDATE_TABLE_WIDTH = 3488
+const MAX_SELECTED_APPLICATIONS = 100
 
 const clean = value => String(value ?? '').trim()
 const asList = value => (Array.isArray(value) ? value : String(value || '').split(','))
@@ -252,6 +257,17 @@ export default function AppliedCandidatesPage() {
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectSaving, setRejectSaving] = useState(false)
   const [expandedSkills, setExpandedSkills] = useState({})
+  const [selectedApplications, setSelectedApplications] = useState(() => new Map())
+  const [bulkConfirmation, setBulkConfirmation] = useState(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkError, setBulkError] = useState('')
+  const [bulkResult, setBulkResult] = useState(null)
+  const [deletionFailures, setDeletionFailures] = useState([])
+  const [recoveryError, setRecoveryError] = useState('')
+  const bulkBusyRef = useRef(false)
+  const bulkOperationRef = useRef(null)
+  const bulkReturnFocusRef = useRef(null)
+  const pageRef = useRef(null)
   const requestRef = useRef(null)
   const drawerRequestRef = useRef(null)
   const conversionBusyRef = useRef(false)
@@ -261,6 +277,15 @@ export default function AppliedCandidatesPage() {
   const noticeSequenceRef = useRef(0)
 
   const reload = useCallback(() => setRefreshVersion(value => value + 1), [])
+  const clearSelection = () => {
+    setSelectedApplications(new Map())
+    bulkOperationRef.current = null
+  }
+  const removeSelectedApplication = id => setSelectedApplications(current => {
+    const next = new Map(current)
+    next.delete(id)
+    return next
+  })
   const showNotice = useCallback((message, tone, title) => {
     noticeSequenceRef.current += 1
     setNotice({ id: noticeSequenceRef.current, message, tone, title, visible: true })
@@ -273,12 +298,17 @@ export default function AppliedCandidatesPage() {
   }, [])
 
   useEffect(() => {
+    if (filters.search === searchInput) return undefined
     const timer = window.setTimeout(() => {
+      // Also clear at the debounced scope boundary: a user may have selected
+      // another old row in the interval after typing but before this fetch.
+      setSelectedApplications(new Map())
+      bulkOperationRef.current = null
       setFilters(current => current.search === searchInput ? current : { ...current, search: searchInput })
       setPage(1)
     }, 250)
     return () => window.clearTimeout(timer)
-  }, [searchInput])
+  }, [filters.search, searchInput])
 
   useEffect(() => {
     requestRef.current?.abort()
@@ -288,9 +318,18 @@ export default function AppliedCandidatesPage() {
     setError('')
     fetchAppliedCandidates({ ...filters, page, limit: pageSize, sortField: 'created_at', sortDirection: 'desc' }, { signal: controller.signal })
       .then(result => {
+        if (controller.signal.aborted) return
         setRows(result.rows)
         setTotal(result.total)
         setTotalPages(Math.max(1, result.totalPages))
+        if (page > result.totalPages) setPage(Math.max(1, result.totalPages))
+        setSelectedApplications(current => {
+          const ineligible = result.rows.filter(row => !['pending', 'rejected'].includes(row.application_status) && current.has(row.id))
+          if (!ineligible.length) return current
+          const next = new Map(current)
+          ineligible.forEach(row => next.delete(row.id))
+          return next
+        })
       })
       .catch(requestError => {
         if (requestError?.name !== 'AbortError') setError(requestError.message || 'Applied candidates could not be loaded.')
@@ -302,10 +341,23 @@ export default function AppliedCandidatesPage() {
     return () => controller.abort()
   }, [filters, page, pageSize, refreshVersion])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchAppliedCandidateDeletionFailures({ signal: controller.signal }).then(result => {
+      if (controller.signal.aborted) return
+      setDeletionFailures(result.data || [])
+      setRecoveryError('')
+    }).catch(requestError => {
+      if (!controller.signal.aborted) setRecoveryError(requestError.message || 'Deletion recovery could not be loaded.')
+    })
+    return () => controller.abort()
+  }, [refreshVersion])
+
   useEffect(() => () => drawerRequestRef.current?.controller.abort(), [])
 
+  const noticeId = notice?.id
   useEffect(() => {
-    if (!notice) return undefined
+    if (!noticeId) return undefined
     const fadeTimer = window.setTimeout(() => {
       setNotice(current => current ? { ...current, visible: false } : current)
     }, 4600)
@@ -314,7 +366,7 @@ export default function AppliedCandidatesPage() {
       window.clearTimeout(fadeTimer)
       window.clearTimeout(removeTimer)
     }
-  }, [notice?.id])
+  }, [noticeId])
 
   useEffect(() => {
     if (!drawer && !rejectTarget) return undefined
@@ -354,6 +406,7 @@ export default function AppliedCandidatesPage() {
   }), [rows])
 
   const setFilter = (name, value) => {
+    clearSelection()
     setFilters(current => ({ ...current, [name]: value }))
     setPage(1)
   }
@@ -511,6 +564,7 @@ export default function AppliedCandidatesPage() {
     setConversionErrors({})
     try {
       await convertAppliedCandidate(drawer.row.id, conversionPayload(action, selectedExistingId))
+      removeSelectedApplication(drawer.row.id)
       closeDrawer()
       window.dispatchEvent(new Event('ats:applied-candidates-updated'))
       reload()
@@ -538,6 +592,7 @@ export default function AppliedCandidatesPage() {
     setRejectSaving(true)
     try {
       await updateAppliedCandidateStatus(rejectTarget.id, 'rejected')
+      removeSelectedApplication(rejectTarget.id)
       setRejectTarget(null)
       closeDrawer()
       window.dispatchEvent(new Event('ats:applied-candidates-updated'))
@@ -558,43 +613,86 @@ export default function AppliedCandidatesPage() {
   }
 
   const hasFilters = Object.values(filters).some(Boolean) || Boolean(searchInput)
+  const eligibleRows = rows.filter(row => row.application_status === 'pending')
+  const selectedOnPage = eligibleRows.filter(row => selectedApplications.has(row.id)).length
+  const selectApplications = (applications, checked) => {
+    const next = new Map(selectedApplications)
+    applications.forEach(row => { if (checked) next.set(row.id, row); else next.delete(row.id) })
+    if (next.size > MAX_SELECTED_APPLICATIONS) {
+      showNotice('Select up to 100 applications per deletion. Delete or clear the current selection first.', 'error', 'Selection limit')
+      return
+    }
+    setSelectedApplications(next)
+  }
+  const submitBulkDelete = async () => {
+    if (!bulkConfirmation?.length || bulkBusyRef.current) return
+    bulkBusyRef.current = true
+    setBulkDeleting(true)
+    setBulkError('')
+    try {
+      const result = await bulkDeleteAppliedCandidates(bulkConfirmation.map(row => row.id), bulkOperationRef.current)
+      const names = new Map(bulkConfirmation.map(row => [row.id, row.full_name]))
+      const resolved = new Set(result.results.filter(item => item.status !== 'failed').map(item => item.id))
+      setSelectedApplications(current => new Map([...current].filter(([id]) => !resolved.has(id))))
+      setBulkResult({ ...result, results: result.results.map(item => ({ ...item, full_name: names.get(item.id) || item.id })) })
+      const { deleted, skipped, failed } = result.summary
+      showNotice(`${deleted} deleted, ${skipped} skipped, ${failed} failed.`, failed ? 'error' : 'success', failed ? 'Deletion partially completed' : skipped ? 'Deletion results' : 'Deletion complete')
+      setBulkConfirmation(null)
+      window.dispatchEvent(new Event('ats:applied-candidates-updated'))
+      reload()
+    } catch (requestError) {
+      setBulkError(`${requestError.message || 'Deletion could not be confirmed.'} Your selection is preserved. You can safely retry.`)
+      // The request may have reached the server even if its response was lost.
+      reload()
+      window.dispatchEvent(new Event('ats:applied-candidates-updated'))
+    } finally {
+      bulkBusyRef.current = false
+      setBulkDeleting(false)
+    }
+  }
+  const renderSelectionHeader = disabled => <th scope="col" className="applied-selection-cell"><input type="checkbox" aria-label="Select eligible applications on this page" checked={selectedOnPage > 0 && selectedOnPage === eligibleRows.length} ref={node => { if (node) node.indeterminate = selectedOnPage > 0 && selectedOnPage < eligibleRows.length }} disabled={disabled || !eligibleRows.length || bulkDeleting} onChange={event => selectApplications(eligibleRows, event.target.checked)} /></th>
 
   return (
-    <div className="candidates-page applied-candidates-page">
+    <div ref={pageRef} tabIndex={-1} aria-label="Applied Candidates" className={`candidates-page applied-candidates-page${selectedApplications.size ? ' has-bulk-selection' : ''}`}>
       {notice && <div className={`applied-action-toast applied-action-toast-${notice.tone}${notice.visible ? ' is-visible' : ' is-hidden'}`} role={notice.tone === 'error' ? 'alert' : 'status'} aria-live="polite">
-        <XCircle size={18} />
+        {notice.tone === 'error' ? <XCircle size={18} /> : <CircleCheck size={18} />}
         <div><strong>{notice.title}</strong><span>{notice.message}</span></div>
         <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification"><X size={14} /></button>
       </div>}
       <div className="filter-bar candidates-filter-bar applied-filter-bar">
-        <label className="applied-search"><Search size={15} /><input className="filter-input" value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder="Search candidate, email or mobile" /></label>
+        <label className="applied-search"><Search size={15} /><input className="filter-input" value={searchInput} onChange={event => { clearSelection(); setSearchInput(event.target.value) }} placeholder="Search candidate, email or mobile" aria-label="Search applications" /></label>
         <input className="filter-input applied-filter-input" list="applied-role-options" value={filters.role} onChange={event => setFilter('role', event.target.value)} aria-label="Applied Role" placeholder="Applied Role" /><datalist id="applied-role-options">{filterOptions.roles.map(value => <option key={value} value={value} />)}</datalist>
         <input className="filter-input applied-filter-input" list="applied-client-options" value={filters.client} onChange={event => setFilter('client', event.target.value)} aria-label="Client" placeholder="Client" /><datalist id="applied-client-options">{filterOptions.clients.map(value => <option key={value} value={value} />)}</datalist>
         <input className="filter-input applied-filter-input" list="applied-consultant-options" value={filters.consultant} onChange={event => setFilter('consultant', event.target.value)} aria-label="Consultant" placeholder="Consultant" /><datalist id="applied-consultant-options">{filterOptions.consultants.map(value => <option key={value} value={value} />)}</datalist>
         <input className="filter-input applied-filter-input" list="applied-location-options" value={filters.location} onChange={event => setFilter('location', event.target.value)} aria-label="Location" placeholder="Location" /><datalist id="applied-location-options">{filterOptions.locations.map(value => <option key={value} value={value} />)}</datalist>
         <label className="applied-date-filter"><span>From</span><input className="filter-input" type="date" value={filters.date_from} onChange={event => setFilter('date_from', event.target.value)} /></label>
         <label className="applied-date-filter"><span>To</span><input className="filter-input" type="date" value={filters.date_to} onChange={event => setFilter('date_to', event.target.value)} /></label>
-        <button className="filter-clear" type="button" onClick={() => { setFilters(DEFAULT_FILTERS); setSearchInput(''); setPage(1) }} disabled={!hasFilters}>Clear Filters</button>
+        <button className="filter-clear" type="button" onClick={() => { clearSelection(); setFilters(DEFAULT_FILTERS); setSearchInput(''); setPage(1) }} disabled={!hasFilters}>Clear Filters</button>
       </div>
 
+      {bulkResult && <section className="applied-bulk-result" role="status" aria-label="Deletion result"><strong>{bulkResult.summary.deleted} deleted, {bulkResult.summary.skipped} skipped, {bulkResult.summary.failed} failed.</strong><p>{bulkResult.summary.failed ? 'Failed applications remain selected and can be retried below.' : 'The application list and counts have been refreshed.'}</p>{bulkResult.results.filter(item => item.status === 'skipped').map(item => <p key={item.id}>{item.full_name}: {item.message}</p>)}</section>}
+      {recoveryError && <div className="table-error-banner" role="alert"><span>Deletion recovery: {recoveryError}</span><button className="filter-clear" type="button" onClick={reload}>Retry</button></div>}
+      {deletionFailures.length > 0 && <section className="applied-deletion-recovery" aria-label="Applications needing deletion cleanup"><strong>Applications needing deletion cleanup</strong><p>These applications remain recoverable even when they no longer appear in the pending list. Select up to 100 at a time to retry.</p><ul>{deletionFailures.map(row => <li key={row.id}><label><input type="checkbox" checked={selectedApplications.has(row.id)} disabled={bulkDeleting || !['pending', 'rejected', 'missing'].includes(row.application_status)} onChange={event => selectApplications([row], event.target.checked)} /><span><strong>{row.full_name}</strong><small>{row.message}</small></span></label></li>)}</ul></section>}
+
       {error && <div className="table-error-banner" role="alert"><AlertTriangle size={16} /><span>{error}</span><button type="button" className="filter-clear" onClick={reload}>Retry</button></div>}
-      <div className="table-card table-card-popovers candidates-table-card" style={{ minWidth: `max(100%, ${APPLIED_CANDIDATE_TABLE_WIDTH}px)` }}>
+      <div className="table-card table-card-popovers candidates-table-card">
         {loading ? (
           <div className="table-wrapper candidates-table-scroll">
             <table className="data-table fb-theme-table candidates-master-table applied-candidates-table table-loading-table" aria-label="Loading applied candidates" style={{ minWidth: APPLIED_CANDIDATE_TABLE_WIDTH }}>
-              <thead><tr>{APPLIED_CANDIDATE_COLUMNS.map(column => <th key={column}>{column}</th>)}</tr></thead>
+              <thead><tr>{renderSelectionHeader(true)}{APPLIED_CANDIDATE_COLUMNS.slice(1).map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead>
               <tbody><tr className="table-loading-row"><td className="table-loading-cell" colSpan={APPLIED_CANDIDATE_COLUMNS.length}><FyndbridgeLoader size={88} label="Loading applied candidates..." className="table-inline-loader" /></td></tr></tbody>
             </table>
           </div>
         ) : (
           <div className="table-wrapper candidates-table-scroll">
             <table className="data-table fb-theme-table candidates-master-table applied-candidates-table" aria-label="Applied Candidates" style={{ minWidth: APPLIED_CANDIDATE_TABLE_WIDTH }}>
-              <thead><tr>{APPLIED_CANDIDATE_COLUMNS.map(column => <th key={column}>{column}</th>)}</tr></thead>
+              <thead><tr>{renderSelectionHeader(false)}{APPLIED_CANDIDATE_COLUMNS.slice(1).map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead>
               <tbody>
-                {!rows.length ? <tr><td colSpan="21" className="table-empty-cell"><div className="empty-state"><div className="empty-state-icon"><UserRoundCheck size={28} /></div><div className="empty-state-title">No applied candidates found</div><div className="empty-state-desc">Try changing the filters or wait for a new public application.</div></div></td></tr> : rows.map(row => {
+                {!rows.length ? <tr><td colSpan={APPLIED_CANDIDATE_COLUMNS.length} className="table-empty-cell"><div className="empty-state"><div className="empty-state-icon"><UserRoundCheck size={28} /></div><div className="empty-state-title">No applied candidates found</div><div className="empty-state-desc">Try changing the filters or wait for a new public application.</div></div></td></tr> : rows.map(row => {
                   const pending = row.application_status === 'pending'
                   const canConvert = pending || row.application_status === 'converting'
-                  return <tr key={row.id} className={drawer?.row?.id === row.id ? 'is-selected' : ''}>
+                  return <tr key={row.id} className={drawer?.row?.id === row.id || selectedApplications.has(row.id) ? 'is-selected' : ''}>
+                    <td className="applied-selection-cell" title={!pending ? 'Unavailable for deletion while conversion is in progress or complete.' : undefined}><input type="checkbox" aria-label={`Select application from ${display(row.full_name)}`} checked={selectedApplications.has(row.id)} disabled={!pending || bulkDeleting} aria-describedby={!pending ? `applied-selection-disabled-${row.id}` : undefined} onChange={event => selectApplications([row], event.target.checked)} />{!pending && <span className="applied-visually-hidden" id={`applied-selection-disabled-${row.id}`}>Unavailable for deletion while conversion is in progress or complete.</span>}</td>
                     <td><div className="name-cell"><div className="name-avatar" style={avatarColorsFor(row.full_name)}>{initials(row.full_name)}</div><div className="candidate-name-content"><span className="name-text candidate-name-text">{display(row.full_name)}</span><span className="sub-text">Public applicant</span></div></div></td>
                     <td><span className="applied-public-role">{roleName(row)}</span></td>
                     <td><span className="applied-mandate-role">{internalRole(row)}</span></td>
@@ -627,7 +725,15 @@ export default function AppliedCandidatesPage() {
           </div>
         )}
       </div>
-      <PaginationBar page={page} totalPages={totalPages} total={total} pageSize={pageSize} loading={loading} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1) }} />
+      <PaginationBar page={page} totalPages={totalPages} total={total} pageSize={pageSize} pageSizeOptions={[10, 25, 50, 100]} loading={loading} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1) }} />
+
+      <AppliedCandidateSelectionDock count={selectedApplications.size} hidden={Boolean(bulkConfirmation || drawer || rejectTarget)} onClear={clearSelection} onDelete={event => {
+        bulkReturnFocusRef.current = event.currentTarget
+        if (!bulkOperationRef.current) bulkOperationRef.current = window.crypto.randomUUID()
+        setBulkError('')
+        setBulkConfirmation([...selectedApplications.values()])
+      }} />
+      {bulkConfirmation && <AppliedCandidateDeleteDialog count={bulkConfirmation.length} pending={bulkDeleting} error={bulkError} onCancel={() => { if (!bulkBusyRef.current) setBulkConfirmation(null) }} onConfirm={submitBulkDelete} returnFocusRef={bulkReturnFocusRef} fallbackRef={pageRef} />}
 
       {drawer && !rejectTarget && createPortal(
         <div className="applied-content-overlay" role="presentation" onMouseDown={event => {

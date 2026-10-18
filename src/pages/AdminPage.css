@@ -1432,59 +1432,6 @@
   line-height: 1.7;
 }
 
-.admin-unsaved-dock {
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  z-index: 900;
-  display: flex;
-  justify-content: center;
-  width: min(880px, calc(100vw - 32px));
-  opacity: 0;
-  pointer-events: none;
-  transform: translate3d(-50%, calc(100% + 48px), 0) scale(0.96);
-  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
-}
-
-.admin-unsaved-dock.is-visible {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate3d(-50%, 0, 0) scale(1);
-}
-
-.admin-unsaved-dock-inner {
-  display: grid;
-  width: 100%;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 14px;
-  border: 1px solid rgba(0, 18, 100, 0.18);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 22px 52px rgba(0, 18, 100, 0.22);
-  padding: 14px 16px;
-}
-
-.admin-unsaved-dock-inner > span {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border-radius: 16px;
-  background: rgba(218, 177, 17, 0.22);
-  color: var(--admin-navy);
-}
-
-.admin-unsaved-dock strong {
-  color: var(--admin-navy);
-}
-
-.admin-unsaved-dock p {
-  margin: 3px 0 0;
-  color: var(--admin-muted);
-  font-size: 13px;
-}
-
 .admin-footer-cancel,
 .admin-footer-save {
   height: 42px;
@@ -1503,12 +1450,7 @@
   font-weight: 800;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .admin-unsaved-dock {
-    transform: translate3d(-50%, 0, 0) scale(1);
-    transition: opacity 160ms ease;
-  }
-}
+
 
 .admin-lock-modal .modal-body {
   max-height: 70vh;

@@ -66,3 +66,15 @@ export async function openAppliedCandidateCv(id) {
     notFoundMessage: 'The staged application CV could not be opened.',
   })
 }
+
+export function bulkDeleteAppliedCandidates(ids, operationId) {
+  return protectedJson('/api/applied-candidates/bulk-delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ application_ids: ids, operation_id: operationId }),
+  })
+}
+
+export function fetchAppliedCandidateDeletionFailures({ signal } = {}) {
+  return protectedJson('/api/applied-candidates/deletion-failures', { signal, cache: 'no-store' })
+}
