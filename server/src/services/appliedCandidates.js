@@ -254,10 +254,20 @@ async function removeFinalizedApplication(supabase, application) {
   return { removed: true, cvRemoved: true }
 }
 
-async function rejectApplication(supabase, applicationId, userId, reason) {
+async function rejectApplication(supabase, applicationId, userId, reason, { beforeCleanup } = {}) {
   const rejectionReason = clean(reason)
   let application = await getApplication(supabase, applicationId)
   if (!application) throw Object.assign(new Error('Application not found.'), { statusCode: 404 })
+  if (!['pending', 'rejected'].includes(application.application_status) || application.converted_candidate_id || application.converted_association_id || application.processing_token) {
+    throw Object.assign(new Error('This application is being converted or has already been adopted and cannot be deleted.'), { statusCode: 409, code: 'APPLICATION_INELIGIBLE' })
+  }
+  let objectPath
+  try {
+    objectPath = validateStagedResumePath(application)
+  } catch (error) {
+    error.code = 'INVALID_STAGED_CV'
+    throw error
+  }
 
   if (application.application_status === 'pending') {
     const now = new Date().toISOString()
@@ -269,13 +279,14 @@ async function rejectApplication(supabase, applicationId, userId, reason) {
       updated_at: now
     }).eq('id', applicationId).eq('application_status', 'pending').select(APPLICATION_SELECT).maybeSingle()
     if (error) throw error
-    if (!data) throw Object.assign(new Error('Only pending applications can be rejected.'), { statusCode: 409 })
+    if (!data) throw Object.assign(new Error('Only pending applications can be rejected.'), { statusCode: 409, code: 'APPLICATION_INELIGIBLE' })
     application = data
   } else if (application.application_status !== 'rejected') {
     throw Object.assign(new Error('Only pending applications can be rejected.'), { statusCode: 409 })
   }
 
-  const objectPath = validateStagedResumePath(application)
+  // A durable bulk-deletion receipt must exist before any irreversible cleanup.
+  if (beforeCleanup) await beforeCleanup(application)
   let cleanup = await supabase.storage.from(PUBLIC_APPLICATION_BUCKET).remove([objectPath])
   if (cleanup.error) cleanup = await supabase.storage.from(PUBLIC_APPLICATION_BUCKET).remove([objectPath])
   if (cleanup.error) {
@@ -292,7 +303,7 @@ async function rejectApplication(supabase, applicationId, userId, reason) {
     .select('id')
     .maybeSingle()
   if (deleteError) throw deleteError
-  if (!removed) throw Object.assign(new Error('The rejected application could not be removed and can be safely retried.'), { statusCode: 409 })
+  if (!removed) throw Object.assign(new Error('The rejected application could not be removed and can be safely retried.'), { statusCode: 409, code: 'CLEANUP_INCOMPLETE' })
   return application
 }
 

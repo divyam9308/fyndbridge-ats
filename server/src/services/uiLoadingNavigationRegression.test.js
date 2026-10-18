@@ -10,7 +10,6 @@ const loaderComponent = read('src/components/FyndbridgeLoader.jsx')
 const loaderCss = read('src/components/FyndbridgeLoader.css')
 const candidatesPage = read('src/pages/CandidatesPage.jsx')
 const jobsPage = read('src/pages/JobsPage.jsx')
-const sidebar = read('src/components/Sidebar.jsx')
 const invoicePage = read('src/pages/InvoiceEntityDetailPage.jsx')
 const invoiceCss = read('src/pages/InvoicePage.css')
 
@@ -34,13 +33,8 @@ test('candidate initial loading and mandate background refresh ownership remain 
   assert.match(jobsPage, /const refreshJobs = \(\) => fetchData\(\{ showLoading: false \}\)/)
 })
 
-test('PMS sidebar navigation commits on the initial primary pointer event', () => {
-  assert.match(sidebar, /location\.pathname !== '\/dashboard\/performance'/)
-  assert.match(sidebar, /event\.preventDefault\(\)/)
-  assert.match(sidebar, /document\.activeElement instanceof HTMLElement/)
-  assert.match(sidebar, /navigate\(to\)/)
-  assert.match(sidebar, /onPointerDown=\{\(event\) => navigateFromPerformancePointer\(event, to\)\}/)
-})
+// PMS navigation is covered by real cold-route, pointer and keyboard checks in
+// server/browser-tests/pms-applied.spec.cjs. The old pointer workaround is gone.
 
 test('invoice detail table uses one shared column model with centered non-overlapping cells', () => {
   assert.match(invoicePage, /const DETAIL_COLUMNS = \[/)

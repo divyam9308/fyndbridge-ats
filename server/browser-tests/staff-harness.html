@@ -1,0 +1,32 @@
+<!doctype html><html lang="en"><head><title>Isolated staff hook verification</title></head><body><div id="probe"></div><script type="module">
+import { createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { AuthContext } from '../../src/context/authStore.js'
+import { useStaffDirectory, refreshStaffDirectory } from '../../src/hooks/useStaffDirectory.js'
+const root = createRoot(document.getElementById('probe'))
+const registerEmploymentStatuses = () => {}
+let statuses = {}
+let revision = 0
+let previous = null
+function StaffProbe() {
+  const result = useStaffDirectory()
+  window.staffSnapshot = {
+    staff: result.staff, selectableStaff: result.selectableStaff,
+    sameStaff: previous?.staff === result.staff,
+    sameSelectable: previous?.selectableStaff === result.selectableStaff,
+    loading: result.loading, revision
+  }
+  previous = result
+  return createElement('div', null, result.loading ? 'Loading' : result.staff.map(item => `${item.name}:${item.status}`).join(', '))
+}
+function render() {
+  revision += 1
+  root.render(createElement(AuthContext.Provider, { value: { employmentStatusByUserId: statuses, registerEmploymentStatuses } }, createElement(StaffProbe, { revision })))
+}
+window.staffActions = {
+  render,
+  setStatus(id, status) { statuses = { ...statuses, [id]: status }; render() },
+  refresh: refreshStaffDirectory
+}
+render()
+</script></body></html>

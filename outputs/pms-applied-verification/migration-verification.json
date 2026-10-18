@@ -1,0 +1,17 @@
+{
+  "engine": "PGlite PostgreSQL",
+  "security": {
+    "rls": true,
+    "anon_select": false,
+    "authenticated_select": false,
+    "service_access": true,
+    "service_delete": false
+  },
+  "authenticatedSelectDenied": true,
+  "receiptSurvivesUserRemoval": {
+    "status": "deleted",
+    "requested_by": null,
+    "last_attempt_by": null
+  },
+  "migrationApplied": true
+}

@@ -1,0 +1,9 @@
+{
+  "position": "fixed",
+  "duration": "0.38s, 0.22s",
+  "timing": "cubic-bezier(0.22, 1, 0.36, 1), ease",
+  "radius": "24px",
+  "background": "rgba(255, 255, 255, 0.96)",
+  "border": "rgba(0, 18, 100, 0.18)",
+  "shadow": "rgba(0, 18, 100, 0.22) 0px 22px 52px 0px"
+}

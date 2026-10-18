@@ -78,10 +78,11 @@ export function useStaffDirectory({ enabled = true } = {}) {
   }, [enabled, registerEmploymentStatuses, revision])
 
   const refresh = useCallback(() => refreshStaffDirectory(), [])
-  const mergedStaff = staff.map((employee) => ({
+  const staffSnapshot = staff
+  const mergedStaff = useMemo(() => staffSnapshot.map((employee) => ({
     ...employee,
     status: employmentStatusByUserId[employee.user_id] || employee.status || 'active'
-  }))
+  })), [staffSnapshot, employmentStatusByUserId])
   const selectableStaff = useMemo(() => mergedStaff.filter((employee) => employee.status === 'active'), [mergedStaff])
   return { staff: mergedStaff, selectableStaff, loading, refresh }
 }

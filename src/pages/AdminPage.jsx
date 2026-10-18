@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import FloatingActionDock from '../components/FloatingActionDock'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, BarChart3, Briefcase, Building2, Check, Eye, EyeOff, Lock, Save, Search, Shield, ShieldCheck, Trash2, Unlock, UserPlus, Users, X } from 'lucide-react'
 import { notifyAdminPermissionsChanged, useAdminAccess } from '../hooks/useAdminAccess'
@@ -814,9 +815,7 @@ export default function AdminPage() {
         </Section>
       ) : null}
 
-      {createPortal((
-        <div className={`admin-unsaved-dock${dirty && !lockModalType ? ' is-visible' : ''}${savingPermissions ? ' is-saving' : ''}`} aria-hidden={!dirty || Boolean(lockModalType)}>
-          <div className="admin-unsaved-dock-inner">
+      <FloatingActionDock visible={dirty && !lockModalType} className={`admin-unsaved-dock${savingPermissions ? ' is-saving' : ''}`} innerClassName="admin-unsaved-dock-inner">
             <span><AlertTriangle size={18} /></span>
             <div>
               <strong>{employeeManagementDirty ? (permissionChangesDirty ? 'Unsaved changes' : 'Unsaved employee changes') : 'Unsaved permission changes'}</strong>
@@ -824,9 +823,7 @@ export default function AdminPage() {
             </div>
             <button className="admin-footer-cancel" type="button" onClick={cancelPermissionChanges} disabled={savingPermissions || !dirty}><X size={16} />Cancel</button>
             <button className="admin-footer-save" type="button" onClick={savePermissionChanges} disabled={savingPermissions || !dirty}><Save size={16} />{savingPermissions ? 'Saving...' : 'Save Changes'}</button>
-          </div>
-        </div>
-      ), document.body)}
+      </FloatingActionDock>
 
       {lockModalType && createPortal((
         <div className="modal-overlay">

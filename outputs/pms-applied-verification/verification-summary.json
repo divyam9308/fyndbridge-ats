@@ -1,0 +1,75 @@
+{
+  "branch": "fix/pms-navigation-applied-bulk-delete",
+  "base_commit": "63567949729d2541e1bc1406c36cf9ca852521e4",
+  "production_mutations": false,
+  "build": "passed",
+  "server_tests": {
+    "passed": 727,
+    "failed": 0
+  },
+  "browser_tests": {
+    "passed": 26,
+    "failed": 0,
+    "skipped": 0,
+    "duration_ms": 73252.906,
+    "projects": {
+      "chromium": 13,
+      "webkit": 13
+    },
+    "firefox": "Not verified: host profile-launch failures and isolated page crash"
+  },
+  "changed_files_lint": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "source_lint_baseline": {
+    "errors": 41,
+    "warnings": 4
+  },
+  "source_lint_current": {
+    "errors": 41,
+    "warnings": 3
+  },
+  "dependency_audit": {
+    "frontend": {
+      "counts": {
+        "info": 0,
+        "low": 0,
+        "moderate": 2,
+        "high": 6,
+        "critical": 0,
+        "total": 8
+      },
+      "unchanged_from_baseline": true,
+      "packages": {
+        "baseline-browser-mapping": "moderate",
+        "brace-expansion": "high",
+        "browserslist": "high",
+        "nanoid": "high",
+        "postcss": "high",
+        "react-router": "high",
+        "react-router-dom": "moderate",
+        "source-map-js": "high"
+      }
+    },
+    "server": {
+      "counts": {
+        "info": 0,
+        "low": 0,
+        "moderate": 3,
+        "high": 2,
+        "critical": 1,
+        "total": 6
+      },
+      "unchanged_from_baseline": true,
+      "packages": {
+        "axios": "high",
+        "body-parser": "moderate",
+        "brace-expansion": "high",
+        "express": "moderate",
+        "proxy-addr": "critical",
+        "qs": "moderate"
+      }
+    }
+  }
+}
