@@ -152,8 +152,8 @@ test('dock shares Admin styling, animates once, stays fixed during long vertical
   await scroll.evaluate(node => { node.scrollLeft = 1600 })
   const afterDock = await dock(page).boundingBox()
   expect(Math.abs(originalDock.y - afterDock.y)).toBeLessThan(1)
-  const stickyCells = await page.locator('tbody tr').first().locator('td').evaluateAll(cells => cells.slice(0, 2).map(cell => ({ position: getComputedStyle(cell).position, left: cell.getBoundingClientRect().left })))
-  expect(stickyCells.every(cell => cell.position === 'sticky' && cell.left >= 240 && cell.left < 400)).toBe(true)
+  const leadingCells = await page.locator('tbody tr').first().locator('td').evaluateAll(cells => cells.slice(0, 2).map(cell => ({ position: getComputedStyle(cell).position, left: cell.getBoundingClientRect().left })))
+  expect(leadingCells.every(cell => cell.position !== 'sticky' && cell.left < 0)).toBe(true)
   if (testInfo.project.name === 'chromium') {
     await page.evaluate(() => window.scrollTo(0, 0))
     await scroll.evaluate(node => { node.scrollLeft = 0 })
