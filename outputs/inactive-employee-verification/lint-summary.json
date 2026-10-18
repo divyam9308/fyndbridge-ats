@@ -1,0 +1,22 @@
+{
+  "command": "npx eslint . --ignore-pattern .vercel",
+  "errors": 41,
+  "warnings": 3,
+  "all_findings_in_unchanged_files": true,
+  "files_with_findings": [
+    "scripts/write-version.js",
+    "server/src/controllers/candidateController.js",
+    "server/src/controllers/clientController.js",
+    "server/src/controllers/jobController.js",
+    "server/src/services/entityIntentCore.js",
+    "server/src/services/publicApplicationAbuse.js",
+    "server/src/services/publicApplications.js",
+    "server/src/services/userManual.js",
+    "src/components/PaginationBar.jsx",
+    "src/pages/CandidatesPage.jsx",
+    "src/pages/ClientDetailPage.jsx",
+    "src/pages/ClientJobCandidatesPage.jsx",
+    "src/pages/JobsPage.jsx",
+    "src/pages/ProfileSettingsPage.jsx"
+  ]
+}

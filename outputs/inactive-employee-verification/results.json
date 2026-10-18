@@ -1,0 +1,29 @@
+{
+  "data_provenance": "Synthetic staff, isolated memory database, real Express attendance/PMS services and app UI",
+  "backend_tests": {
+    "passed": 739,
+    "failed": 0
+  },
+  "browser_regression": {
+    "startTime": "2026-10-18T15:33:48.518Z",
+    "duration": 124339.21900000001,
+    "expected": 46,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "projects": [
+    "chromium",
+    "webkit"
+  ],
+  "changed_files_lint": "passed",
+  "production_build": "passed",
+  "production_browser": {
+    "startTime": "2026-10-18T15:36:34.302Z",
+    "duration": 16434.601000000002,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

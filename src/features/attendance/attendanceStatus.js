@@ -13,7 +13,7 @@ export function attendanceStatusTone(status) {
   if (value === 'corrected') return 'corrected'
   if (value === 'holiday' || value.endsWith(' holiday')) return 'holiday'
   if (value === 'weekly off') return 'weekly'
-  if (value.includes('leave rejected') || value === 'future') return 'future'
+  if (value.includes('leave rejected') || ['future', 'inactive'].includes(value)) return 'future'
   if (['not marked', 'unmarked'].includes(value)) return 'unmarked'
   if (['approved', 'rejected', 'cancelled'].includes(value)) return value
   return 'neutral'

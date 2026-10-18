@@ -20,9 +20,12 @@ function buildAttendancePeriodSummary({
   holidayRows = [],
   leaveRequests = [],
   correctionRequests = [],
-  today = localDate()
+  today = localDate(),
+  inactiveFrom = null
 }) {
   const effectiveRecords = normalizeAttendanceRecords(records, today)
+  const employedOn = date => !inactiveFrom || date < inactiveFrom
+  const employedRecords = effectiveRecords.filter(record => employedOn(record.attendance_date))
   const holidaysByDate = new Map(holidayRows.map((holiday) => [holiday.holiday_date, holiday]))
   const holidayDates = [...holidaysByDate.keys()]
   const recordsByDate = new Map(effectiveRecords.map((record) => [record.attendance_date, record]))
@@ -69,10 +72,11 @@ function buildAttendancePeriodSummary({
     const approvedLeave = approvedLeaveForDate(date)
     const record = recordsByDate.get(date) || null
 
-    if (!holiday && !weeklyOff) workingDays += 1
-    if (approvedLeave?.duration_type === 'half_day') halfDayLeave += 1
+    const employed = employedOn(date)
+    if (employed && !holiday && !weeklyOff) workingDays += 1
+    if (employed && approvedLeave?.duration_type === 'half_day') halfDayLeave += 1
     const unmarkedRecord = !record || ['not_marked', 'absent'].includes(record.status)
-    if (!future && !holiday && !weeklyOff && unmarkedRecord && !pendingLeave && !rejectedLeave && !approvedLeave && date !== today) {
+    if (employed && !future && !holiday && !weeklyOff && unmarkedRecord && !pendingLeave && !rejectedLeave && !approvedLeave && date !== today) {
       unmarkedDays += 1
     }
 
@@ -82,23 +86,24 @@ function buildAttendancePeriodSummary({
       holiday,
       weekly_off: weeklyOff,
       future,
+      inactive: !employed,
       pending_leave: pendingLeave,
       rejected_leave: rejectedLeave,
       approved_leave: approvedLeave
     })
   }
 
-  const presentRecords = effectiveRecords.filter((record) => (
+  const presentRecords = employedRecords.filter((record) => (
     ['present', 'corrected'].includes(record.status)
     || (record.status === 'clocked_in' && record.attendance_date === today)
   ))
   const leaveDates = new Set([
     ...approvedDates,
     ...sandwichSundays,
-    ...effectiveRecords.filter((record) => String(record.status || '').includes('leave')).map((record) => record.attendance_date)
-  ])
-  const correctedAttendance = effectiveRecords.filter((record) => record.status === 'corrected').length
-  const pendingCorrections = correctionRequests.filter((request) => request.status === 'pending').length
+    ...employedRecords.filter((record) => String(record.status || '').includes('leave')).map((record) => record.attendance_date)
+  ].filter(employedOn))
+  const correctedAttendance = employedRecords.filter((record) => record.status === 'corrected').length
+  const pendingCorrections = correctionRequests.filter((request) => employedOn(request.attendance_date) && request.status === 'pending').length
   const totalMinutes = presentRecords.reduce((total, record) => total + (Number(record.worked_minutes) || 0), 0)
   const attendancePercentage = workingDays ? Math.round((presentRecords.length / workingDays) * 100) : 0
 
@@ -113,7 +118,7 @@ function buildAttendancePeriodSummary({
       present: presentRecords.length,
       leave: leaveDates.size,
       half_day_leave: halfDayLeave,
-      corrections: effectiveRecords.filter((record) => ['corrected', 'correction_pending'].includes(record.status)).length,
+      corrections: employedRecords.filter((record) => ['corrected', 'correction_pending'].includes(record.status)).length,
       corrected_attendance: correctedAttendance,
       pending_corrections: pendingCorrections,
       unmarked: unmarkedDays,

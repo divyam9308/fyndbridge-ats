@@ -1,16 +1,20 @@
 const { test: base, expect } = require('@playwright/test')
 const express = require('express')
+const { AsyncLocalStorage } = require('node:async_hooks')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const { application, applicationId, USER_ID, memoryDatabase } = require('../test-support/appliedCandidatesMemory.cjs')
 
 let activeDatabase
+const databaseContext = new AsyncLocalStorage()
 const supabasePath = require.resolve('../src/services/supabaseAdmin')
 require.cache[supabasePath] = { id: supabasePath, filename: supabasePath, loaded: true, children: [], exports: new Proxy({}, {
-  get(target, key) { const value = activeDatabase[key]; return typeof value === 'function' ? value.bind(activeDatabase) : value }
+  get(target, key) { const database = databaseContext.getStore() || activeDatabase; const value = database[key]; return typeof value === 'function' ? value.bind(database) : value }
 }) }
 const appliedRouter = require('../src/routes/appliedCandidates')
 const preferencesRouter = require('../src/routes/userPreferences')
+const attendanceRouter = require('../src/routes/attendance')
+const performanceRouter = require('../src/routes/performance')
 const evidenceDir = path.resolve(process.env.FYNDBRIDGE_BROWSER_EVIDENCE_DIR || path.join(__dirname, '../../outputs/pms-applied-verification'))
 
 const withApp = async ({ page }, use) => {
@@ -21,15 +25,28 @@ const withApp = async ({ page }, use) => {
     activeDatabase = db
     const serverApp = express()
     serverApp.use(express.json())
-    serverApp.use((req, res, next) => { req.user = { id: USER_ID, email: 'recruiter@fyndbridge.in' }; next() })
+    serverApp.use((req, res, next) => {
+      req.user = { id: USER_ID, email: 'recruiter@fyndbridge.in' }
+      const employmentRequest = req.path.startsWith('/api/attendance/') || req.path.startsWith('/api/performance/')
+      databaseContext.run(employmentRequest && state.employmentDb ? state.employmentDb : db, next)
+    })
     serverApp.use('/api/applied-candidates', appliedRouter)
     serverApp.use('/api/user-preferences', preferencesRouter)
+    serverApp.use('/api/attendance', attendanceRouter)
+    serverApp.use('/api/performance', performanceRouter)
     const server = serverApp.listen(0, '127.0.0.1')
     await new Promise(resolve => server.once('listening', resolve))
     const apiBase = `http://127.0.0.1:${server.address().port}`
+    const subscriptions = []
     const state = {
       db, superAdmin: true, staff: [{ id: USER_ID, name: 'Test Recruiter', email: 'recruiter@fyndbridge.in', status: 'active' }, { id: applicationId(999), name: 'Test Employee', email: 'employee@fyndbridge.in', status: 'active' }],
-      deleteRequests: [], reviewSaves: [], adminSaves: [], preferenceSaves: [], failPreferenceSaves: false, reviews: new Map(), requestPaths: [], consoleErrors: [], dropDeleteResponse: false, performancePermissions: {},
+      deleteRequests: [], reviewSaves: [], adminSaves: [], preferenceSaves: [], failPreferenceSaves: false, reviews: new Map(), requestPaths: [], consoleErrors: [], dropDeleteResponse: false, performancePermissions: {}, employmentDb: null,
+      emitEmploymentStatus(row) {
+        for (const { socket, joinRef, topic, changes } of subscriptions) {
+          const ids = changes.filter(change => change.table === 'employee_statuses' && ['*', 'UPDATE'].includes(change.event)).map(change => change.id)
+          if (ids.length) socket.send(JSON.stringify([joinRef, null, topic, 'postgres_changes', { ids, data: { schema: 'public', table: 'employee_statuses', type: 'UPDATE', commit_timestamp: new Date().toISOString(), columns: Object.keys(row).map(name => ({ name, type: 'text' })), record: row, old_record: { user_id: row.user_id } } }]))
+        }
+      },
     }
     page.on('pageerror', error => state.consoleErrors.push(error.message))
     await page.addInitScript(({ userId }) => {
@@ -50,6 +67,7 @@ const withApp = async ({ page }, use) => {
           const frame = JSON.parse(String(message))
           const [joinRef, ref, topic, , payload] = frame
           const changes = (payload?.config?.postgres_changes || []).map((change, index) => ({ ...change, id: index + 1 }))
+          if (changes.length) subscriptions.push({ socket, joinRef, topic, changes })
           socket.send(JSON.stringify([joinRef, ref, topic, 'phx_reply', { status: 'ok', response: { postgres_changes: changes } }]))
         } catch { /* Ignore non-JSON synthetic heartbeat frames. */ }
       })
@@ -65,6 +83,10 @@ const withApp = async ({ page }, use) => {
       const url = new URL(request.url())
       const routePath = url.pathname
       state.requestPaths.push(routePath)
+      if (state.employmentDb && (routePath.startsWith('/api/attendance/') || (routePath.startsWith('/api/performance/') && !routePath.endsWith('/handbook')))) {
+        if (routePath.startsWith('/api/performance/') && request.method() === 'PUT') state.reviewSaves.push({ path: routePath, ...request.postDataJSON() })
+        return route.fulfill({ response: await route.fetch({ url: `${apiBase}${routePath}${url.search}` }) })
+      }
       if (routePath.startsWith('/api/applied-candidates') || routePath.startsWith('/api/user-preferences/')) {
         if (routePath.endsWith('/bulk-delete')) state.deleteRequests.push(request.postDataJSON())
         if (routePath.startsWith('/api/user-preferences/') && request.method() === 'PUT') {
@@ -79,7 +101,7 @@ const withApp = async ({ page }, use) => {
       if (routePath === '/api/auth/employment-status') payload = { data: { profile_complete: true, status: 'active' } }
       else if (routePath === '/api/admin/me') payload = { isAdmin: state.superAdmin, isSuperAdmin: state.superAdmin, role: state.superAdmin ? 'super_admin' : 'recruiter' }
       else if (routePath === '/api/user-profiles') payload = { data: { user_id: USER_ID, name: 'Test Recruiter', email: 'recruiter@fyndbridge.in', status: 'active' } }
-      else if (routePath === '/api/user-profiles/options') payload = { data: state.staff }
+      else if (routePath === '/api/user-profiles/options') payload = { data: state.employmentDb ? state.employmentDb.tables.user_profiles.map(profile => ({ ...profile, id: profile.user_id, status: state.employmentDb.tables.employee_statuses.find(row => row.user_id === profile.user_id)?.status || 'active' })) : state.staff }
       else if (routePath === '/api/admin/column-permissions') payload = { columns: {}, permissions: { clients: {}, candidates: {}, jobs: {} } }
       else if (routePath === '/api/admin/dashboard-visibility') { const body = request.postDataJSON(); if (body) state.adminSaves.push(body); payload = { data: body || { restrictNonAdminToSelf: true, lowMandateNotificationAudience: 'super_admins' } } }
       else if (routePath === '/api/public/open-roles/count') payload = { count: 8 }

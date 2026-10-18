@@ -1,6 +1,7 @@
 const supabase = require('./supabaseAdmin')
 const { isSuperAdmin } = require('./adminAccess')
 const { buildPerformanceCompletion } = require('./performanceCompletion')
+const { getEmployeeStatus } = require('./employeeStatus')
 
 const REVIEW_PERIOD = 'Q1'
 const REVIEW_PERIODS = ['Q1', 'Q2', 'Q3', 'Q4']
@@ -216,8 +217,18 @@ async function ensureReview(employeeUserId, actorId, period = REVIEW_PERIOD) {
 
 async function getReview(actor, employeeUserId, period = REVIEW_PERIOD) {
   const { targetUserId } = await assertCanAccessEmployee(actor, employeeUserId)
+  const employment = await getEmployeeStatus(targetUserId)
+  if (employment?.status === 'inactive') {
+    // Reading history must not create a new quarter or replace archived rows
+    // with defaults, even when a review has fewer than five stored rows.
+    const { data: review, error } = await supabase.from('performance_reviews').select('*')
+      .eq('employee_user_id', targetUserId).eq('review_period', normalizeReviewPeriod(period)).maybeSingle()
+    if (error) throw error
+    if (!review) throw httpError('No saved review exists for this past employee and quarter.', 404)
+    return { ...serializeReview(review, await fetchRows(review.id)), read_only: true }
+  }
   const { review, rows } = await ensureReview(targetUserId, actor.id, period)
-  return serializeReview(review, rows)
+  return { ...serializeReview(review, rows), read_only: false }
 }
 
 async function getCompletionStatuses(actor, period = REVIEW_PERIOD) {
@@ -313,6 +324,9 @@ function normalizeRowsPayload(rows, permissions, superAdmin, existingRows = []) 
 
 async function updateReview(actor, employeeUserId, rowsPayload, period = REVIEW_PERIOD) {
   const { targetUserId, superAdmin } = await assertCanAccessEmployee(actor, employeeUserId)
+  if ((await getEmployeeStatus(targetUserId))?.status === 'inactive') {
+    throw httpError('Past employee reviews are read-only. Reactivate the employee before creating or changing a review.', 409)
+  }
   const [existing, permissions] = await Promise.all([
     ensureReview(targetUserId, actor.id, period),
     getPermissions()

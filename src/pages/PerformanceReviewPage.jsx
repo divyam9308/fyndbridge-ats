@@ -408,20 +408,27 @@ export default function PerformanceReviewPage() {
   const { staff: staffUsers, loading: loadingStaff } = useStaffDirectory({ enabled: isSuperAdmin })
   const ownUserId = currentUserId(user)
   const ownName = displayName(user)
+  const [period, setPeriod] = useState(() => currentPerformancePeriod())
+  const [includePastEmployees, setIncludePastEmployees] = useState(false)
+  const [completionState, setCompletionState] = useState({ period: '', statuses: {} })
+  const completionStatuses = useMemo(() => completionState.period === period ? completionState.statuses : {}, [completionState, period])
   const selectorUsers = useMemo(() => {
     const byId = new Map([[ownUserId, { id: ownUserId, name: ownName, email: user?.email || '' }]])
     if (isSuperAdmin) staffUsers.forEach(profile => {
       const id = profile.id || profile.user_id
-      if (id) byId.set(id, { id, name: profile.name, email: profile.email || '' })
+      const inactive = profile.status === 'inactive'
+      if (id && (!inactive || (includePastEmployees && completionStatuses[id]))) {
+        byId.set(id, { id, name: profile.name, email: profile.email || '', inactive })
+      }
     })
     return [...byId.values()]
-  }, [isSuperAdmin, ownName, ownUserId, staffUsers, user?.email])
+  }, [completionStatuses, includePastEmployees, isSuperAdmin, ownName, ownUserId, staffUsers, user?.email])
   const [selection, setSelection] = useState(() => ({ ownerId: ownUserId, userId: ownUserId }))
   const selectedUserId = selection.ownerId === ownUserId && selectorUsers.some(profile => profile.id === selection.userId)
     ? selection.userId : ownUserId
   const setSelectedUserId = userId => setSelection({ ownerId: ownUserId, userId })
-  const [period, setPeriod] = useState(() => currentPerformancePeriod())
   const effectiveUserId = isSuperAdmin ? selectedUserId : ownUserId
+  const readOnlyReview = selectorUsers.find(profile => profile.id === effectiveUserId)?.inactive === true
   const [rows, setRows] = useState(() => normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS))
   const [savedRows, setSavedRows] = useState(() => normalizePerformanceRows(DEFAULT_PERFORMANCE_ROWS))
   const [permissions, setPermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
@@ -431,12 +438,10 @@ export default function PerformanceReviewPage() {
   const [uploadingHandbook, setUploadingHandbook] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
-  const [completionState, setCompletionState] = useState({ period: '', statuses: {} })
   const reviewCacheRef = useRef(new Map())
   const loadedReviewKeyRef = useRef('')
   const requestSeqRef = useRef(0)
   const completionRequestSeqRef = useRef(0)
-  const completionStatuses = completionState.period === period ? completionState.statuses : {}
 
   const reviewCacheKey = useCallback((targetUserId, reviewPeriod) => `${isSuperAdmin ? 'employee' : 'self'}:${targetUserId}:${reviewPeriod}`, [isSuperAdmin])
   const readReview = useCallback((targetUserId, reviewPeriod) => (
@@ -508,7 +513,7 @@ export default function PerformanceReviewPage() {
   }, [isSuperAdmin, ownUserId, period])
 
   useEffect(() => {
-    if (!effectiveUserId) return undefined
+    if (!effectiveUserId || readOnlyReview) return undefined
     let active = true
     const prefetchPeriods = PERFORMANCE_PERIOD_VALUES.filter(item => item !== period)
     prefetchPeriods.forEach((reviewPeriod) => {
@@ -519,7 +524,7 @@ export default function PerformanceReviewPage() {
       }).catch(() => {})
     })
     return () => { active = false }
-  }, [cacheReview, effectiveUserId, period, readReview, reviewCacheKey])
+  }, [cacheReview, effectiveUserId, period, readOnlyReview, readReview, reviewCacheKey])
 
   useEffect(() => {
     const sync = () => fetchPerformancePermissions().then(({ permissions: next }) => setPermissions({ ...DEFAULT_PERFORMANCE_PERMISSIONS, ...(next || {}) })).catch(err => setError(err.message))
@@ -561,7 +566,7 @@ export default function PerformanceReviewPage() {
   const allocationValid = Math.round(totals.allocation * 100) === 10000
   const scoresValid = rows.every(row => ['self_score', 'ss_ns_score', 'ra_score'].every(key => row[key] === '' || row[key] === null || (Number(row[key]) >= 0 && Number(row[key]) <= 5)))
   const dirty = useMemo(() => JSON.stringify(canonicalPerformanceRows(rows)) !== JSON.stringify(canonicalPerformanceRows(savedRows)), [rows, savedRows])
-  const canSave = dirty && allocationValid && scoresValid && !savingReview && !loadingReview
+  const canSave = !readOnlyReview && dirty && allocationValid && scoresValid && !savingReview && !loadingReview
   const showValidationWarning = !loadingReview && (!allocationValid || !scoresValid)
 
   const updateRow = (targetRow, patch) => setRows(current => current.map(row => {
@@ -658,6 +663,8 @@ export default function PerformanceReviewPage() {
           <EmployeeSelector users={selectorUsers} selectedUserId={selectedUserId} onSelect={setSelectedUserId} loading={isSuperAdmin && loadingStaff} disabled={!isSuperAdmin} completionStatuses={completionStatuses} />
           <PeriodSelector period={period} onChange={setPeriod} />
         </div>
+        {isSuperAdmin && <label className="performance-history-toggle"><input type="checkbox" checked={includePastEmployees} onChange={event => setIncludePastEmployees(event.target.checked)} />Show past employees with saved reviews</label>}
+        {readOnlyReview && <p className="performance-history-notice" role="status">Past employee review · Read only</p>}
         <EmployeeHandbook handbook={handbook} canUpload={isSuperAdmin} uploading={uploadingHandbook} onOpen={handleOpenHandbook} onUpload={handleHandbookUpload} />
       </div>
       <div className={`performance-message-slot${error ? ' is-visible' : ''}`}>
@@ -698,7 +705,7 @@ export default function PerformanceReviewPage() {
               {rows.map(row => (
                 <tr key={row.id || row.row_order}>
                   {visibleColumns.map(column => {
-                    const disabled = CALCULATED_PERFORMANCE_COLUMNS.has(column.key) || isPerformanceColumnDisabled(permissions, column.key, isSuperAdmin)
+                    const disabled = readOnlyReview || CALCULATED_PERFORMANCE_COLUMNS.has(column.key) || isPerformanceColumnDisabled(permissions, column.key, isSuperAdmin)
                     return (
                       <td key={column.key}>
                         <ReviewCell row={row} columnKey={column.key} disabled={disabled} onChange={patch => updateRow(row, patch)} />

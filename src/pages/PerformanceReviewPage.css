@@ -103,6 +103,28 @@
   gap: 10px;
 }
 
+.performance-history-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary, #64748b);
+  font-size: 13px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.performance-history-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #000b58;
+}
+
+.performance-history-notice {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
 .performance-control-row {
   display: flex;
   align-items: center;

@@ -19,6 +19,12 @@ export function attendanceRefreshScopes(events, { userId = '', isAdmin = false, 
     const affectedUserId = String(payload?.new?.user_id || payload?.old?.user_id || '')
     const affectsCurrentUser = Boolean(personalAttendanceEnabled && affectedUserId === userId)
 
+    if (table === 'employee_statuses') {
+      if (isAdmin && tab === 'team') scopes.add('team')
+      if (isAdmin && tab === 'leave-balances') scopes.add('managed-balances')
+      continue
+    }
+
     if (table === 'reconnect') {
       if (personalAttendanceEnabled) {
         scopes.add('personal-attendance')
@@ -109,6 +115,9 @@ export function useAttendanceRealtime({ userId, isAdmin, onEvents, enabled = tru
       table,
       ...(!isAdmin ? { filter: `user_id=eq.${userId}` } : {})
     })
+    // AuthContext owns the single global employment-status subscription.
+    const onEmploymentChange = event => schedule({ table: 'employee_statuses', new: event.detail })
+    window.addEventListener('fb:employee-status-changed', onEmploymentChange)
 
     logRealtimeSubscribe({ name: channelName, scope: 'page', tables: ATTENDANCE_REALTIME_TABLES })
     let channel = supabase.channel(channelName)
@@ -129,6 +138,7 @@ export function useAttendanceRealtime({ userId, isAdmin, onEvents, enabled = tru
     })
 
     return () => {
+      window.removeEventListener('fb:employee-status-changed', onEmploymentChange)
       window.clearTimeout(timerRef.current)
       eventsRef.current = []
       supabase.removeChannel(channel)

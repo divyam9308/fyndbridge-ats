@@ -106,7 +106,11 @@ async function updateEmployeeStatus(employeeId, status, actorId) {
     error.statusCode = 404
     throw error
   }
-  const { data: previous } = await supabase.from('employee_statuses').select('status').eq('user_id', id).maybeSingle()
+  const { data: previous, error: previousError } = await supabase.from('employee_statuses')
+    .select('user_id, status, created_at, updated_at, updated_by').eq('user_id', id).maybeSingle()
+  if (previousError) throw previousError
+  // A repeated save must not move the departure boundary into a later month.
+  if (previous?.status === nextStatus) return { ...previous, previous_status: previous.status }
   const { data, error } = await supabase
     .from('employee_statuses')
     .upsert({ user_id: id, status: nextStatus, updated_at: new Date().toISOString(), updated_by: actorId }, { onConflict: 'user_id' })
