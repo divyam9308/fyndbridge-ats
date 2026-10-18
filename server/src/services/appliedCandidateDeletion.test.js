@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const express = require('express')
 const { application, applicationId, USER_ID, OPERATION_ID, memoryDatabase } = require('../../test-support/appliedCandidatesMemory.cjs')
-const { MAX_DELETE_BATCH, DELETE_CONCURRENCY, validateBulkDeletion, bulkDeleteApplications, listDeletionFailures } = require('./appliedCandidateDeletion')
+const { MAX_DELETE_BATCH, DELETE_CONCURRENCY, validateBulkDeletion, bulkDeleteApplications } = require('./appliedCandidateDeletion')
 
 const body = ids => ({ application_ids: ids, operation_id: OPERATION_ID })
 
@@ -31,13 +31,10 @@ test('mixed batch returns accurate outcomes, preserves adopted records, and reco
   assert.equal(receipt.requested_by, USER_ID)
   assert.ok(receipt.cleanup_started_at && receipt.deleted_at)
   assert.equal(Object.hasOwn(receipt, 'full_name'), false)
-  const failures = await listDeletionFailures(db)
-  assert.equal(failures.total, 1)
-  assert.equal(failures.data[0].id, applicationId(3))
-  assert.equal(failures.data[0].full_name, 'Test Applicant 003')
+  assert.equal(db.tables.public_application_deletions.find(row => row.application_id === applicationId(3)).status, 'failed')
 })
 
-test('storage failure remains discoverable across requests and retry cleans up rejected rows idempotently', async () => {
+test('storage failure keeps an audit receipt and retry cleans up rejected rows idempotently', async () => {
   const db = memoryDatabase([application(1), application(2)])
   db.storageFailures.add(applicationId(2))
   const request = body([applicationId(1), applicationId(2)])
@@ -47,7 +44,7 @@ test('storage failure remains discoverable across requests and retry cleans up r
   assert.deepEqual(retry.summary, { deleted: 2, skipped: 0, failed: 0 })
   assert.equal(retry.results[0].code, 'already_deleted')
   assert.equal(db.removedPaths.filter(path => path.startsWith(applicationId(1))).length, 1)
-  assert.equal((await listDeletionFailures(db)).total, 0)
+  assert.ok(db.tables.public_application_deletions.every(row => row.status === 'deleted'))
   assert.equal(db.tables.public_applications.length, 0)
 })
 
@@ -135,5 +132,5 @@ test('real bulk route enforces authentication and fresh page access, including o
   const response = await request(body([applicationId(1)]))
   assert.equal(response.status, 200)
   assert.deepEqual((await response.json()).summary, { deleted: 1, skipped: 0, failed: 0 })
-  assert.equal((await fetch(`${url}/deletion-failures`)).status, 401)
+  assert.equal((await fetch(`${url}/deletion-failures`, { headers: { Authorization: 'Bearer synthetic-recruiter' } })).status, 404)
 })

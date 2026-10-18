@@ -27,7 +27,6 @@ import {
   convertAppliedCandidate,
   fetchAppliedCandidate,
   fetchAppliedCandidates,
-  fetchAppliedCandidateDeletionFailures,
   openAppliedCandidateCv,
   updateAppliedCandidateStatus,
 } from '../services/appliedCandidatesApi'
@@ -262,8 +261,6 @@ export default function AppliedCandidatesPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkError, setBulkError] = useState('')
   const [bulkResult, setBulkResult] = useState(null)
-  const [deletionFailures, setDeletionFailures] = useState([])
-  const [recoveryError, setRecoveryError] = useState('')
   const bulkBusyRef = useRef(false)
   const bulkOperationRef = useRef(null)
   const bulkReturnFocusRef = useRef(null)
@@ -340,18 +337,6 @@ export default function AppliedCandidatesPage() {
       })
     return () => controller.abort()
   }, [filters, page, pageSize, refreshVersion])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetchAppliedCandidateDeletionFailures({ signal: controller.signal }).then(result => {
-      if (controller.signal.aborted) return
-      setDeletionFailures(result.data || [])
-      setRecoveryError('')
-    }).catch(requestError => {
-      if (!controller.signal.aborted) setRecoveryError(requestError.message || 'Deletion recovery could not be loaded.')
-    })
-    return () => controller.abort()
-  }, [refreshVersion])
 
   useEffect(() => () => drawerRequestRef.current?.controller.abort(), [])
 
@@ -671,8 +656,6 @@ export default function AppliedCandidatesPage() {
       </div>
 
       {bulkResult && <section className="applied-bulk-result" role="status" aria-label="Deletion result"><strong>{bulkResult.summary.deleted} deleted, {bulkResult.summary.skipped} skipped, {bulkResult.summary.failed} failed.</strong><p>{bulkResult.summary.failed ? 'Failed applications remain selected and can be retried below.' : 'The application list and counts have been refreshed.'}</p>{bulkResult.results.filter(item => item.status === 'skipped').map(item => <p key={item.id}>{item.full_name}: {item.message}</p>)}</section>}
-      {recoveryError && <div className="table-error-banner" role="alert"><span>Deletion recovery: {recoveryError}</span><button className="filter-clear" type="button" onClick={reload}>Retry</button></div>}
-      {deletionFailures.length > 0 && <section className="applied-deletion-recovery" aria-label="Applications needing deletion cleanup"><strong>Applications needing deletion cleanup</strong><p>These applications remain recoverable even when they no longer appear in the pending list. Select up to 100 at a time to retry.</p><ul>{deletionFailures.map(row => <li key={row.id}><label><input type="checkbox" checked={selectedApplications.has(row.id)} disabled={bulkDeleting || !['pending', 'rejected', 'missing'].includes(row.application_status)} onChange={event => selectApplications([row], event.target.checked)} /><span><strong>{row.full_name}</strong><small>{row.message}</small></span></label></li>)}</ul></section>}
 
       {error && <div className="table-error-banner" role="alert"><AlertTriangle size={16} /><span>{error}</span><button type="button" className="filter-clear" onClick={reload}>Retry</button></div>}
       <div className="table-card table-card-popovers candidates-table-card">
@@ -684,7 +667,13 @@ export default function AppliedCandidatesPage() {
             </table>
           </div>
         ) : (
-          <div className="table-wrapper candidates-table-scroll">
+          <div className="table-wrapper candidates-table-scroll" tabIndex={0} role="region" aria-label="Applied candidate details" aria-describedby="applied-table-scroll-help" onKeyDown={event => {
+            if (event.target !== event.currentTarget || event.altKey || event.ctrlKey || event.metaKey) return
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+              event.preventDefault()
+              event.currentTarget.scrollLeft += event.key === 'ArrowRight' ? 80 : -80
+            }
+          }}>
             <table className="data-table fb-theme-table candidates-master-table applied-candidates-table" aria-label="Applied Candidates" style={{ minWidth: APPLIED_CANDIDATE_TABLE_WIDTH }}>
               <thead><tr>{renderSelectionHeader(false)}{APPLIED_CANDIDATE_COLUMNS.slice(1).map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead>
               <tbody>
@@ -725,6 +714,7 @@ export default function AppliedCandidatesPage() {
           </div>
         )}
       </div>
+      <p id="applied-table-scroll-help" className="applied-visually-hidden">Scroll horizontally for more application details. Use the left and right arrow keys when the table is focused.</p>
       <PaginationBar page={page} totalPages={totalPages} total={total} pageSize={pageSize} pageSizeOptions={[10, 25, 50, 100]} loading={loading} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1) }} />
 
       <AppliedCandidateSelectionDock count={selectedApplications.size} hidden={Boolean(bulkConfirmation || drawer || rejectTarget)} onClear={clearSelection} onDelete={event => {

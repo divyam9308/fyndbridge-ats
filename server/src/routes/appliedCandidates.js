@@ -17,7 +17,6 @@ router.param('id', (req, res, next, id) => {
 })
 router.get('/', controller.listAppliedCandidates)
 router.get('/count', controller.countAppliedCandidates)
-router.get('/deletion-failures', controller.getAppliedCandidateDeletionFailures)
 router.post('/bulk-delete', controller.bulkDeleteAppliedCandidates)
 router.get('/:id', controller.getAppliedCandidate)
 router.get('/:id/cv', controller.getAppliedCandidateCv)

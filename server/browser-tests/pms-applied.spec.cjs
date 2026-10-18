@@ -168,7 +168,7 @@ test('dock shares Admin styling, animates once, stays fixed during long vertical
   expect(app.deleteRequests).toHaveLength(0)
 })
 
-test('confirmation cancellation, duplicate click protection, conversion race, partial results and retry recovery', async ({ page, app }, testInfo) => {
+test('confirmation cancellation, duplicate click protection, conversion race, partial results and retry', async ({ page, app }, testInfo) => {
   await page.goto(appliedUrl)
   for (const number of [1, 2, 4]) await rowCheckbox(page, number).check()
   await deleteButton(page).click()
@@ -197,7 +197,7 @@ test('confirmation cancellation, duplicate click protection, conversion race, pa
   expect(app.deleteRequests).toHaveLength(1)
   await expect(page.getByRole('status', { name: 'Deletion result' })).toContainText('1 deleted, 1 skipped, 1 failed.')
   await expect(dock(page)).toContainText('1 application selected')
-  await expect(page.getByRole('region', { name: 'Applications needing deletion cleanup' })).toContainText('Test Applicant 002')
+  await expect(page.getByRole('region', { name: 'Applications needing deletion cleanup' })).toHaveCount(0)
   await expect(page.locator('.pagination-results')).toContainText('of 103 results')
   await expect(page.locator('#nav-applied-candidates .sidebar-count-badge')).toHaveText('99+')
   expect(app.db.tables.public_applications.find(row => row.id === applicationId(2)).application_status).toBe('rejected')
@@ -213,7 +213,7 @@ test('confirmation cancellation, duplicate click protection, conversion race, pa
   await expect(dock(page)).not.toHaveClass(/is-visible/)
 })
 
-test('cleanup failures remain discoverable after a full page reload and last-page deletion clamps pagination', async ({ page, app }) => {
+test('no recovery option or request appears after reload and last-page deletion clamps pagination', async ({ page, app }) => {
   await page.goto(appliedUrl)
   await rowCheckbox(page, 1).check()
   app.db.storageFailures.add(applicationId(1))
@@ -221,13 +221,10 @@ test('cleanup failures remain discoverable after a full page reload and last-pag
   await page.getByRole('button', { name: 'Permanently delete (1)' }).click()
   await expect(page.getByRole('status', { name: 'Deletion result' })).toContainText('0 deleted, 0 skipped, 1 failed.')
   await page.reload()
-  const recovery = page.getByRole('region', { name: 'Applications needing deletion cleanup' })
-  await expect(recovery).toContainText('Test Applicant 001')
-  await recovery.getByRole('checkbox').check()
-  app.db.storageFailures.clear()
-  await deleteButton(page).click()
-  await page.getByRole('button', { name: 'Permanently delete (1)' }).click()
-  await expect(recovery).toHaveCount(0)
+  await expect(page.getByRole('table', { name: 'Applied Candidates', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Applications needing deletion cleanup' })).toHaveCount(0)
+  await expect(page.getByText(/Deletion recovery:/)).toHaveCount(0)
+  expect(app.requestPaths.some(route => route.endsWith('/deletion-failures'))).toBe(false)
   await page.locator('.pagination-go-input').fill('5')
   await page.locator('.pagination-go-input').press('Enter')
   await expect(rowCheckbox(page, 105)).toBeVisible()

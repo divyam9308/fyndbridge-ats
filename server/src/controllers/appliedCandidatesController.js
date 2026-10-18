@@ -1,5 +1,5 @@
 const supabase = require('../services/supabaseAdmin')
-const { bulkDeleteApplications, listDeletionFailures } = require('../services/appliedCandidateDeletion')
+const { bulkDeleteApplications } = require('../services/appliedCandidateDeletion')
 const {
   listApplications,
   countActiveApplications,
@@ -61,14 +61,6 @@ async function bulkDeleteAppliedCandidates(req, res) {
     return res.json(await bulkDeleteApplications(supabase, req.body, req.user.id))
   } catch (error) {
     return sendInternal(res, 'bulkDeleteAppliedCandidates', error)
-  }
-}
-
-async function getAppliedCandidateDeletionFailures(req, res) {
-  try {
-    return res.json(await listDeletionFailures(supabase))
-  } catch (error) {
-    return sendInternal(res, 'getAppliedCandidateDeletionFailures', error)
   }
 }
 
@@ -541,7 +533,6 @@ async function convertAppliedCandidate(req, res) {
 
 module.exports = {
   bulkDeleteAppliedCandidates,
-  getAppliedCandidateDeletionFailures,
   listAppliedCandidates,
   countAppliedCandidates,
   getAppliedCandidate,

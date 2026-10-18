@@ -10,7 +10,7 @@ require.cache[supabasePath] = { id: supabasePath, filename: supabasePath, loaded
   get(target, key) { const value = activeDatabase[key]; return typeof value === 'function' ? value.bind(activeDatabase) : value }
 }) }
 const appliedRouter = require('../src/routes/appliedCandidates')
-const evidenceDir = path.resolve(__dirname, '../../outputs/pms-applied-verification')
+const evidenceDir = path.resolve(process.env.FYNDBRIDGE_BROWSER_EVIDENCE_DIR || path.join(__dirname, '../../outputs/pms-applied-verification'))
 
 const withApp = async ({ page }, use) => {
     const db = memoryDatabase(Array.from({ length: 105 }, (_, index) => application(index + 1, {

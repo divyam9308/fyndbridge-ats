@@ -56,7 +56,7 @@ async function deleteOne(supabase, id, userId, operationId) {
       try {
         await updateReceipt(supabase, id, { status: 'deleted', code: 'already_deleted', deleted_at: new Date().toISOString() })
         return result(id, 'deleted', 'already_deleted', 'Deletion already completed.')
-      } catch { /* Keep the receipt discoverable for another retry. */ }
+      } catch { /* Preserve the receipt for a subsequent attempt. */ }
     }
     const skipped = error.statusCode === 404 || error.code === 'APPLICATION_INELIGIBLE'
     const status = skipped ? 'skipped' : 'failed'
@@ -65,11 +65,11 @@ async function deleteOne(supabase, id, userId, operationId) {
         : error.statusCode === 502 ? 'storage_cleanup_failed' : 'cleanup_failed'
     if (receipt) {
       try { await updateReceipt(supabase, id, { status, code }) }
-      catch { /* A processing receipt is also included in the recovery list. */ }
+      catch { /* Preserve the previous receipt if this update fails. */ }
     }
     const message = skipped ? (error.statusCode === 404 ? 'Application no longer exists.' : 'Application is no longer eligible for deletion.')
       : code === 'invalid_staged_cv' ? 'Invalid staged CV path. Ask an administrator to repair it before retrying.'
-        : 'Deletion could not be completed. The cleanup is recoverable; retry this application.'
+        : 'Deletion could not be completed. Try again.'
     return result(id, status, code, message)
   }
 }
@@ -89,25 +89,4 @@ async function bulkDeleteApplications(supabase, body, userId) {
   return { operation_id: operationId, results, summary }
 }
 
-async function listDeletionFailures(supabase) {
-  const { data, error, count } = await supabase.from(AUDIT_TABLE).select(RECEIPT_SELECT, { count: 'exact' })
-    .in('status', ['failed', 'processing']).order('updated_at', { ascending: true }).limit(MAX_DELETE_BATCH)
-  if (error) throw error
-  if (!data?.length) return { data: [], total: 0 }
-  const { data: applications, error: applicationError } = await supabase.from('public_applications')
-    .select('id, full_name, application_status').in('id', data.map(item => item.application_id))
-  if (applicationError) throw applicationError
-  const byId = new Map((applications || []).map(item => [item.id, item]))
-  return {
-    data: data.map(item => ({
-      id: item.application_id,
-      full_name: byId.get(item.application_id)?.full_name || item.application_id,
-      application_status: byId.get(item.application_id)?.application_status || 'missing',
-      code: item.code,
-      message: item.code === 'invalid_staged_cv' ? 'Staged CV needs repair before cleanup.' : 'Previous deletion needs cleanup. Select to retry.'
-    })),
-    total: count || data.length
-  }
-}
-
-module.exports = { MAX_DELETE_BATCH, DELETE_CONCURRENCY, validateBulkDeletion, bulkDeleteApplications, listDeletionFailures }
+module.exports = { MAX_DELETE_BATCH, DELETE_CONCURRENCY, validateBulkDeletion, bulkDeleteApplications }

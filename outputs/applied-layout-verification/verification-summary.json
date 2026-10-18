@@ -1,0 +1,120 @@
+{
+  "date": "2026-10-18",
+  "branch": "main",
+  "base_commit": "44deb1cbdc9497a551e75a5108ffdef6e1b0eb38",
+  "data": "Synthetic staff and applications; real Applied Candidates Express route/controller/service backed by isolated in-memory storage/database.",
+  "production_data_or_schema_mutated": false,
+  "changes": [
+    "Removed deletion recovery UI, lookup and GET endpoint",
+    "Table card fits application rows",
+    "No visible page/table horizontal scrollbar; columns remain scrollable with trackpad/touch/keyboard",
+    "Compact centered loading/empty states"
+  ],
+  "checks": {
+    "build": "passed",
+    "server": {
+      "passed": 727,
+      "failed": 0
+    },
+    "browser_full": {
+      "startTime": "2026-10-18T07:43:58.078Z",
+      "duration": 76705.286,
+      "expected": 28,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "final_layout_after_corner_refinement": {
+      "startTime": "2026-10-18T07:46:01.945Z",
+      "duration": 7179.406,
+      "expected": 2,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "changed_source_strict_lint": "passed",
+    "full_lint": {
+      "errors": 886,
+      "warnings": 3,
+      "source_errors_excluding_generated": 41,
+      "source_warnings": 3,
+      "all_findings_in_unchanged_files": true
+    }
+  },
+  "layout": {
+    "chromium": [
+      {
+        "width": 1440,
+        "viewport": 1440,
+        "documentWidth": 1440,
+        "blankSpace": 1,
+        "paginationGap": 15,
+        "scrollWidth": 3488,
+        "clientWidth": 1142,
+        "scrollbarWidth": "none",
+        "webkitScrollbar": "none"
+      },
+      {
+        "width": 1024,
+        "viewport": 1024,
+        "documentWidth": 1024,
+        "blankSpace": 1,
+        "paginationGap": 15,
+        "scrollWidth": 3488,
+        "clientWidth": 726,
+        "scrollbarWidth": "none",
+        "webkitScrollbar": "none"
+      },
+      {
+        "width": 390,
+        "viewport": 390,
+        "documentWidth": 390,
+        "blankSpace": 1,
+        "paginationGap": 15,
+        "scrollWidth": 3488,
+        "clientWidth": 116,
+        "scrollbarWidth": "none",
+        "webkitScrollbar": "none"
+      }
+    ],
+    "webkit": [
+      {
+        "width": 1440,
+        "viewport": 1440,
+        "documentWidth": 1440,
+        "blankSpace": 1,
+        "paginationGap": 14.997314453125,
+        "scrollWidth": 3488,
+        "clientWidth": 1142,
+        "scrollbarWidth": "none",
+        "webkitScrollbar": "none"
+      },
+      {
+        "width": 1024,
+        "viewport": 1024,
+        "documentWidth": 1024,
+        "blankSpace": 1.0000152587890625,
+        "paginationGap": 15,
+        "scrollWidth": 3488,
+        "clientWidth": 726,
+        "scrollbarWidth": "none",
+        "webkitScrollbar": "none"
+      },
+      {
+        "width": 390,
+        "viewport": 384,
+        "documentWidth": 384,
+        "blankSpace": 1,
+        "paginationGap": 15,
+        "scrollWidth": 3488,
+        "clientWidth": 110,
+        "scrollbarWidth": "none",
+        "webkitScrollbar": "none"
+      }
+    ]
+  },
+  "limitations": [
+    "Firefox is not counted; previous launch on this macOS host failed before tests.",
+    "Live storage/database deletion is not tested; the existing audit migration remains a rollout prerequisite."
+  ]
+}

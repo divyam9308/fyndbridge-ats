@@ -5,6 +5,15 @@ Implemented locally on `fix/pms-navigation-applied-bulk-delete`, based on
 merge branches, deploy to production, or change live applications, storage, or
 database contents. The database migration is included for a separate rollout.
 
+The October 18 followup on `main` removes the deletion recovery panel, its
+background lookup, and the corresponding GET endpoint. The table card now fits
+its rows instead of reserving 620 px. Horizontal overflow stays inside the table
+with no visible scrollbar; touch/trackpad scrolling and focused left/right arrow
+keys still reach every column. Loading and empty states fit the visible table
+width. With five applications, both Chromium and WebKit measured a 1 px card
+border below the last row and a 15 px gap to pagination, with no page horizontal
+overflow at 1440, 1024, or 390 px. One-row and empty lists were also checked.
+
 ## PMS cause and fix
 
 `useStaffDirectory` mapped the cached directory on every render. The new array
@@ -61,14 +70,13 @@ permanent application/staged-CV deletion, and preservation of candidate master
 records and adopted CVs. Busy state and an immediate ref guard prevent duplicate
 submissions. There is no Undo promise.
 
-The new protected endpoints are:
+The protected bulk endpoint is:
 
 | Endpoint | Purpose |
 | --- | --- |
 | `POST /api/applied-candidates/bulk-delete` | Delete explicit `application_ids` with an `operation_id` |
-| `GET /api/applied-candidates/deletion-failures` | Discover incomplete cleanup, including rejected rows outside the pending list |
 
-Both use the same authentication and fresh `applied_candidates` page permission
+It uses the same authentication and fresh `applied_candidates` page permission
 as existing rejection. This feature is available to permitted ordinary
 recruiters; it does not require Admin status or grant additional access.
 
@@ -83,7 +91,8 @@ A service-only deletion ledger records application/operation UUIDs, actors,
 state, and timestamps before irreversible cleanup. It stores no applicant name,
 email, CV path, or CV contents. Cleanup markers and receipts support retries
 after storage/database errors, process interruption, and lost responses. Failed
-items remain selected and appear in a persistent recovery list after reload.
+items remain selected for retry during the current page session. There is no
+deletion recovery option, list, or background lookup after reload.
 Successful and skipped IDs leave selection. The UI shows exact deleted/skipped/
 failed counts, refreshes list totals and sidebar counts, and clamps pagination.
 
@@ -100,7 +109,7 @@ CVs were used to test deletion.
 | `npm run build` | Passed |
 | `npm --prefix server test` | **727 passed, 0 failed** |
 | New deletion-service and real-route tests | **9 passed** within the server suite |
-| `npm run test:browser -- --project=chromium --project=webkit` | **26 passed, 0 failed, 0 skipped**, 13 scenarios per engine |
+| `npm run test:browser -- --project=chromium --project=webkit` | **28 passed, 0 failed, 0 skipped**, 14 scenarios per engine |
 | ESLint on every changed JS/JSX source and server test, `--max-warnings 0` | Passed, no warnings |
 | `git diff --check` | Passed |
 | Audit migration in isolated PGlite PostgreSQL | Passed RLS, privileges, service writes, denied browser-role reads, and receipt persistence after actor removal |
@@ -112,8 +121,9 @@ mixed selection; selection across pages and scope changes; the 100-ID limit;
 100-row vertical/horizontal scrolling; dock entrance/count/exit and reduced
 motion; narrow-screen dock geometry; hidden keyboard controls; dialog focus and
 Escape/cancel; pending/duplicate clicks; conversion races; partial success;
-storage failure/recovery after reload; lost-response retry; list/sidebar counts;
-last-page correction; and unchanged Admin save/cancel behavior. Rendered Admin
+storage failure and immediate retry; absence of recovery UI/requests after reload;
+lost-response retry; list/sidebar counts; last-page correction; five/one/zero-row
+layout, hidden scrollbars and keyboard scrolling; and unchanged Admin save/cancel behavior. Rendered Admin
 and selection dock panel/motion styles were compared and matched.
 
 Backend tests additionally cover unauthorized/forbidden requests, malformed
@@ -121,7 +131,9 @@ payloads, missing IDs, duplicate UUIDs, batch/concurrency bounds, invalid staged
 paths, adopted candidate guards, audit persistence failure, database cleanup
 failure, interrupted completion receipts, and concurrent/idempotent retries.
 
-Evidence: [verification summary](../outputs/pms-applied-verification/verification-summary.json),
+Followup layout evidence: [verification summary](../outputs/applied-layout-verification/verification-summary.json),
+[five applications in WebKit](../outputs/applied-layout-verification/five-applications-webkit.png).
+Original implementation evidence: [verification summary](../outputs/pms-applied-verification/verification-summary.json),
 [Admin dock comparison](../outputs/pms-applied-verification/admin-dock-comparison.json),
 [migration checks](../outputs/pms-applied-verification/migration-verification.json).
 
@@ -160,6 +172,12 @@ these two changes.
 
 ## Screenshots
 
+- [Five applications, Chromium](../outputs/applied-layout-verification/five-applications-chromium.png)
+- [Five applications, WebKit](../outputs/applied-layout-verification/five-applications-webkit.png)
+- [Empty list, WebKit](../outputs/applied-layout-verification/empty-applications-webkit.png)
+
+The following snapshots show the original implementation before this followup:
+
 - [Floating selection bar](../outputs/pms-applied-verification/selection-bar.png)
 - [Confirmation dialog](../outputs/pms-applied-verification/confirmation-dialog.png)
 - [Partial result and selected retry item](../outputs/pms-applied-verification/partial-result-and-retry.png)
@@ -167,7 +185,7 @@ these two changes.
 
 ## Changed files
 
-The complete source, test, migration, documentation, and evidence list is in
+The original source, test, migration, documentation, and evidence list is in
 [changed-files.txt](../outputs/pms-applied-verification/changed-files.txt).
 
 | Files | Change |
@@ -175,23 +193,25 @@ The complete source, test, migration, documentation, and evidence list is in
 | `src/hooks/useStaffDirectory.js` | Stable directory arrays with live status updates |
 | `src/pages/PerformanceReviewPage.jsx` | Derived selector options and account-aware selection |
 | `src/components/Sidebar.jsx` | Removed the PMS pointer workaround |
-| `src/pages/AppliedCandidatesPage.jsx`, `.css` | Selection, sticky columns, dock/dialog integration, recovery/results, pagination |
+| `src/pages/AppliedCandidatesPage.jsx`, `.css` | Selection, sticky columns, dock/dialog, results, compact layout, hidden scrollbar and keyboard scrolling |
 | `src/components/AppliedCandidateBulkDelete.jsx` | Selection dock content and accessible native confirmation |
 | `src/components/FloatingActionDock.jsx`, `.css` | Shared portal panel, motion, inert visibility |
 | `src/pages/AdminPage.jsx`, `.css` | Reused shared dock styles with existing save/cancel handlers |
-| `src/services/appliedCandidatesApi.js` | Bulk-delete and recovery API methods |
-| `server/src/routes/appliedCandidates.js` | Authenticated bulk/recovery routes |
-| `server/src/controllers/appliedCandidatesController.js` | Bulk/recovery request handlers |
+| `src/services/appliedCandidatesApi.js` | Bulk-delete API; removed recovery method |
+| `server/src/routes/appliedCandidates.js` | Authenticated bulk route; removed recovery route |
+| `server/src/controllers/appliedCandidatesController.js` | Bulk request handler; removed recovery handler |
 | `server/src/services/appliedCandidates.js` | Reused cleanup with pre-cleanup receipt hook and adopted-record guards |
-| `server/src/services/appliedCandidateDeletion.js` | Validation, bounded execution, receipts, outcomes, recovery |
+| `server/src/services/appliedCandidateDeletion.js` | Validation, bounded execution, receipts and outcomes; removed recovery listing |
 | `supabase/migrations/20261018064757_applied_candidate_deletion_audit.sql` | RLS-protected service-only deletion ledger |
 | `server/src/services/appliedCandidateDeletion.test.js` | Service/race/retry/security/real-route coverage |
 | `server/src/services/uiLoadingNavigationRegression.test.js` | Removed obsolete workaround-only assertion |
 | `server/test-support/appliedCandidatesMemory.cjs` | Isolated database/storage test adapter |
 | `server/browser-tests/fixtures.cjs` | Mock auth/API boundary with real deletion backend |
 | `server/browser-tests/pms-applied.spec.cjs` | Thirteen browser scenarios per engine |
+| `server/browser-tests/applied-layout.spec.cjs` | Short/empty list geometry, scrollbar visibility, overflow containment and keyboard scrolling |
 | `server/browser-tests/staff-harness.html` | Real hook reference/status/refresh verification |
 | `server/browser-tests/vite.config.mjs` | Test server without an API proxy |
 | `server/browser-tests/baseline-diagnostic.cjs` | Original-commit reproduction helper |
 | `playwright.config.cjs`, `package.json`, `package-lock.json` | Locked browser tooling, test command, browser matrix |
 | `outputs/pms-applied-verification/*` | Synthetic screenshots and recorded verification evidence |
+| `outputs/applied-layout-verification/*` | Followup layout screenshots, measurements and check results |

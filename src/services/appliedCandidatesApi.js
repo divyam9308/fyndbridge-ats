@@ -74,7 +74,3 @@ export function bulkDeleteAppliedCandidates(ids, operationId) {
     body: JSON.stringify({ application_ids: ids, operation_id: operationId }),
   })
 }
-
-export function fetchAppliedCandidateDeletionFailures({ signal } = {}) {
-  return protectedJson('/api/applied-candidates/deletion-failures', { signal, cache: 'no-store' })
-}
