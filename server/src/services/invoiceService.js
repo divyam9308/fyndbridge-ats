@@ -22,7 +22,7 @@ const COMPANY = {
       name: 'ICICI Bank Limited',
       account: '102305501028',
       ifsc: 'ICIC0001023',
-      branch: '233 Okhla Industrial Estate, New Delhi - 110020'
+      branch: 'D-1, Alaknanda Shopping Complex, 0,\nNew Delhi - 110019'
     },
     reverseCharge: 'Our Payments on reverse charge basis: No',
     prefix: 'FB',
@@ -176,8 +176,7 @@ const INVOICE_LAYOUTS = Object.freeze({
     clientValueTextY: [165.80, 175.72, 185.53, 198.25, 210.97, 223.72],
     issuerLabelY: 86.71, issuerNameY: 100.83,
     issuerTextY: [114.68, 127.40, 140.12, 152.84, 165.57, null, 185.29, 198.01, 210.74, 223.49],
-    taxTextY: [468.13], taxWordsBold: false,
-    branchLines: '233 Okhla Industrial Estate, New Delhi\n- 110020'
+    taxTextY: [468.13], taxWordsBold: false
   },
   FCS_IGST_ROUND: {
     id: 'FCS_IGST_ROUND', reference: 'FCS with roundoff.pdf', tax: 'IGST', rounded: true,
@@ -199,8 +198,7 @@ const INVOICE_LAYOUTS = Object.freeze({
     issuerLabelY: 84.69, issuerNameY: 99.74,
     issuerTextY: [111.50, 123.76, 136.01, 148.27, 160.53, null, 185.04, 197.29, 210.18, 225.38],
     issuerLineSizes: [null, null, null, null, null, null, null, null, 10.04, 10.04],
-    taxTextY: [452.96], descriptionBreak: true,
-    branchLines: '233 Okhla Industrial Estate, New\nDelhi - 110020'
+    taxTextY: [452.96], descriptionBreak: true
   },
   FCS_CGST_SGST: {
     id: 'FCS_CGST_SGST', reference: 'FCS_CGST_SGST.pdf', tax: 'CGST_SGST', rounded: true,
@@ -221,8 +219,7 @@ const INVOICE_LAYOUTS = Object.freeze({
     clientValueTextY: [165.80, 175.72, 185.53, 198.25, 210.97, 223.72],
     issuerLabelY: 86.71, issuerNameY: 100.83,
     issuerTextY: [114.68, 127.40, 140.12, 152.85, 165.57, null, 185.30, 198.02, 210.74, 223.49],
-    taxTextY: [395.83, 411.36], reverseBold: false, roundingDivider: true,
-    branchLines: '233 Okhla Industrial Estate, New Delhi -\n110020'
+    taxTextY: [395.83, 411.36], reverseBold: false, roundingDivider: true
   }
 })
 

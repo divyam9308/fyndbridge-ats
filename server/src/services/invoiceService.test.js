@@ -190,6 +190,50 @@ test('issuer bank accounts remain exact strings', () => {
   assert.doesNotMatch(COMPANY.FCS.bank.account, /e\+/i)
 })
 
+for (const billing_entity of ['FCS', 'FCAPL']) {
+  test(`${billing_entity} bank branch is scoped to the invoice issuer across all document layouts`, async () => {
+    const expected = billing_entity === 'FCS' ? {
+      branch: /Branch\s*D-1, Alaknanda Shopping Complex, 0, New Delhi - 110019/,
+      bank: 'ICICI Bank Limited', account: '102305501028', ifsc: 'ICIC0001023',
+      beneficiary: 'For FyndBridge Consulting Services',
+      address: ['Ground Floor, 20, New Delhi,', 'Okhla Industrial Estate Phase 3, New Delhi,', 'South East Delhi,', 'Delhi, 110020']
+    } : {
+      branch: /Branch\s*233 Okhla Industrial Estate,? New Delhi - 110020/i,
+      bank: 'State Bank of India', account: '42926962136', ifsc: 'SBIN0000727',
+      beneficiary: 'For FyndBridge Consultants & Advisors Private Limited',
+      address: ['Second Floor, House No- A-34,', 'Pocket A-8, Kalkaji Extension, Behind', 'Aggarwal Sweet House, New Delhi,', 'South East Delhi, Delhi - 110019']
+    }
+    for (const state_code of ['07', '09']) {
+      for (const others_amount of ['560000', '558720']) {
+        for (const invoice_type of ['tax_invoice', 'proforma_invoice']) {
+          const entity = {
+            legal_entity_name: 'BANK BRANCH TEST CLIENT',
+            address: '123 EXAMPLE STREET, INDIA',
+            // A customer's default billing entity must not override the invoice issuer.
+            billing_entity: billing_entity === 'FCS' ? 'FCAPL' : 'FCS',
+            state_code, sac: '998512'
+          }
+          const input = { ...baseInput, ...entity, billing_entity, others_amount, invoice_type }
+          const invoice = {
+            ...calculateInvoice(input), billing_entity, invoice_type,
+            invoice_number: `${invoice_type}/${billing_entity}/26-27/001`,
+            invoice_date: '2026-10-18', sac: entity.sac
+          }
+          const rendered = await renderInvoicePdf({ entity, invoice, overrides: input })
+          const text = (await pdfParse(rendered.buffer)).text.replace(/\s+/g, ' ')
+          assert.equal(rendered.pageCount, 1)
+          assert.match(text, expected.branch)
+          for (const value of [expected.bank, expected.account, expected.ifsc, expected.beneficiary, ...expected.address, entity.legal_entity_name, entity.address]) {
+            assert.ok(text.includes(value), `Missing unchanged invoice detail: ${value}`)
+          }
+          if (billing_entity === 'FCAPL') assert.doesNotMatch(text, /Alaknanda/)
+          else assert.doesNotMatch(text, /233 Okhla Industrial Estate/)
+        }
+      }
+    }
+  })
+}
+
 test('six explicit reference cases select six distinct layout profiles', () => {
   assert.equal(Object.keys(INVOICE_LAYOUTS).length, 6)
   const cases = [
