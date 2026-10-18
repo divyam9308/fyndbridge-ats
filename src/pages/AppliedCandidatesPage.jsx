@@ -10,17 +10,21 @@ import {
   Loader2,
   Plus,
   RotateCcw,
-  Search,
   UserRoundCheck,
   X,
   XCircle,
 } from 'lucide-react'
 import { ConsultantPillGroup } from '../components/ConsultantPill'
 import PaginationBar from '../components/PaginationBar'
+import FloatingDropdown from '../components/FloatingDropdown'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import { AppliedCandidateDeleteDialog, AppliedCandidateSelectionDock } from '../components/AppliedCandidateBulkDelete'
 import { isColumnDisabled, isColumnHidden, useAdminAccess } from '../hooks/useAdminAccess'
 import { useStaffDirectory } from '../hooks/useStaffDirectory'
+import { useAuth } from '../context/useAuth'
+import { apiFetch } from '../services/apiClient'
+import { lockBodyScroll } from '../utils/lockBodyScroll'
+import { APPLIED_CANDIDATE_TABLE_COLUMNS, DEFAULT_APPLIED_COLUMN_KEYS, APPLIED_COLUMNS_PREFERENCE_KEY, mergeAppliedColumnPreference } from '../utils/appliedCandidateTableColumns'
 import {
   AppliedCandidatesApiError,
   bulkDeleteAppliedCandidates,
@@ -35,14 +39,17 @@ import { normalizeMandateStatus } from '../utils/mandateStatuses'
 import '../styles/Shared.css'
 import './AppliedCandidatesPage.css'
 
-const DEFAULT_FILTERS = {
-  search: '',
-  role: '',
-  client: '',
-  consultant: '',
-  date_from: '',
-  date_to: '',
-  location: '',
+const readStoredAppliedColumns = () => {
+  try {
+    return mergeAppliedColumnPreference(JSON.parse(window.localStorage.getItem(APPLIED_COLUMNS_PREFERENCE_KEY) || 'null'))
+  } catch {
+    return null
+  }
+}
+const storeAppliedColumns = value => {
+  try { window.localStorage.setItem(APPLIED_COLUMNS_PREFERENCE_KEY, JSON.stringify(value)) } catch {
+    // Keep the selected columns usable when local storage is unavailable.
+  }
 }
 
 const EMPTY_CONVERSION = {
@@ -105,13 +112,6 @@ const BLANK_FILL_PERMISSION_FIELDS = Object.freeze([
   ['cv', 'cv'],
 ])
 
-const APPLIED_CANDIDATE_COLUMNS = [
-  'Select', 'Candidate Name', 'Applied Public Role', 'Internal Mandate/Role', 'Client Name', 'Client ID', 'Email', 'Mobile',
-  'Current Designation', 'Current Organization', 'Experience', 'Current Location', 'Skills', 'Current CTC',
-  'Expected CTC', 'Notice Period', 'Open to Relocate', 'Applied On', 'Application Status', 'CV',
-  'Assigned Consultant', 'Actions',
-]
-const APPLIED_CANDIDATE_TABLE_WIDTH = 3488
 const MAX_SELECTED_APPLICATIONS = 100
 
 const clean = value => String(value ?? '').trim()
@@ -230,11 +230,16 @@ function applicationDetails(row) {
 }
 
 export default function AppliedCandidatesPage() {
+  const { session } = useAuth()
   const { selectableStaff } = useStaffDirectory()
   const { isAdmin, permissions, loading: accessLoading } = useAdminAccess()
   const [rows, setRows] = useState([])
-  const [filters, setFilters] = useState(DEFAULT_FILTERS)
-  const [searchInput, setSearchInput] = useState('')
+  const initialColumns = useMemo(() => readStoredAppliedColumns() || DEFAULT_APPLIED_COLUMN_KEYS, [])
+  const [visibleColumns, setVisibleColumns] = useState(initialColumns)
+  const [pendingColumns, setPendingColumns] = useState(initialColumns)
+  const [savedColumns, setSavedColumns] = useState(initialColumns)
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const [columnsAnchor, setColumnsAnchor] = useState(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
@@ -294,18 +299,50 @@ export default function AppliedCandidatesPage() {
     setDrawerLoading(false)
   }, [])
 
+  const userId = session?.user?.id
   useEffect(() => {
-    if (filters.search === searchInput) return undefined
-    const timer = window.setTimeout(() => {
-      // Also clear at the debounced scope boundary: a user may have selected
-      // another old row in the interval after typing but before this fetch.
-      setSelectedApplications(new Map())
-      bulkOperationRef.current = null
-      setFilters(current => current.search === searchInput ? current : { ...current, search: searchInput })
-      setPage(1)
-    }, 250)
-    return () => window.clearTimeout(timer)
-  }, [filters.search, searchInput])
+    if (!userId) return undefined
+    const controller = new AbortController()
+    apiFetch(`/api/user-preferences/${APPLIED_COLUMNS_PREFERENCE_KEY}?user_id=${encodeURIComponent(userId)}`, { signal: controller.signal })
+      .then(async response => response.ok ? response.json() : null)
+      .then(payload => {
+        if (controller.signal.aborted) return
+        const value = mergeAppliedColumnPreference(payload?.data?.value)
+        if (!value) return
+        setVisibleColumns(value)
+        setPendingColumns(value)
+        setSavedColumns(value)
+        storeAppliedColumns(value)
+      }).catch(() => { /* Keep synchronously loaded local/default columns. */ })
+    return () => controller.abort()
+  }, [userId])
+
+  const togglePendingColumn = key => setPendingColumns(current => current.includes(key)
+    ? current.filter(item => item !== key) : [...current, key])
+  const proceedColumns = () => {
+    const value = mergeAppliedColumnPreference(pendingColumns) || DEFAULT_APPLIED_COLUMN_KEYS
+    setVisibleColumns(value)
+    storeAppliedColumns(value)
+    setColumnsOpen(false)
+  }
+  const saveColumnPreference = async () => {
+    try {
+      const value = mergeAppliedColumnPreference(pendingColumns) || DEFAULT_APPLIED_COLUMN_KEYS
+      const response = await apiFetch(`/api/user-preferences/${APPLIED_COLUMNS_PREFERENCE_KEY}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, value }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload.detail || payload.error || 'Unable to save column preference.')
+      }
+      setSavedColumns(value)
+      storeAppliedColumns(value)
+    } catch (saveError) {
+      showNotice(saveError.message, 'error', 'Column preference could not be saved')
+    }
+  }
 
   useEffect(() => {
     requestRef.current?.abort()
@@ -313,7 +350,7 @@ export default function AppliedCandidatesPage() {
     requestRef.current = controller
     setLoading(true)
     setError('')
-    fetchAppliedCandidates({ ...filters, page, limit: pageSize, sortField: 'created_at', sortDirection: 'desc' }, { signal: controller.signal })
+    fetchAppliedCandidates({ page, limit: pageSize, sortField: 'created_at', sortDirection: 'desc' }, { signal: controller.signal })
       .then(result => {
         if (controller.signal.aborted) return
         setRows(result.rows)
@@ -336,7 +373,7 @@ export default function AppliedCandidatesPage() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [filters, page, pageSize, refreshVersion])
+  }, [page, pageSize, refreshVersion])
 
   useEffect(() => () => drawerRequestRef.current?.controller.abort(), [])
 
@@ -355,8 +392,7 @@ export default function AppliedCandidatesPage() {
 
   useEffect(() => {
     if (!drawer && !rejectTarget) return undefined
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlockScroll = lockBodyScroll()
     const onKeyDown = event => {
       if (event.key !== 'Escape' || conversionSaving || rejectSaving) return
       if (rejectTarget) setRejectTarget(null)
@@ -368,7 +404,7 @@ export default function AppliedCandidatesPage() {
     })
     window.addEventListener('keydown', onKeyDown)
     return () => {
-      document.body.style.overflow = previousOverflow
+      unlockScroll()
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [closeDrawer, conversionSaving, drawer, rejectSaving, rejectTarget])
@@ -382,19 +418,6 @@ export default function AppliedCandidatesPage() {
     modalReturnFocusRef.current = null
     if (returnTarget instanceof HTMLElement && document.contains(returnTarget)) returnTarget.focus({ preventScroll: true })
   }, [drawer, rejectTarget])
-
-  const filterOptions = useMemo(() => ({
-    roles: [...new Set(rows.map(roleName).filter(value => value !== '-'))].sort(),
-    clients: [...new Set(rows.map(clientName).filter(value => value !== '-'))].sort(),
-    consultants: [...new Set(rows.flatMap(consultants))].sort(),
-    locations: [...new Set(rows.map(row => clean(row.location)).filter(Boolean))].sort(),
-  }), [rows])
-
-  const setFilter = (name, value) => {
-    clearSelection()
-    setFilters(current => ({ ...current, [name]: value }))
-    setPage(1)
-  }
 
   const isConversionFieldHidden = name => isColumnHidden(
     permissions,
@@ -597,7 +620,43 @@ export default function AppliedCandidatesPage() {
     return <div className={`table-chip-cell${expanded ? ' is-expanded' : ''}`}><div className="table-chip-list">{visible.map(skill => <span className="table-skill-chip" key={skill}>{skill}</span>)}</div>{skills.length > 2 && <button type="button" className="table-view-more" aria-expanded={expanded} onClick={() => setExpandedSkills(current => ({ ...current, [row.id]: !current[row.id] }))}><ChevronDown size={12} className={expanded ? 'is-open' : ''} />{expanded ? 'View less' : 'View more'}</button>}</div>
   }
 
-  const hasFilters = Object.values(filters).some(Boolean) || Boolean(searchInput)
+  const renderAppliedCell = (key, row) => {
+    const pending = row.application_status === 'pending'
+    const canConvert = pending || row.application_status === 'converting'
+    switch (key) {
+      case 'name': return (<div className="name-cell"><div className="name-avatar" style={avatarColorsFor(row.full_name)}>{initials(row.full_name)}</div><div className="candidate-name-content"><span className="name-text candidate-name-text">{display(row.full_name)}</span><span className="sub-text">Public applicant</span></div></div>)
+      case 'publicRole': return (<span className="applied-public-role">{roleName(row)}</span>)
+      case 'mandateRole': return (<span className="applied-mandate-role">{internalRole(row)}</span>)
+      case 'client': return (<span className="applied-client-name">{clientName(row)}</span>)
+      case 'clientId': return (clean(row.client_display_id || row.client_id) ? <span className="candidate-id-chip candidate-client-id-chip">{display(row.client_display_id || row.client_id)}</span> : <span className="candidate-muted-dash">-</span>)
+      case 'email': return (<a className="applied-email-link" href={`mailto:${clean(row.email)}`}>{display(row.email)}</a>)
+      case 'mobile': return (<span className="applied-mobile-value">{display(row.mobile_number)}</span>)
+      case 'designation': return (<span className="applied-designation">{display(row.current_designation)}</span>)
+      case 'organisation': return (<span className="applied-organisation">{display(row.current_organisation)}</span>)
+      case 'experience': return (clean(row.experience_years) ? `${row.experience_years} yrs` : <span className="candidate-empty-value">-</span>)
+      case 'location': return (<span className="applied-location-value">{display(row.location)}</span>)
+      case 'skills': return (renderAppliedSkills(row))
+      case 'currentCtc': return (row.current_salary === null || row.current_salary === undefined ? <span className="candidate-empty-value">-</span> : <span className="candidate-money-value">{formatCandidateCtc(row.current_salary)}</span>)
+      case 'expectedCtc': return (row.expected_salary === null || row.expected_salary === undefined ? <span className="candidate-empty-value">-</span> : <span className="candidate-money-value">{formatCandidateCtc(row.expected_salary)}</span>)
+      case 'noticePeriod': return ((() => { const meta = noticeMeta(row.notice_period); return meta ? <span className={`candidate-notice-pill candidate-notice-pill-${meta.tone}`}>{meta.label}</span> : <span className="candidate-empty-value">-</span> })())
+      case 'relocate': return (clean(relocateDisplay(row.open_to_relocate)) !== '-' ? <span className={`candidate-relocate-pill${relocateDisplay(row.open_to_relocate) === 'Yes' ? ' is-yes' : ' is-no'}`}>{relocateDisplay(row.open_to_relocate)}</span> : <span className="candidate-empty-value">-</span>)
+      case 'appliedOn': return (<span className="applied-date-value">{formatAppliedDate(row.created_at)}</span>)
+      case 'status': return (<span className={statusClass(row.application_status)}>{display(row.application_status).replace(/_/g, ' ')}</span>)
+      case 'cv': return (<button className="row-action-btn" type="button" title="View CV" onClick={() => openAppliedCandidateCv(row.id)}><FileText size={13} /></button>)
+      case 'consultant': return (<ConsultantPillGroup consultants={consultants(row)} />)
+      case 'actions': return (<div className="row-actions applied-row-actions">
+                      <button className="row-action-btn" type="button" title="View Details" onClick={() => loadDrawer(row, 'details')}><Eye size={13} /></button>
+                      {canConvert && <button className="row-action-btn applied-convert-action" type="button" title={pending ? 'Add to Candidates' : 'Retry Conversion'} onClick={() => loadDrawer(row, 'convert')}>{pending ? <Plus size={13} /> : <RotateCcw size={13} />}<span>{pending ? 'Add to Candidates' : 'Retry Conversion'}</span></button>}
+                      {pending && <button className="row-action-btn applied-reject-action" type="button" title="Reject" onClick={() => setRejectTarget(row)}><XCircle size={13} /></button>}
+                    </div>)
+      default: return null
+    }
+  }
+
+  const activeColumns = APPLIED_CANDIDATE_TABLE_COLUMNS.filter(column => visibleColumns.includes(column.key))
+  const tableMinWidth = 48 + activeColumns.reduce((sum, column) => sum + column.width, 0)
+  const visibleColumnCount = activeColumns.length + 1
+  const renderColumnGroup = () => <colgroup><col style={{ width: 48 }} />{activeColumns.map(column => <col key={column.key} style={{ width: column.width }} />)}</colgroup>
   const eligibleRows = rows.filter(row => row.application_status === 'pending')
   const selectedOnPage = eligibleRows.filter(row => selectedApplications.has(row.id)).length
   const selectApplications = (applications, checked) => {
@@ -644,15 +703,23 @@ export default function AppliedCandidatesPage() {
         <div><strong>{notice.title}</strong><span>{notice.message}</span></div>
         <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification"><X size={14} /></button>
       </div>}
-      <div className="filter-bar candidates-filter-bar applied-filter-bar">
-        <label className="applied-search"><Search size={15} /><input className="filter-input" value={searchInput} onChange={event => { clearSelection(); setSearchInput(event.target.value) }} placeholder="Search candidate, email or mobile" aria-label="Search applications" /></label>
-        <input className="filter-input applied-filter-input" list="applied-role-options" value={filters.role} onChange={event => setFilter('role', event.target.value)} aria-label="Applied Role" placeholder="Applied Role" /><datalist id="applied-role-options">{filterOptions.roles.map(value => <option key={value} value={value} />)}</datalist>
-        <input className="filter-input applied-filter-input" list="applied-client-options" value={filters.client} onChange={event => setFilter('client', event.target.value)} aria-label="Client" placeholder="Client" /><datalist id="applied-client-options">{filterOptions.clients.map(value => <option key={value} value={value} />)}</datalist>
-        <input className="filter-input applied-filter-input" list="applied-consultant-options" value={filters.consultant} onChange={event => setFilter('consultant', event.target.value)} aria-label="Consultant" placeholder="Consultant" /><datalist id="applied-consultant-options">{filterOptions.consultants.map(value => <option key={value} value={value} />)}</datalist>
-        <input className="filter-input applied-filter-input" list="applied-location-options" value={filters.location} onChange={event => setFilter('location', event.target.value)} aria-label="Location" placeholder="Location" /><datalist id="applied-location-options">{filterOptions.locations.map(value => <option key={value} value={value} />)}</datalist>
-        <label className="applied-date-filter"><span>From</span><input className="filter-input" type="date" value={filters.date_from} onChange={event => setFilter('date_from', event.target.value)} /></label>
-        <label className="applied-date-filter"><span>To</span><input className="filter-input" type="date" value={filters.date_to} onChange={event => setFilter('date_to', event.target.value)} /></label>
-        <button className="filter-clear" type="button" onClick={() => { clearSelection(); setFilters(DEFAULT_FILTERS); setSearchInput(''); setPage(1) }} disabled={!hasFilters}>Clear Filters</button>
+      <div className="candidate-columns-toolbar candidates-toolbar applied-columns-toolbar">
+        <div className="candidate-columns-control">
+          <button className="filter-select candidate-columns-btn" type="button" aria-expanded={columnsOpen} onClick={event => { setColumnsAnchor({ rect: event.currentTarget.getBoundingClientRect(), element: event.currentTarget }); setColumnsOpen(open => !open) }}>
+            <span>Columns</span><ChevronDown size={13} strokeWidth={2} />
+          </button>
+          <button className="btn-primary candidate-columns-proceed" type="button" onClick={proceedColumns}>Proceed</button>
+          {columnsOpen && <FloatingDropdown anchorRect={columnsAnchor?.rect} ignoreElement={columnsAnchor?.element} className="candidate-columns-dropdown" width={176} onClose={() => setColumnsOpen(false)}>
+            <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(DEFAULT_APPLIED_COLUMN_KEYS)}>Select All</button>
+            <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns([])}>Clear All</button>
+            <button className="candidate-columns-action" type="button" onClick={saveColumnPreference}>Save Preference</button>
+            <button className="candidate-columns-action" type="button" onClick={() => setPendingColumns(savedColumns?.length ? savedColumns : DEFAULT_APPLIED_COLUMN_KEYS)}>Reset to Saved Preference</button>
+            <div className="candidate-columns-divider" />
+            {APPLIED_CANDIDATE_TABLE_COLUMNS.map(column => <label className="candidate-column-option" key={column.key}>
+              <input type="checkbox" checked={pendingColumns.includes(column.key)} onChange={() => togglePendingColumn(column.key)} />{column.label}
+            </label>)}
+          </FloatingDropdown>}
+        </div>
       </div>
 
       {bulkResult && <section className="applied-bulk-result" role="status" aria-label="Deletion result"><strong>{bulkResult.summary.deleted} deleted, {bulkResult.summary.skipped} skipped, {bulkResult.summary.failed} failed.</strong><p>{bulkResult.summary.failed ? 'Failed applications remain selected and can be retried below.' : 'The application list and counts have been refreshed.'}</p>{bulkResult.results.filter(item => item.status === 'skipped').map(item => <p key={item.id}>{item.full_name}: {item.message}</p>)}</section>}
@@ -661,9 +728,10 @@ export default function AppliedCandidatesPage() {
       <div className="table-card table-card-popovers candidates-table-card">
         {loading ? (
           <div className="table-wrapper candidates-table-scroll">
-            <table className="data-table fb-theme-table candidates-master-table applied-candidates-table table-loading-table" aria-label="Loading applied candidates" style={{ minWidth: APPLIED_CANDIDATE_TABLE_WIDTH }}>
-              <thead><tr>{renderSelectionHeader(true)}{APPLIED_CANDIDATE_COLUMNS.slice(1).map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead>
-              <tbody><tr className="table-loading-row"><td className="table-loading-cell" colSpan={APPLIED_CANDIDATE_COLUMNS.length}><FyndbridgeLoader size={88} label="Loading applied candidates..." className="table-inline-loader" /></td></tr></tbody>
+            <table className="data-table fb-theme-table candidates-master-table applied-candidates-table table-loading-table" aria-label="Loading applied candidates" style={{ minWidth: tableMinWidth }}>
+              {renderColumnGroup()}
+              <thead><tr>{renderSelectionHeader(true)}{activeColumns.map(column => <th scope="col" key={column.key} style={{ width: column.width }}>{column.label}</th>)}</tr></thead>
+              <tbody><tr className="table-loading-row"><td className="table-loading-cell" colSpan={visibleColumnCount}><FyndbridgeLoader size={88} label="Loading applied candidates..." className="table-inline-loader" /></td></tr></tbody>
             </table>
           </div>
         ) : (
@@ -674,39 +742,15 @@ export default function AppliedCandidatesPage() {
               event.currentTarget.scrollLeft += event.key === 'ArrowRight' ? 80 : -80
             }
           }}>
-            <table className="data-table fb-theme-table candidates-master-table applied-candidates-table" aria-label="Applied Candidates" style={{ minWidth: APPLIED_CANDIDATE_TABLE_WIDTH }}>
-              <thead><tr>{renderSelectionHeader(false)}{APPLIED_CANDIDATE_COLUMNS.slice(1).map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead>
+            <table className="data-table fb-theme-table candidates-master-table applied-candidates-table" aria-label="Applied Candidates" style={{ minWidth: tableMinWidth }}>
+              {renderColumnGroup()}
+              <thead><tr>{renderSelectionHeader(false)}{activeColumns.map(column => <th scope="col" key={column.key} style={{ width: column.width }}>{column.label}</th>)}</tr></thead>
               <tbody>
-                {!rows.length ? <tr><td colSpan={APPLIED_CANDIDATE_COLUMNS.length} className="table-empty-cell"><div className="empty-state"><div className="empty-state-icon"><UserRoundCheck size={28} /></div><div className="empty-state-title">No applied candidates found</div><div className="empty-state-desc">Try changing the filters or wait for a new public application.</div></div></td></tr> : rows.map(row => {
+                {!rows.length ? <tr><td colSpan={visibleColumnCount} className="table-empty-cell"><div className="empty-state"><div className="empty-state-icon"><UserRoundCheck size={28} /></div><div className="empty-state-title">No applied candidates found</div><div className="empty-state-desc">New public applications will appear here.</div></div></td></tr> : rows.map(row => {
                   const pending = row.application_status === 'pending'
-                  const canConvert = pending || row.application_status === 'converting'
                   return <tr key={row.id} className={drawer?.row?.id === row.id || selectedApplications.has(row.id) ? 'is-selected' : ''}>
                     <td className="applied-selection-cell" title={!pending ? 'Unavailable for deletion while conversion is in progress or complete.' : undefined}><input type="checkbox" aria-label={`Select application from ${display(row.full_name)}`} checked={selectedApplications.has(row.id)} disabled={!pending || bulkDeleting} aria-describedby={!pending ? `applied-selection-disabled-${row.id}` : undefined} onChange={event => selectApplications([row], event.target.checked)} />{!pending && <span className="applied-visually-hidden" id={`applied-selection-disabled-${row.id}`}>Unavailable for deletion while conversion is in progress or complete.</span>}</td>
-                    <td><div className="name-cell"><div className="name-avatar" style={avatarColorsFor(row.full_name)}>{initials(row.full_name)}</div><div className="candidate-name-content"><span className="name-text candidate-name-text">{display(row.full_name)}</span><span className="sub-text">Public applicant</span></div></div></td>
-                    <td><span className="applied-public-role">{roleName(row)}</span></td>
-                    <td><span className="applied-mandate-role">{internalRole(row)}</span></td>
-                    <td><span className="applied-client-name">{clientName(row)}</span></td>
-                    <td className="applied-cell-center">{clean(row.client_display_id || row.client_id) ? <span className="candidate-id-chip candidate-client-id-chip">{display(row.client_display_id || row.client_id)}</span> : <span className="candidate-muted-dash">-</span>}</td>
-                    <td><a className="applied-email-link" href={`mailto:${clean(row.email)}`}>{display(row.email)}</a></td>
-                    <td><span className="applied-mobile-value">{display(row.mobile_number)}</span></td>
-                    <td><span className="applied-designation">{display(row.current_designation)}</span></td>
-                    <td><span className="applied-organisation">{display(row.current_organisation)}</span></td>
-                    <td className="applied-cell-center">{clean(row.experience_years) ? `${row.experience_years} yrs` : <span className="candidate-empty-value">-</span>}</td>
-                    <td><span className="applied-location-value">{display(row.location)}</span></td>
-                    <td>{renderAppliedSkills(row)}</td>
-                    <td className="applied-cell-center">{row.current_salary === null || row.current_salary === undefined ? <span className="candidate-empty-value">-</span> : <span className="candidate-money-value">{formatCandidateCtc(row.current_salary)}</span>}</td>
-                    <td className="applied-cell-center">{row.expected_salary === null || row.expected_salary === undefined ? <span className="candidate-empty-value">-</span> : <span className="candidate-money-value">{formatCandidateCtc(row.expected_salary)}</span>}</td>
-                    <td className="applied-cell-center">{(() => { const meta = noticeMeta(row.notice_period); return meta ? <span className={`candidate-notice-pill candidate-notice-pill-${meta.tone}`}>{meta.label}</span> : <span className="candidate-empty-value">-</span> })()}</td>
-                    <td className="applied-cell-center">{clean(relocateDisplay(row.open_to_relocate)) !== '-' ? <span className={`candidate-relocate-pill${relocateDisplay(row.open_to_relocate) === 'Yes' ? ' is-yes' : ' is-no'}`}>{relocateDisplay(row.open_to_relocate)}</span> : <span className="candidate-empty-value">-</span>}</td>
-                    <td className="applied-cell-center"><span className="applied-date-value">{formatAppliedDate(row.created_at)}</span></td>
-                    <td className="applied-cell-center"><span className={statusClass(row.application_status)}>{display(row.application_status).replace(/_/g, ' ')}</span></td>
-                    <td className="applied-cell-center"><button className="row-action-btn" type="button" title="View CV" onClick={() => openAppliedCandidateCv(row.id)}><FileText size={13} /></button></td>
-                    <td><ConsultantPillGroup consultants={consultants(row)} /></td>
-                    <td className="applied-cell-center"><div className="row-actions applied-row-actions">
-                      <button className="row-action-btn" type="button" title="View Details" onClick={() => loadDrawer(row, 'details')}><Eye size={13} /></button>
-                      {canConvert && <button className="row-action-btn applied-convert-action" type="button" title={pending ? 'Add to Candidates' : 'Retry Conversion'} onClick={() => loadDrawer(row, 'convert')}>{pending ? <Plus size={13} /> : <RotateCcw size={13} />}<span>{pending ? 'Add to Candidates' : 'Retry Conversion'}</span></button>}
-                      {pending && <button className="row-action-btn applied-reject-action" type="button" title="Reject" onClick={() => setRejectTarget(row)}><XCircle size={13} /></button>}
-                    </div></td>
+                    {activeColumns.map(column => <td key={column.key} className={column.center ? 'applied-cell-center' : undefined}>{renderAppliedCell(column.key, row)}</td>)}
                   </tr>
                 })}
               </tbody>

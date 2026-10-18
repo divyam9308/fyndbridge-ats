@@ -21,7 +21,7 @@ function application(index, overrides = {}) {
 
 function memoryDatabase(applications = []) {
   const tables = {
-    public_applications: applications.map(row => ({ ...row })), public_application_deletions: [],
+    public_applications: applications.map(row => ({ ...row })), public_application_deletions: [], user_preferences: [],
     page_view_permissions: [{ page_key: 'applied_candidates', view_permission: 'everyone' }], admin_users: []
   }
   const storageObjects = new Set(applications.map(row => row.cv_storage_path))
@@ -44,9 +44,12 @@ function memoryDatabase(applications = []) {
         operations.push({ table, kind: state.kind })
         let rows = tables[table].filter(matches)
         if (state.kind === 'upsert') {
-          const key = table === 'public_application_deletions' ? 'application_id' : 'id'
+          const keys = table === 'public_application_deletions' ? ['application_id']
+            : table === 'user_preferences' ? ['user_id', 'preference_key'] : ['id']
           for (const value of [state.values].flat()) {
-            if (!tables[table].some(row => row[key] === value[key])) tables[table].push({ ...value, created_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            const existing = tables[table].find(row => keys.every(key => row[key] === value[key]))
+            if (!existing) tables[table].push({ ...value, created_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            else if (!state.ignoreDuplicates) Object.assign(existing, value)
           }
           rows = []
         } else if (state.kind === 'update') {
@@ -72,7 +75,7 @@ function memoryDatabase(applications = []) {
         gte(field, value) { state.filters.push(row => row[field] >= value); return builder },
         lte(field, value) { state.filters.push(row => row[field] <= value); return builder },
         update(values) { state.kind = 'update'; state.values = values; return builder },
-        upsert(values) { state.kind = 'upsert'; state.values = values; return builder },
+        upsert(values, options = {}) { state.kind = 'upsert'; state.values = values; state.ignoreDuplicates = options.ignoreDuplicates; return builder },
         delete() { state.kind = 'delete'; return builder },
         order(field, { ascending = true } = {}) { state.sort = field; state.ascending = ascending; return builder },
         limit(value) { state.limit = value; return builder },

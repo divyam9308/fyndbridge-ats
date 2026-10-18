@@ -1,0 +1,110 @@
+{
+  "applied": {
+    "columns": {
+      "width": "90px",
+      "height": "34px",
+      "background": "none",
+      "color": "rgb(46, 46, 40)",
+      "radius": "10px",
+      "border": "1.5px solid rgb(226, 226, 222)",
+      "font": "650 13px DM Sans, system-ui, sans-serif",
+      "shadow": "rgba(0, 18, 100, 0.08) 0px 2px 5px 0px, rgba(255, 255, 255, 0.9) 0px 1px 0px 0px inset"
+    },
+    "proceed": {
+      "width": "80px",
+      "height": "34px",
+      "background": "linear-gradient(rgb(218, 177, 17) 0%, oklch(0.78 0.165 89) 54%, rgb(218, 177, 17) 100%)",
+      "color": "rgb(0, 18, 100)",
+      "radius": "10px",
+      "border": "1px solid rgba(141, 105, 0, 0.22)",
+      "font": "700 12px DM Sans, system-ui, sans-serif",
+      "shadow": "rgba(218, 177, 17, 0.35) 0px 5px 12px 0px, rgba(255, 255, 255, 0.45) 0px 1px 0px 0px inset"
+    },
+    "action": {
+      "width": "192px",
+      "height": "30px",
+      "background": "none",
+      "color": "oklch(0.78 0.165 89)",
+      "radius": "0px",
+      "border": "0px none oklch(0.78 0.165 89)",
+      "font": "700 12px DM Sans, system-ui, sans-serif",
+      "shadow": "none"
+    },
+    "checkbox": {
+      "width": "14px",
+      "accent": "oklch(0.78 0.165 89)"
+    }
+  },
+  "candidates": {
+    "columns": {
+      "width": "90px",
+      "height": "34px",
+      "background": "none",
+      "color": "rgb(46, 46, 40)",
+      "radius": "10px",
+      "border": "1.5px solid rgb(226, 226, 222)",
+      "font": "650 13px DM Sans, system-ui, sans-serif",
+      "shadow": "rgba(0, 18, 100, 0.08) 0px 2px 5px 0px, rgba(255, 255, 255, 0.9) 0px 1px 0px 0px inset"
+    },
+    "proceed": {
+      "width": "80px",
+      "height": "34px",
+      "background": "linear-gradient(rgb(218, 177, 17) 0%, oklch(0.78 0.165 89) 54%, rgb(218, 177, 17) 100%)",
+      "color": "rgb(0, 18, 100)",
+      "radius": "10px",
+      "border": "1px solid rgba(141, 105, 0, 0.22)",
+      "font": "700 12px DM Sans, system-ui, sans-serif",
+      "shadow": "rgba(218, 177, 17, 0.35) 0px 5px 12px 0px, rgba(255, 255, 255, 0.45) 0px 1px 0px 0px inset"
+    },
+    "action": {
+      "width": "192px",
+      "height": "30px",
+      "background": "none",
+      "color": "oklch(0.78 0.165 89)",
+      "radius": "0px",
+      "border": "0px none oklch(0.78 0.165 89)",
+      "font": "700 12px DM Sans, system-ui, sans-serif",
+      "shadow": "none"
+    },
+    "checkbox": {
+      "width": "14px",
+      "accent": "oklch(0.78 0.165 89)"
+    }
+  },
+  "clients": {
+    "columns": {
+      "width": "90px",
+      "height": "34px",
+      "background": "none",
+      "color": "rgb(46, 46, 40)",
+      "radius": "10px",
+      "border": "1.5px solid rgb(226, 226, 222)",
+      "font": "650 13px DM Sans, system-ui, sans-serif",
+      "shadow": "rgba(0, 18, 100, 0.08) 0px 2px 5px 0px, rgba(255, 255, 255, 0.9) 0px 1px 0px 0px inset"
+    },
+    "proceed": {
+      "width": "80px",
+      "height": "34px",
+      "background": "linear-gradient(rgb(218, 177, 17) 0%, oklch(0.78 0.165 89) 54%, rgb(218, 177, 17) 100%)",
+      "color": "rgb(0, 18, 100)",
+      "radius": "10px",
+      "border": "1px solid rgba(141, 105, 0, 0.22)",
+      "font": "700 12px DM Sans, system-ui, sans-serif",
+      "shadow": "rgba(218, 177, 17, 0.35) 0px 5px 12px 0px, rgba(255, 255, 255, 0.45) 0px 1px 0px 0px inset"
+    },
+    "action": {
+      "width": "192px",
+      "height": "30px",
+      "background": "none",
+      "color": "oklch(0.78 0.165 89)",
+      "radius": "0px",
+      "border": "0px none oklch(0.78 0.165 89)",
+      "font": "700 12px DM Sans, system-ui, sans-serif",
+      "shadow": "none"
+    },
+    "checkbox": {
+      "width": "14px",
+      "accent": "oklch(0.78 0.165 89)"
+    }
+  }
+}

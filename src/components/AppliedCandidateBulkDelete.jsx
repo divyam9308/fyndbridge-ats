@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { ListChecks, Loader2, Trash2, X } from 'lucide-react'
 import FloatingActionDock from './FloatingActionDock'
+import { lockBodyScroll } from '../utils/lockBodyScroll'
 
 export function AppliedCandidateSelectionDock({ count, hidden, onClear, onDelete }) {
   const visible = count > 0 && !hidden
@@ -19,13 +20,12 @@ export function AppliedCandidateDeleteDialog({ count, pending, error, onCancel, 
     const dialog = dialogRef.current
     const returnTarget = returnFocusRef.current
     const fallbackTarget = fallbackRef.current
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlockScroll = lockBodyScroll()
     dialog.showModal()
     cancelRef.current?.focus()
     return () => {
       dialog.close()
-      document.body.style.overflow = previousOverflow
+      unlockScroll()
       window.requestAnimationFrame(() => {
         const target = returnTarget
         if (target instanceof HTMLElement && document.contains(target) && !target.closest('[inert]') && !target.disabled) target.focus({ preventScroll: true })

@@ -1,0 +1,26 @@
+{
+  "before": {
+    "x": 268,
+    "right": 1406,
+    "width": 1138,
+    "topbarRight": 1406
+  },
+  "afterSelection": {
+    "x": 268,
+    "right": 1406,
+    "width": 1138,
+    "topbarRight": 1406
+  },
+  "duringConfirmation": {
+    "x": 268,
+    "right": 1406,
+    "width": 1138,
+    "topbarRight": 1406
+  },
+  "afterCancel": {
+    "x": 268,
+    "right": 1406,
+    "width": 1138,
+    "topbarRight": 1406
+  }
+}

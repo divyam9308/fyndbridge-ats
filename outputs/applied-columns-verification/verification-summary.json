@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-18",
+  "branch": "main",
+  "base_commit": "354f47a77d0e7147b22be1bd3a1e93aabf1bf57f",
+  "data": "Synthetic auth, staff, applicants, preference rows and storage; real Applied Candidates and user preference Express routes/controllers against an isolated memory adapter.",
+  "production_mutations": false,
+  "features": [
+    "No filter/search/date bar or filter query parameters",
+    "21 optional data columns using the Candidates/Clients picker UI, Proceed and saved preferences",
+    "Selection checkboxes remain available regardless of chosen data columns",
+    "Table/header width stays constant on selection, confirmation and cancel",
+    "Shared Admin/bulk entrance: 380ms slide, 220ms fade, explicit keyframes, reduced motion retained",
+    "Background scrolling frozen without losing the current page position"
+  ],
+  "checks": {
+    "production_browser": {
+      "startTime": "2026-10-18T14:25:29.467Z",
+      "duration": 35791.545,
+      "expected": 12,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "server": {
+      "passed": 727,
+      "failed": 0
+    },
+    "build": "passed",
+    "changed_source_strict_lint": "passed",
+    "full_lint": {
+      "errors": 886,
+      "warnings": 3,
+      "source_errors": 41,
+      "source_warnings": 3,
+      "findings_in_unchanged_files_only": true
+    },
+    "full_browser": {
+      "startTime": "2026-10-18T14:27:51.741Z",
+      "duration": 107845.555,
+      "expected": 38,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "limitations": [
+    "Firefox is not counted due to the previously observed macOS launch failure.",
+    "Bulk deletion retains its existing audit migration prerequisite; no schema changes were needed for column preferences."
+  ]
+}

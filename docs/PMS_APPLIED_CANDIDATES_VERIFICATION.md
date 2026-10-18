@@ -24,6 +24,40 @@ ellipsis beside checkboxes or clipped long names/roles. The compact height and
 hidden scrollbar fixes remain. The built production assets were checked in
 Chromium and WebKit using synthetic auth/data, including a late shared stylesheet.
 
+## Column picker and bulk bar update
+
+The filter card, search, role/client/consultant/location fields, dates, datalists,
+and Clear Filters action have been removed. List requests now send pagination
+and the existing applied-date sort only. The replacement uses the same
+`FloatingDropdown`, markup, CSS classes, controls, and preference workflow as
+Candidates and Clients: Columns, Proceed, Select All, Clear All, Save Preference,
+and Reset to Saved Preference. Browser comparisons confirmed identical rendered
+button, action, and checkbox styles across all three pages.
+
+All 21 data columns remain available. Widths, colgroups, headers, rows, loading,
+and empty-state colspans follow the active columns. Bulk-selection checkboxes
+remain available when data columns are hidden, and changing columns preserves
+selected application IDs. Proceed applies pending choices; an empty choice
+falls back to all columns, matching the existing pages. Saved choices use the
+existing authenticated `/api/user-preferences/appliedCandidatesTableColumns`
+GET/PUT routes and local storage fallback. The preference controller binds
+requests to the authenticated user. No schema change was needed.
+
+The right-edge movement was reproduced as a 6 px scrollbar-width change in
+WebKit. The Applied Candidates route now reserves that scrollbar space, and
+dialogs freeze the body at its current position without removing the reserved
+scrollbar. Tests keep both the table and top-bar right edge at exactly the same
+coordinates through selection, confirmation, and cancel, and verify restoration
+of a page scrolled 700 px down.
+
+WebKit also skipped the previous transition, jumping from an offscreen position
+to fully visible in its first sampled frame. Both Admin and bulk selection now
+use explicit shared 380 ms slide and 220 ms fade keyframes, with the original
+easing. The final frames remain in place, avoiding a second transition at the
+end. Frame samples confirm continuous upward movement and increasing opacity;
+count updates do not restart the entrance. Reduced motion still uses the
+existing short fade.
+
 ## PMS cause and fix
 
 `useStaffDirectory` mapped the cached directory on every render. The new array
@@ -61,8 +95,8 @@ Evidence: [original metrics](../outputs/pms-applied-verification/original-pms-na
 
 Selection uses application UUIDs and survives pagination and scrolling. The
 header checkbox selects eligible applications on the current page only and
-shows the mixed state. Search and filters clear the selection, including the
-debounced search boundary. Converting applications have disabled checkboxes with
+shows the mixed state. Column visibility changes preserve selection.
+Converting applications have disabled checkboxes with
 an accessible explanation. Selection and candidate-name columns scroll normally
 with the other columns. The page supports 100 rows per page and a
 maximum selection of 100 explicit application IDs.
@@ -119,8 +153,8 @@ CVs were used to test deletion.
 | `npm run build` | Passed |
 | `npm --prefix server test` | **727 passed, 0 failed** |
 | New deletion-service and real-route tests | **9 passed** within the server suite |
-| `npm run test:browser -- --project=chromium --project=webkit` | **28 passed, 0 failed, 0 skipped**, 14 scenarios per engine |
-| Production build layout checks, `FYNDBRIDGE_TEST_BUILD=1`, Chromium/WebKit | **2 passed**; all 21 historical columns reachable, names scroll normally, no table outline, long text wraps even with Shared.css loaded last |
+| `npm run test:browser -- --project=chromium --project=webkit` | **38 passed, 0 failed, 0 skipped**, 19 scenarios per engine |
+| Production build columns/layout checks, `FYNDBRIDGE_TEST_BUILD=1`, Chromium/WebKit | **12 passed**; preference persistence/error handling, rendered picker comparison, actual Admin/bulk animation frames, stable layout, scroll restoration, original columns and text wrapping |
 | ESLint on every changed JS/JSX source and server test, `--max-warnings 0` | Passed, no warnings |
 | `git diff --check` | Passed |
 | Audit migration in isolated PGlite PostgreSQL | Passed RLS, privileges, service writes, denied browser-role reads, and receipt persistence after actor removal |
@@ -128,13 +162,15 @@ CVs were used to test deletion.
 Browser scenarios cover idle settling and cold/repeated mouse/keyboard navigation
 after editing; employee/quarter changes; score save/reset; completion indicators;
 staff refresh/status updates; empty staff; recruiter permissions; individual/page/
-mixed selection; selection across pages and scope changes; the 100-ID limit;
+mixed selection; selection across pages and column changes; the 100-ID limit;
 100-row vertical/horizontal scrolling; dock entrance/count/exit and reduced
 motion; narrow-screen dock geometry; hidden keyboard controls; dialog focus and
 Escape/cancel; pending/duplicate clicks; conversion races; partial success;
 storage failure and immediate retry; absence of recovery UI/requests after reload;
 lost-response retry; list/sidebar counts; last-page correction; five/one/zero-row
-layout, hidden scrollbars and keyboard scrolling; and unchanged Admin save/cancel behavior. Rendered Admin
+layout, hidden scrollbars and keyboard scrolling; saved column preferences and
+the same picker UI as Candidates/Clients; stable selection/modal geometry and
+scroll restoration; actual entrance frames; and unchanged Admin save/cancel behavior. Rendered Admin
 and selection dock panel/motion styles were compared and matched.
 
 Backend tests additionally cover unauthorized/forbidden requests, malformed
@@ -142,6 +178,11 @@ payloads, missing IDs, duplicate UUIDs, batch/concurrency bounds, invalid staged
 paths, adopted candidate guards, audit persistence failure, database cleanup
 failure, interrupted completion receipts, and concurrent/idempotent retries.
 
+Current column picker and motion evidence: [verification summary](../outputs/applied-columns-verification/verification-summary.json),
+[picker comparison](../outputs/applied-columns-verification/column-ui-comparison.json),
+[layout stability](../outputs/applied-columns-verification/layout-stability-webkit.json),
+[bulk entrance frames](../outputs/applied-columns-verification/selection-motion-webkit.json),
+[Admin entrance frames](../outputs/applied-columns-verification/admin-motion-webkit.json).
 Restored formatting evidence: [history and browser checks](../outputs/applied-table-restoration/history-and-layout.json),
 [name and role wrapping](../outputs/applied-table-restoration/five-applications-webkit.png),
 [final columns](../outputs/applied-table-restoration/final-columns-webkit.png).
@@ -186,6 +227,12 @@ these two changes.
 
 ## Screenshots
 
+- [Column picker matching Candidates and Clients, WebKit](../outputs/applied-columns-verification/column-picker-webkit.png)
+- [Applied column choices, WebKit](../outputs/applied-columns-verification/selected-columns-webkit.png)
+- [Bulk-delete bar, WebKit](../outputs/applied-columns-verification/bulk-delete-bar-webkit.png)
+
+Earlier formatting snapshots are retained below:
+
 - [Restored formatting with long names and roles, WebKit](../outputs/applied-table-restoration/five-applications-webkit.png)
 - [Final columns after horizontal scrolling, WebKit](../outputs/applied-table-restoration/final-columns-webkit.png)
 
@@ -212,8 +259,10 @@ The original source, test, migration, documentation, and evidence list is in
 | `src/hooks/useStaffDirectory.js` | Stable directory arrays with live status updates |
 | `src/pages/PerformanceReviewPage.jsx` | Derived selector options and account-aware selection |
 | `src/components/Sidebar.jsx` | Removed the PMS pointer workaround |
-| `src/pages/AppliedCandidatesPage.jsx`, `.css` | Selection, original column formatting and normal scrolling, dock/dialog, compact layout and hidden scrollbar |
-| `src/components/AppliedCandidateBulkDelete.jsx` | Selection dock content and accessible native confirmation |
+| `src/pages/AppliedCandidatesPage.jsx`, `.css` | Selection, column picker replacing all filters, dynamic table, compact layout and reserved scrollbar |
+| `src/utils/appliedCandidateTableColumns.js` | Stable column keys, labels, widths and saved-preference normalization |
+| `src/utils/lockBodyScroll.js` | Freeze and restore the current scroll position while preserving table width |
+| `src/components/AppliedCandidateBulkDelete.jsx` | Selection dock, native confirmation and preserved scroll position |
 | `src/components/FloatingActionDock.jsx`, `.css` | Shared portal panel, motion, inert visibility |
 | `src/pages/AdminPage.jsx`, `.css` | Reused shared dock styles with existing save/cancel handlers |
 | `src/services/appliedCandidatesApi.js` | Bulk-delete API; removed recovery method |
@@ -225,8 +274,9 @@ The original source, test, migration, documentation, and evidence list is in
 | `server/src/services/appliedCandidateDeletion.test.js` | Service/race/retry/security/real-route coverage |
 | `server/src/services/uiLoadingNavigationRegression.test.js` | Removed obsolete workaround-only assertion |
 | `server/test-support/appliedCandidatesMemory.cjs` | Isolated database/storage test adapter |
-| `server/browser-tests/fixtures.cjs` | Mock auth/API boundary with real deletion backend |
+| `server/browser-tests/fixtures.cjs` | Mock auth/API boundary with real deletion and user preference backend |
 | `server/browser-tests/pms-applied.spec.cjs` | Thirteen browser scenarios per engine |
+| `server/browser-tests/applied-columns.spec.cjs` | Five picker/persistence/UI/motion/layout/scroll scenarios per engine |
 | `server/browser-tests/applied-layout.spec.cjs` | Short/empty geometry, all historical columns, normal name scrolling, no outline, long text and late shared CSS |
 | `server/browser-tests/staff-harness.html` | Real hook reference/status/refresh verification |
 | `server/browser-tests/vite.config.mjs` | Test server without an API proxy |
@@ -235,3 +285,4 @@ The original source, test, migration, documentation, and evidence list is in
 | `outputs/pms-applied-verification/*` | Synthetic screenshots and recorded verification evidence |
 | `outputs/applied-layout-verification/*` | Followup layout screenshots, measurements and check results |
 | `outputs/applied-table-restoration/*` | Historical column comparison and production-build formatting evidence |
+| `outputs/applied-columns-verification/*` | Current column picker screenshots, real animation frames, layout stability and verification results |

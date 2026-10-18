@@ -10,6 +10,7 @@ require.cache[supabasePath] = { id: supabasePath, filename: supabasePath, loaded
   get(target, key) { const value = activeDatabase[key]; return typeof value === 'function' ? value.bind(activeDatabase) : value }
 }) }
 const appliedRouter = require('../src/routes/appliedCandidates')
+const preferencesRouter = require('../src/routes/userPreferences')
 const evidenceDir = path.resolve(process.env.FYNDBRIDGE_BROWSER_EVIDENCE_DIR || path.join(__dirname, '../../outputs/pms-applied-verification'))
 
 const withApp = async ({ page }, use) => {
@@ -22,12 +23,13 @@ const withApp = async ({ page }, use) => {
     serverApp.use(express.json())
     serverApp.use((req, res, next) => { req.user = { id: USER_ID, email: 'recruiter@fyndbridge.in' }; next() })
     serverApp.use('/api/applied-candidates', appliedRouter)
+    serverApp.use('/api/user-preferences', preferencesRouter)
     const server = serverApp.listen(0, '127.0.0.1')
     await new Promise(resolve => server.once('listening', resolve))
     const apiBase = `http://127.0.0.1:${server.address().port}`
     const state = {
       db, superAdmin: true, staff: [{ id: USER_ID, name: 'Test Recruiter', email: 'recruiter@fyndbridge.in', status: 'active' }, { id: applicationId(999), name: 'Test Employee', email: 'employee@fyndbridge.in', status: 'active' }],
-      deleteRequests: [], reviewSaves: [], adminSaves: [], reviews: new Map(), requestPaths: [], consoleErrors: [], dropDeleteResponse: false, performancePermissions: {},
+      deleteRequests: [], reviewSaves: [], adminSaves: [], preferenceSaves: [], failPreferenceSaves: false, reviews: new Map(), requestPaths: [], consoleErrors: [], dropDeleteResponse: false, performancePermissions: {},
     }
     page.on('pageerror', error => state.consoleErrors.push(error.message))
     await page.addInitScript(({ userId }) => {
@@ -63,8 +65,12 @@ const withApp = async ({ page }, use) => {
       const url = new URL(request.url())
       const routePath = url.pathname
       state.requestPaths.push(routePath)
-      if (routePath.startsWith('/api/applied-candidates')) {
+      if (routePath.startsWith('/api/applied-candidates') || routePath.startsWith('/api/user-preferences/')) {
         if (routePath.endsWith('/bulk-delete')) state.deleteRequests.push(request.postDataJSON())
+        if (routePath.startsWith('/api/user-preferences/') && request.method() === 'PUT') {
+          state.preferenceSaves.push(request.postDataJSON())
+          if (state.failPreferenceSaves) return route.fulfill({ status: 500, json: { error: 'Synthetic preference save failure' } })
+        }
         const response = await route.fetch({ url: `${apiBase}${routePath}${url.search}` })
         if (routePath.endsWith('/bulk-delete') && state.dropDeleteResponse) { state.dropDeleteResponse = false; return route.abort('failed') }
         return route.fulfill({ response })
