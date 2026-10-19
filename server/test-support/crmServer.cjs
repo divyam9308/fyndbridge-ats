@@ -10,6 +10,7 @@ async function start() {
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019105523_business_development_crm.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019110948_crm_probability_sorting.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019165228_crm_gmail_integration.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019182711_crm_gmail_manual_sync.sql'), 'utf8'))
   await db.query('insert into auth.users values($1,$2)', [USER_ID, 'recruiter@fyndbridge.in'])
   await db.query("insert into employee_statuses(user_id,status) values($1,'active')", [USER_ID])
   await db.query('insert into user_profiles(user_id,name,email) values($1,$2,$3)', [USER_ID, 'Test Recruiter', 'recruiter@fyndbridge.in'])
@@ -18,6 +19,22 @@ async function start() {
   adapter.rpc = async (...args) => { const result = await rpc(...args); if (result.error) result.error.details = result.error.detail; return result }
   const target = require.resolve('../src/services/supabaseAdmin')
   require.cache[target] = { id: target, filename: target, loaded: true, exports: adapter }
+  // Real manual-sync orchestration with isolated synthetic Google/AI providers.
+  process.env.GMAIL_TOKEN_ENCRYPTION_KEY = '01'.repeat(32)
+  const { encrypt } = require('../src/services/crmGmailGoogle')
+  const gmailTarget = require.resolve('../src/services/crmGmail')
+  const gmailExports = require(gmailTarget)
+  const gmailService = gmailExports.createGmailService({ db: adapter,
+    authorize: async id => { if (id !== USER_ID) throw Object.assign(new Error('Denied'), { code: 'ACCESS_DENIED' }); return 'recruiter@fyndbridge.in' },
+    google: {
+      revoke: async () => {},
+      api: async (access, endpoint) => endpoint === 'history' ? { historyId: '101', history: [{ messagesAdded: [{ message: { id: 'manual-sync-message' } }] }] } : {
+        id: 'manual-sync-message', internalDate: String(Date.now()), payload: { mimeType: 'text/plain', headers: [{ name: 'From', value: 'hr@client.test' }, { name: 'To', value: 'recruiter@fyndbridge.in' }, { name: 'Subject', value: 'Manual sync meeting' }], body: { data: Buffer.from('Can we meet Friday at 2 PM? No requirements at present.').toString('base64url') } }
+      }
+    },
+    ai: async () => ({ summary: 'Client requested a meeting.', meeting: { status: 'proposed', when: 'Friday at 2 PM', evidence: 'Can we meet Friday at 2 PM?' }, negative_response: { category: 'no_requirements', permanence: 'temporary', evidence: 'No requirements at present.' }, sentiment: { label: 'neutral', evidence: 'No requirements at present.' } })
+  })
+  require.cache[gmailTarget].exports = { ...gmailExports, createGmailService: () => gmailService }
   const express = require('express'), app = express()
   let failSave = false
   app.use(require('cors')()); app.use(express.json())
@@ -27,7 +44,8 @@ async function start() {
   app.get('/test/permissions', async (req,res) => res.json((await db.query('select * from page_view_permissions')).rows))
   app.post('/test/permission', async (req,res) => { await db.query("update page_view_permissions set view_permission=$1 where page_key='crm'", [req.body.permission]); res.json({ ok: true }) })
   app.post('/test/gmail', async (req, res) => {
-    await db.query('insert into crm_gmail_connections(user_id,email,credentials,history_id,last_sync_at) values($1,$2,$3,$4,now()) on conflict(user_id) do nothing', [USER_ID,'recruiter@fyndbridge.in','synthetic-unusable-ciphertext','100'])
+    const credentials = encrypt({ access_token: 'synthetic-access', refresh_token: 'synthetic-refresh', expires_at: Date.now() + 3600000 }, USER_ID)
+    await db.query('insert into crm_gmail_connections(user_id,email,credentials,history_id,last_sync_at) values($1,$2,$3,$4,now()) on conflict(user_id) do nothing', [USER_ID,'recruiter@fyndbridge.in',credentials,'100'])
     res.json({ ok: true })
   })
   app.post('/test/gmail-activity', async (req, res) => {

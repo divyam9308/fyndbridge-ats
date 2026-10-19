@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Info, Mail } from 'lucide-react'
+import { Info, Mail, RefreshCw } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { crmRequest } from '../services/crmApi'
 import { CrmDialog } from './CrmDialogs'
@@ -17,6 +17,14 @@ const CALLBACK_MESSAGES = {
   CONFIGURATION: 'Gmail integration is not configured. Contact an administrator.'
 }
 const dateTime = value => value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }).format(new Date(value)) + ' IST' : 'Not yet synchronised'
+const SYNC_MESSAGES = {
+  completed: 'Gmail sync complete. New matching emails are available in Activity History.',
+  pending: 'Sync requested. Remaining emails are queued and will continue automatically.',
+  quota_paused: 'Email processing is paused by provider quota. Queued emails will retry automatically.',
+  partial: 'Sync finished. Some emails could not be processed. Contact an administrator.',
+  not_connected: 'Gmail was disconnected. Connect again to synchronise.',
+  reauthorization_required: 'Gmail access needs to be renewed. Reconnect Gmail to synchronise.'
+}
 export default function CrmGmailConnection() {
   const { user } = useAuth()
   const [connection, setConnection] = useState(null)
@@ -58,13 +66,29 @@ export default function CrmGmailConnection() {
     catch (failure) { setError(failure.message); setOpen(true) }
     finally { lock.current = false; setBusy('') }
   }
+  const syncNow = async () => {
+    if (lock.current) return
+    lock.current = true; setBusy('syncing'); setError(''); setNotice(null)
+    try {
+      const result = await crmRequest('/gmail/sync', { method: 'POST' })
+      setConnection(result.connection)
+      setNotice({ text: SYNC_MESSAGES[result.state] || SYNC_MESSAGES.pending, success: !['not_connected', 'reauthorization_required'].includes(result.state) })
+      setOpen(true)
+    } catch (failure) { setError(failure.message); setOpen(true) }
+    finally { lock.current = false; setBusy('') }
+  }
+  const syncButton = connection?.connected && <button type="button" className={`btn-secondary crm-gmail-sync${busy === 'syncing' ? ' is-syncing' : ''}`} disabled={Boolean(busy) || connection.status !== 'connected'} aria-label="Sync Gmail now" aria-busy={busy === 'syncing'} onClick={syncNow}>
+    <RefreshCw size={16} />{busy === 'syncing' ? 'Syncing...' : 'Sync now'}
+  </button>
   return <div className="crm-gmail-control">
     <button type="button" className="btn-secondary crm-gmail-button" disabled={busy || (!connection && !error)} onClick={() => connection?.connected ? disconnect() : error ? setOpen(true) : connect()}>
-      <Mail size={16} />{busy ? busy === 'disconnecting' ? 'Disconnecting...' : 'Connecting...' : !connection && !error ? 'Loading Gmail...' : connection?.connected ? 'Disconnect Gmail' : 'Connect Gmail'}
+      <Mail size={16} />{busy === 'disconnecting' ? 'Disconnecting...' : busy === 'connecting' ? 'Connecting...' : !connection && !error ? 'Loading Gmail...' : connection?.connected ? 'Disconnect Gmail' : 'Connect Gmail'}
     </button>
+    {syncButton}
     {connection?.connected && <button type="button" className="row-action-btn" aria-label="Gmail connection details" disabled={Boolean(busy)} onClick={() => setOpen(true)}><Info size={16} /></button>}
     {open && <CrmDialog title="Gmail Connection" onClose={() => setOpen(false)} busy={Boolean(busy)} footer={<>
       <button className="btn-secondary" disabled={Boolean(busy)} onClick={() => setOpen(false)}>Close</button>
+      {syncButton}
       {connection?.connected ? <button className="btn-secondary" disabled={Boolean(busy)} onClick={disconnect}>{busy === 'disconnecting' ? 'Disconnecting...' : 'Disconnect Gmail'}</button> : <button className="btn-primary" disabled={Boolean(busy)} onClick={connect}>Connect Gmail</button>}
     </>}><div className="modal-body">
       {notice && <p className={notice.success ? 'sub-text' : 'form-error'} role={notice.success ? 'status' : 'alert'}>{notice.text}</p>}

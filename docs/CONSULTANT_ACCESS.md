@@ -107,8 +107,13 @@ Existing Gmail variables and `GEMINI_CRM_MODEL` remain as documented in CRM_GMAI
    recruitment services?” Send a separate follow-up confirming the meeting. In another
    message say: “We have no recruitment requirements this quarter; please check with
    us next quarter.” Also send a short outgoing introduction from the work mailbox.
-5. Wait for the next hourly discovery and allow the minute worker to finish queued
-   analysis. For a controlled quicker test, an operator can invoke the protected
+5. After applying `20261019182711_crm_gmail_manual_sync.sql` and deploying the manual
+   sync change, click **Sync now** beside Disconnect Gmail. It starts discovery and
+   analysis immediately for your own mailbox. Wait for the result dialog, then open
+   Activity History. Larger batches and busy/provider-delayed work continue through
+   the minute worker; the dialog identifies queued or quota-paused processing.
+   Without a manual request, the normal next hourly discovery remains available.
+   An operator can also invoke the protected
    `/api/cron/crm-gmail-sync` once and then `/api/cron/crm-gmail-worker` with the existing
    server-side CRON_SECRET. Do not change the normal hourly discovery schedule.
    Vercel sends the configured secret automatically on scheduled calls:

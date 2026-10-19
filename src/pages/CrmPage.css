@@ -55,6 +55,11 @@
 
 .crm-gmail-control { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .crm-gmail-button { color: var(--brand-blue, #001264); white-space: nowrap; }
+.crm-gmail-sync { white-space: nowrap; min-width: 110px; }
+.crm-gmail-sync.is-syncing svg { animation: crm-gmail-spin 1s linear infinite; }
+@keyframes crm-gmail-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .crm-gmail-sync.is-syncing svg { animation: none; } }
+@media (max-width: 760px) { .crm-gmail-control { flex-wrap: wrap; max-width: 100%; } }
 .crm-email-insight { padding: 10px 12px; margin-top: 10px; border-radius: 8px; border-left: 3px solid; }
 .crm-email-meeting { color: #6b21a8; background: #f3e8ff; }
 .crm-email-negative { color: #b91c1c; background: #fef2f2; }

@@ -174,16 +174,16 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       await checked(db.from('crm_gmail_jobs').update({ status: permanent ? 'permanent_failure' : 'retryable_failure', available_at: new Date(now() + backoff(job.attempts, quota || error.code === 'GMAIL_DAILY_QUOTA')).toISOString(), last_error: quota ? 'QUOTA_PAUSED' : revoked ? 'REAUTHORIZE' : error.code === 'INVALID_AI_OUTPUT' ? 'INVALID_AI_OUTPUT' : 'PROCESSING_FAILED', lease_id: null, lease_until: null }).eq('id', job.id).eq('lease_id', lease))
     }
   }
-  async function run({ schedule = false, budgetMs = 45000 } = {}) {
+  async function run({ schedule = false, budgetMs = 45000, userId = null } = {}) {
     const deadline = now() + Math.min(45000, budgetMs), lease = crypto.randomUUID()
     return budgets.run({ deadline }, async () => {
-      if (schedule) await rpc('schedule')
+      if (schedule && !userId) await rpc('schedule')
       if (!await rpc('claim_worker', { p_lease: lease })) return { busy: true }
       let discovered = 0, processed = 0
       try {
         // Alternate discovery and processing; a large mailbox cannot starve jobs.
         for (let step = 0; step < 12 && now() < deadline - 27000; step++) {
-          const c = await rpc('claim_sync', { p_lease: lease })
+          const c = await rpc(userId ? 'claim_user_sync' : 'claim_sync', { p_lease: lease, ...(userId ? { p_user: userId } : {}) })
           if (c) {
             try { await discover(c, lease); discovered++ }
             catch (error) {
@@ -193,7 +193,7 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
             }
           }
           if (now() >= deadline - 27000) break
-          const job = await rpc('claim_job', { p_lease: lease })
+          const job = await rpc(userId ? 'claim_user_job' : 'claim_job', { p_lease: lease, ...(userId ? { p_user: userId } : {}) })
           if (job) { await processJob(job, lease); processed++ }
           if (!c && !job) break
         }
@@ -203,6 +203,28 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       }
     })
   }
-  return { start, callback, status, disconnect, run, access, discover, processJob }
+  async function syncNow(userId) {
+    const deadline = now() + 45000
+    return budgets.run({ deadline }, async () => {
+      // Recheck work identity, employment and current CRM access before scheduling.
+      const email = await authorizeWithinBudget(userId)
+      const c = await connectionFor(userId)
+      if (!c) throw fault('NOT_CONNECTED')
+      if (normalizeEmail(c.email) !== email) throw fault('WORK_EMAIL_CHANGED')
+      const requested = await rpc('request_manual_sync', { p_user: userId })
+      if (requested.state === 'not_connected') throw fault('NOT_CONNECTED')
+      if (requested.state === 'reauthorization_required') throw fault('REAUTHORIZE')
+      if (requested.state === 'cooldown') throw Object.assign(fault('SYNC_COOLDOWN'), { retryAfter: requested.retry_after })
+      const result = requested.state === 'in_progress' ? { busy: true } : await run({ userId, budgetMs: deadline - now() - 4000 })
+      const snapshot = await rpc('manual_sync_status', { p_user: userId })
+      const state = !snapshot.connection.connected ? 'not_connected'
+        : snapshot.connection.status !== 'connected' ? 'reauthorization_required'
+          : snapshot.ai_paused && snapshot.pending_jobs ? 'quota_paused'
+            : result.busy || snapshot.discovery_pending || snapshot.pending_jobs ? 'pending'
+              : snapshot.failed_jobs ? 'partial' : 'completed'
+      return { ...snapshot, state }
+    })
+  }
+  return { start, callback, status, disconnect, syncNow, run, access, discover, processJob }
 }
 module.exports = { createGmailService, verifiedConsultant, backoff, CRM_MODEL }

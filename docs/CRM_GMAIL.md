@@ -21,6 +21,11 @@ opens connection details. The existing 13 columns remain unchanged. CRM visibili
 now supports selected consultants in Admin → Page View Permissions, as described in
 [the follow-up access report](CONSULTANT_ACCESS.md).
 
+A connected mailbox also has **Sync now** in the toolbar and connection dialog.
+Clicking it immediately requests discovery and analysis for the signed-in mailbox,
+shows **Syncing...**, and disables duplicate actions while the request is running.
+The result and errors stay in the dialog without adding inline toolbar text.
+
 Only exact, case-normalized contact emails match. All contact persons are included.
 Public domains receive no special domain matching; an exact address can still match.
 Ambiguous organisations and unrelated messages are skipped before any full-message
@@ -46,6 +51,7 @@ mandate, calendar, reminder, sending or reply operation is performed.
 | GET | `/api/crm/gmail/callback` | Single-use state, browser cookie and PKCE |
 | GET | `/api/crm/gmail/status` | Current consultant only, existing CRM permission |
 | DELETE | `/api/crm/gmail/disconnect` | Current consultant only, existing CRM permission |
+| POST | `/api/crm/gmail/sync` | Current verified work mailbox only, existing CRM permission; ignores caller-supplied user IDs |
 | GET | `/api/cron/crm-gmail-sync` | Constant-time `CRON_SECRET` Bearer comparison |
 | GET | `/api/cron/crm-gmail-worker` | Same cron authorization |
 
@@ -110,8 +116,26 @@ HTML. Email text remains untrusted prompt data.
 | `* * * * *` | `/api/cron/crm-gmail-worker` | Drain jobs and continue already-requested discovery pages/retries |
 
 The minute worker **does not start a fresh mailbox poll**. Once an hourly discovery
-has completed, only a later hourly kickoff can request another. Delayed scheduled
+has completed, a later hourly kickoff or explicit **Sync now** action can request another. Delayed scheduled
 invocations and unfinished pages remain recoverable from persistent checkpoints.
+
+Manual sync requires `20261019182711_crm_gmail_manual_sync.sql`, created with the
+Supabase CLI. It adds one persisted per-mailbox request timestamp and four
+service-role-only RPCs for requesting work, claiming only that user's discovery/jobs,
+and returning a safe progress summary. It reuses the existing global worker lease,
+checkpoints, deduplication, circuit breaker and durable queue. A request immediately
+runs a bounded worker in the HTTP request; it does not just wait for the hourly cron.
+The service reserves time within the existing 60-second function limit. Larger
+batches continue through the minute worker, as do requests received while the worker
+is occupied. Provider backoff and AI quota pauses are respected. Requests within
+30 seconds return HTTP 429 with `Retry-After`; this limit is persisted across instances.
+No new environment variables or cron changes are required.
+
+Results distinguish completed, pending, quota-paused, partial and reconnect-required
+states. A processed-job count is not treated as proof that every email produced an
+activity. Only matching emails create history entries, and no historical import is
+introduced. This migration and application change must be applied/deployed together;
+this manual-sync task did not change hosted Supabase or Vercel.
 
 Initial authorization records the current Gmail history ID, importing no historical
 mailbox. Normal history pages enqueue message IDs and commit the next page/checkpoint

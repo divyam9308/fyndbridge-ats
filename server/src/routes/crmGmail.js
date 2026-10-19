@@ -12,7 +12,10 @@ const MESSAGES = {
   ACCESS_DENIED: 'CRM access is required to connect Gmail.',
   SCOPE_REQUIRED: 'Allow read-only Gmail access to connect your mailbox.',
   OFFLINE_ACCESS_REQUIRED: 'Offline access was not granted. Please reconnect and approve access.',
-  CONFIGURATION: 'Gmail integration is not configured. Please contact an administrator.'
+  CONFIGURATION: 'Gmail integration is not configured. Please contact an administrator.',
+  NOT_CONNECTED: 'Connect Gmail before synchronising.',
+  REAUTHORIZE: 'Reconnect Gmail before synchronising.',
+  SYNC_COOLDOWN: 'Please wait 30 seconds between manual Gmail syncs.'
 }
 const cookieName = () => config().secure ? '__Host-crm_gmail_oauth' : 'crm_gmail_oauth'
 const cookieOptions = () => ({ httpOnly: true, secure: config().secure, sameSite: 'lax', path: '/', maxAge: 600000 })
@@ -22,7 +25,11 @@ function createHandlers(service = createGmailService()) {
   router.use((req, res, next) => { res.set('Cache-Control', 'private, no-store'); next() })
   const safe = fn => async (req, res) => {
     try { await fn(req, res) }
-    catch (error) { res.status(error.code === 'WORK_EMAIL_REQUIRED' ? 400 : error.code === 'ACCESS_DENIED' ? 403 : 503).json({ error: MESSAGES[error.code] || 'Unable to complete the Gmail request. Please try again.' }) }
+    catch (error) {
+      const status = error.code === 'SYNC_COOLDOWN' ? 429 : ['NOT_CONNECTED','REAUTHORIZE'].includes(error.code) ? 409 : error.code === 'WORK_EMAIL_REQUIRED' ? 400 : error.code === 'ACCESS_DENIED' ? 403 : 503
+      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter))
+      res.status(status).json({ error: MESSAGES[error.code] || 'Unable to complete the Gmail request. Please try again.', ...(error.retryAfter ? { retry_after: error.retryAfter } : {}) })
+    }
   }
   router.get('/status', safe(async (req, res) => res.json(await service.status(req.user.id))))
   router.post('/connect', safe(async (req, res) => {
@@ -30,6 +37,7 @@ function createHandlers(service = createGmailService()) {
     res.cookie(cookieName(), browser, cookieOptions()); res.json({ url })
   }))
   router.delete('/disconnect', safe(async (req, res) => { await service.disconnect(req.user.id); res.json({ connected: false }) }))
+  router.post('/sync', safe(async (req, res) => res.json(await service.syncNow(req.user.id))))
   async function callback(req, res) {
     res.set({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' })
     let result = 'connected'
