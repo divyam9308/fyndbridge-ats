@@ -23,18 +23,25 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     assert.equal((await request(`/${own.id}/consultant`,'PATCH',{assigned_consultant_id:OTHER})).httpStatus,403)
     const other=(await db.query('select id from assigned_candidates where assigned_consultant_id=$1',[OTHER])).rows[0].id
     assert.equal((await request(`/${other}/cv`)).httpStatus,404)
+    assert.equal((await request(`/${other}/review`,'POST',{})).httpStatus,404)
     assert.equal((await request(`/${own.id}/cv`)).httpStatus,200)
   })
   await t.test('both uncontacted states reject transfer before candidate creation',async()=>{
     for(const status of ['Not Contacted','Didn’t Pick Up']) {
       assert.equal((await request(`/${own.id}/status`,'PATCH',{status})).httpStatus,200)
       assert.equal((await request(`/${own.id}/transfer`,'POST',{status:'Interested'})).httpStatus,409)
+      assert.equal((await request(`/${own.id}/review`,'POST',{status:'Interested'})).httpStatus,409)
     }
   })
   await t.test('existing form validation is reused; full transfer is retryable and no new CV upload is needed',async()=>{
     await request(`/${own.id}/status`,'PATCH',{status:'Interested'})
     const invalid=await request(`/${own.id}/transfer`,'POST',{status:'Interested'});assert.equal(invalid.httpStatus,400);assert.ok(invalid.errors.full_name)
     const body={full_name:'Test Candidate 201',email:'synthetic201@example.test',mobile_number:'9876500201',client_id:CLIENT,job_id:JOB,status:'Interested',consultant_name:'Other Consultant',consultant_user_id:OTHER}
+    assert.equal((await request(`/${own.id}/review`,'POST',{})).httpStatus,400)
+    assert.equal((await request(`/${own.id}/review`,'POST',body)).valid,true)
+    assert.equal((await db.query('select count(*)::int as n from candidates')).rows[0].n,0)
+    assert.equal((await db.query('select count(*)::int as n from candidate_associations')).rows[0].n,0)
+    assert.equal((await db.query('select added_at from assigned_candidates where id=$1',[own.id])).rows[0].added_at,null)
     const result=await request(`/${own.id}/transfer`,'POST',body)
     assert.equal(result.httpStatus,201,JSON.stringify(result));assert.equal(result.consultant_user_id,CONSULTANT)
     assert.ok(result.cv_storage_path);assert.match(result.candidate_display_id,/^CA/)
@@ -46,6 +53,9 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     const body={full_name:'Test Candidate 201',email:'synthetic201@example.test',mobile_number:'9876500201',client_id:CLIENT,job_id:JOB,status:'Interested',consultant_name:'Test Consultant',consultant_user_id:CONSULTANT}
     const response=await request(`/${duplicate.id}/transfer`,'POST',body)
     assert.equal(response.httpStatus,409);assert.equal(response.duplicate,true);assert.equal(response.exactAssociation,true)
+    assert.equal((await request(`/${duplicate.id}/review`,'POST',body)).duplicate,true)
+    assert.equal((await request(`/${duplicate.id}/review`,'POST',{...body,full_name:'Not Saved By Review',duplicate_action:'update_current'})).valid,true)
+    assert.equal((await db.query('select full_name from candidates')).rows[0].full_name,'Test Candidate 201')
     assert.equal((await request(`/${duplicate.id}/transfer`,'POST',{...body,full_name:'Reviewed Existing Candidate',status:'In Discussion',notes:'Reviewed details',duplicate_action:'update_current'})).httpStatus,201)
     assert.equal((await db.query('select full_name from candidates')).rows[0].full_name,'Reviewed Existing Candidate')
     assert.equal((await db.query('select status,notes from candidate_associations')).rows[0].status,'In Discussion')
@@ -54,6 +64,13 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
   })
   await t.test('admin and super-admin get aggregated consultant data; inactive users cannot read',async()=>{
     for(const uid of [ADMIN,SUPER]){current=uid;const result=await request();assert.equal(result.httpStatus,200);assert.ok(result.consultants.length>=4);assert.ok(!result.consultants.some(c=>c.id===INACTIVE));assert.ok(result.can_manage)}
+    assert.equal((await request()).data.find(row=>row.id===own.id).assigned_consultant_name,'Test Consultant')
+    await db.query("update employee_statuses set status='inactive' where user_id=$1",[OTHER])
+    try {
+      const result=await request()
+      assert.equal(result.data.find(row=>row.assigned_consultant_id===OTHER).assigned_consultant_name,'Other Consultant')
+      assert.ok(!result.consultants.some(c=>c.id===OTHER))
+    } finally { await db.query("update employee_statuses set status='active' where user_id=$1",[OTHER]) }
     current=INACTIVE;assert.equal((await request()).httpStatus,403)
   })
   await t.test('Add Duplicate reuses the existing person for a different mandate and appends the stored CV',async()=>{
@@ -92,6 +109,7 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     const before=(await request('/count')).count
     assert.equal((await request(`/${reassigned.id}/consultant`,'PATCH',{assigned_consultant_id:INACTIVE})).httpStatus,400)
     assert.equal((await request(`/${reassigned.id}/consultant`,'PATCH',{assigned_consultant_id:OTHER})).httpStatus,200)
+    assert.equal((await request()).data.find(row=>row.id===reassigned.id).assigned_consultant_name,'Other Consultant')
     assert.equal((await request('/count')).count,before)
     current=CONSULTANT;assert.ok(!(await request()).data.some(row=>row.id===reassigned.id))
     assert.equal((await request(`/${reassigned.id}/status`,'PATCH',{status:'Interested'})).httpStatus,404)

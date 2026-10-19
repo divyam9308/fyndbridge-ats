@@ -6,7 +6,7 @@ This module stores preliminary CV assignments independently of Candidates. “No
 
 - Sidebar navigation beside Candidates with a database aggregate badge for Not Contacted. Consultants see their own count; administrators see active consultants' combined count.
 - Administrator Overall/consultant filtering with counts, active employee options, stable selection and four existing Reports KPI components.
-- Requested table columns, current-page bulk selection, global database grouping and oldest-first ordering, editable statuses, system dates, protected CV access, and completed grey rows.
+- Requested table columns, checkbox selection retained across pages (up to 100 records), global database grouping and oldest-first ordering, editable statuses, system dates, protected CV access, and completed grey rows.
 - One bulk upload wizard with three concurrent uploads, per-file recovery, manual correction, individual candidate steps, Back/Next, and an atomic, retry-safe batch Save.
 - The actual `CandidatesPage` form in modal-only mode, all existing fields, existing validation and duplicate dialog, editable client/mandate defaults, stored-CV full parsing, and atomic candidate/association/link creation.
 - Administrator reassignment, individual/bulk deletion and scoped Delete All. Delete All always preserves both pending contact statuses, including Added assignments that were later returned to those statuses.
@@ -15,6 +15,9 @@ This module stores preliminary CV assignments independently of Candidates. “No
 - If some files have already uploaded while another is still processing, the individual cross deletes that uploaded file; Cancel or the dialog cross deletes all unsaved uploaded files. Any outstanding upload is discarded when its request finishes. Mixed-batch browser checks verify storage removal and manifest deletion for both completed and late uploads.
 - Table presentation reuses the main Candidates name/avatar and consultant-chip components, mobile typography, status badge color map and popup menu styling. Clicking a status pill opens the assignment status menu, including both assignment-only pending states; keyboard editing and viewport boundaries are supported. Names retain their stored spelling/capitalization. The original assignment column order and white/yellow/grey row groups remain intact.
 - A centered CV column before Actions uses the same `DocumentIconGroup` component, document icon, colors, filename tooltip and loading spinner as main Candidates. The former eye action is removed. Opening still uses the assignment-authorized signed-URL endpoint; repeated clicks while that request is pending do not issue duplicate requests.
+- In administrator Overall view, a Consultant column immediately after Status shows the assigned employee using the same `ConsultantChip` as main Candidates. It is hidden when filtering to one consultant or viewing a consultant's own assignments. The existing list endpoint resolves names from the full employee directory, preserving names on historical assignments when employees become inactive; only active employees remain selectable for new assignments/reassignment. No schema change is required.
+- The toolbar Bulk Delete button is replaced by a floating selection popup using the same dock as Applied Candidates. Administrators/superadmins get Delete selected and Add to Candidates; consultants get only Add to Candidates. Clear selection is available to both. Pending-contact and already-added records cannot enter bulk transfer; consultants cannot select those rows, while administrators may select them for deletion.
+- Bulk Add reviews the existing complete candidate form one record at a time with Next/Back and a final Save. Review is read-only; cancelling before Save creates no main candidates or associations and retains the assignment CVs. Final Save uses the existing per-record transactional/idempotent transfer, preserves duplicate dialogs and retains unsaved drafts after an error. Completed records remain saved and are excluded from subsequent retries. This transfer batch is not one all-or-nothing database transaction.
 
 ## Database and deployment status
 
@@ -46,6 +49,7 @@ All paths below are relative to `/api/assigned-candidates`, behind existing auth
 | PATCH | `/:id/consultant` | Administrator reassignment to an active employee |
 | GET | `/:id/cv` | Record-authorized, short-lived signed document URL |
 | POST | `/:id/parse` | Existing full parser applied to the stored CV |
+| POST | `/:id/review` | Read-only full validation, permissions and duplicate checks for staged bulk review |
 | POST | `/:id/transfer` | Existing candidate validation/duplicate workflow plus atomic transfer |
 | DELETE | `/:id` | Administrator individual assignment deletion |
 | POST | `/delete` | Explicit IDs for bulk deletion, or server-calculated contacted-only deletion |
@@ -57,6 +61,8 @@ Assignment SELECT RLS checks active employment and existing page permissions, th
 Status mutations repeat the consultant ownership predicate on UPDATE, so a reassignment between read and write cannot grant access. Receiving consultants must be active. The database generates assignment/contact timestamps, preserves the first contacted timestamp, and rejects invalid status/reference data. Added state survives deletion of a linked main candidate, preventing accidental repeated transfer.
 
 Transfer locks the assignment row. Candidate creation, mandate association and assignment linkage commit together. Lost-response retries return the committed result. Concurrent identity changes are rechecked within the transaction. Explicit Update Existing saves the reviewed candidate and association fields, appends the stored CV once, and links the assignment to the existing concrete candidate/mandate association without creating another person or association.
+
+Bulk review uses the same ownership, employment, page-view, column, mandate, consultant and duplicate checks as transfer. Its server-only review marker returns before the transfer RPC; a request-body property cannot enable it on the write endpoint. Every final transfer repeats authoritative checks and the database safeguards. A failure stops the save queue, displays the remaining candidate form (and the existing duplicate dialog when relevant), retains reviewed values, and reports the number already added. No new schema or migration is needed.
 
 ## Parsing and storage
 
@@ -89,6 +95,7 @@ New application files:
 - `server/src/services/assignedCvParsing.js`
 - `src/pages/AssignedCandidatesPage.jsx` and `.css`
 - `src/features/assigned-candidates/AssignmentWizard.jsx`, `AssignmentSelect.jsx`, `assignmentStatuses.js`
+- `src/features/assigned-candidates/AssignmentSelectionDock.jsx` and `.css`, `AssignmentTransferWizard.jsx`
 - `src/services/assignedCandidatesApi.js`
 - The migration and this document.
 

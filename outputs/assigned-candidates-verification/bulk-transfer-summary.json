@@ -1,0 +1,55 @@
+{
+  "provenance": "Actual React form, Express assignment routes and isolated synthetic PostgreSQL/storage; rendered Applied Candidates dock compared with assignment selection popup",
+  "backend": {
+    "passed": 777,
+    "failed": 0
+  },
+  "full_module_browser": {
+    "startTime": "2026-10-19T08:23:00.635Z",
+    "duration": 206980.963,
+    "expected": 50,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  },
+  "test_synchronization_fix": "Wait for the updated status text before starting the next status change",
+  "new_flow_browser_recheck": {
+    "startTime": "2026-10-19T08:27:14.145Z",
+    "duration": 56199.409999999996,
+    "expected": 12,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "module_scenarios_verified_across_runs": 51,
+  "coverage": [
+    "Applied Candidates shared dock and computed panel/delete-button styling",
+    "admin/superadmin Delete and Add; consultants Add only",
+    "selection preserved over pages and capped at 100",
+    "pending-contact and already-added transfer guards",
+    "responsive popup bounds at 390, 768, 1280 and 1440px",
+    "read-only server validation with no candidate, association or Added timestamp writes",
+    "existing full form, Next/Back with retained drafts and final Save",
+    "cancel before Save preserves assignments and CVs without creating main candidates",
+    "native duplicate dialog for duplicates appearing between reviewed drafts",
+    "failure retains remaining forms and retries without re-saving completed rows",
+    "option-loading requests cancel cleanly on form changes"
+  ],
+  "save_semantics": "Final Save transfers records sequentially with per-record transactions; completed records remain saved after a later failure, and remaining drafts are retryable",
+  "build": "passed",
+  "focused_eslint": "passed",
+  "preexisting_lint_unchanged": {
+    "CandidatesPage.jsx": {
+      "errors": 4,
+      "warnings": 2
+    },
+    "candidateController.js": {
+      "errors": 7,
+      "warnings": 0
+    }
+  },
+  "diff_check": "passed",
+  "migration_required": false,
+  "production_writes": 0,
+  "published": false
+}

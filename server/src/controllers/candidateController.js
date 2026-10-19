@@ -1392,6 +1392,7 @@ async function createCandidate(req, res) {
     if (req.assignedCandidateId) {
       await assertCanUpdateColumns('candidates', { cv_files: true }, await isAdmin(req.user))
       if (candidate) await assertRowEditable('candidates', candidate.id, await isAdmin(req.user))
+      if (req.assignedReviewOnly) return res.json({ valid: true })
       const { data, error } = await supabase.rpc('transfer_assigned_candidate', {
         p_id: req.assignedCandidateId, p_actor: req.user.id, p_candidate: candidatePayload,
         p_association: associationPayload, p_existing: candidate?.id || null

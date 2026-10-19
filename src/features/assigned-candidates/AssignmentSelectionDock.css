@@ -1,0 +1,22 @@
+.assigned-page.has-bulk-selection { padding-bottom: calc(145px + env(safe-area-inset-bottom, 0px)); }
+.assigned-selection-dock { left: calc(50% + var(--sidebar-width) / 2); width: min(1020px, calc(100vw - var(--sidebar-width) - 48px)); bottom: max(24px, calc(env(safe-area-inset-bottom, 0px) + 12px)); }
+.assigned-selection-dock.has-delete .floating-action-dock-inner { grid-template-columns: auto minmax(0, 1fr) auto auto auto; }
+.assigned-dock-clear,.assigned-dock-delete,.assigned-dock-add { height: 42px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 16px; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.assigned-dock-clear { background: #fff; border: 1px solid rgba(0, 18, 100, 0.22); color: #001264; }
+.assigned-dock-delete { border: 1px solid #b42318; border-radius: 18px; color: #fff; background: #b42318; box-shadow: 0 12px 24px rgb(180 35 24 / 18%); }
+.assigned-dock-delete:hover { background: #912018; }
+.assigned-selection-dock button:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+@media (max-width: 1300px) {
+  .assigned-selection-dock .floating-action-dock-inner,.assigned-selection-dock.has-delete .floating-action-dock-inner { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .assigned-dock-delete,.assigned-dock-add { grid-row: 2; }
+  .assigned-dock-delete { grid-column: 2; }
+  .assigned-dock-add { grid-column: 3; }
+  .assigned-page.has-bulk-selection { padding-bottom: calc(220px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 760px) {
+  .assigned-selection-dock { left: 50%; width: calc(100vw - 24px); bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+  .assigned-selection-dock .floating-action-dock-inner,.assigned-selection-dock.has-delete .floating-action-dock-inner { grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 12px; }
+  .assigned-dock-clear { grid-row: 2; grid-column: 1 / -1; }
+  .assigned-dock-delete,.assigned-dock-add { grid-column: 1 / -1; grid-row: auto; }
+  .assigned-page.has-bulk-selection { padding-bottom: calc(300px + env(safe-area-inset-bottom, 0px)); }
+}

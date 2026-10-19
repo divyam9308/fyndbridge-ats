@@ -46,11 +46,12 @@ exports.list = handle(async (req,res) => {
   const result = await query.order('sort_group').order('assigned_at').order('id').range((page-1)*limit,page*limit-1)
   unwrap(result)
   const stats = unwrap(await supabase.rpc('assigned_candidates_stats',{p_scope:scope,p_active_only:false}))
-  const directory = admin ? (await listEmployeeDirectory()).filter(e=>e.status==='active') : []
+  const directory = admin ? await listEmployeeDirectory() : []
+  const consultantNames = new Map(directory.map(e=>[e.user_id,e.name]))
   const counts = admin ? unwrap(await supabase.rpc('assigned_candidates_consultant_counts')) || [] : []
   const countMap = new Map(counts.map(r=>[r.user_id,Number(r.not_contacted)]))
-  res.json({ data:result.data,total:result.count,page,limit,totalPages:Math.max(1,Math.ceil(result.count/limit)),stats,statuses:ASSIGNED_STATUSES,
-    consultants:directory.map(e=>({id:e.user_id,name:e.name,not_contacted:countMap.get(e.user_id)||0})),can_manage:admin })
+  res.json({ data:admin ? result.data.map(row=>({...row,assigned_consultant_name:consultantNames.get(row.assigned_consultant_id)||null})) : result.data,total:result.count,page,limit,totalPages:Math.max(1,Math.ceil(result.count/limit)),stats,statuses:ASSIGNED_STATUSES,
+    consultants:directory.filter(e=>e.status==='active').map(e=>({id:e.user_id,name:e.name,not_contacted:countMap.get(e.user_id)||0})),can_manage:admin })
 })
 exports.count = handle(async(req,res)=>{
   const {admin,scope}=await context(req)
@@ -127,7 +128,7 @@ exports.parse = handle(async(req,res)=>{
     res.json({data:require('./resumeController').rowFromParsed({originalname:cv.cv_original_name,mimetype:cv.cv_mimetype},parsed)})
   } finally {await fs.unlink(file).catch(()=>{})}
 })
-exports.transfer = handle(async(req,res)=>{
+async function transfer(req,res) {
   const row=await getRow(req)
   if(row.added_at) return res.json({candidate_id:row.candidate_id,association_id:row.association_id,idempotent:true})
   if([NOT_CONTACTED,DID_NOT_PICK_UP].includes(row.status)) throw fail('Contact the candidate and update the assignment status before adding to Candidates.',409)
@@ -139,6 +140,11 @@ exports.transfer = handle(async(req,res)=>{
   for(const key of ['cv_link','cv_storage_path','cv_attachments','cv_file_hash','resume_url','cv_original_name','cv_mimetype']) delete body[key]
   req.body={...body,source:'manual',...(!admin?{consultant_user_id:row.assigned_consultant_id,consultant_name:employee?.name || ''}:{})}
   return require('./candidateController').createCandidate(req,res)
+}
+exports.transfer = handle(transfer)
+exports.review = handle(async(req,res)=>{
+  req.assignedReviewOnly=true
+  return transfer(req,res)
 })
 exports.remove = handle(async(req,res)=>{
   const {scope}=await adminContext(req)

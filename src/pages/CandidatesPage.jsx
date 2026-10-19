@@ -301,7 +301,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
   }
 }
 
-export default function CandidatesPage({ assignedCandidate = null, onAssignedClose, onAssignedSaved } = {}) {
+export default function CandidatesPage({ assignedCandidate = null, onAssignedClose, onAssignedSaved, assignedBatch = null } = {}) {
   const { loadProfile, session } = useAuth()
   const { isAdmin, permissions } = useAdminAccess()
   const location = useLocation()
@@ -309,6 +309,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
   const dashboardFilters = useMemo(() => parseDashboardFiltersFromUrl(location.search), [location.search])
   const [candidates, setCandidates] = useState([])
   const fileInputRef = useRef(null)
+  const optionRequestRef = useRef(null)
   const candidateModalRef = useRef(null)
   const candidateModalBodyRef = useRef(null)
   const candidateDetailRef = useRef(null)
@@ -326,8 +327,12 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [candidateDuplicate, setCandidateDuplicate] = useState(null)
-  const [duplicateBypass, setDuplicateBypass] = useState(null)
+  const [candidateDuplicate, setCandidateDuplicate] = useState(() => assignedBatch?.error?.duplicate ? {
+    source: 'manual', candidate: assignedBatch.draft?.form, existing: assignedBatch.error.duplicate.existing,
+    exactAssociation: assignedBatch.error.exactAssociation, allowAddDuplicate: assignedBatch.error.duplicate.allowAddDuplicate !== false,
+    message: assignedBatch.error.message
+  } : null)
+  const [duplicateBypass, setDuplicateBypass] = useState(() => assignedBatch?.draft?.duplicateAction ? { source: 'manual', action: assignedBatch.draft.duplicateAction } : null)
   const [duplicateMoreOpen, setDuplicateMoreOpen] = useState(false)
   const [cvDuplicateNotice, setCvDuplicateNotice] = useState(null)
   const [page, setPage] = useState(1)
@@ -359,24 +364,35 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
 
   const [dbClients, setDbClients] = useState([])
   const [dbJobs, setDbJobs] = useState([])
+  const [optionError, setOptionError] = useState('')
   const { staff: allConsultantOptions, selectableStaff: consultantOptions } = useStaffDirectory()
   const [consultantSearch, setConsultantSearch] = useState('')
   const [consultantOpen, setConsultantOpen] = useState(false)
 
   const refreshOptionData = useCallback(async () => {
-    const [clientsRes, jobsRes] = await Promise.all([
-      fetch('/api/clients?options=true'),
-      fetch('/api/jobs?options=true')
-    ])
-    const clientsData = await clientsRes.json().catch(() => ({}))
-    const jobsData = await jobsRes.json().catch(() => ({}))
-    if (clientsRes.ok) setDbClients(clientsData.data || [])
-    if (jobsRes.ok) setDbJobs((jobsData.data || []).sort((a, b) => (a?.title || a?.role || '').localeCompare(b?.title || b?.role || '', undefined, { sensitivity: 'base' })))
+    optionRequestRef.current?.abort()
+    const controller = new AbortController()
+    optionRequestRef.current = controller
+    try {
+      const [clientsRes, jobsRes] = await Promise.all([
+        fetch('/api/clients?options=true', { signal: controller.signal }),
+        fetch('/api/jobs?options=true', { signal: controller.signal })
+      ])
+      if (!clientsRes.ok || !jobsRes.ok) throw new Error('Unable to load clients and mandates. Please retry.')
+      const clientsData = await clientsRes.json()
+      const jobsData = await jobsRes.json()
+      if (controller.signal.aborted) return
+      setDbClients(clientsData.data || [])
+      setDbJobs((jobsData.data || []).sort((a, b) => (a?.title || a?.role || '').localeCompare(b?.title || b?.role || '', undefined, { sensitivity: 'base' })))
+      setOptionError('')
+    } catch {
+      if (!controller.signal.aborted) setOptionError('Unable to load clients and mandates. Please retry.')
+    }
   }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(refreshOptionData, 0)
-    return () => window.clearTimeout(timer)
+    return () => { window.clearTimeout(timer); optionRequestRef.current?.abort() }
   }, [refreshOptionData])
 
   const consultantByName = useMemo(() => new Map(allConsultantOptions.map(user => [user.name, user])), [allConsultantOptions])
@@ -442,8 +458,9 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
     name: assignedCandidate.full_name, mobile: assignedCandidate.mobile_number,
     clientId: assignedCandidate.client_id || '', client: assignedCandidate.clients?.name || assignedCandidate.clients?.client_name || '',
     jobId: assignedCandidate.job_id || '', job: assignedCandidate.jobs?.title || '', status: assignedCandidate.status,
-    consultantName: assignedCandidate.consultant_name || '', consultantUserId: assignedCandidate.assigned_consultant_id } : EMPTY_CAND)
-  const [errors, setErrors]     = useState({})
+    consultantName: assignedCandidate.consultant_name || '', consultantUserId: assignedCandidate.assigned_consultant_id,
+    ...assignedBatch?.draft?.form } : EMPTY_CAND)
+  const [errors, setErrors]     = useState(() => assignedBatch?.error ? { form: assignedBatch.error.message } : {})
   const [skillInput, setSkillInput] = useState('')
   const [editing, setEditing] = useState(false)
   const [assigningAnother, setAssigningAnother] = useState(false)
@@ -625,6 +642,11 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
     const body = uiCandidateToApi(prepared, activeConsultantName, dbClients, dbJobs)
     if (duplicateAction) body.duplicate_action = duplicateAction
     if (assignedCandidate) {
+      if (assignedBatch) {
+        await assignedRequest(`/${assignedCandidate.id}/review`, { method: 'POST', body: JSON.stringify(body) })
+        await assignedBatch.onReview({ form: candidate, body, duplicateAction })
+        return null
+      }
       const payload = await assignedRequest(`/${assignedCandidate.id}/transfer`, { method: 'POST', body: JSON.stringify(body) })
       return apiCandidateToUi(payload)
     }
@@ -1202,7 +1224,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
     setSaving(true)
     try {
       await saveCandidateToApi(candidateToSave, { update: editing && !assigningAnother, duplicateAction: assigningAnother ? 'add_duplicate' : (duplicateBypass?.source === 'manual' ? duplicateBypass.action || 'add_duplicate' : '') })
-      if (assignedCandidate) { onAssignedSaved?.(); return }
+      if (assignedCandidate) { if (!assignedBatch) onAssignedSaved?.(); return }
       setSaving(false)
       setDuplicateBypass(null)
       closeCandidateModal()
@@ -2560,6 +2582,8 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
               <button className="modal-close" onClick={closeCandidateModal} aria-label="Close" disabled={saving || parsingAssigned}><X size={16} /></button>
             </div>
             <div className="modal-body" ref={candidateModalBodyRef}>
+              {assignedBatch && <div className="review-banner" role="status" style={{ marginBottom:12 }}>Candidate {assignedBatch.index + 1} of {assignedBatch.total}{assignedBatch.savedCount ? ` · ${assignedBatch.savedCount} already added` : ''}{assignedBatch.progress ? ` · ${assignedBatch.progress}` : ''}</div>}
+              {optionError && <div className="form-error" role="alert">{optionError}<button className="btn-secondary" type="button" onClick={() => refreshOptionData()}>Retry</button></div>}
               {errors.form && <div className="form-error" style={{ display:'block', marginBottom:12 }}>{errors.form}</div>}
               {assignedCandidate && <button className="btn-secondary" type="button" onClick={parseAssignedCv} disabled={parsingAssigned || saving}>{parsingAssigned ? 'Parsing…' : 'Parse CV'}</button>}
               {assigningAnother && <div className="review-banner" style={{ marginBottom:12 }}>Creates a new assignment. The current candidate row will not be changed.</div>}
@@ -2585,11 +2609,12 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={closeCandidateModal} disabled={saving}>Cancel</button>
+              {assignedBatch?.onBack && <button className="btn-secondary" disabled={saving || parsingAssigned} onClick={() => assignedBatch.onBack({ form, duplicateAction: duplicateBypass?.action || (duplicateBypass ? 'add_duplicate' : '') })}>Back</button>}
               {editing && (
                 <button className="btn-secondary" onClick={openAssignAnother} disabled={saving}>Assign Another Mandate/Client</button>
               )}
               <button className="btn-primary" onClick={handleSave} id="save-candidate-btn" disabled={saving || parsingAssigned}>
-                {saving ? 'Saving...' : (assigningAnother ? 'Save New Assignment' : 'Save Candidate')}
+                {saving ? 'Saving...' : assignedBatch ? (assignedBatch.index === assignedBatch.total - 1 ? 'Save' : 'Next') : (assigningAnother ? 'Save New Assignment' : 'Save Candidate')}
               </button>
             </div>
           </div>

@@ -1,0 +1,50 @@
+{
+  "provenance": "Actual React and Express API using synthetic isolated PostgreSQL/storage; rendered main Candidates computed-style comparison",
+  "column": "Consultant immediately after Status, administrator Overall view only",
+  "backend": {
+    "passed": 777,
+    "failed": 0
+  },
+  "initial_module_browser": {
+    "startTime": "2026-10-19T08:02:45.193Z",
+    "duration": 157287.874,
+    "expected": 33,
+    "skipped": 0,
+    "unexpected": 6,
+    "flaky": 0
+  },
+  "assertion_correction": "Target the consultant name span, excluding decorative avatar initials",
+  "focused_browser_recheck": {
+    "startTime": "2026-10-19T08:05:56.182Z",
+    "duration": 23892.046,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "module_scenarios_verified_across_runs": 39,
+  "styles": {
+    "webkit": {
+      "consultant_pill_and_avatar_match_main": true
+    },
+    "chromium": {
+      "consultant_pill_and_avatar_match_main": true
+    },
+    "firefox": {
+      "consultant_pill_and_avatar_match_main": true
+    }
+  },
+  "coverage": [
+    "Overall column order and assignee name",
+    "hidden in selected-consultant and consultant-account views",
+    "inactive assignee name retained without enabling inactive assignment options",
+    "name updates after reassignment",
+    "shared main Candidates consultant pill and avatar",
+    "unchanged contact-date and CV cell behavior"
+  ],
+  "build": "passed",
+  "focused_eslint": "passed",
+  "diff_check": "passed",
+  "migration_required": false,
+  "published": false
+}
