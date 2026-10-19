@@ -30,6 +30,7 @@ const InvoicePage = lazy(() => import('./pages/InvoicePage'))
 const InvoiceEntityDetailPage = lazy(() => import('./pages/InvoiceEntityDetailPage'))
 const AttendancePage = lazy(() => import('./pages/AttendancePage'))
 const ConsultantReportPage = lazy(() => import('./pages/ConsultantReportPage'))
+const AssignedCandidatesPage = lazy(() => import('./pages/AssignedCandidatesPage'))
 const AppliedCandidatesPage = lazy(() => import('./pages/AppliedCandidatesPage'))
 const PublicLayout = lazy(() => import('./components/public/PublicLayout'))
 const PublicRolesPage = lazy(() => import('./pages/PublicRolesPage'))
@@ -71,6 +72,7 @@ function AuthenticatedRoutes() {
             <Route path="clients/:clientId" element={<PageViewGuard pageKey="clients"><ClientDetailPage /></PageViewGuard>} />
             <Route path="clients/:clientId/jobs/:jobId/candidates" element={<PageViewGuard pageKey="clients"><ClientJobCandidatesPage /></PageViewGuard>} />
             <Route path="candidates" element={<PageViewGuard pageKey="candidates"><CandidatesPage /></PageViewGuard>} />
+            <Route path="assigned-candidates" element={<PageViewGuard pageKey="assigned_candidates"><AssignedCandidatesPage /></PageViewGuard>} />
             <Route path="applied-candidates" element={<PageViewGuard pageKey="applied_candidates"><AppliedCandidatesPage /></PageViewGuard>} />
             <Route path="performance" element={<PageViewGuard pageKey="performance_review"><PerformanceReviewPage /></PageViewGuard>} />
             <Route path="attendance" element={<PageViewGuard pageKey="attendance"><AttendancePage /></PageViewGuard>} />

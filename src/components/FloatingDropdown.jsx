@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
-export default function FloatingDropdown({ anchorRect, ignoreElement, onClose, className = '', width, minWidth = 180, children }) {
+export default function FloatingDropdown({ anchorRect, ignoreElement, onClose, className = '', width, minWidth = 180, fitViewport = false, children }) {
   const ref = useRef(null)
   const canUseDom = typeof document !== 'undefined' && Boolean(document.body)
   const validRect = anchorRect && Number.isFinite(anchorRect.left) && Number.isFinite(anchorRect.bottom)
-  const nextWidth = validRect ? width || Math.max(anchorRect.width || 0, minWidth) : minWidth
+  const requestedWidth = validRect ? width || Math.max(anchorRect.width || 0, minWidth) : minWidth
+  const nextWidth = fitViewport && canUseDom ? Math.min(requestedWidth, window.innerWidth - 16) : requestedWidth
   const style = validRect && canUseDom ? {
     position: 'fixed',
     top: anchorRect.bottom + 6,
@@ -14,6 +15,19 @@ export default function FloatingDropdown({ anchorRect, ignoreElement, onClose, c
     zIndex: 10050,
     visibility: 'visible',
   } : { visibility: 'hidden' }
+
+  useLayoutEffect(() => {
+    const node = ref.current
+    if (!fitViewport || !node || !validRect) return
+    const below = Math.max(0, window.innerHeight - anchorRect.bottom - 14)
+    const above = Math.max(0, anchorRect.top - 14)
+    const maximumHeight = parseFloat(window.getComputedStyle(node).maxHeight) || Infinity
+    const openAbove = node.getBoundingClientRect().height > below && above > below
+    node.style.maxHeight = `${Math.min(maximumHeight, openAbove ? above : below)}px`
+    node.style.overflowY = 'auto'
+    const height = node.getBoundingClientRect().height
+    node.style.top = `${openAbove ? Math.max(8, anchorRect.top - height - 6) : anchorRect.bottom + 6}px`
+  }, [fitViewport, validRect, anchorRect, nextWidth, children])
 
   useEffect(() => {
     if (!canUseDom) return undefined
@@ -32,12 +46,14 @@ export default function FloatingDropdown({ anchorRect, ignoreElement, onClose, c
     document.addEventListener('mousedown', closeOnMouseDown)
     document.addEventListener('keydown', closeOnEscape)
     window.addEventListener('scroll', closeOnScroll, true)
+    if (fitViewport) window.addEventListener('resize', onClose)
     return () => {
       document.removeEventListener('mousedown', closeOnMouseDown)
       document.removeEventListener('keydown', closeOnEscape)
       window.removeEventListener('scroll', closeOnScroll, true)
+      if (fitViewport) window.removeEventListener('resize', onClose)
     }
-  }, [canUseDom, ignoreElement, onClose])
+  }, [canUseDom, fitViewport, ignoreElement, onClose])
 
   if (!canUseDom || !validRect) return null
 

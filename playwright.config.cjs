@@ -11,7 +11,7 @@ module.exports = defineConfig({
   use: { baseURL: 'http://127.0.0.1:4173', viewport: { width: 1440, height: 960 }, trace: 'retain-on-failure' },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 960 } } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'], viewport: { width: 1440, height: 960 } } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'], viewport: { width: 1440, height: 960 }, ...(process.env.FYNDBRIDGE_FIREFOX_EXECUTABLE ? { launchOptions: { executablePath: process.env.FYNDBRIDGE_FIREFOX_EXECUTABLE } } : {}) } },
     { name: 'webkit', use: { ...devices['Desktop Safari'], viewport: { width: 1440, height: 960 } } },
   ],
   webServer: {

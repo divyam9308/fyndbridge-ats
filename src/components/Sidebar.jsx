@@ -7,6 +7,7 @@ import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import { usePageViewPermissions } from '../hooks/usePageViewPermissions'
 import { preloadRoute } from '../utils/routePreload'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import { apiFetch } from '../services/apiClient'
 import './Sidebar.css'
 
@@ -15,6 +16,7 @@ const navItems = [
   { to: '/dashboard/jobs',       label: 'Mandates', key: 'mandates', Icon: Briefcase },
   { to: '/dashboard/clients',    label: 'Clients', key: 'clients', Icon: Building2 },
   { to: '/dashboard/candidates', label: 'Candidates', key: 'candidates', Icon: Users },
+  { to: '/dashboard/assigned-candidates', label: 'Assigned Candidates', key: 'assigned_candidates', Icon: UserRoundCheck },
   { to: '/dashboard/attendance', label: 'Attendance', key: 'attendance', Icon: CalendarCheck },
   { to: '/dashboard/reports/consultant', label: 'Report', key: 'report', Icon: ChartNoAxesCombined },
   { to: '/dashboard/performance', label: 'PMS', key: 'performance_review', Icon: ClipboardList },
@@ -30,6 +32,7 @@ export default function Sidebar() {
   const { user, signOut } = useAuth()
   const { isAdmin, isSuperAdmin } = useAdminAccess({ loadPermissions: false })
   const pageViews = usePageViewPermissions({ isAdmin, isSuperAdmin })
+  const canViewAssignedCandidates = !pageViews.loading && pageViews.canView('assigned_candidates')
   const canViewAppliedCandidates = !pageViews.loading && pageViews.canView('applied_candidates')
   const [counts, setCounts] = useState({ public_roles: null, applied_candidates: null })
   const displayName = user?.profile_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Recruiter'
@@ -57,6 +60,13 @@ export default function Sidebar() {
           }),
       )
     }
+    if (canViewAssignedCandidates) requests.push(
+      apiFetch('/api/assigned-candidates/count', { cache: 'no-store' }).then(async response => {
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.error || 'Assignment count failed')
+        return ['assigned_candidates', Number(payload.count || 0)]
+      })
+    )
     const results = await Promise.allSettled(requests)
     setCounts(current => {
       const next = { ...current }
@@ -65,7 +75,7 @@ export default function Sidebar() {
       })
       return next
     })
-  }, [canViewAppliedCandidates, pageViews.loading])
+  }, [canViewAppliedCandidates, canViewAssignedCandidates, pageViews.loading])
 
   useEffect(() => {
     preloadRoute('/dashboard/performance')
@@ -88,17 +98,21 @@ export default function Sidebar() {
     const refreshFromStorage = event => {
       if (event.key === 'ats:sidebar-counts-refresh') refreshSidebarCounts()
     }
+    window.addEventListener('ats:assigned-candidates-updated', refresh)
     window.addEventListener('ats:jobs-updated', refresh)
     window.addEventListener('ats:public-roles-updated', refresh)
     window.addEventListener('ats:applied-candidates-updated', refresh)
     window.addEventListener('storage', refreshFromStorage)
     return () => {
+      window.removeEventListener('ats:assigned-candidates-updated', refresh)
       window.removeEventListener('ats:jobs-updated', refresh)
       window.removeEventListener('ats:public-roles-updated', refresh)
       window.removeEventListener('ats:applied-candidates-updated', refresh)
       window.removeEventListener('storage', refreshFromStorage)
     }
   }, [refreshSidebarCounts])
+
+  useRealtimeRefresh({ channelName: 'realtime:assigned-sidebar', tables: ['assigned_candidates', 'employee_statuses'], onChange: refreshSidebarCounts, enabled: canViewAssignedCandidates })
 
   const preload = (to) => {
     preloadRoute(to)

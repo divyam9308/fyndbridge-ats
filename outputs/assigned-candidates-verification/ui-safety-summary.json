@@ -1,0 +1,311 @@
+{
+  "provenance": "Local synthetic browser/API fixtures; final frontend safety follow-up",
+  "stats": {
+    "startTime": "2026-10-18T21:33:09.977Z",
+    "duration": 70092.95,
+    "expected": 21,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "engines": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ],
+  "checks_per_engine": 7,
+  "popup_measurements": {
+    "chromium": [
+      {
+        "width": 1440,
+        "before": {
+          "x": 268,
+          "width": 1144,
+          "documentWidth": 1440,
+          "viewport": 1440
+        },
+        "during": {
+          "x": 268,
+          "width": 1144
+        },
+        "after": {
+          "x": 268,
+          "width": 1144
+        },
+        "dialog": {
+          "x": 340,
+          "y": 24,
+          "width": 760,
+          "height": 389
+        }
+      },
+      {
+        "width": 1280,
+        "before": {
+          "x": 268,
+          "width": 984,
+          "documentWidth": 1280,
+          "viewport": 1280
+        },
+        "during": {
+          "x": 268,
+          "width": 984
+        },
+        "after": {
+          "x": 268,
+          "width": 984
+        },
+        "dialog": {
+          "x": 260,
+          "y": 24,
+          "width": 760,
+          "height": 389
+        }
+      },
+      {
+        "width": 1024,
+        "before": {
+          "x": 268,
+          "width": 728,
+          "documentWidth": 1024,
+          "viewport": 1024
+        },
+        "during": {
+          "x": 268,
+          "width": 728
+        },
+        "after": {
+          "x": 268,
+          "width": 728
+        },
+        "dialog": {
+          "x": 132,
+          "y": 24,
+          "width": 760,
+          "height": 389
+        }
+      },
+      {
+        "width": 768,
+        "before": {
+          "x": 268,
+          "width": 472,
+          "documentWidth": 768,
+          "viewport": 768
+        },
+        "during": {
+          "x": 268,
+          "width": 472
+        },
+        "after": {
+          "x": 268,
+          "width": 472
+        },
+        "dialog": {
+          "x": 16,
+          "y": 24,
+          "width": 736,
+          "height": 389
+        }
+      }
+    ],
+    "firefox": [
+      {
+        "width": 1440,
+        "before": {
+          "x": 268,
+          "width": 1144,
+          "documentWidth": 1440,
+          "viewport": 1440
+        },
+        "during": {
+          "x": 268,
+          "width": 1144
+        },
+        "after": {
+          "x": 268,
+          "width": 1144
+        },
+        "dialog": {
+          "x": 340,
+          "y": 24,
+          "width": 760,
+          "height": 391
+        }
+      },
+      {
+        "width": 1280,
+        "before": {
+          "x": 268,
+          "width": 984,
+          "documentWidth": 1280,
+          "viewport": 1280
+        },
+        "during": {
+          "x": 268,
+          "width": 984
+        },
+        "after": {
+          "x": 268,
+          "width": 984
+        },
+        "dialog": {
+          "x": 260,
+          "y": 24,
+          "width": 760,
+          "height": 391
+        }
+      },
+      {
+        "width": 1024,
+        "before": {
+          "x": 268,
+          "width": 728,
+          "documentWidth": 1024,
+          "viewport": 1024
+        },
+        "during": {
+          "x": 268,
+          "width": 728
+        },
+        "after": {
+          "x": 268,
+          "width": 728
+        },
+        "dialog": {
+          "x": 132,
+          "y": 24,
+          "width": 760,
+          "height": 391
+        }
+      },
+      {
+        "width": 768,
+        "before": {
+          "x": 268,
+          "width": 472,
+          "documentWidth": 768,
+          "viewport": 768
+        },
+        "during": {
+          "x": 268,
+          "width": 472
+        },
+        "after": {
+          "x": 268,
+          "width": 472
+        },
+        "dialog": {
+          "x": 16,
+          "y": 24,
+          "width": 736,
+          "height": 391
+        }
+      }
+    ],
+    "webkit": [
+      {
+        "width": 1440,
+        "before": {
+          "x": 268,
+          "width": 1138,
+          "documentWidth": 1434,
+          "viewport": 1440
+        },
+        "during": {
+          "x": 268,
+          "width": 1138
+        },
+        "after": {
+          "x": 268,
+          "width": 1138
+        },
+        "dialog": {
+          "x": 340,
+          "y": 24,
+          "width": 760,
+          "height": 390
+        }
+      },
+      {
+        "width": 1280,
+        "before": {
+          "x": 268,
+          "width": 978,
+          "documentWidth": 1274,
+          "viewport": 1280
+        },
+        "during": {
+          "x": 268,
+          "width": 978
+        },
+        "after": {
+          "x": 268,
+          "width": 978
+        },
+        "dialog": {
+          "x": 260,
+          "y": 24,
+          "width": 760,
+          "height": 390
+        }
+      },
+      {
+        "width": 1024,
+        "before": {
+          "x": 268,
+          "width": 722,
+          "documentWidth": 1018,
+          "viewport": 1024
+        },
+        "during": {
+          "x": 268,
+          "width": 722
+        },
+        "after": {
+          "x": 268,
+          "width": 722
+        },
+        "dialog": {
+          "x": 132,
+          "y": 24,
+          "width": 760,
+          "height": 390
+        }
+      },
+      {
+        "width": 768,
+        "before": {
+          "x": 268,
+          "width": 466,
+          "documentWidth": 762,
+          "viewport": 768
+        },
+        "during": {
+          "x": 268,
+          "width": 466
+        },
+        "after": {
+          "x": 268,
+          "width": 466
+        },
+        "dialog": {
+          "x": 16,
+          "y": 24,
+          "width": 736,
+          "height": 390
+        }
+      }
+    ]
+  },
+  "checks": [
+    "centered wizard at 768, 1024, 1280 and 1440 pixels",
+    "no horizontal page movement on popup open/close",
+    "bottom-edge action menu remains within viewport",
+    "reassignment dropdown fits modal and supports keyboard/Escape",
+    "existing candidate and duplicate dialogs centered",
+    "native navy/gold theme and Candidates row-action styling",
+    "complete assignment upload, parser, transfer and deletion workflows"
+  ],
+  "deployment_performed": false
+}

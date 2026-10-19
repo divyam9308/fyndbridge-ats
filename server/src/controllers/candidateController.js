@@ -1359,7 +1359,7 @@ async function createCandidate(req, res) {
       ? duplicateMatch.matches.find((match) => hasSameConcreteAssociation(match, associationPayload))
       : null
 
-    if (exactAssociation) {
+    if (exactAssociation && !(req.assignedCandidateId && duplicateAction === 'update_current')) {
       return res.status(409).json({
         duplicate: true,
         exactAssociation: true,
@@ -1387,6 +1387,17 @@ async function createCandidate(req, res) {
 
     if (!candidate && duplicateAction === 'add_duplicate' && duplicateMatch.matchedCandidates?.length) {
       candidate = duplicateMatch.matchedCandidates[0]
+    }
+
+    if (req.assignedCandidateId) {
+      await assertCanUpdateColumns('candidates', { cv_files: true }, await isAdmin(req.user))
+      if (candidate) await assertRowEditable('candidates', candidate.id, await isAdmin(req.user))
+      const { data, error } = await supabase.rpc('transfer_assigned_candidate', {
+        p_id: req.assignedCandidateId, p_actor: req.user.id, p_candidate: candidatePayload,
+        p_association: associationPayload, p_existing: candidate?.id || null
+      })
+      if (error) throw Object.assign(error, { statusCode: error.code === '42501' ? 403 : 409 })
+      return res.status(201).json(flattenAssociation(data.association))
     }
 
     const previousAttachments = candidateCvAttachments(candidate)

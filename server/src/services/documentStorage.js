@@ -52,6 +52,14 @@ async function removeUnreferencedDocuments(bucket, attachments, { table, attachm
       referenced.add(attachment.path)
     }
   }
+  const assignedPaths = bucket === 'resumes' ? [...targetPaths].filter(path => path.startsWith('assigned/')) : []
+  if (assignedPaths.length) {
+    // The assignment owns this object even after it becomes a main candidate CV.
+    // Its cleanup queue checks both modules before releasing the document.
+    const assigned = await supabase.from('assigned_candidate_uploads').select('cv_storage_path').in('cv_storage_path', assignedPaths)
+    if (assigned.error) throw assigned.error
+    for (const upload of assigned.data || []) referenced.add(upload.cv_storage_path)
+  }
   await removeDocuments(bucket, [...targetPaths]
     .filter(path => !referenced.has(path))
     .map(path => ({ path })))

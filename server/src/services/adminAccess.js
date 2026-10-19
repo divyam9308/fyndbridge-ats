@@ -24,6 +24,7 @@ const PAGE_VIEW_DEFAULTS = {
   attendance: 'everyone',
   report: 'everyone',
   applied_candidates: 'everyone',
+  assigned_candidates: 'everyone',
   invoice: 'admin_only',
   user_manual: 'everyone'
 }

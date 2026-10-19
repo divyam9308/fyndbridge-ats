@@ -184,6 +184,7 @@ async function discardTempResumes(req, res) {
 }
 
 module.exports = {
+  rowFromParsed,
   bulkParseResumes,
   openResume,
   discardTempResumes

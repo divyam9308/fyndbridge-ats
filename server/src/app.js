@@ -45,6 +45,7 @@ app.use('/api/public', require('./routes/publicRoles'))
 app.use(attachUser)
 
 app.use('/api/candidates', requireAuth, require('./routes/candidates'))
+app.use('/api/assigned-candidates', requireAuth, require('./routes/assignedCandidates'))
 app.use('/api/applied-candidates', requireAuth, require('./routes/appliedCandidates'))
 app.use('/api/resumes', requireAuth, require('./routes/resumes'))
 app.use('/api/documents', requireAuth, require('./routes/documents'))

@@ -1,0 +1,40 @@
+.assigned-page { display: grid; gap: 20px; }
+.assigned-toolbar,.assigned-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.assigned-toolbar { justify-content: space-between; }
+.assigned-toolbar h2 { font-size: 20px; color: var(--navy); margin: 0; }
+.assigned-consultant-filter { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-width: 220px; }
+.assigned-consultant-options { max-height: 320px; overflow-y: auto; }
+.assigned-consultant-option { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 10px 12px; border: 0; background: var(--white, #fff); color: var(--navy); text-align: left; cursor: pointer; font: inherit; font-size: 12px; }
+.assigned-consultant-option:hover,.assigned-consultant-option:focus-visible { background: var(--bg-primary, #f3f5f9); }
+.assigned-consultant-option .sidebar-count-badge { background: var(--navy); color: white; min-width: 24px; }
+.assigned-kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+.assigned-table { min-width: 1040px; }
+.assigned-table tbody tr.assigned-group-0 { background: white; }
+.assigned-table tbody tr.assigned-group-1 { background: #fff9e5; }
+.assigned-table tbody tr.assigned-group-2 { background: #f1f3f5; }
+.assigned-table tbody tr:hover { filter: brightness(.985); }
+.assigned-table tbody tr.is-selected { box-shadow: inset 3px 0 var(--gold, #DAB111); }
+.assigned-status { max-width: 165px; background: rgba(255,255,255,.75); border: 1px solid var(--border-color, #dce1e9); border-radius: 5px; padding: 5px 6px; font: inherit; font-size: 11px; color: var(--navy); }
+.assigned-row-actions { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.assigned-add { border: 0; background: transparent; color: var(--navy); font: inherit; font-size: 11px; font-weight: 650; padding: 4px; cursor: pointer; }
+.assigned-add:disabled { color: var(--text-muted, #758095); cursor: not-allowed; }
+.assigned-notice { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: #edf7ef; color: #285a34; border-radius: 8px; padding: 12px 15px; font-size: 13px; }
+.assigned-progress { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 18px; font-size: 13px; font-weight: 650; color: var(--navy); }
+.assigned-progress span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 65%; font-size: 12px; font-weight: 400; color: var(--text-muted, #758095); }
+.assigned-dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 145px; padding: 20px; border: 1px dashed var(--navy); border-radius: 9px; background: #f6f8fc; color: var(--navy); cursor: pointer; font: inherit; }
+.assigned-dropzone span { font-size: 12px; color: var(--text-muted, #758095); }
+.assigned-file-list { list-style: none; padding: 0; margin: 16px 0 0; }
+.assigned-file-list li { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border-color, #e4e7ed); }
+.assigned-file-list li>div { min-width: 0; flex: 1; }
+.assigned-file-list strong,.assigned-file-list span { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.assigned-file-list span { margin-top: 3px; color: var(--text-muted, #758095); font-size: 11px; }
+.assigned-wizard { width: min(760px,calc(100vw - 32px)); left: max(16px,calc(50vw - 380px)); }
+.assigned-wizard .modal-body { min-height: 250px; max-height: 65vh; overflow: auto; }
+.assigned-wizard .form-group { min-width: 0; }
+.assigned-wizard .client-suggestions button { display: flex; justify-content: space-between; gap: 12px; }
+@media (max-width: 1050px) { .assigned-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 600px) { .assigned-wizard .form-grid-2 { grid-template-columns: 1fr; } .assigned-controls { width: 100%; } .assigned-progress { flex-direction: column; } }
+
+.assigned-wizard .client-search-wrap,.assigned-wizard .client-search-wrap>.form-control { width: 100%; }
+.assigned-reassign-dialog .modal-body { min-height: 240px; }
+.assigned-reassign-dialog .client-search-wrap,.assigned-reassign-dialog .client-search-wrap>.form-control { width: 100%; }

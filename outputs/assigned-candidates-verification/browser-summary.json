@@ -1,0 +1,20 @@
+{
+  "provenance": "Synthetic local browser/API/PostgreSQL fixtures; no production writes",
+  "stats": {
+    "startTime": "2026-10-18T21:14:51.358Z",
+    "duration": 236834.08599999998,
+    "expected": 84,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "engines": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ],
+  "checks_per_engine": 28,
+  "assigned_candidates_checks": 15,
+  "firefox_test_launcher": "/tmp/fyndx-assigned-firefox",
+  "production_migration_applied": false
+}

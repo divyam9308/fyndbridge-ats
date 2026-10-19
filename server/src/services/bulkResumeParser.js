@@ -47,6 +47,7 @@ function fallbackReason(normalizedText, extractionError) {
 
 function createBulkResumeParser({
   readFile = fs.readFile,
+  normalizeText = normalizeResumeText,
   pdfParseImpl = pdfParse,
   extractTextWithOcrImpl = extractTextWithOcr,
   parseResumeFileImpl = parseResume,
@@ -66,7 +67,7 @@ function createBulkResumeParser({
     const fileBuffer = await readFile(file.path)
     try {
       const parsed = await pdfParseImpl(fileBuffer)
-      normalizedText = normalizeResumeText(parsed?.text)
+      normalizedText = normalizeText(parsed?.text)
     } catch (error) {
       extractionError = error
       logger.warn('[upload-resumes] PDF text extraction failed', {
@@ -98,7 +99,7 @@ function createBulkResumeParser({
     })
 
     try {
-      const ocrText = normalizeResumeText(await extractTextWithOcrImpl(fileBuffer))
+      const ocrText = normalizeText(await extractTextWithOcrImpl(fileBuffer))
       if (!isUsableResumeText(ocrText)) {
         const error = new Error('OCR did not produce usable resume text')
         error.code = 'OCR_TEXT_UNUSABLE'

@@ -93,6 +93,8 @@ test('Applied Candidates uses the same rendered column picker UI as Candidates a
   const styles = []
   const readStyle = node => { const style = getComputedStyle(node); return { width: style.width, height: style.height, background: style.backgroundImage, color: style.color, radius: style.borderRadius, border: style.border, font: style.font, shadow: style.boxShadow } }
   for (const route of [appliedUrl, '/dashboard/candidates', '/dashboard/clients']) {
+    // Compare the same resting state; a pointer retained over Columns can change hover styles.
+    await page.mouse.move(0, 0)
     await page.goto(route)
     const button = page.getByRole('button', { name: 'Columns', exact: true })
     await expect(button).toBeVisible()

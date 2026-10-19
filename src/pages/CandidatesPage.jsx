@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, X, Users, ChevronDown, AlertCircle, Search, Loader2, Eye, Pencil, Lock } from 'lucide-react'
+import { assignedRequest } from '../services/assignedCandidatesApi'
+import { lockBodyScroll } from '../utils/lockBodyScroll'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
@@ -315,7 +317,7 @@ const uiCandidateToApi = (f, consultantName = '', dbClients = [], dbJobs = []) =
   }
 }
 
-export default function CandidatesPage() {
+export default function CandidatesPage({ assignedCandidate = null, onAssignedClose, onAssignedSaved } = {}) {
   const { loadProfile, session } = useAuth()
   const { isAdmin, permissions } = useAdminAccess()
   const location = useLocation()
@@ -450,8 +452,13 @@ export default function CandidatesPage() {
   }, [])
 
   // Add Candidate Modal
-  const [addOpen, setAddOpen]   = useState(false)
-  const [form, setForm]         = useState(EMPTY_CAND)
+  const [addOpen, setAddOpen]   = useState(Boolean(assignedCandidate))
+  const [parsingAssigned, setParsingAssigned] = useState(false)
+  const [form, setForm]         = useState(() => assignedCandidate ? { ...EMPTY_CAND, skills: [],
+    name: assignedCandidate.full_name, mobile: assignedCandidate.mobile_number,
+    clientId: assignedCandidate.client_id || '', client: assignedCandidate.clients?.name || assignedCandidate.clients?.client_name || '',
+    jobId: assignedCandidate.job_id || '', job: assignedCandidate.jobs?.title || '', status: assignedCandidate.status,
+    consultantName: assignedCandidate.consultant_name || '', consultantUserId: assignedCandidate.assigned_consultant_id } : EMPTY_CAND)
   const [errors, setErrors]     = useState({})
   const [skillInput, setSkillInput] = useState('')
   const [editing, setEditing] = useState(false)
@@ -493,10 +500,11 @@ export default function CandidatesPage() {
 
   useEffect(() => {
     if (!addOpen && !importOpen && !candidateDuplicate && !selectedCandidate) return
+    if (assignedCandidate) return lockBodyScroll({ preserveScrollbar: true })
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = previous }
-  }, [addOpen, importOpen, candidateDuplicate, selectedCandidate])
+  }, [addOpen, importOpen, candidateDuplicate, selectedCandidate, assignedCandidate])
 
   useEffect(() => {
     if (addOpen) focusPopup(candidateModalRef)
@@ -595,17 +603,17 @@ export default function CandidatesPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      loadCandidates(page)
+      if (!assignedCandidate) loadCandidates(page)
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [loadCandidates, page])
+  }, [assignedCandidate, loadCandidates, page])
 
   useEffect(() => {
-    const refreshCandidates = () => { loadCandidates(page, { showLoading: false }) }
+    const refreshCandidates = () => { if (!assignedCandidate) loadCandidates(page, { showLoading: false }) }
     window.addEventListener('ats:candidates-updated', refreshCandidates)
     return () => window.removeEventListener('ats:candidates-updated', refreshCandidates)
-  }, [loadCandidates, page])
+  }, [assignedCandidate, loadCandidates, page])
 
   const refreshCandidatesRealtime = useCallback(() => {
     if (addOpen || importOpen || candidateDuplicate || editing) {
@@ -624,13 +632,18 @@ export default function CandidatesPage() {
   useRealtimeRefresh({
     channelName: 'realtime:candidates-page',
     tables: ['candidates', 'candidate_associations'],
-    onChange: refreshCandidatesRealtime
+    onChange: refreshCandidatesRealtime,
+    enabled: !assignedCandidate
   })
 
   const saveCandidateToApi = async (candidate, { update = false, duplicateAction = '' } = {}) => {
     const prepared = await ensureCandidateClient(candidate)
     const body = uiCandidateToApi(prepared, activeConsultantName, dbClients, dbJobs)
     if (duplicateAction) body.duplicate_action = duplicateAction
+    if (assignedCandidate) {
+      const payload = await assignedRequest(`/${assignedCandidate.id}/transfer`, { method: 'POST', body: JSON.stringify(body) })
+      return apiCandidateToUi(payload)
+    }
     const formBody = new FormData()
     Object.entries(body).forEach(([key, value]) => {
       if (value === undefined) return
@@ -862,7 +875,7 @@ export default function CandidatesPage() {
     jobId: 'job_id'
   }
   const isCandidateFieldHidden = (name) => isColumnHidden(permissions, 'candidates', candidateFieldPermission[name] || name, isAdmin)
-  const isCandidateFieldDisabled = (name) => isColumnDisabled(permissions, 'candidates', candidateFieldPermission[name] || name, isAdmin)
+  const isCandidateFieldDisabled = (name) => (Boolean(assignedCandidate) && name === 'consultantName' && !isAdmin) || isColumnDisabled(permissions, 'candidates', candidateFieldPermission[name] || name, isAdmin)
 
   const proceedColumns = () => {
     const allowed = allowedCandidateColumnKeys()
@@ -995,6 +1008,7 @@ export default function CandidatesPage() {
     setErrors({})
     setDuplicateBypass(null)
     assignmentSourceRef.current = null
+    if (assignedCandidate) onAssignedClose?.()
   }
 
   const openAddModal = useCallback(async () => {
@@ -1040,6 +1054,22 @@ export default function CandidatesPage() {
     }
     if (action === 'add-candidate') openAddModal()
   }, [location.pathname, location.state?.action, navigate, openAddModal])
+
+  const parseAssignedCv = async () => {
+    setParsingAssigned(true)
+    try {
+      const payload = await assignedRequest(`/${assignedCandidate.id}/parse`, { method: 'POST' })
+      const parsed = mapBulkResumeRowToForm(payload.data)
+      setForm(current => {
+        const next = { ...current }
+        for (const key of ['email','designation','currentCompany','currentOrganisation','exp','city','state','location','skills','education','salary','linkedinUrl','notes']) {
+          if (parsed[key] !== '' && parsed[key] != null) next[key] = parsed[key]
+        }
+        return next
+      })
+    } catch (error) { setErrors(current => ({ ...current, form: error.message })) }
+    finally { setParsingAssigned(false) }
+  }
 
   const candidateToForm = (candidate) => {
     const matchedClient = dbClients.find(c => c.id === candidate.clientId)
@@ -1187,7 +1217,8 @@ export default function CandidatesPage() {
       : { ...form, cvLink: nextCvLink, cvFiles: pendingCvFiles, removedCvPaths: editing ? removedCvPaths : [] }
     setSaving(true)
     try {
-      await saveCandidateToApi(candidateToSave, { update: editing && !assigningAnother, duplicateAction: assigningAnother ? 'add_duplicate' : (duplicateBypass?.source === 'manual' ? 'add_duplicate' : '') })
+      await saveCandidateToApi(candidateToSave, { update: editing && !assigningAnother, duplicateAction: assigningAnother ? 'add_duplicate' : (duplicateBypass?.source === 'manual' ? duplicateBypass.action || 'add_duplicate' : '') })
+      if (assignedCandidate) { onAssignedSaved?.(); return }
       setSaving(false)
       setDuplicateBypass(null)
       closeCandidateModal()
@@ -1529,6 +1560,12 @@ export default function CandidatesPage() {
 
   const openDuplicateExistingForEdit = () => {
     if (!candidateDuplicate?.existing) return
+    if (assignedCandidate) {
+      setDuplicateBypass({ source: 'manual', action: 'update_current' })
+      setCandidateDuplicate(null)
+      setDuplicateMoreOpen(false)
+      return
+    }
     const existing = apiCandidateToUi(candidateDuplicate.existing)
     setCandidateDuplicate(null)
     setDuplicateMoreOpen(false)
@@ -2223,6 +2260,7 @@ export default function CandidatesPage() {
 
   return (
     <div className="candidates-page">
+      {!assignedCandidate && <>
       <input
         ref={fileInputRef}
         type="file"
@@ -2537,16 +2575,18 @@ export default function CandidatesPage() {
         </div>
       ), document.body)}
 
+      </>}
       {/* ===== Add Candidate Modal ===== */}
       {addOpen && createPortal((
         <div className="modal-overlay">
           <div className="modal-card modal-card-lg" ref={candidateModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={assigningAnother ? 'Assign Another Mandate/Client' : 'Add Candidate'}>
             <div className="modal-header">
               <span className="modal-title">{assigningAnother ? 'Assign Another Mandate/Client' : (editing ? 'Edit Candidate' : 'Add New Candidate')}</span>
-              <button className="modal-close" onClick={closeCandidateModal} aria-label="Close" disabled={saving}><X size={16} /></button>
+              <button className="modal-close" onClick={closeCandidateModal} aria-label="Close" disabled={saving || parsingAssigned}><X size={16} /></button>
             </div>
             <div className="modal-body" ref={candidateModalBodyRef}>
               {errors.form && <div className="form-error" style={{ display:'block', marginBottom:12 }}>{errors.form}</div>}
+              {assignedCandidate && <button className="btn-secondary" type="button" onClick={parseAssignedCv} disabled={parsingAssigned || saving}>{parsingAssigned ? 'Parsing…' : 'Parse CV'}</button>}
               {assigningAnother && <div className="review-banner" style={{ marginBottom:12 }}>Creates a new assignment. The current candidate row will not be changed.</div>}
               {CandidateFormBody({
                 f: form,
@@ -2558,7 +2598,7 @@ export default function CandidatesPage() {
                 onAddSkill: addManualSkill,
                 rmSkill: removeSkill,
                 onChange: handleChange,
-                lockCv: assigningAnother,
+                lockCv: assigningAnother || Boolean(assignedCandidate),
                 cvSaved: savedCvAttachments,
                 cvPending: pendingCvFiles,
                 cvRemovedPaths: removedCvPaths,
@@ -2573,7 +2613,7 @@ export default function CandidatesPage() {
               {editing && (
                 <button className="btn-secondary" onClick={openAssignAnother} disabled={saving}>Assign Another Mandate/Client</button>
               )}
-              <button className="btn-primary" onClick={handleSave} id="save-candidate-btn" disabled={saving}>
+              <button className="btn-primary" onClick={handleSave} id="save-candidate-btn" disabled={saving || parsingAssigned}>
                 {saving ? 'Saving...' : (assigningAnother ? 'Save New Assignment' : 'Save Candidate')}
               </button>
             </div>

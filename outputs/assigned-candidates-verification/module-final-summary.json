@@ -1,0 +1,19 @@
+{
+  "provenance": "Final assignment-specific browser checks after reviewed-field duplicate update fix; synthetic local API/PostgreSQL/storage fixtures; no production writes",
+  "stats": {
+    "startTime": "2026-10-18T21:23:21.611Z",
+    "duration": 56261.327,
+    "expected": 15,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "engines": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ],
+  "checks_per_engine": 5,
+  "includes": "Existing form parsing, first transfer and exact-match Update Existing with reviewed-field persistence and unchanged person/association totals",
+  "production_migration_applied": false
+}
