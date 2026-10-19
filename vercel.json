@@ -24,5 +24,15 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/crm-gmail-sync",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/crm-gmail-worker",
+      "schedule": "* * * * *"
+    }
   ]
 }

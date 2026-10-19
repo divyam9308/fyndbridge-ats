@@ -52,3 +52,12 @@
 .crm-probability-medium { background: #fff0df; color: #95430e; border: 1px solid #f3d0aa; }
 .crm-probability-high { background: #fff5cf; color: #7a5c00; border: 1px solid #ecdc9c; }
 .crm-probability-highest { background: #D4EDDA; color: #155724; border: 1px solid #b8dac1; }
+
+.crm-gmail-control { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.crm-gmail-button { color: var(--brand-blue, #001264); white-space: nowrap; }
+.crm-email-insight { padding: 10px 12px; margin-top: 10px; border-radius: 8px; border-left: 3px solid; }
+.crm-email-meeting { color: #6b21a8; background: #f3e8ff; }
+.crm-email-negative { color: #b91c1c; background: #fef2f2; }
+.crm-email-sentiment-positive { color: #166534; background: #dcfce7; }
+.crm-email-sentiment-neutral, .crm-email-sentiment-unknown { color: #4b5563; background: #f3f4f6; }
+.crm-email-sentiment-negative { color: #9a3412; background: #ffedd5; }

@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-19",
+  "backend": {
+    "passed": 810,
+    "failed": 0
+  },
+  "gmail_backend_cases": 20,
+  "compiled_browser": {
+    "passed": 20,
+    "failed": 0,
+    "projects": [
+      "chromium",
+      "webkit"
+    ]
+  },
+  "final_gmail_browser": {
+    "passed": 4,
+    "failed": 0
+  },
+  "live_synthetic_ai": {
+    "passed": 4,
+    "failed": 0,
+    "model": "gemini-3.5-flash-lite"
+  },
+  "production_build": "passed",
+  "changed_file_lint": "passed",
+  "global_lint": {
+    "errors": 885,
+    "warnings": 3
+  },
+  "dependency_audit": {
+    "server": {
+      "critical": 1,
+      "high": 2,
+      "moderate": 3
+    },
+    "frontend": {
+      "high": 1,
+      "moderate": 1
+    }
+  },
+  "live_google_oauth": "not performed",
+  "hosted_migration": "not applied",
+  "deployment": "not performed"
+}

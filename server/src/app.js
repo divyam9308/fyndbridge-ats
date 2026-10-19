@@ -42,6 +42,12 @@ app.use(cors({
 app.use(express.json())
 app.get('/share/open-roles/:slug', require('./controllers/publicRolesController').shareOpenRole)
 app.use('/api/public', require('./routes/publicRoles'))
+// Google redirects and Vercel Cron have no ATS session token. Each has its own
+// authentication and must be registered before attachUser / protected CRM routes.
+const gmail = require('./routes/crmGmail').createHandlers()
+app.get('/api/crm/gmail/callback', gmail.callback)
+app.get('/api/cron/crm-gmail-sync', gmail.syncCron)
+app.get('/api/cron/crm-gmail-worker', gmail.workerCron)
 app.use(attachUser)
 
 app.use('/api/candidates', requireAuth, require('./routes/candidates'))

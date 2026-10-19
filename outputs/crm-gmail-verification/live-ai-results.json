@@ -1,0 +1,38 @@
+{
+  "model": "gemini-3.5-flash-lite",
+  "synthetic_only": true,
+  "results": [
+    {
+      "name": "proposed",
+      "passed": true,
+      "duration_ms": 2143,
+      "meeting": "proposed",
+      "negative": null,
+      "sentiment": "positive"
+    },
+    {
+      "name": "confirmed",
+      "passed": true,
+      "duration_ms": 1722,
+      "meeting": "confirmed",
+      "negative": null,
+      "sentiment": "positive"
+    },
+    {
+      "name": "temporary_no_requirements",
+      "passed": true,
+      "duration_ms": 971,
+      "meeting": null,
+      "negative": "no_requirements",
+      "sentiment": "negative"
+    },
+    {
+      "name": "outgoing_unknown",
+      "passed": true,
+      "duration_ms": 1006,
+      "meeting": null,
+      "negative": null,
+      "sentiment": "unknown"
+    }
+  ]
+}

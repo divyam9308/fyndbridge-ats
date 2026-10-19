@@ -121,6 +121,21 @@ function activityValue(value, type) {
   if (type === 'next_follow_up_date_changed') return formatDateDDMMYYYY(value)
   return String(value)
 }
+function EmailActivity({ email }) {
+  const date = value => value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }).format(new Date(value)) + ' IST' : '-'
+  const label = value => String(value || '').replaceAll('_', ' ')
+  return <>
+    <strong>{email.direction === 'outgoing' ? 'Outgoing' : 'Incoming'} email · Gmail</strong>
+    <div className="sub-text">{date(email.email_at)}</div>
+    <p><strong>From:</strong> {email.sender}<br /><strong>To:</strong> {(email.recipients || []).join(', ')}</p>
+    <p><strong>Subject:</strong> {email.subject}</p>
+    <p><strong>AI summary:</strong> {email.summary}</p>
+    {email.meeting && <div className="crm-email-insight crm-email-meeting"><strong>Meeting {label(email.meeting.status)}</strong>{email.meeting.when && <p>{email.meeting.when}</p>}<p>{email.meeting.evidence}</p></div>}
+    {email.negative_response && <div className="crm-email-insight crm-email-negative"><strong>{label(email.negative_response.category)} · {label(email.negative_response.permanence)}</strong><p>{email.negative_response.evidence}</p></div>}
+    <p><span className={`badge crm-email-sentiment-${['positive','neutral','negative'].includes(email.sentiment?.label) ? email.sentiment.label : 'unknown'}`}>Client interest: {email.sentiment?.label === 'unknown' ? 'Not assessable' : label(email.sentiment?.label || 'unknown')}</span></p>
+    {email.sentiment?.evidence && <p className="sub-text">{email.sentiment.evidence}</p>}
+  </>
+}
 export function CrmHistory({ record, kind, onClose }) {
   const [rows, setRows] = useState([])
   const [page, setPage] = useState(1)
@@ -136,7 +151,7 @@ export function CrmHistory({ record, kind, onClose }) {
   return <CrmDialog title={kind === 'comments' ? 'Comment History' : 'Activity History'} onClose={onClose} footer={<>
     <button className="btn-secondary" disabled={page === 1 || loading} onClick={() => { setLoading(true); setPage(value => value - 1) }}>Previous</button><span className="sub-text">Page {page} of {Math.max(1, Math.ceil(total / 25))}</span><button className="btn-secondary" disabled={page * 25 >= total || loading} onClick={() => { setLoading(true); setPage(value => value + 1) }}>Next</button>
   </>}><div className="modal-body"><div className="name-text">{record.organisation_name}</div>{loading ? <p role="status">Loading history...</p> : error ? <div role="alert" className="form-error">{error}<button className="btn-secondary" onClick={() => { setLoading(true); setRetry(value => value + 1) }}>Retry</button></div> : !rows.length ? <p className="sub-text">No {kind === 'comments' ? 'comments' : 'activities'} yet.</p> : rows.map(row => <div className="crm-history-entry" key={row.id}>
-      <div className="sub-text">{commentDate(row.created_at)}</div>{kind === 'comments' ? <p>{row.body}</p> : <><strong>{ACTIVITY_LABELS[row.activity_type] || row.activity_type}</strong>{row.comment_body ? <p>{row.comment_body}</p> : row.activity_type !== 'created' && <p>{row.previous_label || activityValue(row.previous_value, row.activity_type)} → {row.new_label || activityValue(row.new_value, row.activity_type)}</p>}</>}
-      <div className="sub-text">By {row.actor_name}</div>
+      <div className="sub-text">{commentDate(row.created_at)}</div>{kind === 'comments' ? <p>{row.body}</p> : row.activity_type === 'gmail_email' && row.email_metadata ? <EmailActivity email={row.email_metadata} /> : <><strong>{ACTIVITY_LABELS[row.activity_type] || row.activity_type}</strong>{row.comment_body ? <p>{row.comment_body}</p> : row.activity_type !== 'created' && <p>{row.previous_label || activityValue(row.previous_value, row.activity_type)} → {row.new_label || activityValue(row.new_value, row.activity_type)}</p>}</>}
+      <div className="sub-text">{row.activity_type === 'gmail_email' ? 'Gmail activity for' : 'By'} {row.actor_name}</div>
     </div>)}</div></CrmDialog>
 }

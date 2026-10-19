@@ -5,10 +5,10 @@ const GEMINI_API_KEY_PRIMARY = process.env.GEMINI_API_KEY_PRIMARY || ''
 const GEMINI_API_KEY_SECONDARY = process.env.GEMINI_API_KEY_SECONDARY || ''
 const REQUEST_TIMEOUT_MS = 30000
 
-function createModel(apiKey) {
+function createModel(apiKey, model = GEMINI_MODEL) {
   if (!apiKey) return null
   return new GoogleGenerativeAI(apiKey).getGenerativeModel({
-    model: GEMINI_MODEL,
+    model,
     systemInstruction: 'Return valid JSON only. Do not include markdown or explanatory text.'
   })
 }
@@ -73,14 +73,14 @@ function extractJsonText(text) {
   return cleaned
 }
 
-async function withTimeout(promise) {
+async function withTimeout(promise, timeoutMs = REQUEST_TIMEOUT_MS) {
   let timer
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
       const err = new Error('Gemini request timed out')
       err.statusCode = 504
       reject(err)
-    }, REQUEST_TIMEOUT_MS)
+    }, timeoutMs)
   })
 
   try {
@@ -90,21 +90,22 @@ async function withTimeout(promise) {
   }
 }
 
-async function requestProvider(providerName, fullPrompt, temperature) {
-  const result = await withTimeout(providers[providerName].generateContent({
+async function requestProvider(providerName, fullPrompt, temperature, options = {}) {
+  const provider = options.model ? createModel(providerName === 'PRIMARY' ? GEMINI_API_KEY_PRIMARY : GEMINI_API_KEY_SECONDARY, options.model) : providers[providerName]
+  const result = await withTimeout(provider.generateContent({
     contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
     generationConfig: {
       temperature,
       responseMimeType: 'application/json'
     }
-  }))
+  }, options.timeoutMs ? { timeout: options.timeoutMs } : undefined), options.timeoutMs)
 
   const text = result.response.text().trim()
   if (!text) throw new Error('Gemini returned an empty response')
   return text
 }
 
-async function generateAIResponse(prompt, { temperature = 0.1, schema = null, schemaName = 'ats_json', primaryOnly = false } = {}) {
+async function generateAIResponse(prompt, { temperature = 0.1, schema = null, schemaName = 'ats_json', primaryOnly = false, model, timeoutMs, safeErrors = false } = {}) {
   validateAiConfig({ primaryOnly })
 
   const started = Date.now()
@@ -116,7 +117,7 @@ async function generateAIResponse(prompt, { temperature = 0.1, schema = null, sc
   ].filter(Boolean).join('\n\n')
 
   try {
-    return await requestProvider('PRIMARY', fullPrompt, temperature)
+    return await requestProvider('PRIMARY', fullPrompt, temperature, { model, timeoutMs })
   } catch (err) {
     if (primaryOnly) {
       if (isQuotaError(err)) throw quotaReachedError()
@@ -137,7 +138,7 @@ async function generateAIResponse(prompt, { temperature = 0.1, schema = null, sc
         model: GEMINI_MODEL,
         durationMs: Date.now() - started,
         statusCode: normalized.statusCode,
-        message: normalized.message
+        message: safeErrors ? 'CRM_AI_PROVIDER_ERROR' : normalized.message
       })
       throw normalized
     }
@@ -146,13 +147,13 @@ async function generateAIResponse(prompt, { temperature = 0.1, schema = null, sc
     console.warn('[Gemini] Fallback Activated')
 
     try {
-      return await requestProvider('SECONDARY', fullPrompt, temperature)
+      return await requestProvider('SECONDARY', fullPrompt, temperature, { model, timeoutMs })
     } catch (secondaryErr) {
       if (isQuotaError(secondaryErr)) {
         console.warn('[Gemini] Quota Exceeded on Secondary')
         console.warn('[Gemini] Provider: PRIMARY')
         try {
-          return await requestProvider('PRIMARY', fullPrompt, temperature)
+          return await requestProvider('PRIMARY', fullPrompt, temperature, { model, timeoutMs })
         } catch (primaryRetryErr) {
           if (isQuotaError(primaryRetryErr)) {
             throw quotaReachedError()
@@ -163,7 +164,7 @@ async function generateAIResponse(prompt, { temperature = 0.1, schema = null, sc
             model: GEMINI_MODEL,
             durationMs: Date.now() - started,
             statusCode: normalizedRetry.statusCode,
-            message: normalizedRetry.message
+            message: safeErrors ? 'CRM_AI_PROVIDER_ERROR' : normalizedRetry.message
           })
           throw normalizedRetry
         }
@@ -174,15 +175,15 @@ async function generateAIResponse(prompt, { temperature = 0.1, schema = null, sc
         model: GEMINI_MODEL,
         durationMs: Date.now() - started,
         statusCode: normalized.statusCode,
-        message: normalized.message
+        message: safeErrors ? 'CRM_AI_PROVIDER_ERROR' : normalized.message
       })
       throw normalized
     }
   }
 }
 
-async function callAiJson({ prompt, schema, temperature = 0.1, schemaName = 'ats_json', returnRaw = false, primaryOnly = false }) {
-  const rawText = await generateAIResponse(prompt, { schema, temperature, schemaName, primaryOnly })
+async function callAiJson({ prompt, schema, temperature = 0.1, schemaName = 'ats_json', returnRaw = false, primaryOnly = false, model, timeoutMs, safeErrors = false }) {
+  const rawText = await generateAIResponse(prompt, { schema, temperature, schemaName, primaryOnly, model, timeoutMs, safeErrors })
   const jsonText = extractJsonText(rawText)
 
   try {

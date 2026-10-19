@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, CalendarClock, History, Info, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { CrmClientForm, CrmDialog, CrmHistory } from '../components/CrmDialogs'
+import CrmGmailConnection from '../components/CrmGmailConnection'
 import PaginationBar from '../components/PaginationBar'
 import TablePopover from '../components/TablePopover'
 import FormattedDateInput from '../components/FormattedDateInput'
@@ -101,6 +102,7 @@ export default function CrmPage() {
       <div className="crm-search"><Search size={15} /><input className="form-control" aria-label="Search CRM" placeholder="Search CRM..." value={search} onChange={event => setSearch(event.target.value)} /></div>
       <select className="filter-select" aria-label="Follow-up filter" value={follow} onChange={event => configure(setFollow)(event.target.value)}><option value="all">All Follow-ups</option>{Object.entries(FOLLOW_LABELS).map(([key, value]) => <option value={key} key={key}>{value}</option>)}</select>
       <select className="filter-select" aria-label="Sort CRM" value={sort} onChange={event => configure(setSort)(event.target.value)}><option value="created_at:desc">Newest first</option><option value="created_at:asc">Oldest first</option><option value="conversion_probability:desc">Probability: highest to lowest</option><option value="organisation_name:asc">Organisation A–Z</option><option value="organisation_name:desc">Organisation Z–A</option></select>
+      <CrmGmailConnection />
     </div>
     {error && <div className="crm-error" role="alert">{error}<button className="btn-secondary" onClick={() => { setLoading(true); setRevision(value => value + 1) }}>Reload table</button></div>}
     <div className="table-card"><div className="table-wrapper crm-table-scroll"><table className="data-table fb-theme-table crm-table"><colgroup>{WIDTHS.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>

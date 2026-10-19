@@ -9,6 +9,7 @@ async function start() {
   const db = await createDatabase()
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019105523_business_development_crm.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019110948_crm_probability_sorting.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019165228_crm_gmail_integration.sql'), 'utf8'))
   await db.query('insert into auth.users values($1,$2)', [USER_ID, 'recruiter@fyndbridge.in'])
   await db.query("insert into employee_statuses(user_id,status) values($1,'active')", [USER_ID])
   await db.query('insert into user_profiles(user_id,name,email) values($1,$2,$3)', [USER_ID, 'Test Recruiter', 'recruiter@fyndbridge.in'])
@@ -25,6 +26,14 @@ async function start() {
   app.get('/test/state', async (req, res) => res.json({ clients: (await db.query('select * from crm_clients')).rows, comments: (await db.query('select * from crm_comments order by created_at desc,id desc')).rows, activities: (await db.query('select * from crm_activities')).rows, ats: (await db.query('select * from clients')).rows }))
   app.get('/test/permissions', async (req,res) => res.json((await db.query('select * from page_view_permissions')).rows))
   app.post('/test/permission', async (req,res) => { await db.query("update page_view_permissions set view_permission=$1 where page_key='crm'", [req.body.permission]); res.json({ ok: true }) })
+  app.post('/test/gmail', async (req, res) => {
+    await db.query('insert into crm_gmail_connections(user_id,email,credentials,history_id,last_sync_at) values($1,$2,$3,$4,now()) on conflict(user_id) do nothing', [USER_ID,'recruiter@fyndbridge.in','synthetic-unusable-ciphertext','100'])
+    res.json({ ok: true })
+  })
+  app.post('/test/gmail-activity', async (req, res) => {
+    await db.query("insert into crm_activities(crm_client_id,activity_type,created_by,gmail_user_id,gmail_message_id,email_metadata) values($1,'gmail_email',$2,$2,$3,$4)", [req.body.client_id, USER_ID, req.body.message_id || 'browser-message', JSON.stringify(req.body.metadata)])
+    res.json({ ok: true })
+  })
   app.post('/test/fail-save', (req,res) => { failSave = true; res.json({ ok: true }) })
   app.post('/test/concurrent', async (req,res) => {
     const saved = await adapter.rpc('crm_save', { p_actor: OTHER, p_id: req.body.id, p_version: req.body.version, p_data: { status: 'Negotiation' } })

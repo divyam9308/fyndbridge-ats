@@ -11,6 +11,7 @@ const safe = handler => async (req, res, next) => { try { await handler(req, res
 const integer = (value, fallback, max) => Math.min(Math.max(parseInt(value, 10) || fallback, 1), max)
 router.use(requirePageViewPermission('crm'))
 router.use((req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next() })
+router.use('/gmail', require('./crmGmail').createHandlers().router)
 router.get('/check-duplicate', safe(async (req, res) => {
   const { data, error } = await supabase.rpc('crm_duplicate', { p_name: normalizeClientName(String(req.query.name || '').slice(0, 200)), p_exclude: UUID.test(req.query.exclude || '') ? req.query.exclude : null })
   if (error) throw error
