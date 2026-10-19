@@ -16,7 +16,7 @@
 .crm-table td.crm-email { color: var(--info); font-size: 12.5px; }
 .crm-comment-cell { position: relative; padding-right: 30px !important; }
 .crm-comment-info { position: absolute; top: 7px; right: 6px; }
-.crm-comment-text { text-align: left; font: inherit; background: transparent; border: 0; color: inherit; cursor: pointer; padding: 0; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.crm-comment-text { text-align: left; font: inherit; background: transparent; border: 0; color: inherit; cursor: pointer; padding: 0; white-space: normal; }
 .crm-inline-comment > div { display: flex; gap: 4px; margin-top: 8px; }
 .crm-inline-comment .btn-primary, .crm-inline-comment .btn-secondary { padding: 5px 10px; font-size: 12px; }
 .crm-form-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
@@ -47,3 +47,8 @@
   .crm-page .pagination-bar { max-width: 100%; }
   .crm-page .crm-search { min-width: 0; }
 }
+
+.crm-probability-low { background: #F8D7DA; color: #721C24; border: 1px solid #efb8bd; }
+.crm-probability-medium { background: #fff0df; color: #95430e; border: 1px solid #f3d0aa; }
+.crm-probability-high { background: #fff5cf; color: #7a5c00; border: 1px solid #ecdc9c; }
+.crm-probability-highest { background: #D4EDDA; color: #155724; border: 1px solid #b8dac1; }

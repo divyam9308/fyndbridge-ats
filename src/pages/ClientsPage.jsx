@@ -1,3 +1,4 @@
+import { previewWords } from '../utils/tableText'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -95,14 +96,6 @@ const clientContractAttachments = (client) => normalizeAttachments(
 )
 const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim()
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
-const previewWords = (value, count = 3) => {
-  const words = String(value || '').trim().split(/\s+/).filter(Boolean)
-  return {
-    words,
-    isLong: words.length > count,
-    preview: words.slice(0, count).join(' ')
-  }
-}
 const contactNameFor = (client) => String(client?.contact_person || client?.contact || '').replace(/\s+/g, ' ').trim()
 const isRealContact = (client) => {
   const name = contactNameFor(client)

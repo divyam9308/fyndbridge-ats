@@ -96,3 +96,26 @@ image was not supplied; current ATS source and rendered native forms guided styl
 - Existing unrelated search-path/password-protection notices were left unchanged.
   [Search path guidance](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable),
   [password protection guidance](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+
+## Display-refinement verification — 19 October 2026
+
+- Full backend suite: 789 passed, including the additional cross-page numeric-band
+  sorting test. PostgreSQL CRM suite: 11 passed.
+- Current Chromium/WebKit CRM suite: 16 passed, including existing ATS forms.
+- Browser assertions confirm the three-word preview and View more / View less,
+  exact pill labels without arrows, all four probability colours, sorting over
+  30 records and two pages, and unset probabilities last.
+- Full 42-day calendars were visible and clickable at 1440×780 and 390×700 without
+  scrolling the follow-up modal; the Edit Client form's calendar also passed.
+- Final production-build checks for these refinements: 4 passed across Chromium and WebKit.
+- Newly edited CRM/date-picker/helper code passes ESLint. Candidates and Clients
+  received only the identical preview helper extraction; their lint findings were
+  compared with HEAD: Candidates retains its 6 existing findings; Clients has 0.
+  No new findings were introduced.
+- Hosted migration `20261019110948` updates only `crm_list`. The live rollback test
+  passed for highest, middle and lowest/unset pages; no test rows remain. Browser
+  RPC execution remains revoked and service-role execution remains allowed.
+- Security advisor findings are unchanged; no new `crm_list` findings were reported.
+
+New screenshots: `calendar-1440.png`, `calendar-390.png`, and
+`probability-and-comment-previews.png`.

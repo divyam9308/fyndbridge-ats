@@ -5,7 +5,7 @@ export const CRM_BADGES = {
   'Outreach Sent': 'badge-client-submission', 'Follow-up Sent': 'badge-in-discussion', DNP: 'badge-status-unset', CB: 'badge-offered',
   'Meeting Scheduled': 'badge-interview', 'Proposal Sent': 'badge-client-submission', Negotiation: 'badge-in-discussion', Won: 'badge-hired',
   Lost: 'badge-rejected-client', 'On Hold': 'badge-offer-declined', 'Not Interested': 'badge-not-interested', 'Nurture / Long-term': 'badge-interested',
-  '<25%': 'badge-status-unset', '25-50%': 'badge-client-submission', '50-75%': 'badge-in-discussion', '75-100%': 'badge-hired'
+  '<25%': 'crm-probability-low', '25-50%': 'crm-probability-medium', '50-75%': 'crm-probability-high', '75-100%': 'crm-probability-highest'
 }
 export const emptyContact = () => ({ name: '', mobile: '', email: '', designation: '', linkedin: '' })
 export const followUpState = (date, today) => !date ? 'none' : date < today ? 'overdue' : date === today ? 'today' : 'upcoming'

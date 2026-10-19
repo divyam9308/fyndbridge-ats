@@ -6,7 +6,7 @@ const { createDatabase, CONSULTANT, OTHER, INACTIVE, CLIENT } = require('../../t
 const { normalizeClientName } = require('../../../shared/clientNames.cjs')
 const MIGRATION = path.resolve(__dirname, '../../../supabase/migrations/20261019105523_business_development_crm.sql')
 const contact = { name: 'HR Contact', mobile: '+91 98765 43210', email: 'hr@example.test', designation: '', linkedin: '' }
-async function createCrmDatabase() { const db = await createDatabase(); await db.exec(await fs.readFile(MIGRATION, 'utf8')); return db }
+async function createCrmDatabase() { const db = await createDatabase(); await db.exec(await fs.readFile(MIGRATION, 'utf8')); await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261019110948_crm_probability_sorting.sql'), 'utf8')); return db }
 async function save(db, data, record = null, actor = CONSULTANT) { return (await db.query('select crm_save($1,$2,$3,$4) as data', [actor, record?.id || null, record?.version || null, JSON.stringify(data)])).rows[0].data }
 const scalar = async (db, sql, args = []) => Object.values((await db.query(sql, args)).rows[0])[0]
 test('CRM migration: transactions, persistence, duplicates, audit, concurrency and access control', async t => {
@@ -77,6 +77,17 @@ test('CRM migration: transactions, persistence, duplicates, audit, concurrency a
     assert.equal((await list('', 'overdue')).total, 0)
     assert.equal((await list('', 'upcoming')).total, 0)
     assert.equal((await list('', 'all')).data.length, 1)
+  })
+  await t.test('probability sorts numerically across pages, with unspecified probabilities last', async () => {
+    for (const [index, probability] of [null, '<25%', '75-100%', '25-50%', '50-75%', '75-100%'].entries()) {
+      await save(db, { organisation_name: `Probability fixture ${index}`, contacts: [contact], conversion_probability: probability })
+    }
+    const bands = async (page, ascending = false) => (await scalar(db, "select crm_list('Probability fixture','all','2026-10-20',$1,2,'conversion_probability',$2)", [page, ascending])).data.map(row => row.conversion_probability)
+    assert.deepEqual(await bands(1), ['75-100%', '75-100%'])
+    assert.deepEqual(await bands(2), ['50-75%', '25-50%'])
+    assert.deepEqual(await bands(3), ['<25%', null])
+    assert.deepEqual(await bands(1, true), ['<25%', '25-50%'])
+    assert.deepEqual(await bands(3, true), ['75-100%', null])
   })
   await t.test('browser roles cannot access tables or spoof actors through RPC; service role works', async () => {
     for (const role of ['anon', 'authenticated']) {

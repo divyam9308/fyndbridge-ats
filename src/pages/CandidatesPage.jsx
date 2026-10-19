@@ -1,3 +1,4 @@
+import { previewWords } from '../utils/tableText'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -90,14 +91,6 @@ const getNoticeMeta = (value) => {
 const formatLocationRegion = (location, region) => {
   const parts = [location, region].map(value => String(value || '').trim()).filter(Boolean)
   return parts.join(', ')
-}
-const previewWords = (value, count = 3) => {
-  const words = String(value || '').trim().split(/\s+/).filter(Boolean)
-  return {
-    words,
-    isLong: words.length > count,
-    preview: words.slice(0, count).join(' ')
-  }
 }
 
 const getReadableClientId = (candidate, clientDisplayLookup) => {

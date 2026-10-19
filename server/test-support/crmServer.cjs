@@ -8,6 +8,7 @@ async function start() {
   for (const key of Object.keys(process.env)) if (/GEMINI.*KEY|SUPABASE.*KEY/.test(key)) delete process.env[key]
   const db = await createDatabase()
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019105523_business_development_crm.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019110948_crm_probability_sorting.sql'), 'utf8'))
   await db.query('insert into auth.users values($1,$2)', [USER_ID, 'recruiter@fyndbridge.in'])
   await db.query("insert into employee_statuses(user_id,status) values($1,'active')", [USER_ID])
   await db.query('insert into user_profiles(user_id,name,email) values($1,$2,$3)', [USER_ID, 'Test Recruiter', 'recruiter@fyndbridge.in'])

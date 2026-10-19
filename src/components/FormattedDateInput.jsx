@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 
@@ -56,12 +56,42 @@ const calendarDays = (monthDate) => {
   })
 }
 
-export default function FormattedDateInput({ value, onChange, className = 'form-control', disabled = false, name, id }) {
+export default function FormattedDateInput({ value, onChange, className = 'form-control', disabled = false, name, id, floating = false }) {
   const [displayValue, setDisplayValue] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const [visibleMonth, setVisibleMonth] = useState(() => dateFromValue(value))
   const containerRef = useRef(null)
+  const calendarRef = useRef(null)
+
+  // Opt-in for modal fields: a viewport-positioned calendar escapes the form's
+  // scrolling body while remaining in the dialog DOM and its keyboard focus trap.
+  useLayoutEffect(() => {
+    if (!isOpen || !floating) return undefined
+    const positionCalendar = () => {
+      const calendar = calendarRef.current
+      const input = containerRef.current?.querySelector('input')
+      if (!calendar || !input) return
+      const anchor = input.getBoundingClientRect()
+      const width = Math.min(324, window.innerWidth - 32)
+      calendar.style.width = `${width}px`
+      const height = calendar.offsetHeight
+      const below = window.innerHeight - anchor.bottom - 16
+      const above = anchor.top - 16
+      const top = height > below && above > below ? anchor.top - height - 8 : anchor.bottom + 8
+      Object.assign(calendar.style, {
+        left: `${Math.max(16, Math.min(anchor.left, window.innerWidth - width - 16))}px`,
+        top: `${Math.max(8, Math.min(top, window.innerHeight - height - 8))}px`,
+      })
+    }
+    positionCalendar()
+    window.addEventListener('resize', positionCalendar)
+    window.addEventListener('scroll', positionCalendar, true)
+    return () => {
+      window.removeEventListener('resize', positionCalendar)
+      window.removeEventListener('scroll', positionCalendar, true)
+    }
+  }, [floating, isOpen])
 
   useEffect(() => {
     if (!isOpen) return undefined
@@ -136,7 +166,7 @@ export default function FormattedDateInput({ value, onChange, className = 'form-
       />
 
       {isOpen && (
-        <span className="formatted-date-calendar" role="dialog" aria-label="Choose a date" onClick={(event) => event.stopPropagation()}>
+        <span ref={calendarRef} className="formatted-date-calendar" style={floating ? { position: 'fixed', zIndex: 100010 } : undefined} role="dialog" aria-label="Choose a date" onClick={(event) => event.stopPropagation()}>
           <span className="formatted-date-calendar-header">
             <button type="button" onClick={() => changeMonth(-1)} aria-label="Previous month">
               <ChevronLeft size={18} />

@@ -130,3 +130,18 @@ Modified:
 - `server/src/app.js`: authenticated CRM router.
 - `src/utils/sectorOptions.js`: preserved export backed by the shared options source.
 - `server/src/controllers/clientController.js`: exact existing normalizer extraction only.
+
+## CRM display refinements — 19 October 2026
+
+- Comments share the unchanged Candidates/Clients `previewWords` helper in
+  `src/utils/tableText.js`: date plus the first three comment words, then the native
+  View more / View less control. Clicking the comment still opens its inline editor.
+- CRM uses the date picker's opt-in `floating` mode, positioning its full calendar
+  within the viewport rather than clipping it inside the modal's scrolling body.
+  The calendar remains in the modal DOM for focus management. Existing date fields
+  elsewhere retain their previous default positioning.
+- Status, probability and source buttons open on click without decorative arrows.
+- Conversion bands use restrained red, orange, amber and green pills; 75–100% is green.
+- The probability sort is applied before database pagination, with unset values last.
+  Migration `20261019110948_crm_probability_sorting.sql` is applied in hosted
+  ATS FYNDBRIDGE and verified with a rolled-back six-record sorting test.

@@ -21,7 +21,7 @@ router.get('/', safe(async (req, res) => {
   const { data, error } = await supabase.rpc('crm_list', {
     p_search: String(req.query.search || '').slice(0, 300), p_follow_up: String(req.query.follow_up || 'all'), p_today: today,
     p_page: integer(req.query.page, 1, 1000000), p_size: integer(req.query.pageSize, 25, 100),
-    p_sort: req.query.sort === 'organisation_name' ? 'organisation_name' : 'created_at', p_ascending: req.query.direction === 'asc'
+    p_sort: ['organisation_name', 'conversion_probability'].includes(req.query.sort) ? req.query.sort : 'created_at', p_ascending: req.query.direction === 'asc'
   })
   if (error) throw error
   res.json({ ...data, today })

@@ -107,7 +107,7 @@ export function CrmClientForm({ record, onClose, onSaved }) {
           <option value="">-</option>{historical && <option value={assigned}>{staff.find(person => person.user_id === assigned)?.name || (assigned === (user?.id || session?.user?.id) ? user?.profile_name || user?.email : 'Unavailable employee')} {target ? '(inactive / unavailable)' : ''}</option>}
           {selectableStaff.map(person => <option key={person.user_id} value={person.user_id}>{person.name}</option>)}
         </select></div>
-        <div className="form-group"><label className="form-label" htmlFor="crm-follow-up">Next Follow-up Date</label><FormattedDateInput id="crm-follow-up" value={form.next_follow_up_date || ''} onChange={value => set('next_follow_up_date', value)} disabled={busy} /></div>
+        <div className="form-group"><label className="form-label" htmlFor="crm-follow-up">Next Follow-up Date</label><FormattedDateInput floating id="crm-follow-up" value={form.next_follow_up_date || ''} onChange={value => set('next_follow_up_date', value)} disabled={busy} /></div>
         <div className="form-group full"><label className="form-label" htmlFor="crm-comment">Comments</label><textarea id="crm-comment" className="form-control" rows={3} value={form.comment} maxLength={10000} onChange={event => set('comment', event.target.value)} />{target && <span className="sub-text">Saving a changed comment adds a new history entry. Leave empty to keep the existing comment.</span>}</div>
       </div></fieldset>
     </form>}
