@@ -1,3 +1,4 @@
+const { normalizeClientName: normalizeDuplicateText } = require('../../../shared/clientNames.cjs')
 const { randomUUID } = require('crypto')
 const supabase = require('../services/supabaseAdmin')
 const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
@@ -79,10 +80,6 @@ function normalizeFollowUpDateValue(value) {
 
 function normalizeBoolean(value) {
   return value === true || String(value || '').toLowerCase() === 'true' || String(value || '').toLowerCase() === 'yes'
-}
-
-function normalizeDuplicateText(value) {
-  return clean(value).replace(/[\u200B-\u200D\uFEFF\u2060]/g, '').toLowerCase()
 }
 
 function normalizeContactValue(value) {

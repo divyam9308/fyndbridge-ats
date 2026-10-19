@@ -49,6 +49,7 @@ app.use('/api/assigned-candidates', requireAuth, require('./routes/assignedCandi
 app.use('/api/applied-candidates', requireAuth, require('./routes/appliedCandidates'))
 app.use('/api/resumes', requireAuth, require('./routes/resumes'))
 app.use('/api/documents', requireAuth, require('./routes/documents'))
+app.use('/api/crm', requireAuth, require('./routes/crm'))
 app.use('/api/clients', requireAuth, require('./routes/clients'))
 app.use('/api/jobs', requireAuth, require('./routes/jobs'))
 app.use('/api/dashboard', requireAuth, require('./routes/dashboard'))

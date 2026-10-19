@@ -17,6 +17,7 @@ const PageViewGuard = lazy(() => import('./components/PageViewGuard'))
 const AuthenticatedShell = lazy(loadAuthenticatedShell)
 const DashboardHome = lazy(() => import('./pages/DashboardHome'))
 const JobsPage = lazy(() => import('./pages/JobsPage'))
+const CrmPage = lazy(() => import('./pages/CrmPage'))
 const ClientsPage = lazy(() => import('./pages/ClientsPage'))
 const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage'))
 const ClientJobCandidatesPage = lazy(() => import('./pages/ClientJobCandidatesPage'))
@@ -68,6 +69,7 @@ function AuthenticatedRoutes() {
           <Route path="/dashboard" element={<RequireAuth><Suspense fallback={<AuthenticatedShellSkeleton />}><AuthenticatedShell /></Suspense></RequireAuth>}>
             <Route index element={<PageViewGuard pageKey="dashboard"><DashboardHome /></PageViewGuard>} />
             <Route path="jobs" element={<PageViewGuard pageKey="mandates"><JobsPage /></PageViewGuard>} />
+            <Route path="crm" element={<PageViewGuard pageKey="crm"><CrmPage /></PageViewGuard>} />
             <Route path="clients" element={<PageViewGuard pageKey="clients"><ClientsPage /></PageViewGuard>} />
             <Route path="clients/:clientId" element={<PageViewGuard pageKey="clients"><ClientDetailPage /></PageViewGuard>} />
             <Route path="clients/:clientId/jobs/:jobId/candidates" element={<PageViewGuard pageKey="clients"><ClientJobCandidatesPage /></PageViewGuard>} />

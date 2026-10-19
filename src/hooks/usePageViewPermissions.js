@@ -68,7 +68,7 @@ export function usePageViewPermissions(access = {}) {
     loading: authLoading || (isAuthenticated && (state.loading || !state.loaded)),
     error: state.error,
     refresh,
-    canView: (pageKey) => canViewPage({ isAdmin, isSuperAdmin }, state.permissions[pageKey] || PAGE_VIEW_DEFAULTS[pageKey]),
+    canView: (pageKey) => !(pageKey === 'crm' && state.error) && canViewPage({ isAdmin, isSuperAdmin }, state.permissions[pageKey] || PAGE_VIEW_DEFAULTS[pageKey]),
     firstPermittedRoute: (excludedKey) => firstPermittedPageRoute({ isAdmin, isSuperAdmin }, state.permissions, excludedKey)
   }
 }

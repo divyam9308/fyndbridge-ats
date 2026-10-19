@@ -19,6 +19,7 @@ const PAGE_VIEW_DEFAULTS = {
   dashboard: 'everyone',
   candidates: 'everyone',
   clients: 'everyone',
+  crm: 'everyone',
   mandates: 'everyone',
   performance_review: 'everyone',
   attendance: 'everyone',

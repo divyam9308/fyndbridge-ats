@@ -1,20 +1,2 @@
-export const SECTOR_OPTIONS = [
-  'Agriculture',
-  'Automotive',
-  'Consumer, Retail & Durables',
-  'EPC',
-  'Ecommerce',
-  'Education',
-  'Financial Services',
-  'Healthcare',
-  'Hospitality',
-  'Logistics & Supply Chain',
-  'Manufacturing',
-  'Oil & Gas',
-  'Others',
-  'Pharmaceuticals',
-  'Power',
-  'Real Estate',
-  'Social Sector',
-  'Technology',
-]
+import sectors from '../../shared/sectorOptions.json'
+export const SECTOR_OPTIONS = sectors

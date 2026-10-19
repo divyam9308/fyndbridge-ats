@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useCallback, useEffect, useState } from 'react'
 import {
-  LayoutDashboard, Briefcase, Building2, ClipboardList, Users, LogOut, ShieldCheck, FileText, BookOpenText, CalendarCheck, ChartNoAxesCombined, ExternalLink, UserRoundCheck
+  Handshake, LayoutDashboard, Briefcase, Building2, ClipboardList, Users, LogOut, ShieldCheck, FileText, BookOpenText, CalendarCheck, ChartNoAxesCombined, ExternalLink, UserRoundCheck
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess } from '../hooks/useAdminAccess'
@@ -15,6 +15,7 @@ const navItems = [
   { to: '/dashboard',            label: 'Dashboard', key: 'dashboard', Icon: LayoutDashboard, end: true },
   { to: '/dashboard/jobs',       label: 'Mandates', key: 'mandates', Icon: Briefcase },
   { to: '/dashboard/clients',    label: 'Clients', key: 'clients', Icon: Building2 },
+  { to: '/dashboard/crm', label: 'CRM', key: 'crm', Icon: Handshake },
   { to: '/dashboard/candidates', label: 'Candidates', key: 'candidates', Icon: Users },
   { to: '/dashboard/assigned-candidates', label: 'Assigned Candidates', key: 'assigned_candidates', Icon: UserRoundCheck },
   { to: '/dashboard/attendance', label: 'Attendance', key: 'attendance', Icon: CalendarCheck },
