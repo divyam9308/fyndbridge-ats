@@ -26,6 +26,8 @@ const PAGE_VIEW_DEFAULTS = {
   report: 'everyone',
   applied_candidates: 'everyone',
   assigned_candidates: 'everyone',
+  assigned_candidates_manage: 'admin_only',
+  assigned_candidates_overall: 'admin_only',
   invoice: 'admin_only',
   user_manual: 'everyone'
 }
@@ -141,6 +143,28 @@ async function getPageViewPermission(pageKey, { fresh = false } = {}) {
   return PAGE_VIEW_PERMISSION_VALUES.has(data?.view_permission)
     ? data.view_permission
     : PAGE_VIEW_DEFAULTS[pageKey]
+}
+
+const INDIVIDUAL_ACCESS_KEYS = new Set(['crm','assigned_candidates_manage','assigned_candidates_overall'])
+async function hasIndividualPageAccess(pageKey, userId) {
+  if (!INDIVIDUAL_ACCESS_KEYS.has(pageKey) || !userId) return false
+  const { data, error } = await supabase.from('page_view_permissions').select('allowed_user_ids').eq('page_key',pageKey).maybeSingle()
+  if (error) throw error
+  if (!(data?.allowed_user_ids || []).includes(userId)) return false
+  const employment = await supabase.from('employee_statuses').select('status').eq('user_id',userId).maybeSingle()
+  if (employment.error) throw employment.error
+  return Boolean(employment.data && employment.data.status !== 'inactive')
+}
+async function getPageViewConsultants() {
+  const { data, error } = await supabase.from('page_view_permissions').select('page_key,allowed_user_ids')
+  if (error) throw error
+  return Object.fromEntries((data || []).filter(row=>INDIVIDUAL_ACCESS_KEYS.has(row.page_key)).map(row=>[row.page_key,row.allowed_user_ids || []]))
+}
+async function canAccessResource(user, key) {
+  const permission = await getPageViewPermission(key,{fresh:true})
+  if (permission==='everyone') return true
+  const { allowsPageView } = require('./pageViewPermissionPolicy')
+  return allowsPageView(permission,{isAdmin:await isAdmin(user),isSuperAdmin:await isSuperAdmin(user)}) || await hasIndividualPageAccess(key,user?.id)
 }
 
 function invalidatePageViewPermissionCache() {
@@ -329,6 +353,10 @@ async function assertRowEditable(tableName, rowId, admin) {
 
 module.exports = {
   ACCESS,
+  INDIVIDUAL_ACCESS_KEYS,
+  hasIndividualPageAccess,
+  getPageViewConsultants,
+  canAccessResource,
   ROLES,
   PAGE_VIEW_DEFAULTS,
   PAGE_VIEW_PERMISSION_VALUES,

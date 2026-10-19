@@ -10,7 +10,7 @@ function databaseAdapter(db) {
   return {storage,objects,removedPaths,
     async rpc(name,args={}) {try {const entries=Object.entries(args);if(name==='assigned_candidates_consultant_counts')return {data:(await db.query('select * from assigned_candidates_consultant_counts()')).rows};const q=await db.query(`select public.${name}(${entries.map(([k],i)=>`${k} => $${i+1}`).join(',')}) as result`,entries.map(([,value])=>value&&typeof value==='object'&&!Array.isArray(value)?JSON.stringify(value):value));return {data:q.rows[0]?.result}}catch(error){return {error}}},
     from(table) {
-      const filters=[],params=[],orders=[];let kind='select',values,selection='*',head=false,count=false,take,offset=0,returnRows=true
+      const filters=[],params=[],orders=[];let kind='select',values,conflict,selection='*',head=false,count=false,take,offset=0,returnRows=true
       const value=x=>{params.push(x);return `$${params.length}`}
       const key=x=>`t."${x}"`
       const condition=(field,op,x)=>`${key(field)} ${op} ${value(x)}`
@@ -27,6 +27,7 @@ function databaseAdapter(db) {
         order(f,{ascending=true}={}){orders.push(`${key(f)} ${ascending?'asc':'desc'}`);return b},
         limit(n){take=n;return b},range(from,to){offset=from;take=to-from+1;return b},
         insert(v){kind='insert';values=v;returnRows=false;return b},
+        upsert(v,options={}){kind='insert';values=v;conflict=options.onConflict;returnRows=false;return b},
         update(v){kind='update';values=v;returnRows=false;return b},
         delete(){kind='delete';returnRows=false;return b},
         async execute(single=false){
@@ -42,8 +43,9 @@ function databaseAdapter(db) {
               if(table==='candidate_associations'&&selection.includes('candidates')) extra=`,(select to_jsonb(c) from candidates c where c.id=t.candidate_id) as candidates`
               rows=(await db.query(`select t.*${extra} from public.${table} t${where}${orders.length?' order by '+orders.join(','):''}${take!==undefined?' limit '+Number(take):''} offset ${offset}`,params)).rows
             } else if(kind==='insert') {
-              const columns=Object.keys(values);const args=columns.map(k=>typeof values[k]==='object'?JSON.stringify(values[k]):values[k])
-              rows=(await db.query(`insert into public.${table}(${columns.map(k=>`"${k}"`).join(',')}) values(${columns.map((_,i)=>`$${i+1}`).join(',')}) returning *`,args)).rows
+              const columns=Object.keys(values);const args=columns.map(k=>k==='allowed_user_ids'?values[k]:typeof values[k]==='object'?JSON.stringify(values[k]):values[k])
+              const conflictSql=conflict?` on conflict (${conflict.split(',').map(k=>`"${k}"`).join(',')}) do update set ${columns.filter(k=>!conflict.split(',').includes(k)).map(k=>`"${k}"=excluded."${k}"`).join(',')}`:''
+              rows=(await db.query(`insert into public.${table}(${columns.map(k=>`"${k}"`).join(',')}) values(${columns.map((_,i)=>`$${i+1}`).join(',')})${conflictSql} returning *`,args)).rows
             } else if(kind==='update') {
               const updates=Object.entries(values).map(([k,x])=>`"${k}"=${value(typeof x==='object'&&x!==null?JSON.stringify(x):x)}`)
               rows=(await db.query(`update public.${table} t set ${updates.join(',')}${where} returning *`,params)).rows

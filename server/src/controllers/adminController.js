@@ -15,6 +15,8 @@ const {
   PAGE_VIEW_DEFAULTS,
   PAGE_VIEW_PERMISSION_VALUES,
   getPageViewPermissions,
+  getPageViewConsultants,
+  INDIVIDUAL_ACCESS_KEYS,
   invalidatePageViewPermissionCache
 } = require('../services/adminAccess')
 const { getDashboardVisibility, setDashboardVisibility } = require('../services/dashboardAccess')
@@ -239,20 +241,29 @@ async function columnPermissions(req, res) {
 
 async function pageViewPermissions(req, res) {
   try {
-    if (req.method === 'GET') return res.json({ permissions: await getPageViewPermissions() })
+    if (req.method === 'GET') return res.json({ permissions: await getPageViewPermissions(), consultantAccess: await getPageViewConsultants() })
     await assertCanManageAdminUsers(req.user)
     const pageKey = clean(req.body?.pageKey)
     const viewPermission = clean(req.body?.viewPermission)
     if (!Object.hasOwn(PAGE_VIEW_DEFAULTS, pageKey)) return res.status(400).json({ error: 'Invalid page key' })
     if (!PAGE_VIEW_PERMISSION_VALUES.has(viewPermission)) return res.status(400).json({ error: 'Invalid view permission' })
+    let allowedUserIds
+    if (Object.hasOwn(req.body || {}, 'allowedUserIds')) {
+      const value = req.body.allowedUserIds
+      if (!INDIVIDUAL_ACCESS_KEYS.has(pageKey) || !Array.isArray(value) || value.length>200 || value.some(id=>typeof id!=='string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) return res.status(400).json({error:'Select valid consultants.'})
+      allowedUserIds=[...new Set(value)]
+      const { listEmployeeDirectory } = require('../services/employeeStatus')
+      const employees = await listEmployeeDirectory()
+      if (allowedUserIds.some(id=>!employees.some(person=>person.user_id===id && person.status==='active'))) return res.status(400).json({error:'Select active consultants only.'})
+    }
     const { data, error } = await supabase
       .from('page_view_permissions')
-      .upsert({ page_key: pageKey, view_permission: viewPermission, updated_by: req.user.id, updated_at: new Date().toISOString() }, { onConflict: 'page_key' })
+      .upsert({ page_key: pageKey, view_permission: viewPermission, ...(allowedUserIds ? {allowed_user_ids:allowedUserIds} : {}), updated_by: req.user.id, updated_at: new Date().toISOString() }, { onConflict: 'page_key' })
       .select('page_key, view_permission')
       .single()
     if (error) throw error
     invalidatePageViewPermissionCache()
-    return res.json({ data, permissions: await getPageViewPermissions() })
+    return res.json({ data, permissions: await getPageViewPermissions(), consultantAccess: await getPageViewConsultants() })
   } catch (err) {
     return sendError(res, err)
   }

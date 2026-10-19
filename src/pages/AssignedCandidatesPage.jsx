@@ -72,7 +72,7 @@ export default function AssignedCandidatesPage() {
       setSelection(current => {
         const next = new Map(current)
         for (const row of payload.data) if (next.has(row.id)) {
-          if (!payload.can_manage && !canTransfer(row)) next.delete(row.id)
+          if (!payload.can_manage && (!canTransfer(row) || row.assigned_consultant_id !== payload.current_user_id)) next.delete(row.id)
           else next.set(row.id,row)
         }
         return next
@@ -82,21 +82,24 @@ export default function AssignedCandidatesPage() {
   useEffect(() => { const frame=window.requestAnimationFrame(()=>{setLoading(true);refresh()}); return () => {window.cancelAnimationFrame(frame);abortRef.current?.abort()} }, [refresh])
   useEffect(() => {
     const onStorage = event => { if (event.key === 'ats:sidebar-counts-refresh') refresh() }
-    window.addEventListener('ats:assigned-candidates-updated', refresh); window.addEventListener('storage', onStorage)
-    return () => { window.removeEventListener('ats:assigned-candidates-updated', refresh); window.removeEventListener('storage', onStorage) }
+    window.addEventListener('fb:page-view-permissions-changed', refresh); window.addEventListener('focus', refresh); window.addEventListener('ats:assigned-candidates-updated', refresh); window.addEventListener('storage', onStorage)
+    return () => { window.removeEventListener('fb:page-view-permissions-changed', refresh); window.removeEventListener('focus', refresh); window.removeEventListener('ats:assigned-candidates-updated', refresh); window.removeEventListener('storage', onStorage) }
   }, [refresh])
   useRealtimeRefresh({ channelName: 'realtime:assigned-candidates', tables: ['assigned_candidates', 'employee_statuses'], onChange: refresh })
   const changed = () => assignmentsChanged()
   const admin = Boolean(data?.can_manage)
-  const showConsultant = admin && !scope
+  const canCreate = Boolean(data?.can_create)
+  const canDeleteAll = Boolean(data?.can_delete_all)
+  const canViewOverall = Boolean(data?.can_view_overall)
+  const showConsultant = canViewOverall && !scope
   const columnCount = 10 + Number(showConsultant)
   useEffect(() => {
-    if (!admin) return
+    if (!canCreate) return
     assignedRequest('/uploads/discard', { method: 'POST', body: JSON.stringify({ ids: [] }) })
       .then(result => setCleanupPending(Boolean(result.cleanup_pending))).catch(() => setCleanupPending(true))
-  }, [admin])
+  }, [canCreate])
   const consultants = data?.consultants || []
-  const selectableRows = (data?.data || []).filter(row => admin || canTransfer(row))
+  const selectableRows = (data?.data || []).filter(row => admin || (canTransfer(row) && row.assigned_consultant_id === data?.current_user_id))
   const selectedOnPage = selectableRows.filter(row => selection.has(row.id)).length
   const selectedRows = [...selection.values()]
   const canAddSelection = selectedRows.length > 0 && selectedRows.every(canTransfer)
@@ -159,29 +162,29 @@ export default function AssignedCandidatesPage() {
   }
   return <div className={`assigned-page${selection.size ? ' has-bulk-selection' : ''}`}>
     <div className="assigned-toolbar"><h2>Assigned Candidates</h2><div className="assigned-controls">
-      {admin && <><button ref={scopeButton} className="filter-select assigned-consultant-filter" aria-label="Consultant filter" aria-expanded={Boolean(dropdown)} onClick={() => { setStatusMenu(null); setDropdown(dropdown ? null : {rect:scopeButton.current.getBoundingClientRect(),element:scopeButton.current}) }}>{scope ? <ConsultantChip name={selectedName} /> : selectedName}<ChevronDown size={14} /></button>
-        <button className="btn-primary" onClick={() => setWizard(true)} disabled={loading || !consultants.length}><Plus size={15} />New</button>
-        <button className="btn-secondary" disabled={loading || !data?.total} onClick={() => { setError(''); setConfirm({ all: true }) }}>Delete All</button></>}
+      {canViewOverall && <button ref={scopeButton} className="filter-select assigned-consultant-filter" aria-label="Consultant filter" aria-expanded={Boolean(dropdown)} onClick={() => { setStatusMenu(null); setDropdown(dropdown ? null : {rect:scopeButton.current.getBoundingClientRect(),element:scopeButton.current}) }}>{scope ? <ConsultantChip name={selectedName} /> : selectedName}<ChevronDown size={14} /></button>}
+      {canCreate && <button className="btn-primary" onClick={() => setWizard(true)} disabled={loading || !consultants.length}><Plus size={15} />New</button>}
+      {canDeleteAll && <button className="btn-secondary" disabled={loading || !data?.total} onClick={() => { setError(''); setConfirm({ all: true }) }}>Delete All</button>}
     </div></div>
     {dropdown && <FloatingDropdown fitViewport anchorRect={dropdown.rect} ignoreElement={dropdown.element} width={280} onClose={() => setDropdown(null)} className="assigned-consultant-options">
       {[{ id: '', name: 'Overall (All Consultants)', not_contacted: consultants.reduce((n, c) => n + c.not_contacted, 0) }, ...consultants].map(c => <button key={c.id} className="assigned-consultant-option" onClick={() => toggleScope(c.id)}>{c.id ? <ConsultantChip name={c.name} /> : <span>{c.name}</span>}<span className="sidebar-count-badge">{c.not_contacted}</span></button>)}
     </FloatingDropdown>}
     {notice && <div className="assigned-notice" role="status">{notice}<button className="modal-close" aria-label="Dismiss confirmation" onClick={() => setNotice('')}><X size={14} /></button></div>}
-    {admin && cleanupPending && <div className="assigned-notice" role="status">CV cleanup is pending.<button className="btn-secondary" onClick={() => assignedRequest('/uploads/discard', { method: 'POST', body: JSON.stringify({ ids: [] }) }).then(result => setCleanupPending(Boolean(result.cleanup_pending))).catch(error => setError(error.message))}>Retry cleanup</button></div>}
+    {canCreate && cleanupPending && <div className="assigned-notice" role="status">CV cleanup is pending.<button className="btn-secondary" onClick={() => assignedRequest('/uploads/discard', { method: 'POST', body: JSON.stringify({ ids: [] }) }).then(result => setCleanupPending(Boolean(result.cleanup_pending))).catch(error => setError(error.message))}>Retry cleanup</button></div>}
     {error && !confirm && !reassign && <div className="form-error" role="alert">{error}<button className="btn-secondary" onClick={refresh}>Retry</button></div>}
     <div className="assigned-kpis">{[['Total Candidates', 'assigned', 'navy'], ['Added Candidates', 'added', 'green'], ['Didn’t Pick Up', 'did_not_pick_up', 'amber'], ['Not Contacted', 'not_contacted', 'neutral']].map(([label, key, tone]) => <ReportKpiCard key={key} label={label} value={data?.stats?.[key]} tone={tone} loading={loading} selected={filter === key} onClick={() => { setFilter(key); setPage(1); setSelection(new Map()); setStatusMenu(null); setMenu(null) }} />)}</div>
     <div className="table-card"><div className="table-wrapper" tabIndex={0} role="region" aria-label="Assigned candidate details"><table className="data-table fb-theme-table assigned-table" aria-label="Assigned Candidates" aria-busy={loading}>
       <colgroup><col style={{ width: 44 }} />{[220,120,180,210,190,...(showConsultant ? [200] : []),150,150,110,210].map((width,index) => <col key={index} style={{ width }} />)}</colgroup>
       <thead><tr><th className="assigned-selection-cell"><input type="checkbox" aria-label="Select all assignments on this page" disabled={loading || !selectableRows.length} checked={selectedOnPage > 0 && selectedOnPage === selectableRows.length} ref={node => { if (node) node.indeterminate = selectedOnPage > 0 && selectedOnPage < selectableRows.length }} onChange={event => selectRows(selectableRows,event.target.checked)} /></th>{['Name', 'Mobile', 'Client', 'Mandate', 'Status', ...(showConsultant ? ['Consultant'] : []), 'Assigned Date', 'Contacted Date', 'CV', 'Actions'].map(label => <th key={label} style={label === 'CV' ? { textAlign: 'center' } : undefined}>{label}</th>)}</tr></thead>
       <tbody>{loading ? <tr><td colSpan={columnCount} className="table-loading-cell"><FyndbridgeLoader /></td></tr> : data?.data?.length ? data.data.map(row => <tr key={row.id} className={`assigned-group-${rowTone(row)}${row.added_at ? ' assigned-added' : ''}${selection.has(row.id) ? ' is-selected' : ''}`}>
-        <td className="assigned-selection-cell"><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selection.has(row.id)} disabled={!admin && !canTransfer(row)} onChange={event => selectRows([row],event.target.checked)} /></td>
+        <td className="assigned-selection-cell"><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selection.has(row.id)} disabled={!admin && (!canTransfer(row) || row.assigned_consultant_id !== data?.current_user_id)} onChange={event => selectRows([row],event.target.checked)} /></td>
         <td><CandidateName name={row.full_name} /></td><td className="assigned-mobile">{row.mobile_number}</td><td className="cell-ellipsis" title={row.clients?.name || row.clients?.client_name}>{row.clients?.name || row.clients?.client_name || '-'}</td><td className="cell-ellipsis" title={row.jobs?.title}>{row.jobs?.title || '-'}</td>
-        <td><div className="candidate-columns-control mandate-status-control"><button type="button" className={`badge ${ASSIGNMENT_STATUS_BADGE_MAP[row.status] || 'badge-status-unset'}`} aria-label={`Status for ${row.full_name}: ${row.status}`} aria-haspopup="menu" aria-expanded={statusMenu?.row.id === row.id} disabled={rowBusy === row.id} onClick={event => openStatus(row,event.currentTarget,event.detail === 0)} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); openStatus(row,event.currentTarget,true) } }}>{row.status}</button></div></td>
+        <td><div className="candidate-columns-control mandate-status-control"><button type="button" className={`badge ${ASSIGNMENT_STATUS_BADGE_MAP[row.status] || 'badge-status-unset'}`} aria-label={`Status for ${row.full_name}: ${row.status}`} aria-haspopup="menu" aria-expanded={statusMenu?.row.id === row.id} disabled={rowBusy === row.id || (!admin && row.assigned_consultant_id !== data?.current_user_id)} onClick={event => openStatus(row,event.currentTarget,event.detail === 0)} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); openStatus(row,event.currentTarget,true) } }}>{row.status}</button></div></td>
         {showConsultant && <td><ConsultantChip name={row.assigned_consultant_name || consultants.find(c => c.id === row.assigned_consultant_id)?.name} /></td>}
         <td>{formatDateDDMMYYYY(row.assigned_at)}</td><td>{formatDateDDMMYYYY(row.contacted_at)}</td>
         <td style={{ textAlign: 'center' }}><DocumentIconGroup attachments={[{ path: row.id, name: row.assigned_candidate_uploads?.cv_original_name || `${row.full_name} CV` }]} keyPrefix="assigned-cv" openingKey={openingDocument} onOpen={key => viewCv(row, key)} /></td>
         <td><div className="assigned-row-actions">
-          {row.added_at ? <span className="badge badge-status-unset">Added</span> : <button className="assigned-add" disabled={!canTransfer(row)} title={row.status === 'Not Relevant' ? 'Not Relevant assignments cannot be added to Candidates' : ['Not Contacted', 'Didn’t Pick Up'].includes(row.status) ? 'Contact the candidate and update their status first' : 'Add to Candidates'} onClick={() => setTransfer(transferDetails(row))}>Add to Candidates</button>}
+          {row.added_at ? <span className="badge badge-status-unset">Added</span> : <button className="assigned-add" disabled={!canTransfer(row) || (!admin && row.assigned_consultant_id !== data?.current_user_id)} title={row.status === 'Not Relevant' ? 'Not Relevant assignments cannot be added to Candidates' : ['Not Contacted', 'Didn’t Pick Up'].includes(row.status) ? 'Contact the candidate and update their status first' : 'Add to Candidates'} onClick={() => setTransfer(transferDetails(row))}>Add to Candidates</button>}
           {admin && <button className="row-action-btn" aria-label={`Actions for ${row.full_name}`} onClick={event => setMenu({ row, anchor: event.currentTarget.getBoundingClientRect() })}><MoreHorizontal size={17} /></button>}</div></td>
       </tr>) : <tr><td colSpan={columnCount} className="table-empty-cell">No assigned candidates{admin ? '. Select a consultant and click New to assign CVs.' : '.'}</td></tr>}</tbody>
     </table></div><PaginationBar page={page} totalPages={data?.totalPages || 1} total={data?.total || 0} pageSize={limit} onPageChange={setPage} onPageSizeChange={value => { setLimit(value); setPage(1); setSelection(new Map()) }} loading={loading} /></div>
@@ -203,7 +206,7 @@ export default function AssignedCandidatesPage() {
     {transfer && <Suspense fallback={<div role="status">Loading candidate form…</div>}><CandidateForm assignedCandidate={transfer} onAssignedClose={() => setTransfer(null)} onAssignedSaved={() => { setTransfer(null); setNotice('Candidate Added Successfully. The candidate has been added to the Candidates module.'); assignmentsChanged({ candidates: true }) }} /></Suspense>}
     {bulkTransfer && <AssignmentTransferWizard assignments={bulkTransfer} onClose={ids => finishBulkTransfer(ids)} onSaved={ids => finishBulkTransfer(ids,true)} />}
     {confirm && <AssignmentDialog title={confirm.all ? 'Delete Contacted Assignments?' : `Delete ${confirm.ids.length} Assigned Candidates?`} pending={pending} onCancel={() => setConfirm(null)} onConfirm={remove}>
-      <p>{confirm.all ? `This will permanently remove eligible contacted assignments for ${scope ? selectedName : 'all consultants'}, excluding Not Contacted and Didn’t Pick Up.` : 'This will permanently remove the selected assignments.'} Existing records in the main Candidates module and shared CV documents will be preserved. This action cannot be undone.</p>{error && <p className="form-error" role="alert">{error}</p>}
+      <p>{confirm.all ? `This will permanently remove eligible contacted assignments ${scope ? `for ${selectedName}` : canViewOverall ? 'for all consultants' : 'assigned to you'}, excluding Not Contacted and Didn’t Pick Up.` : 'This will permanently remove the selected assignments.'} Existing records in the main Candidates module and shared CV documents will be preserved. This action cannot be undone.</p>{error && <p className="form-error" role="alert">{error}</p>}
     </AssignmentDialog>}
     {reassign && <AssignmentDialog title="Reassign consultant" className="assigned-reassign-dialog" pending={pending} onCancel={() => setReassign(null)} onConfirm={move} confirm="Save"><AssignmentSelect label="Consultant" value={reassign.consultant} options={consultants} onChange={id => setReassign(current => ({ ...current, consultant: id }))} />{error && <p className="form-error" role="alert">{error}</p>}</AssignmentDialog>}
   </div>

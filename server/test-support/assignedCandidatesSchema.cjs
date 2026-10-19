@@ -16,7 +16,7 @@ async function createDatabase() {
     create table public.user_profiles(id uuid default gen_random_uuid(),user_id text,name text,email text);
     create table public.profiles(id uuid primary key);
     create table public.column_permissions(table_name text,column_key text,access_mode text);
-    create table public.page_view_permissions(page_key text primary key,view_permission text);
+    create table public.page_view_permissions(page_key text primary key,view_permission text,updated_by uuid,updated_at timestamptz);
     create table public.clients(id uuid primary key,client_name text,name text,client_display_id text,client_group_id uuid);
     create table public.jobs(id uuid primary key,client_id uuid references public.clients(id),title text,job_display_id text,mandate_status text default 'Ongoing (P1)',status text default 'Ongoing (P1)',consultants text[] default '{}');
     create table public.candidates(id uuid primary key default gen_random_uuid(),candidate_display_id text unique,full_name text not null,email text,mobile_number text not null,city text,state text,location text,current_designation text,current_company text,current_organisation text,experience_years numeric,notice_period integer,open_to_relocate text,skills text[] default '{}',education text,linkedin_url text,source text,client_id uuid references public.clients(id),cv_storage_path text,cv_link text,resume_url text,cv_file_hash text,cv_original_name text,cv_mimetype text,cv_attachments jsonb default '[]',is_locked boolean default false,created_by uuid,updated_by uuid,created_at timestamptz default now(),updated_at timestamptz default now());
@@ -29,7 +29,7 @@ async function createDatabase() {
 
   `)
   const root=path.resolve(__dirname,'../..')
-  for(const file of ['20260716192438_candidate_display_id_lowest_available_gap.sql','20261018204815_assigned_candidates.sql','20261019120000_assigned_candidate_relevance_order.sql','20261019121623_assigned_candidate_stable_status_order.sql']) await db.exec(await fs.readFile(path.join(root,'supabase/migrations',file),'utf8'))
+  for(const file of ['20260716192438_candidate_display_id_lowest_available_gap.sql','20261018204815_assigned_candidates.sql','20261019120000_assigned_candidate_relevance_order.sql','20261019121623_assigned_candidate_stable_status_order.sql','20261019175017_consultant_access_controls.sql']) await db.exec(await fs.readFile(path.join(root,'supabase/migrations',file),'utf8'))
   for (const [uid,name,role,status] of [[ADMIN,'Test Admin','admin','active'],[CONSULTANT,'Test Consultant',null,'active'],[OTHER,'Other Consultant',null,'active'],[INACTIVE,'Inactive Consultant',null,'inactive'],[SUPER,'Super Admin','super_admin','active']]) {
     await db.query('insert into auth.users values($1,$2)',[uid,`${name.replaceAll(' ','').toLowerCase()}@example.test`])
     await db.query('insert into employee_statuses(user_id,status) values($1,$2)',[uid,status])

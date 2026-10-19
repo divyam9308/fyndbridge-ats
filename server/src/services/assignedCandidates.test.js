@@ -44,7 +44,7 @@ test('migration, RLS, timestamps, atomic transfers and deletion execute in Postg
   })
   await t.test('inactive consultant, unauthorized admin and partial batch failures roll back',async()=>{
     await assert.rejects(assign(db,105,{consultant:INACTIVE}),/Active/)
-    await assert.rejects(assign(db,106,{actor:CONSULTANT}),/Admin/)
+    await assert.rejects(assign(db,106,{actor:CONSULTANT}),error=>error.code==='42501')
     await assign(db,107,{actor:SUPER})
     await upload(db,108);await upload(db,109)
     const base={full_name:'Batch',mobile_number:'9999999999',client_id:CLIENT,job_id:JOB,assigned_consultant_id:CONSULTANT,status:'Not Contacted'}
@@ -76,10 +76,10 @@ test('migration, RLS, timestamps, atomic transfers and deletion execute in Postg
       assert.ok((await db.query('select distinct assigned_consultant_id from assigned_candidates')).rows.length>1)
       await db.exec("reset role;select set_config('request.jwt.claim.sub','',false)")
     }
-    await db.exec("update page_view_permissions set view_permission='super_admin_only'")
+    await db.exec("update page_view_permissions set view_permission='super_admin_only' where page_key='assigned_candidates'")
     await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub','${ADMIN}',false);`)
     assert.equal((await db.query('select * from assigned_candidates')).rows.length,0)
-    await db.exec(`reset role; update page_view_permissions set view_permission='everyone'; set role authenticated; select set_config('request.jwt.claim.sub','${INACTIVE}',false);`)
+    await db.exec(`reset role; update page_view_permissions set view_permission='everyone' where page_key='assigned_candidates'; set role authenticated; select set_config('request.jwt.claim.sub','${INACTIVE}',false);`)
     assert.equal((await db.query('select * from assigned_candidates')).rows.length,0)
     await db.exec("reset role;select set_config('request.jwt.claim.sub','',false)")
   })
@@ -166,7 +166,7 @@ test('migration, RLS, timestamps, atomic transfers and deletion execute in Postg
     assert.deepEqual([...new Set(groups)],[0,1,2,4])
   })
   await t.test('scoped Delete All preserves both pending statuses and main candidates',async()=>{
-    await assert.rejects(db.query('select delete_assigned_candidates($1,null,null,true)',[CONSULTANT]),/Admin/)
+    await assert.rejects(db.query('select delete_assigned_candidates($1,null,null,true)',[CONSULTANT]),error=>error.code==='42501')
     await db.query('select delete_assigned_candidates($1,$2,null,true)',[ADMIN,CONSULTANT])
     assert.equal(await scalar("select count(*)::int from assigned_candidates where assigned_consultant_id=$1 and status not in ('Not Contacted','Didn’t Pick Up')",[CONSULTANT]),0)
     assert.ok(await scalar('select count(*)::int from assigned_candidates where assigned_consultant_id=$1',[OTHER]))

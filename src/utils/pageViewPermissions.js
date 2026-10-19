@@ -3,6 +3,8 @@ export const PAGE_VIEW_DEFAULTS = {
   candidates: 'everyone',
   applied_candidates: 'everyone',
   assigned_candidates: 'everyone',
+  assigned_candidates_manage: 'admin_only',
+  assigned_candidates_overall: 'admin_only',
   clients: 'everyone',
   crm: 'everyone',
   mandates: 'everyone',
@@ -43,16 +45,23 @@ export const PAGE_VIEW_ITEMS = [
   ['user_manual', 'User Manual']
 ]
 
-export function canViewPage({ isAdmin = false, isSuperAdmin = false }, permission = 'everyone') {
+export const CONSULTANT_ACCESS_ITEMS = [
+  ['assigned_candidates_manage', 'Assigned Candidates · New / Delete All'],
+  ['assigned_candidates_overall', 'Assigned Candidates · Overall Consultants']
+]
+export const INDIVIDUAL_ACCESS_KEYS = ['crm', ...CONSULTANT_ACCESS_ITEMS.map(([key]) => key)]
+
+export function canViewPage({ isAdmin = false, isSuperAdmin = false, userId = '' }, permission = 'everyone', allowedUserIds = []) {
+  if (userId && allowedUserIds.includes(userId)) return true
   if (permission === 'everyone') return true
   if (permission === 'admin_only') return isAdmin || isSuperAdmin
-  return isSuperAdmin
+  return permission === 'super_admin_only' && isSuperAdmin
 }
 
-export function firstPermittedPageRoute(access, permissions, excludedKey = '') {
+export function firstPermittedPageRoute(access, permissions, excludedKey = '', consultantAccess = {}) {
   return PAGE_VIEW_ITEMS
     .map(([key]) => key)
     .filter(key => key !== excludedKey)
     .map(key => ({ key, route: PAGE_VIEW_ROUTES[key] }))
-    .find(({ key }) => canViewPage(access, permissions[key] || PAGE_VIEW_DEFAULTS[key]))?.route || '/login'
+    .find(({ key }) => canViewPage(access, permissions[key] || PAGE_VIEW_DEFAULTS[key], consultantAccess[key] || []))?.route || '/login'
 }

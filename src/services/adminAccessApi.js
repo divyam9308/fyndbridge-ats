@@ -14,11 +14,11 @@ export async function fetchPageViewPermissions() {
   return cachedApiJson('/api/admin/page-view-permissions', {}, { ttlMs: 30000 })
 }
 
-export async function updatePageViewPermission(pageKey, viewPermission) {
+export async function updatePageViewPermission(pageKey, viewPermission, allowedUserIds) {
   const result = await json(await apiFetch('/api/admin/page-view-permissions', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pageKey, viewPermission })
+    body: JSON.stringify({ pageKey, viewPermission, ...(allowedUserIds !== undefined ? {allowedUserIds} : {}) })
   }))
   invalidateApiJsonCache('/api/admin/page-view-permissions')
   return result

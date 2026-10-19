@@ -28,7 +28,7 @@ import {
 } from '../utils/performanceReviewStorage'
 import { savePerformancePermissions } from '../services/performanceApi'
 import { setPageViewPermissions, usePageViewPermissions } from '../hooks/usePageViewPermissions'
-import { PAGE_VIEW_DEFAULTS } from '../utils/pageViewPermissions'
+import { PAGE_VIEW_DEFAULTS, INDIVIDUAL_ACCESS_KEYS } from '../utils/pageViewPermissions'
 import './AdminPage.css'
 import AttendancePermissionSettings from '../features/attendance/AttendancePermissionSettings'
 import EmployeeManagement from '../features/employee-management/EmployeeManagement'
@@ -281,9 +281,11 @@ export default function AdminPage() {
   const [overallReportAudience, setOverallReportAudience] = useState('admins')
   const [savedOverallReportAudience, setSavedOverallReportAudience] = useState('admins')
   const [performancePermissions, setPerformancePermissions] = useState(DEFAULT_PERFORMANCE_PERMISSIONS)
-  const { permissions: pageViewPermissions, loading: pageViewPermissionsLoading } = usePageViewPermissions()
+  const { permissions: pageViewPermissions, consultantAccess: pageConsultantAccess, loading: pageViewPermissionsLoading } = usePageViewPermissions()
   const [savedPageViewPermissions, setSavedPageViewPermissions] = useState(() => ({ ...PAGE_VIEW_DEFAULTS }))
   const [draftPageViewPermissions, setDraftPageViewPermissions] = useState(() => ({ ...PAGE_VIEW_DEFAULTS }))
+  const [savedConsultantAccess, setSavedConsultantAccess] = useState({})
+  const [draftConsultantAccess, setDraftConsultantAccess] = useState({})
   const [savedAttendancePermissions, setSavedAttendancePermissions] = useState(() => loadAttendancePermissions())
   const [draftAttendancePermissions, setDraftAttendancePermissions] = useState(() => loadAttendancePermissions())
   const [employeeManagementDirty, setEmployeeManagementDirty] = useState(false)
@@ -334,6 +336,11 @@ export default function AdminPage() {
   useEffect(() => {
     if (pageViewPermissionsLoading) return
     const timer = window.setTimeout(() => {
+      setSavedConsultantAccess(currentSaved => {
+        const nextSaved = { ...pageConsultantAccess }
+        setDraftConsultantAccess(currentDraft => isSamePermissions(currentDraft, currentSaved) ? nextSaved : currentDraft)
+        return nextSaved
+      })
       setSavedPageViewPermissions(currentSaved => {
         const nextSaved = { ...(pageViewPermissions || {}) }
         setDraftPageViewPermissions(currentDraft => isSamePermissions(currentDraft, currentSaved) || !Object.keys(currentDraft || {}).length ? nextSaved : currentDraft)
@@ -341,7 +348,7 @@ export default function AdminPage() {
       })
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [pageViewPermissions, pageViewPermissionsLoading])
+  }, [pageViewPermissions, pageConsultantAccess, pageViewPermissionsLoading])
 
   useEffect(() => {
     let active = true
@@ -403,7 +410,7 @@ export default function AdminPage() {
   const dashboardVisibilityDirty = dashboardRestricted !== savedDashboardRestricted
   const lowMandateAudienceDirty = lowMandateAudience !== savedLowMandateAudience
   const overallReportAudienceDirty = overallReportAudience !== savedOverallReportAudience
-  const pageViewPermissionsDirty = !isSamePermissions(savedPageViewPermissions, draftPageViewPermissions)
+  const pageViewPermissionsDirty = !isSamePermissions(savedPageViewPermissions, draftPageViewPermissions) || !isSamePermissions(savedConsultantAccess, draftConsultantAccess)
   const attendancePermissionsDirty = !isSamePermissions(savedAttendancePermissions, draftAttendancePermissions)
   const permissionChangesDirty = !isSamePermissions(savedPermissions, draftPermissions) || dashboardVisibilityDirty || lowMandateAudienceDirty || overallReportAudienceDirty || pageViewPermissionsDirty || attendancePermissionsDirty
   const dirty = permissionChangesDirty || employeeManagementDirty
@@ -470,6 +477,7 @@ export default function AdminPage() {
   const cancelPermissionChanges = () => {
     setDraftPermissions(savedPermissions)
     setDraftPageViewPermissions(savedPageViewPermissions)
+    setDraftConsultantAccess(savedConsultantAccess)
     setDraftAttendancePermissions(savedAttendancePermissions)
     setDashboardRestricted(savedDashboardRestricted)
     setLowMandateAudience(savedLowMandateAudience)
@@ -481,7 +489,7 @@ export default function AdminPage() {
   const savePermissionChanges = async () => {
     const changes = changedPermissions(savedPermissions, draftPermissions)
     const performanceChanged = isSuperAdmin && !isSamePermissions(savedPermissions?.[PERFORMANCE_TABLE_KEY], draftPermissions?.[PERFORMANCE_TABLE_KEY])
-    const pageViewChanges = Object.entries(draftPageViewPermissions).filter(([pageKey, viewPermission]) => savedPageViewPermissions?.[pageKey] !== viewPermission)
+    const pageViewChanges = Object.entries(draftPageViewPermissions).filter(([pageKey, viewPermission]) => savedPageViewPermissions?.[pageKey] !== viewPermission || !isSamePermissions(savedConsultantAccess[pageKey] || [], draftConsultantAccess[pageKey] || []))
     if (!changes.length && !dashboardVisibilityDirty && !lowMandateAudienceDirty && !overallReportAudienceDirty && !performanceChanged && !pageViewChanges.length && !attendancePermissionsDirty && !employeeManagementDirty) return
     setSavingPermissions(true)
     setError('')
@@ -510,12 +518,16 @@ export default function AdminPage() {
         window.dispatchEvent(new Event('fb:performance-permissions-changed'))
       }
       let nextPageViewPermissions = null
+      let nextConsultantAccess = null
       for (const [pageKey, viewPermission] of pageViewChanges) {
-        const result = await updatePageViewPermission(pageKey, viewPermission)
+        const result = await updatePageViewPermission(pageKey, viewPermission, INDIVIDUAL_ACCESS_KEYS.includes(pageKey) ? draftConsultantAccess[pageKey] || [] : undefined)
         nextPageViewPermissions = result.permissions || nextPageViewPermissions
+        nextConsultantAccess = result.consultantAccess || nextConsultantAccess
       }
       if (nextPageViewPermissions) {
-        setPageViewPermissions(nextPageViewPermissions)
+        setPageViewPermissions(nextPageViewPermissions, nextConsultantAccess)
+        setSavedConsultantAccess(nextConsultantAccess || {})
+        setDraftConsultantAccess(nextConsultantAccess || {})
         setSavedPageViewPermissions(nextPageViewPermissions)
         setDraftPageViewPermissions(nextPageViewPermissions)
       }
@@ -705,6 +717,8 @@ export default function AdminPage() {
       <PageViewPermissions
         isSuperAdmin={isSuperAdmin}
         permissions={draftPageViewPermissions}
+        consultantAccess={draftConsultantAccess}
+        onConsultantChange={(key, ids) => setDraftConsultantAccess(current => ({ ...current, [key]: ids }))}
         disabled={savingPermissions}
         onChange={(pageKey, viewPermission) => setDraftPageViewPermissions(current => ({ ...current, [pageKey]: viewPermission }))}
       />

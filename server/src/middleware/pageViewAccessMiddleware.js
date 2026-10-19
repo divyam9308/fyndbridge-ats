@@ -1,9 +1,10 @@
-const { getPageViewPermission, isAdmin, isSuperAdmin } = require('../services/adminAccess')
+const { getPageViewPermission, isAdmin, isSuperAdmin, hasIndividualPageAccess } = require('../services/adminAccess')
 const { allowsPageView } = require('../services/pageViewPermissionPolicy')
 
 function requirePageViewPermission(pageKey, dependencies = {}) {
   const readPermission = dependencies.getPageViewPermission || getPageViewPermission
   const checkAdmin = dependencies.isAdmin || isAdmin
+  const checkIndividual = dependencies.hasIndividualPageAccess || hasIndividualPageAccess
   const checkSuperAdmin = dependencies.isSuperAdmin || isSuperAdmin
   return async function pageViewPermissionMiddleware(req, res, next) {
     try {
@@ -12,7 +13,7 @@ function requirePageViewPermission(pageKey, dependencies = {}) {
       if (!permission) return res.status(403).json({ error: 'Page access denied' })
       if (permission === 'everyone') return next()
       const [admin, superAdmin] = await Promise.all([checkAdmin(req.user), checkSuperAdmin(req.user)])
-      if (!allowsPageView(permission, { isAdmin: admin, isSuperAdmin: superAdmin })) {
+      if (!allowsPageView(permission, { isAdmin: admin, isSuperAdmin: superAdmin }) && !await checkIndividual(pageKey, req.user.id)) {
         return res.status(403).json({ error: 'You do not have permission to view this page.' })
       }
       return next()

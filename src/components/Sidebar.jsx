@@ -65,14 +65,14 @@ export default function Sidebar() {
       apiFetch('/api/assigned-candidates/count', { cache: 'no-store' }).then(async response => {
         const payload = await response.json()
         if (!response.ok) throw new Error(payload.error || 'Assignment count failed')
-        return ['assigned_candidates', Number(payload.count || 0)]
+        return ['assigned_candidates', Number(payload.count || 0), payload.can_view_overall === true]
       })
     )
     const results = await Promise.allSettled(requests)
     setCounts(current => {
       const next = { ...current }
       results.forEach(result => {
-        if (result.status === 'fulfilled') next[result.value[0]] = result.value[1]
+        if (result.status === 'fulfilled') { next[result.value[0]] = result.value[1]; if (result.value[0] === 'assigned_candidates') next.assigned_overall = result.value[2] }
       })
       return next
     })
@@ -92,7 +92,7 @@ export default function Sidebar() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(refreshSidebarCounts)
     return () => window.cancelAnimationFrame(frame)
-  }, [refreshSidebarCounts])
+  }, [refreshSidebarCounts, pageViews.permissions, pageViews.consultantAccess])
 
   useEffect(() => {
     const refresh = () => refreshSidebarCounts()
@@ -123,7 +123,7 @@ export default function Sidebar() {
     <a className="sidebar-nav-link" href={to} target="_blank" rel="noopener noreferrer" id="nav-public-roles" key={to}>
       <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
       <span className="sidebar-nav-label">{label}</span>
-      {Number.isFinite(counts[key]) && <span className="sidebar-count-badge" aria-label={`${label}: ${counts[key]}`}>{counts[key] > 99 ? '99+' : counts[key]}</span>}
+      {Number.isFinite(counts[key]) && <span className={`sidebar-count-badge${key === 'assigned_candidates' ? ` assigned-count-${counts[key] > (counts.assigned_overall ? 50 : 10) ? 'high' : 'low'}` : ''}`} aria-label={`${label}: ${counts[key]}`}>{counts[key] > 99 ? '99+' : counts[key]}</span>}
     </a>
   ) : (
     <NavLink
@@ -139,7 +139,7 @@ export default function Sidebar() {
     >
       <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
       <span className="sidebar-nav-label">{label}</span>
-      {Number.isFinite(counts[key]) && <span className="sidebar-count-badge" aria-label={`${label}: ${counts[key]}`}>{counts[key] > 99 ? '99+' : counts[key]}</span>}
+      {Number.isFinite(counts[key]) && <span className={`sidebar-count-badge${key === 'assigned_candidates' ? ` assigned-count-${counts[key] > (counts.assigned_overall ? 50 : 10) ? 'high' : 'low'}` : ''}`} aria-label={`${label}: ${counts[key]}`}>{counts[key] > 99 ? '99+' : counts[key]}</span>}
     </NavLink>
   )
 

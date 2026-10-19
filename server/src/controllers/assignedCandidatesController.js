@@ -3,7 +3,7 @@ const os = require('os')
 const path = require('path')
 const { randomUUID } = require('crypto')
 const supabase = require('../services/supabaseAdmin')
-const { isAdmin } = require('../services/adminAccess')
+const { isAdmin, canAccessResource } = require('../services/adminAccess')
 const { listEmployeeDirectory, getEmployeeStatus } = require('../services/employeeStatus')
 const { validateMandateReference } = require('../services/candidateCreation')
 const { withAssignedCvParsing } = require('../services/assignedCvParsing')
@@ -18,18 +18,20 @@ async function context(req) {
   const employment = await getEmployeeStatus(req.user.id)
   if (!employment || employment.status === 'inactive') throw fail('Assignment access denied.', 403)
   const admin = await isAdmin(req.user)
-  req.assignedAccess={ admin, scope: assignmentScope(req.user, admin, req.query.consultant_id || req.body?.consultant_id) }
+  const [canCreate,canViewOverall] = await Promise.all([canAccessResource(req.user,'assigned_candidates_manage'),canAccessResource(req.user,'assigned_candidates_overall')])
+  req.assignedAccess={ admin, canCreate, canViewOverall, scope: assignmentScope(req.user, canViewOverall, req.query.consultant_id || req.body?.consultant_id) }
   return req.assignedAccess
 }
-async function getRow(req) {
-  const { admin } = await context(req)
+async function getRow(req, { write = true } = {}) {
+  const { admin, canViewOverall } = await context(req)
   let query = supabase.from('assigned_candidates').select('*,assigned_candidate_uploads(*)').eq('id', req.params.id)
-  if (!admin) query = query.eq('assigned_consultant_id', req.user.id)
+  if (!admin && (write || !canViewOverall)) query = query.eq('assigned_consultant_id', req.user.id)
   const row = unwrap(await query.maybeSingle())
   if (!row) throw fail('Assignment not found.', 404)
   return row
 }
 async function adminContext(req) { const result = await context(req); if (!result.admin) throw fail('Admin required.', 403); return result }
+async function creationContext(req) { const result = await context(req); if (!result.canCreate) throw fail('New / Delete All access required.',403); return result }
 const handle = fn => async (req, res) => {
   try { await fn(req, res) } catch (error) {
     const status = error.statusCode || (error.code === '42501' ? 403 : ['22023','23505','P0001','23514','22P02'].includes(error.code) ? 409 : error.code === 'P0002' ? 404 : 500)
@@ -39,7 +41,7 @@ const handle = fn => async (req, res) => {
 }
 
 exports.list = handle(async (req,res) => {
-  const { admin, scope } = await context(req)
+  const { admin, scope, canCreate, canViewOverall } = await context(req)
   const page = Math.max(1,parseInt(req.query.page,10)||1); const limit = Math.min(100,Math.max(1,parseInt(req.query.limit,10)||25))
   const filter = req.query.filter || 'assigned'
   if (!['assigned','added','did_not_pick_up','not_contacted'].includes(filter)) throw fail('Invalid assignment filter')
@@ -51,21 +53,21 @@ exports.list = handle(async (req,res) => {
   const result = await query.order('sort_group').order('assigned_at').order('id').range((page-1)*limit,page*limit-1)
   unwrap(result)
   const stats = unwrap(await supabase.rpc('assigned_candidates_stats',{p_scope:scope,p_active_only:false}))
-  const directory = admin ? await listEmployeeDirectory() : []
+  const directory = (admin || canCreate || canViewOverall) ? await listEmployeeDirectory() : []
   const consultantNames = new Map(directory.map(e=>[e.user_id,e.name]))
-  const counts = admin ? unwrap(await supabase.rpc('assigned_candidates_consultant_counts')) || [] : []
+  const counts = canViewOverall ? unwrap(await supabase.rpc('assigned_candidates_consultant_counts')) || [] : []
   const countMap = new Map(counts.map(r=>[r.user_id,Number(r.not_contacted)]))
-  res.json({ data:admin ? result.data.map(row=>({...row,assigned_consultant_name:consultantNames.get(row.assigned_consultant_id)||null})) : result.data,total:result.count,page,limit,totalPages:Math.max(1,Math.ceil(result.count/limit)),stats,statuses:ASSIGNED_STATUSES,
-    consultants:directory.filter(e=>e.status==='active').map(e=>({id:e.user_id,name:e.name,not_contacted:countMap.get(e.user_id)||0})),can_manage:admin })
+  res.json({ data:(admin || canViewOverall) ? result.data.map(row=>({...row,assigned_consultant_name:consultantNames.get(row.assigned_consultant_id)||null})) : result.data,total:result.count,page,limit,totalPages:Math.max(1,Math.ceil(result.count/limit)),stats,statuses:ASSIGNED_STATUSES,
+    consultants:directory.filter(e=>e.status==='active').map(e=>({id:e.user_id,name:e.name,not_contacted:countMap.get(e.user_id)||0})),can_manage:admin,can_create:canCreate,can_delete_all:canCreate,can_view_overall:canViewOverall,current_user_id:req.user.id })
 })
 exports.count = handle(async(req,res)=>{
-  const {admin,scope}=await context(req)
-  const stats=unwrap(await supabase.rpc('assigned_candidates_stats',{p_scope:scope,p_active_only:admin}))
-  res.json({count:Number(stats.not_contacted)})
+  const {canViewOverall,scope}=await context(req)
+  const stats=unwrap(await supabase.rpc('assigned_candidates_stats',{p_scope:scope,p_active_only:canViewOverall}))
+  res.json({count:Number(stats.not_contacted),can_view_overall:canViewOverall,threshold:canViewOverall?50:10})
 })
 exports.upload = handle(async(req,res)=>{
   try {
-    await adminContext(req)
+    await creationContext(req)
     const id=req.body.upload_id
     if (!isUuid(id)||!req.file) throw fail('Select a CV to upload.')
     let row=unwrap(await supabase.from('assigned_candidate_uploads').select('*').eq('id',id).eq('uploaded_by',req.user.id).maybeSingle())
@@ -86,7 +88,7 @@ exports.upload = handle(async(req,res)=>{
   } finally { if(req.file?.path) await fs.unlink(req.file.path).catch(()=>{}) }
 })
 exports.create = handle(async(req,res)=>{
-  await adminContext(req)
+  await creationContext(req)
   if (!Array.isArray(req.body.rows)||!req.body.rows.length) throw fail('Select at least one CV.')
   const rows=req.body.rows.map(validateAssignment)
   if (new Set(rows.map(r=>r.upload_id)).size!==rows.length) throw fail('Each uploaded CV must appear once.')
@@ -118,7 +120,7 @@ exports.reassign = handle(async(req,res)=>{
   res.json({success:true})
 })
 exports.cv = handle(async(req,res)=>{
-  const row=await getRow(req); const cv=row.assigned_candidate_uploads
+  const row=await getRow(req,{write:false}); const cv=row.assigned_candidate_uploads
   const data=unwrap(await supabase.storage.from('resumes').createSignedUrl(cv.cv_storage_path,300))
   res.json({url:data.signedUrl,fileName:cv.cv_original_name,contentType:cv.cv_mimetype})
 })
@@ -153,9 +155,11 @@ exports.review = handle(async(req,res)=>{
   return transfer(req,res)
 })
 exports.remove = handle(async(req,res)=>{
-  const {scope}=await adminContext(req)
-  const ids=req.params.id?[req.params.id]:req.body.ids
+  const access=await context(req)
   const all=req.body.contacted_only===true
+  if (all ? !access.canCreate : !access.admin) throw fail(all?'Delete All access required.':'Admin required.',403)
+  const {scope}=access
+  const ids=req.params.id?[req.params.id]:req.body.ids
   if(!all&&(!Array.isArray(ids)||!ids.length||ids.some(id=>!isUuid(id)))) throw fail('Select valid assignments to delete.')
   if(all&&ids) throw fail('Delete All cannot contain a selection.')
   const count=unwrap(await supabase.rpc('delete_assigned_candidates',{p_actor:req.user.id,p_scope:scope,p_ids:ids?[...new Set(ids)]:null,p_contacted_only:all}))
@@ -163,7 +167,7 @@ exports.remove = handle(async(req,res)=>{
   res.json({deleted:count,cleanup_pending:pending})
 })
 exports.discard = handle(async(req,res)=>{
-  await adminContext(req)
+  await creationContext(req)
   const ids=req.body.ids
   if(!Array.isArray(ids)||ids.some(id=>!isUuid(id))) throw fail('Invalid upload selection.')
   if(ids.length) unwrap(await supabase.from('assigned_candidate_uploads').update({retired_at:new Date().toISOString()}).in('id',ids).eq('uploaded_by',req.user.id))

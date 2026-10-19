@@ -20,7 +20,9 @@ function decrypt(value, owner) {
   return JSON.parse(Buffer.concat([cipher.update(Buffer.from(bytes, 'base64url')), cipher.final()]).toString('utf8'))
 }
 function config() {
-  const id = process.env.GOOGLE_GMAIL_CLIENT_ID, secret = process.env.GOOGLE_GMAIL_CLIENT_SECRET
+  // Support the existing Production variable names as well as the documented names.
+  const id = process.env.GOOGLE_GMAIL_CLIENT_ID || process.env.GoogleOAuthclientID
+  const secret = process.env.GOOGLE_GMAIL_CLIENT_SECRET || process.env.GoogleOAuthclientsecret
   const redirect = process.env.GOOGLE_GMAIL_REDIRECT_URI
   if (!id || !secret || !redirect) throw Object.assign(new Error('Gmail OAuth is not configured.'), { code: 'CONFIGURATION' })
   const url = new URL(redirect)

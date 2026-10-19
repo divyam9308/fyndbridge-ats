@@ -15,8 +15,11 @@ Google's Gmail profile must match that address before credentials are persisted.
 The current CRM has no Overall Consultants control. The button is at the right end
 of its existing toolbar; no consultant control or other page was changed. Its
 existing modal conventions show mailbox, connection status, last completed discovery,
-recovery warnings and disconnect/reconnect controls. The existing 13 columns and
-CRM permissions remain unchanged.
+recovery warnings and disconnect/reconnect controls. The toolbar changes from
+Connect Gmail to Disconnect Gmail after connection; the adjacent information button
+opens connection details. The existing 13 columns remain unchanged. CRM visibility
+now supports selected consultants in Admin → Page View Permissions, as described in
+[the follow-up access report](CONSULTANT_ACCESS.md).
 
 Only exact, case-normalized contact emails match. All contact persons are included.
 Public domains receive no special domain matching; an exact address can still match.
@@ -165,17 +168,27 @@ permanent. Workers do not rotate keys or create a new provider fallback strategy
 
 ## Environment and deployment
 
-Already configured in Vercel Production (no values changed or requested):
+Vercel Production variable names verified on 19 October 2026 (no values read or changed):
 
-- `GOOGLE_GMAIL_CLIENT_ID`
-- `GOOGLE_GMAIL_CLIENT_SECRET`
+- `GoogleOAuthclientID` (also accepts `GOOGLE_GMAIL_CLIENT_ID`, which takes precedence)
+- `GoogleOAuthclientsecret` (also accepts `GOOGLE_GMAIL_CLIENT_SECRET`, which takes precedence)
 - `GOOGLE_GMAIL_REDIRECT_URI=https://fyndbridge-ats.vercel.app/api/crm/gmail/callback`
 - `GMAIL_TOKEN_ENCRYPTION_KEY`
 - `CRON_SECRET`
 - Existing `GEMINI_API_KEY_PRIMARY` and `GEMINI_API_KEY_SECONDARY`
 - Existing Supabase server credentials and existing CV `GEMINI_MODEL`
 
-Add the separate CRM model variable above for explicit configuration. No duplicate
+The original code expected only the uppercase OAuth names, while Production used
+the mixed-case names above. That mismatch caused the "Gmail integration is not
+configured" message. The server now accepts both spellings. A deployment containing
+this change is required; merely retrying the old deployment will not resolve it.
+The remaining callback URI and encryption-key format are still validated. Variable
+metadata confirms names and Production scope, not secret validity or live consent.
+Gmail errors and OAuth feedback appear inside the connection dialog so they cannot
+push the toolbar controls onto another row; closing the dialog keeps the error
+available through the Gmail button.
+
+The separate CRM model variable is present for explicit configuration. No duplicate
 Gemini key variables or dependencies were introduced. The example environment file
 contains empty placeholders only. Do not rotate the encryption key without a planned
 credential migration/reconnection process.

@@ -16,7 +16,7 @@ async function verifiedConsultant(db, userId, access = require('./adminAccess'))
   const { getPageViewPermission, isAdmin, isSuperAdmin } = access
   const { allowsPageView } = require('./pageViewPermissionPolicy')
   const permission = await getPageViewPermission('crm', { fresh: true })
-  if (!permission || (permission !== 'everyone' && !allowsPageView(permission, { isAdmin: await isAdmin(user), isSuperAdmin: await isSuperAdmin(user) }))) throw fault('ACCESS_DENIED')
+  if (!permission || (permission !== 'everyone' && !allowsPageView(permission, { isAdmin: await isAdmin(user), isSuperAdmin: await isSuperAdmin(user) }) && !await access.hasIndividualPageAccess?.('crm', userId))) throw fault('ACCESS_DENIED')
   return email
 }
 function createGmailService({ db = require('./supabaseAdmin'), google, ai = require('./aiProvider').callAiJson, authorize = id => verifiedConsultant(db, id), now = () => Date.now() } = {}) {

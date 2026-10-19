@@ -16,3 +16,8 @@
   .page-view-permission-table .admin-permission-row { gap: 12px; }
   .page-view-permission-table .admin-permission-picker { min-width: min(420px, 100%); }
 }
+.admin-consultant-access { margin-top: 10px; max-width: 520px; }
+.admin-consultant-access summary { cursor: pointer; color: var(--brand-blue); font-size: 12px; font-weight: 600; }
+.admin-consultant-access fieldset { border: 1px solid var(--gray-200); border-radius: 8px; margin: 8px 0 0; padding: 10px; max-height: 200px; overflow: auto; }
+.admin-consultant-option { display: flex; gap: 10px; align-items: center; padding: 7px 3px; font-size: 13px; cursor: pointer; }
+.admin-consultant-access .form-control { width: 100%; margin-top: 8px; }
