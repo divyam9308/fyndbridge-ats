@@ -46,9 +46,10 @@ function MetricIcon({ label }) {
   return <BarChart3 {...METRIC_ICON_PROPS} />
 }
 
-export default function ReportKpiCard({ label, value, tone = 'blue', compact = false, detail = '', loading = false }) {
+export default function ReportKpiCard({ label, value, tone = 'blue', compact = false, detail = '', loading = false, onClick, selected = false }) {
+  const Card = onClick ? 'button' : 'article'
   return (
-    <article className={`report-kpi report-tone-${tone}${compact ? ' is-compact' : ''}${loading ? ' is-loading' : ''}`} aria-busy={loading}>
+    <Card type={onClick ? 'button' : undefined} onClick={onClick} aria-pressed={onClick ? selected : undefined} className={`report-kpi report-tone-${tone}${compact ? ' is-compact' : ''}${loading ? ' is-loading' : ''}${onClick ? ' is-interactive' : ''}${selected ? ' is-selected' : ''}`} aria-busy={loading}>
       <div className="report-kpi-top">
         <span className="report-kpi-label">{label}</span>
         <span className="report-kpi-icon" aria-hidden="true"><MetricIcon label={label} /></span>
@@ -57,6 +58,6 @@ export default function ReportKpiCard({ label, value, tone = 'blue', compact = f
         <strong>{loading ? <span className="report-kpi-skeleton" aria-hidden="true" /> : value ?? '—'}</strong>
         {!loading && detail && <small>{detail}</small>}
       </div>
-    </article>
+    </Card>
   )
 }

@@ -1,9 +1,8 @@
-const { CANDIDATE_STATUSES } = require('./candidateStatuses')
 const { normalizeMobile } = require('./candidateCreation')
 
 const NOT_CONTACTED = 'Not Contacted'
 const DID_NOT_PICK_UP = 'Didn’t Pick Up'
-const ASSIGNED_STATUSES = Object.freeze([NOT_CONTACTED, DID_NOT_PICK_UP, ...CANDIDATE_STATUSES])
+const ASSIGNED_STATUSES = Object.freeze(['Not Contacted', 'Didn’t Pick Up', 'Interested', 'Not Interested', 'In Discussion', 'Rejected by Recruiter'])
 const isUuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''))
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 const isContacted = status => ASSIGNED_STATUSES.includes(status) && ![NOT_CONTACTED, DID_NOT_PICK_UP].includes(status)

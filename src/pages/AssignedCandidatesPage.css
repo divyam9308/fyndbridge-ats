@@ -19,6 +19,7 @@
 .assigned-table tbody tr.assigned-group-0 { background: white; }
 .assigned-table tbody tr.assigned-group-1 { background: #fff9e5; }
 .assigned-table tbody tr.assigned-group-2 { background: #f1f3f5; }
+.assigned-table tbody tr.assigned-added { background: #f0f9f2; }
 .assigned-table tbody tr:hover { filter: brightness(.985); }
 .assigned-table tbody tr.is-selected { box-shadow: inset 3px 0 var(--gold, #DAB111); }
 .assigned-row-actions { display: flex; align-items: center; gap: 7px; white-space: nowrap; }

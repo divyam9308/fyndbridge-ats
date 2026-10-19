@@ -101,3 +101,7 @@
 @media (prefers-reduced-motion: reduce) {
   .report-kpi-skeleton { animation: none; }
 }
+
+.report-kpi.is-interactive { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+.report-kpi.is-interactive:hover, .report-kpi.is-selected { background: var(--report-accent-soft); }
+.report-kpi.is-interactive:focus-visible { outline: 3px solid var(--report-accent); outline-offset: 4px; }

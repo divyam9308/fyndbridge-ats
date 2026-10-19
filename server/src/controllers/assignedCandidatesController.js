@@ -41,7 +41,12 @@ const handle = fn => async (req, res) => {
 exports.list = handle(async (req,res) => {
   const { admin, scope } = await context(req)
   const page = Math.max(1,parseInt(req.query.page,10)||1); const limit = Math.min(100,Math.max(1,parseInt(req.query.limit,10)||25))
+  const filter = req.query.filter || 'assigned'
+  if (!['assigned','added','did_not_pick_up','not_contacted'].includes(filter)) throw fail('Invalid assignment filter')
   let query = supabase.from('assigned_candidates').select(SELECT,{count:'exact'})
+  if (filter === 'added') query = query.not('added_at','is',null)
+  if (filter === 'did_not_pick_up') query = query.eq('status',DID_NOT_PICK_UP)
+  if (filter === 'not_contacted') query = query.eq('status',NOT_CONTACTED)
   if (scope) query = query.eq('assigned_consultant_id',scope)
   const result = await query.order('sort_group').order('assigned_at').order('id').range((page-1)*limit,page*limit-1)
   unwrap(result)

@@ -34,6 +34,7 @@ function AssignmentDialog({ title, children, pending, onCancel, onConfirm, confi
 export default function AssignedCandidatesPage() {
   const { user } = useAuth()
   const [scope, setScope] = useState('')
+  const [filter, setFilter] = useState('assigned')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(25)
   const [data, setData] = useState(null)
@@ -61,7 +62,7 @@ export default function AssignedCandidatesPage() {
   const refresh = useCallback(async () => {
     abortRef.current?.abort(); const controller = new AbortController(); abortRef.current = controller
     try {
-      const params = new URLSearchParams({ page, limit, ...(scope ? { consultant_id: scope } : {}) })
+      const params = new URLSearchParams({ page, limit, filter, ...(scope ? { consultant_id: scope } : {}) })
       const payload = await assignedRequest(`?${params}`, { signal: controller.signal })
       if (controller.signal.aborted) return
       if (page > payload.totalPages) { setPage(payload.totalPages); return }
@@ -75,7 +76,7 @@ export default function AssignedCandidatesPage() {
         return next
       })
     } catch (err) { if (err.name !== 'AbortError') setError(err.message) } finally { if (!controller.signal.aborted) setLoading(false) }
-  }, [page, limit, scope])
+  }, [page, limit, scope, filter])
   useEffect(() => { const frame=window.requestAnimationFrame(()=>{setLoading(true);refresh()}); return () => {window.cancelAnimationFrame(frame);abortRef.current?.abort()} }, [refresh])
   useEffect(() => {
     const onStorage = event => { if (event.key === 'ats:sidebar-counts-refresh') refresh() }
@@ -155,11 +156,11 @@ export default function AssignedCandidatesPage() {
     {notice && <div className="assigned-notice" role="status">{notice}<button className="modal-close" aria-label="Dismiss confirmation" onClick={() => setNotice('')}><X size={14} /></button></div>}
     {admin && cleanupPending && <div className="assigned-notice" role="status">CV cleanup is pending.<button className="btn-secondary" onClick={() => assignedRequest('/uploads/discard', { method: 'POST', body: JSON.stringify({ ids: [] }) }).then(result => setCleanupPending(Boolean(result.cleanup_pending))).catch(error => setError(error.message))}>Retry cleanup</button></div>}
     {error && !confirm && !reassign && <div className="form-error" role="alert">{error}<button className="btn-secondary" onClick={refresh}>Retry</button></div>}
-    <div className="assigned-kpis">{[['Assigned Candidates', 'assigned', 'navy'], ['Added Candidates', 'added', 'green'], ['Didn’t Pick Up', 'did_not_pick_up', 'amber'], ['Not Contacted', 'not_contacted', 'neutral']].map(([label, key, tone]) => <ReportKpiCard key={key} label={label} value={data?.stats?.[key]} tone={tone} loading={loading} />)}</div>
+    <div className="assigned-kpis">{[['Total Candidates', 'assigned', 'navy'], ['Added Candidates', 'added', 'green'], ['Didn’t Pick Up', 'did_not_pick_up', 'amber'], ['Not Contacted', 'not_contacted', 'neutral']].map(([label, key, tone]) => <ReportKpiCard key={key} label={label} value={data?.stats?.[key]} tone={tone} loading={loading} selected={filter === key} onClick={() => { setFilter(key); setPage(1); setSelection(new Map()); setStatusMenu(null); setMenu(null) }} />)}</div>
     <div className="table-card"><div className="table-wrapper" tabIndex={0} role="region" aria-label="Assigned candidate details"><table className="data-table fb-theme-table assigned-table" aria-label="Assigned Candidates" aria-busy={loading}>
       <colgroup><col style={{ width: 44 }} />{[220,120,180,210,190,...(showConsultant ? [200] : []),150,150,110,210].map((width,index) => <col key={index} style={{ width }} />)}</colgroup>
       <thead><tr><th className="assigned-selection-cell"><input type="checkbox" aria-label="Select all assignments on this page" disabled={loading || !selectableRows.length} checked={selectedOnPage > 0 && selectedOnPage === selectableRows.length} ref={node => { if (node) node.indeterminate = selectedOnPage > 0 && selectedOnPage < selectableRows.length }} onChange={event => selectRows(selectableRows,event.target.checked)} /></th>{['Name', 'Mobile', 'Client', 'Mandate', 'Status', ...(showConsultant ? ['Consultant'] : []), 'Assigned Date', 'Contacted Date', 'CV', 'Actions'].map(label => <th key={label} style={label === 'CV' ? { textAlign: 'center' } : undefined}>{label}</th>)}</tr></thead>
-      <tbody>{loading ? <tr><td colSpan={columnCount} className="table-loading-cell"><FyndbridgeLoader /></td></tr> : data?.data?.length ? data.data.map(row => <tr key={row.id} className={`assigned-group-${row.sort_group}${selection.has(row.id) ? ' is-selected' : ''}`}>
+      <tbody>{loading ? <tr><td colSpan={columnCount} className="table-loading-cell"><FyndbridgeLoader /></td></tr> : data?.data?.length ? data.data.map(row => <tr key={row.id} className={`assigned-group-${row.sort_group}${row.added_at ? ' assigned-added' : ''}${selection.has(row.id) ? ' is-selected' : ''}`}>
         <td className="assigned-selection-cell"><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selection.has(row.id)} disabled={!admin && !canTransfer(row)} onChange={event => selectRows([row],event.target.checked)} /></td>
         <td><CandidateName name={row.full_name} /></td><td className="assigned-mobile">{row.mobile_number}</td><td className="cell-ellipsis" title={row.clients?.name || row.clients?.client_name}>{row.clients?.name || row.clients?.client_name || '-'}</td><td className="cell-ellipsis" title={row.jobs?.title}>{row.jobs?.title || '-'}</td>
         <td><div className="candidate-columns-control mandate-status-control"><button type="button" className={`badge ${ASSIGNMENT_STATUS_BADGE_MAP[row.status] || 'badge-status-unset'}`} aria-label={`Status for ${row.full_name}: ${row.status}`} aria-haspopup="menu" aria-expanded={statusMenu?.row.id === row.id} disabled={rowBusy === row.id} onClick={event => openStatus(row,event.currentTarget,event.detail === 0)} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); openStatus(row,event.currentTarget,true) } }}>{row.status}</button></div></td>

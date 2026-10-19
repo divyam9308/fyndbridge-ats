@@ -4,7 +4,7 @@ const { createDatabase,id,ADMIN,CONSULTANT,OTHER,INACTIVE,SUPER,CLIENT,JOB,uploa
 const { ASSIGNED_STATUSES, assignmentScope, validateAssignment, rowGroup } = require('./assignedCandidates')
 const { CANDIDATE_STATUSES } = require('./candidateStatuses')
 test('contact-only statuses never enter the main Candidates status contract',()=>{
-  assert.deepEqual(ASSIGNED_STATUSES.slice(2),CANDIDATE_STATUSES)
+  assert.deepEqual(ASSIGNED_STATUSES,['Not Contacted', 'Didn’t Pick Up', 'Interested', 'Not Interested', 'In Discussion', 'Rejected by Recruiter'])
   for(const status of ['Not Contacted','Didn’t Pick Up']) assert.ok(!CANDIDATE_STATUSES.includes(status))
   assert.equal(rowGroup({status:'Not Contacted',added_at:'2026-10-19'}),2)
   assert.throws(()=>assignmentScope({id:CONSULTANT},false,OTHER),{statusCode:403})
@@ -15,7 +15,7 @@ test('contact-only statuses never enter the main Candidates status contract',()=
 test('migration, RLS, timestamps, atomic transfers and deletion execute in PostgreSQL',async t=>{
   const db=await createDatabase(); t.after(()=>db.close())
   const scalar=async(sql,params=[])=>Object.values((await db.query(sql,params)).rows[0])[0]
-  await t.test('database validation accepts every shared status and both assignment-only states',async()=>{
+  await t.test('database validation accepts all six assignment statuses',async()=>{
     for(const [index,status] of ASSIGNED_STATUSES.entries()) assert.equal((await assign(db,500+index,{status})).status,status)
   })
   await t.test('preliminary assignments do not affect main analytics and supplied timestamps are ignored',async()=>{
