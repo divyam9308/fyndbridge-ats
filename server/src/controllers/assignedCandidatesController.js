@@ -136,6 +136,7 @@ exports.parse = handle(async(req,res)=>{
 async function transfer(req,res) {
   const row=await getRow(req)
   if(row.added_at) return res.json({candidate_id:row.candidate_id,association_id:row.association_id,idempotent:true})
+  if(row.status === 'Not Relevant') throw fail('Not Relevant assignments cannot be added to Candidates.',409)
   if([NOT_CONTACTED,DID_NOT_PICK_UP].includes(row.status)) throw fail('Contact the candidate and update the assignment status before adding to Candidates.',409)
   // Keep the existing complete validation and duplicate dialog contract.
   req.assignedCandidateId=row.id

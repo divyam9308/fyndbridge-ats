@@ -7,6 +7,8 @@ test('contact-only statuses never enter the main Candidates status contract',()=
   assert.deepEqual(ASSIGNED_STATUSES,['Not Contacted', 'Didn’t Pick Up', 'Interested', 'Not Interested', 'In Discussion', 'Rejected by Recruiter', 'Not Relevant'])
   for(const status of ['Not Contacted','Didn’t Pick Up','Not Relevant']) assert.ok(!CANDIDATE_STATUSES.includes(status))
   assert.equal(rowGroup({status:'Not Contacted',added_at:'2026-10-19'}),4)
+  for (const status of ['Not Contacted','Interested','In Discussion','Not Interested','Rejected by Recruiter']) assert.equal(rowGroup({status}),0)
+  assert.equal(rowGroup({status:'Didn’t Pick Up'}),1); assert.equal(rowGroup({status:'Not Relevant'}),2)
   assert.throws(()=>assignmentScope({id:CONSULTANT},false,OTHER),{statusCode:403})
   assert.equal(assignmentScope({id:CONSULTANT},false,''),CONSULTANT)
   assert.equal(assignmentScope({id:ADMIN},true,''),null)
@@ -93,12 +95,30 @@ test('migration, RLS, timestamps, atomic transfers and deletion execute in Postg
     await db.query('delete from assigned_candidates where id=$1',[created.id])
     await db.query('delete from candidates where id=$1',[result.association.candidate_id])
   })
-  await t.test('transaction blocks both pending statuses even if the submitted form says Interested',async()=>{
-    for(const [n,status] of [[112,'Not Contacted'],[113,'Didn’t Pick Up']]) {
+  await t.test('transaction blocks pending and Not Relevant assignments even if the submitted form says Interested',async()=>{
+    for(const [n,status] of [[112,'Not Contacted'],[113,'Didn’t Pick Up'],[118,'Not Relevant']]) {
       const a=await assign(db,n,{status})
-      await assert.rejects(db.query('select transfer_assigned_candidate($1,$2,$3,$4,null)',[a.id,CONSULTANT,JSON.stringify(payload(n)),JSON.stringify(association())]),/Contact the candidate/)
+      await assert.rejects(db.query('select transfer_assigned_candidate($1,$2,$3,$4,null)',[a.id,CONSULTANT,JSON.stringify(payload(n)),JSON.stringify(association())]),/Contact the candidate|Not Relevant/)
     }
     assert.equal(await scalar('select count(*)::int from candidates'),0)
+  })
+  await t.test('ordinary status updates retain assignment position; excluded statuses move immediately', async () => {
+    const first = await assign(db, 119), second = await assign(db, 120)
+    const order = async () => (await db.query('select id from assigned_candidates where id=any($1) order by sort_group,assigned_at,id', [[first.id, second.id]])).rows.map(row => row.id)
+    const initial = await order()
+    for (const status of ['Interested', 'In Discussion', 'Not Interested', 'Rejected by Recruiter']) {
+      await db.query('update assigned_candidates set status=$1 where id=$2', [status, first.id])
+      assert.deepEqual(await order(), initial)
+      assert.equal(await scalar('select sort_group from assigned_candidates where id=$1', [first.id]), 0)
+    }
+    for (const [status, group] of [['Didn’t Pick Up',1],['Not Relevant',2]]) {
+      await db.query('update assigned_candidates set status=$1 where id=$2', [status, first.id])
+      assert.deepEqual(await order(), [second.id, first.id])
+      assert.equal(await scalar('select sort_group from assigned_candidates where id=$1', [first.id]), group)
+    }
+    await db.query("update assigned_candidates set status='Interested' where id=$1", [first.id])
+    assert.deepEqual(await order(), initial)
+    assert.equal((await scalar('select assigned_at from assigned_candidates where id=$1', [first.id])).getTime(), first.assigned_at.getTime())
   })
   await t.test('unauthorized transfer and association failure preserve retryable assignments',async()=>{
     const a=await assign(db,114,{status:'Interested'})
@@ -136,13 +156,14 @@ test('migration, RLS, timestamps, atomic transfers and deletion execute in Postg
     // Exercise the upgrade against populated rows, including already-transferred CVs.
     const before=(await db.query('select id,upload_id,candidate_id,added_at from assigned_candidates order by id')).rows
     await db.exec(await require('node:fs/promises').readFile(require('node:path').resolve(__dirname,'../../../supabase/migrations/20261019120000_assigned_candidate_relevance_order.sql'),'utf8'))
+    await db.exec(await require('node:fs/promises').readFile(require('node:path').resolve(__dirname,'../../../supabase/migrations/20261019121623_assigned_candidate_stable_status_order.sql'),'utf8'))
     assert.deepEqual((await db.query('select id,upload_id,candidate_id,added_at from assigned_candidates order by id')).rows,before)
     const groups=(await db.query('select sort_group from assigned_candidates order by sort_group,assigned_at,id')).rows.map(row=>row.sort_group)
     assert.deepEqual(groups,[...groups].sort((a,b)=>a-b))
     for(let offset=0;offset<groups.length;offset+=3) assert.deepEqual((await db.query('select sort_group from assigned_candidates order by sort_group,assigned_at,id limit 3 offset $1',[offset])).rows.map(row=>row.sort_group),groups.slice(offset,offset+3))
     assert.equal(await scalar('select sort_group from assigned_candidates where id=$1',[transferred.assignment]),4)
     assert.equal(await scalar("select sort_group from assigned_candidates where status='Not Relevant' and added_at is null limit 1"),2)
-    assert.deepEqual([...new Set(groups)],[0,1,2,3,4])
+    assert.deepEqual([...new Set(groups)],[0,1,2,4])
   })
   await t.test('scoped Delete All preserves both pending statuses and main candidates',async()=>{
     await assert.rejects(db.query('select delete_assigned_candidates($1,null,null,true)',[CONSULTANT]),/Admin/)

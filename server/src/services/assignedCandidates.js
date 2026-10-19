@@ -6,7 +6,7 @@ const ASSIGNED_STATUSES = Object.freeze(['Not Contacted', 'Didn’t Pick Up', 'I
 const isUuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''))
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 const isContacted = status => ASSIGNED_STATUSES.includes(status) && ![NOT_CONTACTED, DID_NOT_PICK_UP].includes(status)
-const rowGroup = row => row.added_at ? 4 : row.status === NOT_CONTACTED ? 0 : row.status === DID_NOT_PICK_UP ? 1 : row.status === 'Not Relevant' ? 2 : 3
+const rowGroup = row => row.added_at ? 4 : row.status === DID_NOT_PICK_UP ? 1 : row.status === 'Not Relevant' ? 2 : 0
 
 function validateAssignment(input) {
   const name = String(input.full_name || '').replace(/\s+/g, ' ').trim()

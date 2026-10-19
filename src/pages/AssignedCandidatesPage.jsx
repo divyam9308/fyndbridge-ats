@@ -22,7 +22,9 @@ import '../styles/Shared.css'
 import './AssignedCandidatesPage.css'
 
 const CandidateForm = lazy(() => import('./CandidatesPage'))
-const canTransfer = row => !row.added_at && row.status !== 'Not Contacted' && row.status !== 'Didn’t Pick Up'
+const canTransfer = row => !row.added_at && row.status !== 'Not Contacted' && row.status !== 'Didn’t Pick Up' && row.status !== 'Not Relevant'
+// Row tone describes contact state; it no longer decides database order.
+const rowTone = row => row.added_at ? 4 : row.status === 'Not Contacted' ? 0 : row.status === 'Didn’t Pick Up' ? 1 : row.status === 'Not Relevant' ? 2 : 3
 function AssignmentDialog({ title, children, pending, onCancel, onConfirm, confirm = 'Yes, Delete', className = '' }) {
   const ref = useDialogFocus(onCancel, { closeDisabled: pending })
   useEffect(() => lockBodyScroll({ preserveScrollbar: true }), [])
@@ -115,7 +117,18 @@ export default function AssignedCandidatesPage() {
   const status = async (row, value) => {
     setStatusMenu(null)
     setRowBusy(row.id)
-    try { await assignedRequest(`/${row.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: value }) }); changed() }
+    try {
+      await assignedRequest(`/${row.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: value }) })
+      setSelection(current => {
+        if (!current.has(row.id)) return current
+        const next = new Map(current)
+        const updated = { ...current.get(row.id), status: value }
+        if (!admin && !canTransfer(updated)) next.delete(row.id)
+        else next.set(row.id, updated)
+        return next
+      })
+      changed()
+    }
     catch (err) { setError(err.message) } finally { setRowBusy('') }
   }
   const remove = async () => {
@@ -160,7 +173,7 @@ export default function AssignedCandidatesPage() {
     <div className="table-card"><div className="table-wrapper" tabIndex={0} role="region" aria-label="Assigned candidate details"><table className="data-table fb-theme-table assigned-table" aria-label="Assigned Candidates" aria-busy={loading}>
       <colgroup><col style={{ width: 44 }} />{[220,120,180,210,190,...(showConsultant ? [200] : []),150,150,110,210].map((width,index) => <col key={index} style={{ width }} />)}</colgroup>
       <thead><tr><th className="assigned-selection-cell"><input type="checkbox" aria-label="Select all assignments on this page" disabled={loading || !selectableRows.length} checked={selectedOnPage > 0 && selectedOnPage === selectableRows.length} ref={node => { if (node) node.indeterminate = selectedOnPage > 0 && selectedOnPage < selectableRows.length }} onChange={event => selectRows(selectableRows,event.target.checked)} /></th>{['Name', 'Mobile', 'Client', 'Mandate', 'Status', ...(showConsultant ? ['Consultant'] : []), 'Assigned Date', 'Contacted Date', 'CV', 'Actions'].map(label => <th key={label} style={label === 'CV' ? { textAlign: 'center' } : undefined}>{label}</th>)}</tr></thead>
-      <tbody>{loading ? <tr><td colSpan={columnCount} className="table-loading-cell"><FyndbridgeLoader /></td></tr> : data?.data?.length ? data.data.map(row => <tr key={row.id} className={`assigned-group-${row.sort_group}${row.added_at ? ' assigned-added' : ''}${selection.has(row.id) ? ' is-selected' : ''}`}>
+      <tbody>{loading ? <tr><td colSpan={columnCount} className="table-loading-cell"><FyndbridgeLoader /></td></tr> : data?.data?.length ? data.data.map(row => <tr key={row.id} className={`assigned-group-${rowTone(row)}${row.added_at ? ' assigned-added' : ''}${selection.has(row.id) ? ' is-selected' : ''}`}>
         <td className="assigned-selection-cell"><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selection.has(row.id)} disabled={!admin && !canTransfer(row)} onChange={event => selectRows([row],event.target.checked)} /></td>
         <td><CandidateName name={row.full_name} /></td><td className="assigned-mobile">{row.mobile_number}</td><td className="cell-ellipsis" title={row.clients?.name || row.clients?.client_name}>{row.clients?.name || row.clients?.client_name || '-'}</td><td className="cell-ellipsis" title={row.jobs?.title}>{row.jobs?.title || '-'}</td>
         <td><div className="candidate-columns-control mandate-status-control"><button type="button" className={`badge ${ASSIGNMENT_STATUS_BADGE_MAP[row.status] || 'badge-status-unset'}`} aria-label={`Status for ${row.full_name}: ${row.status}`} aria-haspopup="menu" aria-expanded={statusMenu?.row.id === row.id} disabled={rowBusy === row.id} onClick={event => openStatus(row,event.currentTarget,event.detail === 0)} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); openStatus(row,event.currentTarget,true) } }}>{row.status}</button></div></td>
@@ -168,7 +181,7 @@ export default function AssignedCandidatesPage() {
         <td>{formatDateDDMMYYYY(row.assigned_at)}</td><td>{formatDateDDMMYYYY(row.contacted_at)}</td>
         <td style={{ textAlign: 'center' }}><DocumentIconGroup attachments={[{ path: row.id, name: row.assigned_candidate_uploads?.cv_original_name || `${row.full_name} CV` }]} keyPrefix="assigned-cv" openingKey={openingDocument} onOpen={key => viewCv(row, key)} /></td>
         <td><div className="assigned-row-actions">
-          {row.added_at ? <span className="badge badge-status-unset">Added</span> : <button className="assigned-add" disabled={!canTransfer(row)} title={['Not Contacted', 'Didn’t Pick Up'].includes(row.status) ? 'Contact the candidate and update their status first' : 'Add to Candidates'} onClick={() => setTransfer(transferDetails(row))}>Add to Candidates</button>}
+          {row.added_at ? <span className="badge badge-status-unset">Added</span> : <button className="assigned-add" disabled={!canTransfer(row)} title={row.status === 'Not Relevant' ? 'Not Relevant assignments cannot be added to Candidates' : ['Not Contacted', 'Didn’t Pick Up'].includes(row.status) ? 'Contact the candidate and update their status first' : 'Add to Candidates'} onClick={() => setTransfer(transferDetails(row))}>Add to Candidates</button>}
           {admin && <button className="row-action-btn" aria-label={`Actions for ${row.full_name}`} onClick={event => setMenu({ row, anchor: event.currentTarget.getBoundingClientRect() })}><MoreHorizontal size={17} /></button>}</div></td>
       </tr>) : <tr><td colSpan={columnCount} className="table-empty-cell">No assigned candidates{admin ? '. Select a consultant and click New to assign CVs.' : '.'}</td></tr>}</tbody>
     </table></div><PaginationBar page={page} totalPages={data?.totalPages || 1} total={data?.total || 0} pageSize={limit} onPageChange={setPage} onPageSizeChange={value => { setLimit(value); setPage(1); setSelection(new Map()) }} loading={loading} /></div>
