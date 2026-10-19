@@ -26,8 +26,8 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     assert.equal((await request(`/${other}/review`,'POST',{})).httpStatus,404)
     assert.equal((await request(`/${own.id}/cv`)).httpStatus,200)
   })
-  await t.test('only six assignment statuses are offered and unsupported updates are rejected',async()=>{
-    const statuses=['Not Contacted','Didn’t Pick Up','Interested','Not Interested','In Discussion','Rejected by Recruiter']
+  await t.test('only seven assignment statuses are offered and unsupported updates are rejected',async()=>{
+    const statuses=['Not Contacted','Didn’t Pick Up','Interested','Not Interested','In Discussion','Rejected by Recruiter','Not Relevant']
     assert.deepEqual((await request()).statuses,statuses)
     for(const status of ['Interview','Client Submission','Offered','Hired','Offer Declined','Dropout','Rejected by Client']) {
       assert.equal((await request(`/${own.id}/status`,'PATCH',{status})).httpStatus,400)

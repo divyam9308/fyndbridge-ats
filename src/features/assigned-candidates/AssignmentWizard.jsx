@@ -13,8 +13,9 @@ import AssignmentSelect from './AssignmentSelect'
 const validDetails = row => row.full_name.trim() && (row.mobile_number === '-' || /^\+?\d{7,15}$/.test(row.mobile_number.replace(/[\s()-]/g, ''))) && row.client_id && row.job_id && row.assigned_consultant_id
 const discardUploads = ids => ids.length ? assignedRequest('/uploads/discard', { method: 'POST', body: JSON.stringify({ ids }) }) : Promise.resolve()
 
-export default function AssignmentWizard({ consultants, defaultConsultant, onClose, onSaved }) {
+export default function AssignmentWizard({ consultants, onClose, onSaved }) {
   const [rows, setRows] = useState([])
+  const [defaults, setDefaults] = useState({ client_id: '', job_id: '', assigned_consultant_id: '' })
   const [step, setStep] = useState(-1)
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -28,7 +29,7 @@ export default function AssignmentWizard({ consultants, defaultConsultant, onClo
   const activeUploads = useRef(new Set())
   const closed = useRef(false)
   const saved = useRef(false)
-  useEffect(() => { rowsRef.current = rows }, [rows])
+  const replaceRows = nextRows => { rowsRef.current = nextRows; setRows(nextRows) }
   useEffect(() => {
     closed.current = false
     const removed = removedUploads.current
@@ -53,7 +54,7 @@ export default function AssignmentWizard({ consultants, defaultConsultant, onClo
     }).catch(err => { if (err.name !== 'AbortError') setError(err.message) }).finally(() => setOptionsLoading(false))
     return () => controller.abort()
   }, [])
-  const patch = (id, change) => { if (!closed.current && !removedUploads.current.has(id)) setRows(current => current.map(row => row.id === id ? { ...row, ...change } : row)) }
+  const patch = (id, change) => { if (!closed.current && !removedUploads.current.has(id)) replaceRows(rowsRef.current.map(row => row.id === id ? { ...row, ...change } : row)) }
   const upload = async row => {
     if (closed.current || removedUploads.current.has(row.id)) return
     activeUploads.current.add(row.id)
@@ -70,56 +71,80 @@ export default function AssignmentWizard({ consultants, defaultConsultant, onClo
       if (closed.current || removedUploads.current.has(row.id)) await discardUploads([row.id]).catch(() => {})
     }
   }
-  const processFiles = async files => {
+  const processFiles = files => {
     if (requestLock.current) return
-    const added = Array.from(files).map(file => ({ id: crypto.randomUUID(), file, full_name: '', mobile_number: '', client_id: '', job_id: '', status: 'Not Contacted', assigned_consultant_id: defaultConsultant || '', state: 'Waiting', upload_error: '' }))
+    const added = Array.from(files).map(file => ({ id: crypto.randomUUID(), file, full_name: '', mobile_number: '', ...defaults, status: 'Not Contacted', state: 'Waiting', upload_error: '' }))
     for (const row of added) {
       if (!/\.(pdf|docx?)$/i.test(row.file.name)) row.upload_error = 'Only PDF, DOC and DOCX files are supported.'
       else if (!row.file.size || row.file.size > 10 * 1024 * 1024) row.upload_error = 'Each CV must be between 1 byte and 10 MB.'
       if (row.upload_error) row.state = 'Upload failed'
     }
-    rowsRef.current = [...rowsRef.current, ...added]
-    setRows(current => [...current, ...added]); setError(''); setBusy(true); requestLock.current = true
-    let index = 0; const queue = added.filter(row => !row.upload_error)
+    replaceRows([...rowsRef.current, ...added]); setError('')
+  }
+  const processUploads = async (queue = rowsRef.current.filter(row => !row.upload_id && !row.upload_error)) => {
+    if (!queue.length) return
+    setBusy(true); requestLock.current = true
+    let index = 0
     try { await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => { while (index < queue.length) { const row = queue[index++]; await upload(row) } })) }
     finally { requestLock.current = false; if (!closed.current) setBusy(false) }
   }
-  const retry = async row => { if (requestLock.current) return; requestLock.current = true; setBusy(true); try { await upload(row) } finally { requestLock.current = false; if (!closed.current) setBusy(false) } }
+  const retry = async row => { if (!requestLock.current) await processUploads([row]) }
   const cancel = () => { if (saving) return; closed.current = true; onClose() }
   const dialogRef = useDialogFocus(cancel, { closeDisabled: saving })
   const remove = row => {
     removedUploads.current.add(row.id)
-    rowsRef.current = rowsRef.current.filter(item => item.id !== row.id)
-    setRows(current => current.filter(item => item.id !== row.id))
+    replaceRows(rowsRef.current.filter(item => item.id !== row.id))
     if (!activeUploads.current.has(row.id)) discardUploads([row.id]).catch(() => {})
   }
-  const next = () => {
-    if (step === -1 && (!rows.length || rows.some(row => !row.upload_id))) { setError('Upload or remove each failed CV before continuing.'); return }
+  const next = async () => {
+    if (requestLock.current || !rowsRef.current.length) return
+    if (step === -1) {
+      await processUploads()
+      if (closed.current) return
+      if (!rowsRef.current.length || rowsRef.current.some(row => !row.upload_id)) { setError('Upload or remove each failed CV before continuing.'); return }
+    }
     if (step >= 0 && !validDetails(rows[step])) { setError('Complete the name, mobile, client, mandate and consultant.'); return }
     setError(''); setStep(current => current + 1)
   }
   const save = async () => {
     if (requestLock.current) return
-    const invalid = rows.findIndex(row => !validDetails(row))
+    await processUploads()
+    if (closed.current) return
+    const currentRows = rowsRef.current
+    if (!currentRows.length || currentRows.some(row => !row.upload_id)) { setStep(-1); setError('Upload or remove each failed CV before saving.'); return }
+    const invalid = currentRows.findIndex(row => !validDetails(row))
     if (invalid !== -1) { setStep(invalid); setError('Complete the required candidate details.'); return }
     requestLock.current = true; setSaving(true); setError('')
     try {
-      const result = await assignedRequest('', { method: 'POST', body: JSON.stringify({ rows: rows.map(({ upload_id, full_name, mobile_number, client_id, job_id, status, assigned_consultant_id }) => ({ upload_id, full_name, mobile_number, client_id, job_id, status, assigned_consultant_id })) }) })
+      const result = await assignedRequest('', { method: 'POST', body: JSON.stringify({ rows: currentRows.map(({ upload_id, full_name, mobile_number, client_id, job_id, status, assigned_consultant_id }) => ({ upload_id, full_name, mobile_number, client_id, job_id, status, assigned_consultant_id })) }) })
       saved.current = true
       onSaved(result.count)
     } catch (err) { setError(err.message) } finally { requestLock.current = false; setSaving(false) }
   }
+  const updateDefaults = change => {
+    setDefaults(current => ({ ...current, ...change }))
+    replaceRows(rowsRef.current.map(row => ({ ...row, ...change })))
+  }
+  const clientOptions = options.clients.map(client => ({ id: client.client_group_id || client.id, name: client.name || client.client_name, displayId: client.client_display_id }))
+  const mandateOptions = clientId => options.jobs.filter(job => job.client_id === clientId && normalizeMandateStatus(job.mandate_status || job.status || job.priority) !== 'Completed').map(job => ({ id: job.id, name: job.title || job.role, displayId: job.job_display_id }))
+  const directSave = step === -1 && Boolean(defaults.client_id && defaults.job_id && defaults.assigned_consultant_id)
   const row = rows[step]
   const update = change => patch(row.id, change)
   return createPortal(<div className="modal-overlay"><div className="modal-card modal-card-lg assigned-wizard" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="assigned-wizard-title" aria-busy={busy || saving}>
     <div className="modal-header"><span className="modal-title" id="assigned-wizard-title">Assign New Candidates</span><button className="modal-close" aria-label="Close assignment wizard" disabled={saving} onClick={cancel}><X size={16} /></button></div>
     <div className="modal-body">
-      <div className="assigned-progress">{step === -1 ? 'Upload Files' : `Candidate ${step + 1} of ${rows.length}`}<span>{step === -1 ? consultants.find(c => c.id === defaultConsultant)?.name : row.file.name}</span></div>
+      <div className="assigned-progress">{step === -1 ? 'Upload Files' : `Candidate ${step + 1} of ${rows.length}`}<span>{step === -1 ? `${rows.length} CV${rows.length === 1 ? '' : 's'} selected` : row.file.name}</span></div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {step === -1 ? <>
         <button className="assigned-dropzone" disabled={busy || saving} onClick={() => inputRef.current?.click()} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); processFiles(event.dataTransfer.files) }}>
           <Upload size={24} /><strong>Choose CVs or drop files here</strong><span>PDF, DOC, DOCX · Up to 10 MB per file</span>
         </button>
+        <div className="assigned-batch-defaults">
+          <AssignmentSelect label="Client" allowNone value={defaults.client_id} options={clientOptions} onChange={id => updateDefaults({ client_id: id, job_id: '' })} disabled={optionsLoading || busy || saving} />
+          <AssignmentSelect label="Mandate" allowNone value={defaults.job_id} options={mandateOptions(defaults.client_id)} onChange={id => updateDefaults({ job_id: id })} disabled={!defaults.client_id || optionsLoading || busy || saving} />
+          <AssignmentSelect label="Assign to Consultant" allowNone value={defaults.assigned_consultant_id} options={consultants} onChange={id => updateDefaults({ assigned_consultant_id: id })} disabled={busy || saving} />
+        </div>
+        <p className="assigned-batch-hint">{directSave ? 'Save will process all CVs and assign the candidates using these selections.' : 'Selections apply to all CVs. Leave any as None to complete them for each candidate.'}</p>
         <input ref={inputRef} type="file" multiple accept=".pdf,.doc,.docx" aria-label="Upload CVs" hidden onChange={async event => { const input=event.currentTarget; await processFiles(input.files); input.value = '' }} />
         <ul className="assigned-file-list">{rows.map(item => <li key={item.id}><FileText size={19} /><div><strong>{item.file.name}</strong><span>{(item.file.size / 1024).toFixed(1)} KB · {item.state}</span>{item.upload_error && <span className="form-error">{item.upload_error}</span>}</div>
           {item.upload_error && <button className="btn-secondary" disabled={busy} onClick={() => retry(item)}>Retry</button>}<button className="modal-close" aria-label={`Remove ${item.file.name}`} disabled={saving} onClick={() => remove(item)}><X size={14} /></button></li>)}</ul>
@@ -134,7 +159,7 @@ export default function AssignmentWizard({ consultants, defaultConsultant, onClo
       </div>}
     </div>
     <div className="modal-footer"><button className="btn-secondary" disabled={saving} onClick={step < 0 ? cancel : () => { setStep(step - 1); setError('') }}>{step < 0 ? 'Cancel' : 'Back'}</button>
-      {step === rows.length - 1 && step >= 0 ? <button className="btn-primary" disabled={busy || saving} onClick={save}>{saving ? 'Saving…' : 'Save'}</button> : <button className="btn-primary" disabled={busy || !rows.length || optionsLoading} onClick={next}>{busy ? 'Processing…' : 'Next'}</button>}
+      {directSave || (step === rows.length - 1 && step >= 0) ? <button className="btn-primary" disabled={busy || saving || !rows.length || optionsLoading} onClick={save}>{busy ? 'Processing…' : saving ? 'Saving…' : 'Save'}</button> : <button className="btn-primary" disabled={busy || !rows.length || optionsLoading} onClick={next}>{busy ? 'Processing…' : 'Next'}</button>}
     </div>
   </div></div>, document.body)
 }

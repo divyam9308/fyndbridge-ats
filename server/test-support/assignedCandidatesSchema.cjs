@@ -29,7 +29,7 @@ async function createDatabase() {
 
   `)
   const root=path.resolve(__dirname,'../..')
-  for(const file of ['20260716192438_candidate_display_id_lowest_available_gap.sql','20261018204815_assigned_candidates.sql']) await db.exec(await fs.readFile(path.join(root,'supabase/migrations',file),'utf8'))
+  for(const file of ['20260716192438_candidate_display_id_lowest_available_gap.sql','20261018204815_assigned_candidates.sql','20261019120000_assigned_candidate_relevance_order.sql']) await db.exec(await fs.readFile(path.join(root,'supabase/migrations',file),'utf8'))
   for (const [uid,name,role,status] of [[ADMIN,'Test Admin','admin','active'],[CONSULTANT,'Test Consultant',null,'active'],[OTHER,'Other Consultant',null,'active'],[INACTIVE,'Inactive Consultant',null,'inactive'],[SUPER,'Super Admin','super_admin','active']]) {
     await db.query('insert into auth.users values($1,$2)',[uid,`${name.replaceAll(' ','').toLowerCase()}@example.test`])
     await db.query('insert into employee_statuses(user_id,status) values($1,$2)',[uid,status])

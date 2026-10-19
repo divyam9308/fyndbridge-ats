@@ -18,8 +18,9 @@
 .assigned-table .mandate-status-control { width: max-content; max-width: 100%; }
 .assigned-table tbody tr.assigned-group-0 { background: white; }
 .assigned-table tbody tr.assigned-group-1 { background: #fff9e5; }
-.assigned-table tbody tr.assigned-group-2 { background: #f1f3f5; }
-.assigned-table tbody tr.assigned-added { background: #f0f9f2; }
+.assigned-table tbody tr.assigned-group-2 { background: #fcebea; }
+.assigned-table tbody tr.assigned-group-3 { background: #f1f3f5; }
+.assigned-table tbody tr.assigned-added { background: #e2f3e7; }
 .assigned-table tbody tr:hover { filter: brightness(.985); }
 .assigned-table tbody tr.is-selected { box-shadow: inset 3px 0 var(--gold, #DAB111); }
 .assigned-row-actions { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
@@ -45,3 +46,7 @@
 .assigned-wizard .client-search-wrap,.assigned-wizard .client-search-wrap>.form-control { width: 100%; }
 .assigned-reassign-dialog .modal-body { min-height: 240px; }
 .assigned-reassign-dialog .client-search-wrap,.assigned-reassign-dialog .client-search-wrap>.form-control { width: 100%; }
+
+.assigned-batch-defaults { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.assigned-batch-hint { margin: 0; color: var(--text-muted, #758095); font-size: 12px; line-height: 1.5; }
+@media (max-width: 600px) { .assigned-batch-defaults { grid-template-columns: 1fr; gap: 8px; } }

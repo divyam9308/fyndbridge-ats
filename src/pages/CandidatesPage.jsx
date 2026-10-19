@@ -457,7 +457,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
   const [form, setForm]         = useState(() => assignedCandidate ? { ...EMPTY_CAND, skills: [],
     name: assignedCandidate.full_name, mobile: assignedCandidate.mobile_number,
     clientId: assignedCandidate.client_id || '', client: assignedCandidate.clients?.name || assignedCandidate.clients?.client_name || '',
-    jobId: assignedCandidate.job_id || '', job: assignedCandidate.jobs?.title || '', status: assignedCandidate.status,
+    jobId: assignedCandidate.job_id || '', job: assignedCandidate.jobs?.title || '', status: CANDIDATE_STATUSES.includes(assignedCandidate.status) ? assignedCandidate.status : '',
     consultantName: assignedCandidate.consultant_name || '', consultantUserId: assignedCandidate.assigned_consultant_id,
     ...assignedBatch?.draft?.form } : EMPTY_CAND)
   const [errors, setErrors]     = useState(() => assignedBatch?.error ? { form: assignedBatch.error.message } : {})

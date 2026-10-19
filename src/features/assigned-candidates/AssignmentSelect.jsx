@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 // The same client-search/suggestion styling used by the Add Candidate form.
-export default function AssignmentSelect({ label, value, options, onChange, disabled = false }) {
+export default function AssignmentSelect({ label, value, options, onChange, disabled = false, allowNone = false }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const blurTimer = useRef(null)
@@ -9,7 +9,7 @@ export default function AssignmentSelect({ label, value, options, onChange, disa
   const inputRef = useRef(null)
   useEffect(() => () => window.clearTimeout(blurTimer.current), [])
   const selected = options.find(option => option.id === value)
-  const visibleOptions = options.filter(option => `${option.name} ${option.displayId || ''}`.toLowerCase().includes(search.toLowerCase()))
+  const visibleOptions = (allowNone ? [{ id: '', name: 'None' }, ...options] : options).filter(option => `${option.name} ${option.displayId || ''}`.toLowerCase().includes(search.toLowerCase()))
   useLayoutEffect(() => {
     const list = listRef.current
     const input = inputRef.current
@@ -25,10 +25,10 @@ export default function AssignmentSelect({ label, value, options, onChange, disa
   }, [open, visibleOptions.length])
   const closeOptions = () => { inputRef.current?.focus({ preventScroll: true }); setOpen(false) }
   return <div className="form-group">
-    <label className="form-label">{label}<span className="req"> *</span></label>
+    <label className="form-label">{label}{!allowNone && <span className="req"> *</span>}</label>
     <div className="client-search-wrap" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) blurTimer.current = window.setTimeout(() => setOpen(false), 120) }}>
       <input ref={inputRef} className="form-control" aria-label={label} role="combobox" aria-expanded={open} aria-controls={`assigned-${label.replaceAll(' ', '-')}`} autoComplete="off" disabled={disabled}
-        value={open ? search : selected?.name || ''} placeholder={`Select ${label.toLowerCase()}`}
+        value={open ? search : selected?.name || (allowNone ? 'None' : '')} placeholder={allowNone ? 'None' : `Select ${label.toLowerCase()}`}
         onClick={() => { if (!open) { setSearch(''); setOpen(true) } }}
         onFocus={() => { window.clearTimeout(blurTimer.current); setSearch(''); setOpen(true) }} onChange={event => { setSearch(event.target.value); setOpen(true) }}
         onKeyDown={event => { if (event.key === 'Escape' && open) { event.stopPropagation(); setOpen(false) } if (event.key === 'ArrowDown') { event.preventDefault(); setOpen(true); window.requestAnimationFrame(() => listRef.current?.querySelector('button')?.focus({ preventScroll: true })) } }} />

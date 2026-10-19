@@ -1,0 +1,33 @@
+{
+  "provenance": "Actual React UI against isolated Express/PostgreSQL fixtures with synthetic CVs; no production data or storage writes.",
+  "full_module_run": {
+    "startTime": "2026-10-19T09:59:25.350Z",
+    "duration": 269004.42000000004,
+    "expected": 63,
+    "skipped": 0,
+    "unexpected": 3,
+    "flaky": 0
+  },
+  "affected_transfer_rerun": {
+    "startTime": "2026-10-19T10:04:32.175Z",
+    "duration": 19715.606,
+    "expected": 3,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "resolution": "The three initial failures expected Added on page one. The test now verifies the candidate on the final page, matching the requested ordering. All three browser reruns passed; application code was unchanged after the full run.",
+  "verified_cases": [
+    "All three dropdowns start at None even in a scoped consultant view",
+    "Ten-CV direct Save uploads, parses and creates assignments without individual review",
+    "Partial defaults persist while missing consultant choices are reviewed",
+    "Parsing failures open manual correction before any assignment is created",
+    "Cancel, Close and individual removal clean up ready and late uploads",
+    "Existing layout, role, CV access, selection, transfer, duplicate and retry behavior"
+  ],
+  "checks": {
+    "focused_lint": "passed",
+    "production_build": "passed",
+    "diff_check": "passed"
+  }
+}
