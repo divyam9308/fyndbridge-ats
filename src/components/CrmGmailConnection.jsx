@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Info, Mail, RefreshCw } from 'lucide-react'
+import { Check, Info, Mail, RefreshCw } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { crmRequest } from '../services/crmApi'
 import { CrmDialog } from './CrmDialogs'
@@ -25,10 +25,12 @@ const SYNC_MESSAGES = {
   not_connected: 'Gmail was disconnected. Connect again to synchronise.',
   reauthorization_required: 'Gmail access needs to be renewed. Reconnect Gmail to synchronise.'
 }
-export default function CrmGmailConnection() {
+export default function CrmGmailConnection({ onSynced }) {
   const { user } = useAuth()
   const [connection, setConnection] = useState(null)
   const [busy, setBusy] = useState('')
+  const [synced, setSynced] = useState(false)
+  const syncedTimer = useRef(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState(() => {
     const url = new URL(window.location.href), result = url.searchParams.get('gmail')
@@ -36,6 +38,7 @@ export default function CrmGmailConnection() {
   })
   const [open, setOpen] = useState(() => Boolean(notice))
   const lock = useRef(false)
+  useEffect(() => () => clearTimeout(syncedTimer.current), [])
   const reload = useCallback(async signal => {
     try { const data = await crmRequest('/gmail/status', { signal }); if (!signal?.aborted) { setConnection(data); setError('') } }
     catch (failure) { if (!signal?.aborted) setError(failure.message) }
@@ -68,17 +71,23 @@ export default function CrmGmailConnection() {
   }
   const syncNow = async () => {
     if (lock.current) return
+    clearTimeout(syncedTimer.current); setSynced(false)
     lock.current = true; setBusy('syncing'); setError(''); setNotice(null)
     try {
       const result = await crmRequest('/gmail/sync', { method: 'POST' })
       setConnection(result.connection)
+      onSynced?.()
       setNotice({ text: SYNC_MESSAGES[result.state] || SYNC_MESSAGES.pending, success: !['not_connected', 'reauthorization_required'].includes(result.state) })
-      setOpen(true)
+      if (result.state === 'completed') {
+        setOpen(false)
+        setSynced(true)
+        syncedTimer.current = setTimeout(() => setSynced(false), 5000)
+      } else setOpen(true)
     } catch (failure) { setError(failure.message); setOpen(true) }
     finally { lock.current = false; setBusy('') }
   }
-  const syncButton = connection?.connected && <button type="button" className={`btn-secondary crm-gmail-sync${busy === 'syncing' ? ' is-syncing' : ''}`} disabled={Boolean(busy) || connection.status !== 'connected'} aria-label="Sync Gmail now" aria-busy={busy === 'syncing'} onClick={syncNow}>
-    <RefreshCw size={16} />{busy === 'syncing' ? 'Syncing...' : 'Sync now'}
+  const syncButton = connection?.connected && <button type="button" className={`btn-secondary crm-gmail-sync${busy === 'syncing' ? ' is-syncing' : synced ? ' is-synced' : ''}`} disabled={Boolean(busy) || connection.status !== 'connected'} aria-label="Sync Gmail now" aria-busy={busy === 'syncing'} onClick={syncNow}>
+    {synced ? <Check size={16} /> : <RefreshCw size={16} />}<span aria-live="polite">{busy === 'syncing' ? 'Syncing...' : synced ? 'Synced' : 'Sync now'}</span>
   </button>
   return <div className="crm-gmail-control">
     <button type="button" className="btn-secondary crm-gmail-button" disabled={busy || (!connection && !error)} onClick={() => connection?.connected ? disconnect() : error ? setOpen(true) : connect()}>

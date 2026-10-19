@@ -83,10 +83,47 @@ Application code remains local and uncommitted; no application deployment was ma
   server-filtered page without navigating or resetting search, pagination, contact
   selection or comment drafts. Concurrent changes are rejected rather than lost.
 
-No CRM deletion, imports/exports, automation, conversion, notifications, dashboards,
-consultant filters or excluded features are introduced.
+Organisation deletion is available in each row's Actions using existing CRM page
+access. A confirmation names the organisation and explains permanent removal of its
+CRM contacts, comments, activities and read receipts. A version-checked DELETE
+prevents removal after an unseen concurrent edit; failure keeps the row and dialog
+available. Existing foreign-key cascades perform cleanup atomically, preserving
+linked ATS clients, mandates, candidates, unrelated CRM records and Gmail connections.
+Deletion requires no additional migration beyond the migrations documented above.
+
+No imports/exports, automation, conversion, notifications, dashboards or consultant
+filters are introduced.
 
 ## Verification
+
+### Per-user unread activity
+
+`20261019185136_crm_activity_read_receipts.sql` adds server-only read receipts and
+two SECURITY INVOKER RPCs. Apply it after the CRM/Gmail migrations and before
+deploying the updated API/UI. This change has not applied the migration to hosted
+Supabase or deployed the application.
+
+- Unread changes tint a client row green (`#e2f3e7`). The latest unread email's
+  sentiment takes precedence: positive green, neutral/unknown gray (`#f1f3f5`),
+  negative red (`#fcebea`), matching Assigned Candidates. Newly viewed activity
+  cards retain the same tints for the current history view.
+- Receipts are per authenticated viewer and activity ID, persist across reloads,
+  and never alter CRM fields or another viewer's state. Existing activities start
+  unread because previous viewing history was not recorded.
+- Opening Activity History acknowledges only the displayed page's activity IDs
+  after rendering. Comment History does not acknowledge activities. Concurrently
+  arriving emails and unviewed history pages stay unread; failed acknowledgements
+  keep the highlight and offer a retry.
+- **Read all**, between search and Follow-ups, acknowledges all current CRM
+  activities for the viewer across every page/filter. It does not affect Gmail's
+  own inbox read status. Newly arriving activity remains unread.
+- Current-page unread state refreshes after manual Gmail sync, activity reads,
+  returning to the tab and the existing minute refresh.
+
+`server/src/services/crmActivityReads.test.js` exercises real PostgreSQL receipts,
+idempotency, concurrent arrivals, sentiment choice and browser-role denial.
+`server/browser-tests/crmGmail.spec.cjs` verifies the API-backed row/card colours,
+read persistence, viewer isolation, global Read all, retries and mobile layout.
 
 `server/src/services/crm.test.js` executes the actual migration in PGlite PostgreSQL,
 with synthetic auth/employee fixtures and service/browser database roles. It covers

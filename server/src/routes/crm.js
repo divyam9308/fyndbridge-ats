@@ -9,6 +9,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const FIELDS = new Set(['organisation_name', 'contacts', 'sector', 'connected_through', 'conversion_probability', 'status', 'assigned_consultant_id', 'next_follow_up_date', 'ats_client_id', 'comment'])
 const safe = handler => async (req, res, next) => { try { await handler(req, res) } catch (error) { next(error) } }
 const integer = (value, fallback, max) => Math.min(Math.max(parseInt(value, 10) || fallback, 1), max)
+async function withUnread(rows, userId) {
+  if (!rows.length) return rows
+  const { data, error } = await supabase.rpc('crm_unread_activity', { p_user: userId, p_clients: rows.map(row => row.id) })
+  if (error) throw error
+  return rows.map(row => ({ ...row, unread_activity_count: 0, unread_tone: null, ...data?.[row.id] }))
+}
 router.use(requirePageViewPermission('crm'))
 router.use((req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next() })
 router.use('/gmail', require('./crmGmail').createHandlers().router)
@@ -25,16 +31,31 @@ router.get('/', safe(async (req, res) => {
     p_sort: ['organisation_name', 'conversion_probability'].includes(req.query.sort) ? req.query.sort : 'created_at', p_ascending: req.query.direction === 'asc'
   })
   if (error) throw error
-  res.json({ ...data, today })
+  res.json({ ...data, data: await withUnread(data.data || [], req.user.id), today })
+}))
+router.post('/activities/read-all', safe(async (req, res) => {
+  if (Object.keys(req.body || {}).length) return res.status(400).json({ error: 'Read all does not accept filters or a user ID.' })
+  const { data, error } = await supabase.rpc('crm_mark_activity_read', { p_user: req.user.id, p_client: null, p_ids: null })
+  if (error) throw error
+  res.json({ marked_read: data })
 }))
 router.param('id', (req, res, next, id) => UUID.test(id) ? next() : res.status(404).json({ error: 'CRM client not found.' }))
+router.post('/:id/activities/read', safe(async (req, res) => {
+  const body = req.body || {}, ids = body.activity_ids
+  if (Object.keys(body).some(key => key !== 'activity_ids') || !Array.isArray(ids) || !ids.length || ids.length > 25 || ids.some(id => typeof id !== 'string' || !UUID.test(id))) {
+    return res.status(400).json({ error: 'Send between 1 and 25 activity IDs only.' })
+  }
+  const { data, error } = await supabase.rpc('crm_mark_activity_read', { p_user: req.user.id, p_client: req.params.id, p_ids: [...new Set(ids)] })
+  if (error) throw error
+  res.json({ marked_read: data })
+}))
 router.get('/:id', safe(async (req, res) => {
   const { data, error } = await supabase.from('crm_clients').select('*').eq('id', req.params.id).maybeSingle()
   if (error) throw error
   if (!data) return res.status(404).json({ error: 'CRM client not found.' })
   const latest = await supabase.from('crm_comments').select('*').eq('crm_client_id', data.id).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1)
   if (latest.error) throw latest.error
-  res.json({ data: { ...data, latest_comment: latest.data?.[0] || null } })
+  res.json({ data: (await withUnread([{ ...data, latest_comment: latest.data?.[0] || null }], req.user.id))[0] })
 }))
 for (const kind of ['comments', 'activities']) {
   router.get(`/:id/${kind}`, safe(async (req, res) => {
@@ -50,7 +71,10 @@ for (const kind of ['comments', 'activities']) {
     const comments = commentIds.length ? await supabase.from('crm_comments').select('id,body').in('id', commentIds) : { data: [] }
     if (comments.error) throw comments.error
     const bodies = Object.fromEntries((comments.data || []).map(row => [row.id, row.body]))
-    res.json({ data: (data || []).map(row => ({ ...row, actor_name: names[row.created_by] || 'Former / unavailable employee', comment_body: bodies[row.comment_id], ...(row.activity_type === 'assigned_consultant_id_changed' ? { previous_label: names[row.previous_value] || 'Unassigned / unavailable employee', new_label: names[row.new_value] || 'Unassigned / unavailable employee' } : {}) })), total: count || 0 })
+    const reads = kind === 'activities' && data?.length ? await supabase.from('crm_activity_reads').select('activity_id').eq('user_id', req.user.id).in('activity_id', data.map(row => row.id)) : { data: [] }
+    if (reads.error) throw reads.error
+    const readIds = new Set((reads.data || []).map(row => row.activity_id))
+    res.json({ data: (data || []).map(row => ({ ...row, ...(kind === 'activities' ? { is_unread: !readIds.has(row.id) } : {}), actor_name: names[row.created_by] || 'Former / unavailable employee', comment_body: bodies[row.comment_id], ...(row.activity_type === 'assigned_consultant_id_changed' ? { previous_label: names[row.previous_value] || 'Unassigned / unavailable employee', new_label: names[row.new_value] || 'Unassigned / unavailable employee' } : {}) })), total: count || 0 })
   }))
 }
 const save = safe(async (req, res) => {
@@ -66,6 +90,17 @@ const save = safe(async (req, res) => {
 })
 router.post('/', save)
 router.patch('/:id', save)
+router.delete('/:id', safe(async (req, res) => {
+  const body = req.body || {}
+  if (Object.keys(body).some(key => key !== 'version') || !Number.isSafeInteger(body.version) || body.version < 1) {
+    return res.status(400).json({ error: 'A valid record version is required.' })
+  }
+  // Existing FKs remove only this CRM record's comments, activities and read receipts.
+  const { data, error } = await supabase.from('crm_clients').delete().eq('id', req.params.id).eq('version', body.version).select('id').maybeSingle()
+  if (error) throw error
+  if (!data) return res.status(409).json({ error: 'This organisation changed or was removed. Close this dialog and reload the table before trying again.' })
+  res.json({ deleted: data.id })
+}))
 router.use((error, req, res, next) => {
   if (res.headersSent) return next(error)
   if (error.code === '23505') {

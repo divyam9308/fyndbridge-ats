@@ -136,21 +136,33 @@ function EmailActivity({ email }) {
     {email.sentiment?.evidence && <p className="sub-text">{email.sentiment.evidence}</p>}
   </>
 }
-export function CrmHistory({ record, kind, onClose }) {
+export function CrmHistory({ record, kind, onClose, onRead }) {
   const [rows, setRows] = useState([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [retry, setRetry] = useState(0)
+  const [readError, setReadError] = useState('')
+  const [readRetry, setReadRetry] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
-    crmRequest(`/${record.id}/${kind}?page=${page}`, { signal: controller.signal }).then(result => { setRows(result.data); setTotal(result.total); setError('') }).catch(failure => { if (failure.name !== 'AbortError') setError(failure.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    crmRequest(`/${record.id}/${kind}?page=${page}`, { signal: controller.signal }).then(result => { if (!controller.signal.aborted) { setRows(result.data); setTotal(result.total); setError(''); setReadError('') } }).catch(failure => { if (!controller.signal.aborted) setError(failure.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [kind, page, record.id, retry])
+  // Runs after history has rendered; fetching comments or the client never marks activity read.
+  useEffect(() => {
+    const ids = rows.filter(row => row.is_unread).map(row => row.id)
+    if (kind !== 'activities' || loading || error || !ids.length) return undefined
+    const controller = new AbortController()
+    crmRequest(`/${record.id}/activities/read`, { method: 'POST', body: JSON.stringify({ activity_ids: ids }), signal: controller.signal })
+      .then(() => { if (!controller.signal.aborted) { setReadError(''); onRead?.() } })
+      .catch(failure => { if (!controller.signal.aborted) setReadError(failure.message) })
+    return () => controller.abort()
+  }, [error, kind, loading, onRead, page, readRetry, record.id, rows])
   return <CrmDialog title={kind === 'comments' ? 'Comment History' : 'Activity History'} onClose={onClose} footer={<>
     <button className="btn-secondary" disabled={page === 1 || loading} onClick={() => { setLoading(true); setPage(value => value - 1) }}>Previous</button><span className="sub-text">Page {page} of {Math.max(1, Math.ceil(total / 25))}</span><button className="btn-secondary" disabled={page * 25 >= total || loading} onClick={() => { setLoading(true); setPage(value => value + 1) }}>Next</button>
-  </>}><div className="modal-body"><div className="name-text">{record.organisation_name}</div>{loading ? <p role="status">Loading history...</p> : error ? <div role="alert" className="form-error">{error}<button className="btn-secondary" onClick={() => { setLoading(true); setRetry(value => value + 1) }}>Retry</button></div> : !rows.length ? <p className="sub-text">No {kind === 'comments' ? 'comments' : 'activities'} yet.</p> : rows.map(row => <div className="crm-history-entry" key={row.id}>
+  </>}><div className="modal-body"><div className="name-text">{record.organisation_name}</div>{readError && <div role="alert" className="form-error">Could not mark activity as read: {readError}<button className="btn-secondary" onClick={() => setReadRetry(value => value + 1)}>Retry marking read</button></div>}{loading ? <p role="status">Loading history...</p> : error ? <div role="alert" className="form-error">{error}<button className="btn-secondary" onClick={() => { setLoading(true); setRetry(value => value + 1) }}>Retry</button></div> : !rows.length ? <p className="sub-text">No {kind === 'comments' ? 'comments' : 'activities'} yet.</p> : rows.map(row => <div className={`crm-history-entry${row.is_unread ? ` crm-unread-${row.activity_type === 'gmail_email' ? (['positive', 'negative'].includes(row.email_metadata?.sentiment?.label) ? row.email_metadata.sentiment.label : 'neutral') : 'positive'}` : ''}`} key={row.id}>
       <div className="sub-text">{commentDate(row.created_at)}</div>{kind === 'comments' ? <p>{row.body}</p> : row.activity_type === 'gmail_email' && row.email_metadata ? <EmailActivity email={row.email_metadata} /> : <><strong>{ACTIVITY_LABELS[row.activity_type] || row.activity_type}</strong>{row.comment_body ? <p>{row.comment_body}</p> : row.activity_type !== 'created' && <p>{row.previous_label || activityValue(row.previous_value, row.activity_type)} → {row.new_label || activityValue(row.new_value, row.activity_type)}</p>}</>}
       <div className="sub-text">{row.activity_type === 'gmail_email' ? 'Gmail activity for' : 'By'} {row.actor_name}</div>
     </div>)}</div></CrmDialog>

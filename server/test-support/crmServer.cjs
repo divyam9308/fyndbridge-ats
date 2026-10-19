@@ -11,6 +11,7 @@ async function start() {
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019110948_crm_probability_sorting.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019165228_crm_gmail_integration.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019182711_crm_gmail_manual_sync.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019185136_crm_activity_read_receipts.sql'), 'utf8'))
   await db.query('insert into auth.users values($1,$2)', [USER_ID, 'recruiter@fyndbridge.in'])
   await db.query("insert into employee_statuses(user_id,status) values($1,'active')", [USER_ID])
   await db.query('insert into user_profiles(user_id,name,email) values($1,$2,$3)', [USER_ID, 'Test Recruiter', 'recruiter@fyndbridge.in'])
@@ -40,7 +41,7 @@ async function start() {
   app.use(require('cors')()); app.use(express.json())
   app.use((req, res, next) => { req.user = req.get('x-test-anonymous') ? null : { id: req.get('x-test-user') || USER_ID, email: 'recruiter@fyndbridge.in' }; next() })
   app.use('/api/crm', (req,res,next) => { if (failSave && ['POST','PATCH'].includes(req.method)) { failSave = false; return res.status(503).json({ error: 'Synthetic network failure. Retry your save.' }) } next() }, require('../src/middleware/requireAuth'), require('../src/routes/crm'))
-  app.get('/test/state', async (req, res) => res.json({ clients: (await db.query('select * from crm_clients')).rows, comments: (await db.query('select * from crm_comments order by created_at desc,id desc')).rows, activities: (await db.query('select * from crm_activities')).rows, ats: (await db.query('select * from clients')).rows }))
+  app.get('/test/state', async (req, res) => res.json({ clients: (await db.query('select * from crm_clients')).rows, comments: (await db.query('select * from crm_comments order by created_at desc,id desc')).rows, activities: (await db.query('select * from crm_activities')).rows, reads: (await db.query('select * from crm_activity_reads')).rows, ats: (await db.query('select * from clients')).rows }))
   app.get('/test/permissions', async (req,res) => res.json((await db.query('select * from page_view_permissions')).rows))
   app.post('/test/permission', async (req,res) => { await db.query("update page_view_permissions set view_permission=$1 where page_key='crm'", [req.body.permission]); res.json({ ok: true }) })
   app.post('/test/gmail', async (req, res) => {

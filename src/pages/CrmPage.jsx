@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronDown, CalendarClock, History, Info, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { CheckCheck, ChevronDown, CalendarClock, History, Info, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { CrmClientForm, CrmDialog, CrmHistory } from '../components/CrmDialogs'
 import CrmGmailConnection from '../components/CrmGmailConnection'
 import PaginationBar from '../components/PaginationBar'
@@ -14,7 +14,7 @@ import '../styles/Shared.css'
 import './CrmPage.css'
 
 const COLUMNS = ['Organisation Name', 'Contact Person', 'Mobile', 'Email', 'Designation', 'LinkedIn', 'Sector', 'Connected Through', 'Date', 'Comments', 'Conversion Probability', 'Status', 'Actions']
-const WIDTHS = [235, 210, 160, 240, 190, 115, 185, 180, 125, 300, 195, 200, 150]
+const WIDTHS = [235, 210, 160, 240, 190, 115, 185, 180, 125, 300, 195, 200, 190]
 const FOLLOW_LABELS = { overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming', none: 'No Follow-up' }
 
 export default function CrmPage() {
@@ -38,10 +38,14 @@ export default function CrmPage() {
   const [expandedComments, setExpandedComments] = useState({})
   const [followEditor, setFollowEditor] = useState(null)
   const [busy, setBusy] = useState({})
+  const [readingAll, setReadingAll] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteError, setDeleteError] = useState('')
   const commentDrafts = useRef(new Map())
   const locks = useRef(new Set())
   const generation = useRef(0)
   const mounted = useRef(true)
+  const refreshActivities = useCallback(() => { ++generation.current; setRevision(value => value + 1) }, [])
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => {
     if (search === query) return undefined
@@ -65,8 +69,19 @@ export default function CrmPage() {
     const refresh = () => { if (document.visibilityState === 'visible') setRevision(value => value + 1) }
     const timer = window.setInterval(refresh, 60000)
     document.addEventListener('visibilitychange', refresh)
-    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refresh) }
+    window.addEventListener('focus', refresh)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('focus', refresh) }
   }, [])
+  const readAll = async () => {
+    if (locks.current.has('read-all')) return
+    locks.current.add('read-all'); setReadingAll(true); setError('')
+    ++generation.current
+    try {
+      await crmRequest('/activities/read-all', { method: 'POST', body: '{}' })
+      if (mounted.current) refreshActivities()
+    } catch (failure) { if (mounted.current) setError(failure.message) }
+    finally { locks.current.delete('read-all'); if (mounted.current) setReadingAll(false) }
+  }
   const replace = useCallback(record => setRows(current => current.map(row => row.id === record.id ? record : row)), [])
   const reloadRow = async record => {
     try { const { data } = await crmRequest(`/${record.id}`); replace(data); setComment(current => current?.record.id === data.id ? { ...current, record: data } : current); setError('') } catch (failure) { setError(failure.message) }
@@ -96,13 +111,32 @@ export default function CrmPage() {
   const openEdit = async record => {
     try { const { data } = await crmRequest(`/${record.id}`); setForm({ record: data }) } catch (failure) { setError(failure.message) }
   }
+  const deleteOrganisation = async () => {
+    const record = deleteTarget
+    if (!record || locks.current.has(record.id)) return
+    locks.current.add(record.id); setBusy(current => ({ ...current, [record.id]: true })); setDeleteError('')
+    ++generation.current
+    try {
+      await crmRequest(`/${record.id}`, { method: 'DELETE', body: JSON.stringify({ version: record.version }) })
+      if (mounted.current) {
+        setRows(current => current.filter(row => row.id !== record.id))
+        setTotal(current => Math.max(0, current - 1))
+        commentDrafts.current.delete(record.id)
+        setComment(current => current?.record.id === record.id ? null : current)
+        setDeleteTarget(null); setLoading(true); refreshActivities()
+      }
+    } catch (failure) {
+      if (mounted.current) { setDeleteError(failure.message); if (failure.status === 409) refreshActivities() }
+    } finally { locks.current.delete(record.id); if (mounted.current) setBusy(current => ({ ...current, [record.id]: false })) }
+  }
   return <div className="crm-page">
     <div className="page-header"><h1 className="page-title">CRM</h1></div>
     <div className="crm-toolbar"><button type="button" className="btn-primary" onClick={() => setForm({ record: null })}><Plus size={16} /> Add Client</button>
       <div className="crm-search"><Search size={15} /><input className="form-control" aria-label="Search CRM" placeholder="Search CRM..." value={search} onChange={event => setSearch(event.target.value)} /></div>
+      <button type="button" className="btn-secondary crm-read-all" disabled={readingAll} aria-busy={readingAll} onClick={readAll}><CheckCheck size={16} />{readingAll ? 'Marking read...' : 'Read all'}</button>
       <select className="filter-select" aria-label="Follow-up filter" value={follow} onChange={event => configure(setFollow)(event.target.value)}><option value="all">All Follow-ups</option>{Object.entries(FOLLOW_LABELS).map(([key, value]) => <option value={key} key={key}>{value}</option>)}</select>
       <select className="filter-select" aria-label="Sort CRM" value={sort} onChange={event => configure(setSort)(event.target.value)}><option value="created_at:desc">Newest first</option><option value="created_at:asc">Oldest first</option><option value="conversion_probability:desc">Probability: highest to lowest</option><option value="organisation_name:asc">Organisation A–Z</option><option value="organisation_name:desc">Organisation Z–A</option></select>
-      <CrmGmailConnection />
+      <CrmGmailConnection onSynced={refreshActivities} />
     </div>
     {error && <div className="crm-error" role="alert">{error}<button className="btn-secondary" onClick={() => { setLoading(true); setRevision(value => value + 1) }}>Reload table</button></div>}
     <div className="table-card"><div className="table-wrapper crm-table-scroll"><table className="data-table fb-theme-table crm-table"><colgroup>{WIDTHS.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
@@ -114,8 +148,9 @@ export default function CrmPage() {
         const commentBody = record.latest_comment?.body || ''
         const { isLong, preview } = previewWords(commentBody, 3)
         const expanded = Boolean(record.latest_comment && expandedComments[record.id] === record.latest_comment.id)
-        return <tr key={record.id} aria-busy={Boolean(busy[record.id])}>
-          <td><span className="name-text">{record.organisation_name}</span><button className={`crm-follow crm-follow-${state}`} type="button" title={record.next_follow_up_date ? `Next follow-up: ${formatDateDDMMYYYY(record.next_follow_up_date)}` : 'Set follow-up date'} onClick={() => setFollowEditor({ record, value: record.next_follow_up_date || '' })}>{FOLLOW_LABELS[state]}{record.next_follow_up_date ? ` · ${formatDateDDMMYYYY(record.next_follow_up_date)}` : ''}</button></td>
+        const unreadTone = record.unread_activity_count > 0 ? (['positive', 'neutral', 'negative'].includes(record.unread_tone) ? record.unread_tone : 'positive') : null
+        return <tr key={record.id} className={unreadTone ? `crm-unread-${unreadTone}` : undefined} aria-busy={Boolean(busy[record.id])}>
+          <td><span className="name-text">{record.organisation_name}</span>{unreadTone && <span className="crm-unread-label">{record.unread_activity_count} unread {unreadTone === 'positive' ? 'updates' : `${unreadTone} updates`}</span>}<button className={`crm-follow crm-follow-${state}`} type="button" title={record.next_follow_up_date ? `Next follow-up: ${formatDateDDMMYYYY(record.next_follow_up_date)}` : 'Set follow-up date'} onClick={() => setFollowEditor({ record, value: record.next_follow_up_date || '' })}>{FOLLOW_LABELS[state]}{record.next_follow_up_date ? ` · ${formatDateDDMMYYYY(record.next_follow_up_date)}` : ''}</button></td>
           <td><span className="inline-action-cell">{record.contacts.length > 1 ? <><select className="filter-select compact-select" aria-label={`Contact for ${record.organisation_name}`} value={contactIndex} onChange={event => setSelectedContacts(current => ({ ...current, [record.id]: Number(event.target.value) }))}>{record.contacts.map((item, index) => <option key={index} value={index}>{item.name}</option>)}</select><button type="button" className="row-action-btn" title="Delete Contact" disabled={busy[record.id]} onClick={() => deleteContact(record)}><Trash2 size={12} /></button></> : contact.name}<button type="button" className="row-action-btn" title="Add Contact" onClick={() => setForm({ record: { ...record, contacts: [...record.contacts, { name: '', mobile: '', email: '', designation: '', linkedin: '' }] } })}><Plus size={12} /></button></span></td>
           <td className="crm-mobile">{contact.mobile}</td><td className="crm-email">{contact.email}</td><td>{contact.designation || '-'}</td>
           <td>{contact.linkedin && validLinkedIn(contact.linkedin) ? <a href={contact.linkedin} className="candidate-linkedin-link" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a> : '-'}</td>
@@ -126,7 +161,7 @@ export default function CrmPage() {
               {isLong && <button type="button" className="table-view-more" aria-expanded={expanded} onClick={() => setExpandedComments(current => ({ ...current, [record.id]: expanded ? null : record.latest_comment.id }))}><ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'View less' : 'View more'}</button>}
             </div>}
           </td><td>{drop(record, 'conversion_probability', CRM_PROBABILITIES)}</td><td>{drop(record, 'status', CRM_STATUSES)}</td>
-          <td><div className="inline-action-cell"><button type="button" className="row-action-btn" title="Edit Client" onClick={() => openEdit(record)} disabled={busy[record.id]}><Pencil size={14} /></button><button type="button" className="row-action-btn" title="Activity History" onClick={() => setHistory({ record, kind: 'activities' })}><History size={14} /></button><button type="button" className="row-action-btn" title="Edit Follow-up" onClick={() => setFollowEditor({ record, value: record.next_follow_up_date || '' })}><CalendarClock size={14} /></button></div></td>
+          <td><div className="inline-action-cell"><button type="button" className="row-action-btn" title="Edit Client" onClick={() => openEdit(record)} disabled={busy[record.id]}><Pencil size={14} /></button><button type="button" className="row-action-btn" title="Activity History" onClick={() => setHistory({ record, kind: 'activities' })}><History size={14} /></button><button type="button" className="row-action-btn" title="Edit Follow-up" onClick={() => setFollowEditor({ record, value: record.next_follow_up_date || '' })}><CalendarClock size={14} /></button><button type="button" className="row-action-btn crm-delete-organisation" title="Delete Organisation" aria-label={`Delete organisation ${record.organisation_name}`} disabled={busy[record.id]} onClick={() => { setDeleteError(''); setDeleteTarget(record) }}><Trash2 size={14} /></button></div></td>
         </tr>
       })}</tbody>
     </table></div></div>
@@ -136,7 +171,8 @@ export default function CrmPage() {
       if (await update(popover.record, { [popover.field]: option })) setPopover(null)
     }}>{option || '-'}</button>)}</TablePopover>}
     {form && <CrmClientForm record={form.record} onClose={() => setForm(null)} onSaved={saved} />}
-    {history && <CrmHistory {...history} onClose={() => setHistory(null)} />}
+    {history && <CrmHistory key={`${history.record.id}:${history.kind}`} {...history} onRead={refreshActivities} onClose={() => setHistory(null)} />}
+    {deleteTarget && <CrmDialog title="Delete Organisation" busy={Boolean(busy[deleteTarget.id])} onClose={() => setDeleteTarget(null)} footer={<><button type="button" className="btn-secondary" disabled={busy[deleteTarget.id]} onClick={() => setDeleteTarget(null)}>Cancel</button><button type="button" className="btn-primary crm-confirm-delete" disabled={busy[deleteTarget.id]} onClick={deleteOrganisation}>{busy[deleteTarget.id] ? 'Deleting...' : 'Delete organisation'}</button></>}><div className="modal-body"><p>Permanently delete <strong>{deleteTarget.organisation_name}</strong> and its CRM contacts, comments and activity history?</p><p className="sub-text">This cannot be undone. Linked ATS clients, mandates, candidates and Gmail connections are preserved.</p>{deleteError && <p className="form-error" role="alert">{deleteError}</p>}</div></CrmDialog>}
     {followEditor && <CrmDialog title="Next Follow-up Date" onClose={() => setFollowEditor(null)} busy={busy[followEditor.record.id]} footer={<><button className="btn-secondary" disabled={busy[followEditor.record.id]} onClick={() => setFollowEditor(null)}>Cancel</button><button className="btn-primary" disabled={busy[followEditor.record.id]} onClick={async () => { if (await update(followEditor.record, { next_follow_up_date: followEditor.value })) setFollowEditor(null) }}>Save</button></>}><div className="modal-body"><label className="form-label" htmlFor="crm-row-follow-up">{followEditor.record.organisation_name}</label><FormattedDateInput floating id="crm-row-follow-up" value={followEditor.value} onChange={value => setFollowEditor(current => ({ ...current, value }))} disabled={busy[followEditor.record.id]} />{error && <p className="form-error" role="alert">{error}</p>}</div></CrmDialog>}
   </div>
 }
