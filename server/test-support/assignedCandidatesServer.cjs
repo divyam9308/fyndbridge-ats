@@ -20,7 +20,7 @@ async function start(){
   app.get('/api/jobs',(req,res)=>db.query('select * from jobs').then(result=>res.json({data:result.rows})))
   app.get('/api/candidates/next-display-id',(req,res)=>res.json({candidate_display_id:'CA1'}))
   app.get('/test/pdf',(req,res)=>res.type('application/pdf').send(pdfBytes))
-  app.get('/test/state',async(req,res)=>res.json({assignments:(await db.query('select * from assigned_candidates')).rows,candidates:(await db.query('select * from candidates')).rows,associations:(await db.query('select * from candidate_associations')).rows,removed:adapter.removedPaths}))
+  app.get('/test/state',async(req,res)=>res.json({assignments:(await db.query('select * from assigned_candidates')).rows,candidates:(await db.query('select * from candidates')).rows,associations:(await db.query('select * from candidate_associations')).rows,uploads:(await db.query('select id,cv_original_name,retired_at,storage_ready from assigned_candidate_uploads')).rows,removed:adapter.removedPaths}))
   const server=app.listen(0,'127.0.0.1',()=>process.send({port:server.address().port,ADMIN,CONSULTANT,OTHER}))
   process.on('message',async message=>{if(message==='close'){server.close();await db.close();process.exit(0)}})
 }

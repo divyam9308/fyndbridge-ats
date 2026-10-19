@@ -41,6 +41,12 @@ export default function FloatingDropdown({ anchorRect, ignoreElement, onClose, c
     }
     const closeOnScroll = (event) => {
       if (ref.current?.contains(event.target)) return
+      if (fitViewport && ignoreElement?.isConnected) {
+        const current = ignoreElement.getBoundingClientRect()
+        // A click can reveal its table cell before the scroll event is delivered.
+        // Keep the newly opened menu when its anchor has not moved since opening.
+        if (Math.abs(current.left - anchorRect.left) < 1 && Math.abs(current.top - anchorRect.top) < 1) return
+      }
       onClose()
     }
     document.addEventListener('mousedown', closeOnMouseDown)
@@ -53,7 +59,7 @@ export default function FloatingDropdown({ anchorRect, ignoreElement, onClose, c
       window.removeEventListener('scroll', closeOnScroll, true)
       if (fitViewport) window.removeEventListener('resize', onClose)
     }
-  }, [canUseDom, fitViewport, ignoreElement, onClose])
+  }, [anchorRect, canUseDom, fitViewport, ignoreElement, onClose])
 
   if (!canUseDom || !validRect) return null
 

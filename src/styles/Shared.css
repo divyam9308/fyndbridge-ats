@@ -893,12 +893,12 @@
   width: 240px;
 }
 
-.candidates-master-table .name-cell {
+:is(.candidates-master-table, .assigned-table) .name-cell {
   align-items: flex-start;
   gap: 10px;
 }
 
-.candidates-master-table .name-avatar {
+:is(.candidates-master-table, .assigned-table) .name-avatar {
   width: 28px;
   height: 28px;
   font-size: 10px;
@@ -906,11 +906,11 @@
   box-shadow: none;
 }
 
-.candidates-master-table .candidate-name-content {
+:is(.candidates-master-table, .assigned-table) .candidate-name-content {
   min-width: 0;
 }
 
-.candidates-master-table .candidate-group-name {
+:is(.candidates-master-table, .assigned-table) .candidate-group-name {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -918,7 +918,7 @@
   white-space: nowrap;
 }
 
-.candidates-master-table .candidate-name-text {
+:is(.candidates-master-table, .assigned-table) .candidate-name-text {
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -963,7 +963,7 @@
   color: #9aa4b2;
 }
 
-.candidates-master-table .candidate-consultant-chip {
+.candidate-consultant-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -976,7 +976,7 @@
   font-weight: 600;
 }
 
-.candidates-master-table .candidate-consultant-avatar {
+.candidate-consultant-avatar {
   width: 18px;
   height: 18px;
   border-radius: 50%;
@@ -1481,7 +1481,7 @@
   min-width: 0;
 }
 
-.candidates-master-table .candidate-consultant-chip span:last-child,
+.candidate-consultant-chip span:last-child,
 .candidates-master-table .table-comment-cell,
 .candidates-master-table .table-comment-text,
 .candidates-master-table .table-chip-cell {

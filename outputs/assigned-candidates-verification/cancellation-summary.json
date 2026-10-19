@@ -1,0 +1,28 @@
+{
+  "provenance": "Local synthetic browser/API/PostgreSQL/storage fixtures; production inspection read-only",
+  "stats": {
+    "startTime": "2026-10-19T05:41:42.820Z",
+    "duration": 94131.813,
+    "expected": 30,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "engines": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ],
+  "checks_per_engine": 10,
+  "new_checks": [
+    "sidebar scrollbar hidden while wheel and keyboard navigation remain usable",
+    "active and queued CV removal while processing; queued upload skipped and late active result retired",
+    "Cancel and Close during processing; no assignment created and late upload retired"
+  ],
+  "build": "passed",
+  "focused_eslint": "passed",
+  "diff_check": "passed",
+  "additional_migration_required": false,
+  "production_writes_performed": false,
+  "published": false
+}

@@ -11,6 +11,7 @@ import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
 import { useStaffDirectory } from '../hooks/useStaffDirectory'
 import PaginationBar from '../components/PaginationBar'
+import { CandidateName, ConsultantChip } from '../components/CandidateTableIdentity'
 import FloatingDropdown from '../components/FloatingDropdown'
 import TablePopover from '../components/TablePopover'
 import { AttachmentList, DocumentIconGroup } from '../components/DocumentAttachments'
@@ -40,17 +41,6 @@ const STATUS_BADGE_MAP = CANDIDATE_STATUS_BADGE_MAP
 const CANDIDATES_TABLE_COLUMNS_PREFERENCE_KEY = 'candidatesTableColumns'
 
 const fmt = (n) => n ? `Rs. ${Number(n).toLocaleString('en-IN')}` : '-'
-const initials = (name) => name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()
-const avatarPalette = [
-  ['#7c3aed', '#a855f7'],
-  ['#2563eb', '#3b82f6'],
-  ['#059669', '#10b981'],
-  ['#ea580c', '#f97316'],
-  ['#db2777', '#ec4899'],
-  ['#4f46e5', '#6366f1'],
-  ['#65a30d', '#84cc16'],
-  ['#0891b2', '#06b6d4'],
-]
 const normalizeCandidateGroupName = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()
 const normalizeCandidateGroupEmail = (value) => String(value || '').trim().toLowerCase()
 const normalizeCandidateGroupMobile = (value) => String(value || '').replace(/\D/g, '').trim()
@@ -79,12 +69,6 @@ const isSupportedCandidateFilter = (filters) => {
   return mode === 'keyword' && typeof filters?.search_text === 'string' && Boolean(filters.search_text.trim())
 }
 const formatMonth = formatDateDDMMYYYY
-const avatarColorsFor = (value) => {
-  const text = String(value || '').trim()
-  const hash = [...text].reduce((sum, char) => sum + char.charCodeAt(0), 0)
-  const [start, end] = avatarPalette[hash % avatarPalette.length]
-  return { background: `linear-gradient(135deg, ${start}, ${end})`, color: '#fff' }
-}
 const formatCandidateCtc = (value) => {
   const text = String(value ?? '').trim()
   if (!text || text === '-') return '-'
@@ -2110,9 +2094,6 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
   }
   const renderCandidateCell = ({ key }, c, groupMeta) => {
     const { mobile, isGroup, isExpanded, groupSize, groupIndex } = groupMeta
-    const candidateAvatarStyle = avatarColorsFor(c.name)
-    const consultantInitials = initials(c.consultant || '').slice(0, 2) || '-'
-    const consultantAvatarStyle = avatarColorsFor(c.consultant || c.name)
     const clientIdValue = c.clientDisplayId || getReadableClientId(c, clientDisplayLookup)
     const jobIdValue = c.jobDisplayId || jobDisplayIdForForm(c) || '-'
     const noticeMeta = getNoticeMeta(c.noticePeriod)
@@ -2133,10 +2114,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
         return (
           <td key={key}>
             {c.consultant ? (
-              <span className="candidate-consultant-chip">
-                <span className="candidate-consultant-avatar" style={consultantAvatarStyle}>{consultantInitials}</span>
-                <span>{highlightText(c.consultant, aiFilters)}</span>
-              </span>
+              <ConsultantChip name={c.consultant}>{highlightText(c.consultant, aiFilters)}</ConsultantChip>
             ) : (
               <span className="candidate-muted-dash">-</span>
             )}
@@ -2153,9 +2131,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
       case 'name':
         return (
           <td key={key}>
-            <div className="name-cell">
-              <div className="name-avatar" style={candidateAvatarStyle}>{initials(c.name)}</div>
-              <div className="candidate-name-content">
+            <CandidateName name={c.name}>
                 <div className="name-text candidate-group-name">
                   <span className="candidate-name-text">{c.isLocked && <Lock size={12} className="fb-lock-icon" />} {highlightText(c.name, aiFilters)}</span>
                   {isGroup && groupIndex === 0 && (
@@ -2173,8 +2149,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
                   )}
                 </div>
                 <div className="sub-text candidate-location-text">{highlightText(String(c.location || '').trim() || '-', aiFilters)}</div>
-              </div>
-            </div>
+            </CandidateName>
           </td>
         )
       case 'organisation':

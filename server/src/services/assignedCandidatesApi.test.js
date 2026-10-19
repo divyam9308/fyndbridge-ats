@@ -108,10 +108,14 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
   await t.test('individual, bulk and Delete All preserve main candidates and reference-aware storage',async()=>{
     current=ADMIN
     const result=await request(`/${own.id}`,'DELETE',{});assert.equal(result.httpStatus,200,JSON.stringify(result));assert.equal(result.deleted,1)
+    assert.equal(result.cleanup_pending,0)
     assert.ok(!adapter.removedPaths.some(path=>path.endsWith('000000000201.pdf')))
     const disposable=await assign(db,204,{status:'Interested'})
-    assert.equal((await request('/delete','POST',{ids:[disposable.id],consultant_id:CONSULTANT})).deleted,1)
+    const removed=await request('/delete','POST',{ids:[disposable.id],consultant_id:CONSULTANT})
+    assert.equal(removed.deleted,1);assert.equal(removed.cleanup_pending,0)
     assert.ok(adapter.removedPaths.some(path=>path.endsWith('000000000204.pdf')))
+    assert.equal((await db.query('select count(*)::int as n from assigned_candidate_uploads where id=$1',[disposable.upload_id])).rows[0].n,0)
+    assert.equal((await db.query('select count(*)::int as n from assigned_candidate_uploads where id=$1',[own.upload_id])).rows[0].n,1)
     assert.equal((await request('/delete','POST',{contacted_only:true})).httpStatus,200)
     assert.equal((await db.query('select count(*)::int as n from candidates')).rows[0].n,1)
     const pending=await request();assert.ok(pending.data.every(row=>['Not Contacted','Didn’t Pick Up'].includes(row.status)))

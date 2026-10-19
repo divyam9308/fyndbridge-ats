@@ -21,6 +21,7 @@ const goto=page=>page.goto('/dashboard/assigned-candidates')
 const row=(page,name)=>page.getByRole('row').filter({has:page.getByRole('cell',{name,exact:true})})
 const details=page=>page.getByRole('dialog',{name:'Assign New Candidates'})
 async function choose(page,label,name){await details(page).getByRole('combobox',{name:label,exact:true}).click();await details(page).getByRole('option',{name:new RegExp(name)}).click()}
+async function setStatus(page,name,value){await row(page,name).getByRole('button',{name:new RegExp(`^Status for ${name}:`)}).click();await page.getByRole('menu',{name:`Status for ${name}`,exact:true}).getByRole('menuitemradio',{name:value,exact:true}).click()}
 
 test('native layout, KPI scope, grouping over pages, badges and consultant restrictions',async({page,app,assigned},info)=>{
   await goto(page)
@@ -31,8 +32,9 @@ test('native layout, KPI scope, grouping over pages, badges and consultant restr
   await expect(row(page,'Test Candidate 301')).toHaveCSS('background-color','rgb(255, 255, 255)')
   await expect(row(page,'Test Candidate 313')).toHaveCSS('background-color','rgb(255, 249, 229)')
   await expect(row(page,'Test Candidate 301').getByRole('button',{name:'Add to Candidates'})).toBeDisabled()
-  await page.getByRole('button',{name:'Next page',exact:true}).click();await expect(row(page,'Test Candidate 326')).toBeVisible()
-  await expect(row(page,'Test Candidate 326')).toHaveCSS('background-color','rgb(241, 243, 245)')
+  await page.getByRole('button',{name:'Next page',exact:true}).click();await expect(table.locator('tbody tr')).toHaveCount(7)
+  await expect(table.locator('tbody tr').first()).toHaveCSS('background-color','rgb(241, 243, 245)')
+  expect(await table.locator('tbody tr').evaluateAll(rows=>rows.every(row=>row.classList.contains('assigned-group-2')))).toBeTruthy()
   await page.getByRole('button',{name:'Consultant filter'}).click();await page.getByRole('button',{name:/Other Consultant/}).click();await expect(table.locator('tbody tr')).toHaveCount(1)
   await page.getByRole('button',{name:'Consultant filter'}).click();await page.getByRole('button',{name:/Overall/}).click()
   await expect(row(page,'Test Candidate 301')).toBeVisible()
@@ -66,7 +68,7 @@ test('multiple uploads, parsing failure, manual correction, Back and batch Save 
 
 test('contact status enables full existing candidate form, secure stored-CV parsing and successful transfer',async({page,assigned},info)=>{
   await goto(page)
-  await row(page,'Test Candidate 301').getByRole('combobox').selectOption('Interested')
+  await setStatus(page,'Test Candidate 301','Interested')
   await expect(row(page,'Test Candidate 301')).toHaveClass(/assigned-group-2/)
   const candidate=row(page,'Test Candidate 301');await expect(candidate).toBeVisible()
   const before=await page.locator('.assigned-page').boundingBox()
@@ -85,7 +87,7 @@ test('contact status enables full existing candidate form, secure stored-CV pars
   await expect(candidate.getByText('Added',{exact:true})).toBeVisible()
   await page.getByRole('button',{name:'Dismiss confirmation'}).click()
   const duplicate=row(page,'Test Candidate 302')
-  await duplicate.getByRole('combobox').selectOption('Interested')
+  await setStatus(page,'Test Candidate 302','Interested')
   await expect(duplicate).toHaveClass(/assigned-group-2/)
   await duplicate.getByRole('button',{name:'Add to Candidates'}).click()
   await expect(form).toBeVisible()
@@ -103,10 +105,16 @@ test('contact status enables full existing candidate form, secure stored-CV pars
 })
 
 test('bulk delete and scoped Delete All use confirmations and preserve both pending contact groups',async({page,assigned})=>{
+  const initial=await (await fetch(assigned.url+'/test/state')).json()
+  const deleted=initial.assignments.find(item=>item.full_name==='Test Candidate 301')
   await goto(page)
   await row(page,'Test Candidate 301').getByRole('checkbox').check();await page.getByRole('button',{name:/Bulk Delete/}).click()
   await expect(page.getByRole('alertdialog')).toContainText('Delete 1 Assigned Candidates?')
   await page.getByRole('button',{name:'Yes, Delete',exact:true}).click();await expect(page.getByText('1 assignments deleted.')).toBeVisible()
+  const cleaned=await (await fetch(assigned.url+'/test/state')).json()
+  expect(cleaned.uploads.some(item=>item.id===deleted.upload_id)).toBe(false)
+  expect(cleaned.removed.some(path=>path.includes(deleted.upload_id))).toBe(true)
+  await expect(page.getByText('CV cleanup is pending.',{exact:true})).toHaveCount(0)
   await page.getByRole('button',{name:'Consultant filter'}).click();await page.getByRole('button',{name:/Test Consultant/}).click()
   await page.getByRole('button',{name:'Delete All',exact:true}).click();await expect(page.getByRole('alertdialog')).toContainText('Test Consultant')
   await page.getByRole('button',{name:'Yes, Delete',exact:true}).click();await expect(page.getByRole('alertdialog')).toHaveCount(0)
@@ -174,4 +182,194 @@ test('UI safety: row action popup stays visible near the bottom edge and opens a
   expect(listBounds.y).toBeGreaterThanOrEqual(body.y);expect(listBounds.y+listBounds.height).toBeLessThanOrEqual(body.y+body.height)
   if(info.project.name==='chromium')await page.screenshot({path:info.outputPath('reassign-popup.png')})
   await dialog.getByRole('button',{name:'Cancel',exact:true}).click()
+})
+
+test('sidebar hides its scrollbar while keeping every navigation item reachable',async({page})=>{
+  await page.setViewportSize({width:1280,height:600});await goto(page)
+  await expect(row(page,'Test Candidate 301')).toBeVisible()
+  const nav=page.locator('.sidebar-nav')
+  const metrics=await nav.evaluate(node=>({height:node.clientHeight,scrollHeight:node.scrollHeight,gutter:node.offsetWidth-node.clientWidth,scrollbar:getComputedStyle(node).scrollbarWidth,webkit:getComputedStyle(node,'::-webkit-scrollbar').display}))
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.height)
+  expect(metrics.gutter).toBe(0);expect(metrics.scrollbar==='none'||metrics.webkit==='none').toBeTruthy()
+  await nav.hover();await page.mouse.wheel(0,1000)
+  await expect.poll(()=>nav.evaluate(node=>node.scrollTop)).toBeGreaterThan(0)
+  await nav.getByRole('link').last().focus()
+  const bottom=await nav.getByRole('link').last().boundingBox(),bounds=await nav.boundingBox()
+  expect(bottom.y+bottom.height).toBeLessThanOrEqual(bounds.y+bounds.height+1)
+})
+
+test('removing active and queued CVs during processing skips queued work and discards late upload results',async({page,assigned})=>{
+  let release
+  const held=new Promise(resolve=>{release=resolve}),requests=[]
+  test.info().annotations.push({type:'provenance',description:'Synthetic delayed uploads; actual assignment API and storage-reference cleanup'})
+  await page.route('**/api/assigned-candidates/uploads',async route=>{
+    requests.push(route.request().postDataBuffer().toString().match(/filename="([^"]+)"/)[1])
+    await held;await route.fallback()
+  })
+  try{
+    await goto(page);await page.getByRole('button',{name:'New',exact:true}).click()
+    const directory=await fs.mkdtemp(path.join(require('node:os').tmpdir(),'fyndx-cancel-'))
+    const names=['RemoveActive.docx','KeepOne.docx','KeepTwo.docx','RemoveQueued.docx','KeepThree.docx']
+    await Promise.all(names.map(name=>fs.writeFile(path.join(directory,name),'Synthetic unparsed Word document')))
+    await page.getByLabel('Upload CVs').setInputFiles(names.map(name=>path.join(directory,name)))
+    await expect.poll(()=>requests.length).toBe(3)
+    for(const name of ['RemoveActive.docx','RemoveQueued.docx']){
+      const button=details(page).getByRole('button',{name:`Remove ${name}`,exact:true})
+      await expect(button).toBeEnabled();await button.click();await expect(details(page).getByText(name,{exact:true})).toHaveCount(0)
+    }
+    release()
+    await expect(details(page).getByText('Enter details manually',{exact:false})).toHaveCount(3)
+    await expect(details(page).getByRole('button',{name:'Next',exact:true})).toBeEnabled()
+    expect(requests).toHaveLength(4);expect(requests).not.toContain('RemoveQueued.docx')
+    await details(page).getByRole('button',{name:'Next',exact:true}).click()
+    for(let index=0;index<3;index++){
+      await page.getByLabel('Name',{exact:true}).fill(`Kept Test Candidate ${index+1}`)
+      await page.getByLabel('Mobile Number',{exact:true}).fill(`987654399${index}`)
+      await choose(page,'Client','Example Client');await choose(page,'Mandate','Finance Manager');await choose(page,'Assign to Consultant','Test Consultant')
+      await details(page).getByRole('button',{name:index===2?'Save':'Next',exact:true}).click()
+    }
+    await expect(page.getByText('3 Candidates Assigned Successfully')).toBeVisible()
+    const state=await (await fetch(assigned.url+'/test/state')).json()
+    expect(state.assignments).toHaveLength(35)
+    expect(state.uploads).toHaveLength(35)
+    expect(state.uploads.some(upload=>/^Remove/.test(upload.cv_original_name))).toBe(false)
+    expect(state.removed).toHaveLength(1)
+  }finally{release()}
+})
+
+test('Remove, Cancel and Close delete already-uploaded CVs during processing and discard late results',async({page,assigned})=>{
+  await goto(page)
+  const directory=await fs.mkdtemp(path.join(require('node:os').tmpdir(),'fyndx-close-'))
+  const names=['ReadyToCancel.docx','RemoveReady.docx','Cancelled.docx']
+  await Promise.all(names.map(name=>fs.writeFile(path.join(directory,name),'Synthetic Word document')))
+  for(const name of ['Cancel','Close assignment wizard']){
+    let release,received=false
+    const held=new Promise(resolve=>{release=resolve})
+    const intercept=async route=>{
+      if(route.request().postDataBuffer().toString().includes('filename="Cancelled.docx"')){received=true;await held}
+      await route.fallback()
+    }
+    await page.route('**/api/assigned-candidates/uploads',intercept)
+    try{
+      await page.getByRole('button',{name:'New',exact:true}).click()
+      await page.getByLabel('Upload CVs').setInputFiles(names.map(name=>path.join(directory,name)))
+      await expect.poll(()=>received).toBe(true)
+      await expect(details(page).getByText('Enter details manually',{exact:false})).toHaveCount(2)
+      const uploaded=(await (await fetch(assigned.url+'/test/state')).json()).uploads.filter(upload=>names.includes(upload.cv_original_name))
+      expect(uploaded).toHaveLength(2);expect(uploaded.every(upload=>upload.storage_ready)).toBe(true)
+      const removed=uploaded.find(upload=>upload.cv_original_name==='RemoveReady.docx')
+      await details(page).getByRole('button',{name:'Remove RemoveReady.docx',exact:true}).click()
+      await expect.poll(async()=>{
+        const state=await (await fetch(assigned.url+'/test/state')).json()
+        return !state.uploads.some(upload=>upload.id===removed.id)&&state.removed.some(path=>path.includes(removed.id))
+      }).toBe(true)
+      const completion=page.waitForResponse(response=>response.url().endsWith('/api/assigned-candidates/uploads')&&response.status()===200)
+      const button=details(page).getByRole('button',{name,exact:true});await expect(button).toBeEnabled();await button.click()
+      await expect(details(page)).toHaveCount(0)
+      const ready=uploaded.find(upload=>upload.cv_original_name==='ReadyToCancel.docx')
+      await expect.poll(async()=>{
+        const state=await (await fetch(assigned.url+'/test/state')).json()
+        return !state.uploads.some(upload=>upload.id===ready.id)&&state.removed.some(path=>path.includes(ready.id))
+      }).toBe(true)
+      release();await completion
+      await expect.poll(async()=>{
+        const state=await (await fetch(assigned.url+'/test/state')).json()
+        return state.uploads.filter(upload=>upload.cv_original_name==='Cancelled.docx').length
+      }).toBe(0)
+    }finally{release();await page.unroute('**/api/assigned-candidates/uploads',intercept)}
+  }
+  const state=await (await fetch(assigned.url+'/test/state')).json()
+  expect(state.assignments).toHaveLength(32);expect(state.uploads).toHaveLength(32);expect(state.removed).toHaveLength(6)
+})
+
+test('status pills support mouse and keyboard editing, pending guards, saved contact date and viewport-safe menus',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});await goto(page)
+  const candidate=row(page,'Test Candidate 301')
+  const pill=()=>candidate.getByRole('button',{name:/^Status for Test Candidate 301:/})
+  await expect(pill()).toHaveClass(/badge-status-unset/)
+  await pill().focus();await page.keyboard.press('Enter')
+  const menu=page.getByRole('menu',{name:'Status for Test Candidate 301',exact:true})
+  await expect(menu.getByRole('menuitemradio')).toHaveCount(13)
+  await expect(menu.getByRole('menuitemradio',{name:'Not Contacted',exact:true})).toBeFocused()
+  await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter')
+  await expect(pill()).toHaveText('Didn’t Pick Up');await expect(pill()).toHaveClass(/badge-interview/)
+  await expect(candidate).toHaveClass(/assigned-group-1/)
+  await expect(candidate.locator('td').nth(7)).toHaveText('-')
+  await expect(candidate.getByRole('button',{name:'Add to Candidates',exact:true})).toBeDisabled()
+  await setStatus(page,'Test Candidate 301','Interested')
+  await expect(pill()).toHaveClass(/badge-interested/);await expect(candidate).toHaveClass(/assigned-group-2/)
+  await expect(candidate.locator('td').nth(7)).toHaveText(/\d{2}\/\d{2}\/\d{4}/)
+  const contacted=await candidate.locator('td').nth(7).textContent()
+  await setStatus(page,'Test Candidate 301','Not Contacted')
+  await expect(pill()).toHaveClass(/badge-status-unset/);await expect(candidate.locator('td').nth(7)).toHaveText(contacted)
+  await expect(page.locator('#nav-assigned-candidates .sidebar-count-badge')).toHaveText('12')
+  await pill().click();await expect(menu).toBeVisible();await page.keyboard.press('Escape');await expect(menu).toHaveCount(0)
+  const last=page.locator('.assigned-table tbody tr').last().getByRole('button',{name:/^Status for/})
+  await last.scrollIntoViewIfNeeded();await last.evaluate(node=>scrollBy(0,node.getBoundingClientRect().bottom-innerHeight+20));await last.click()
+  const bounds=await page.getByRole('menu').locator('..').boundingBox()
+  expect(bounds.x).toBeGreaterThanOrEqual(8);expect(bounds.x+bounds.width).toBeLessThanOrEqual(1272)
+  expect(bounds.y).toBeGreaterThanOrEqual(8);expect(bounds.y+bounds.height).toBeLessThanOrEqual(792)
+  await page.keyboard.press('Escape')
+})
+
+test('CV column opens the protected document with the shared icon and no eye action',async({page,context,assigned,app},info)=>{
+  await goto(page)
+  const table=page.getByRole('table',{name:'Assigned Candidates',exact:true})
+  const candidate=row(page,'Test Candidate 301')
+  await expect(candidate.locator('td')).toHaveCount(10)
+  await expect(table.getByRole('columnheader')).toHaveText(['','Name','Mobile','Client','Mandate','Status','Assigned Date','Contacted Date','CV','Actions'])
+  await expect(table.getByRole('button',{name:/View CV/})).toHaveCount(0)
+  await expect(table.locator('.lucide-eye')).toHaveCount(0)
+  assigned.admin=false;app.superAdmin=false;await page.reload()
+  await expect(candidate.locator('td')).toHaveCount(9)
+  const link=candidate.getByRole('link',{name:'Open Candidate-301.pdf',exact:true})
+  await expect(link).toHaveClass('cv-table-link document-icon-link')
+  await expect(candidate.locator('td').nth(7)).toHaveCSS('text-align','center')
+  await expect(link.locator('.lucide-file-text')).toHaveCount(1)
+  let requests=0,release
+  const gate=new Promise(resolve=>{release=resolve})
+  await page.route('**/api/assigned-candidates/*/cv',async route=>{requests++;await gate;await route.fallback()})
+  // Use a synthetic preview at the signed URL; headless engines handle PDF viewers differently.
+  await context.route('https://example.test/protected/**',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Synthetic CV preview</title><p>Synthetic CV preview</p>'}))
+  const popupPromise=page.waitForEvent('popup')
+  await link.click();await expect(link.locator('.spin')).toHaveCount(1)
+  await link.click();expect(requests).toBe(1)
+  release()
+  const popup=await popupPromise
+  await expect.poll(()=>popup.url()).toMatch(/^https:\/\/example\.test\/protected\//)
+  await expect(popup.getByText('Synthetic CV preview',{exact:true})).toBeVisible()
+  await expect(link.locator('.spin')).toHaveCount(0)
+  await expect(link.locator('.lucide-file-text')).toHaveCount(1)
+  const state=await (await fetch(assigned.url+'/test/state')).json()
+  const uploadId=state.assignments.find(item=>item.full_name==='Test Candidate 301').upload_id
+  expect(decodeURIComponent(popup.url())).toContain(uploadId)
+  await popup.close()
+  if(info.project.name==='chromium')await page.screenshot({path:'outputs/assigned-candidates-verification/cv-column.png',fullPage:true})
+})
+
+test('rendered candidate identities, consultant chips, status pills and cell typography match main Candidates',async({page,assigned,app},info)=>{
+  const initial=await (await fetch(assigned.url+'/test/state')).json(),assignment=initial.assignments.find(item=>item.full_name==='Test Candidate 301')
+  await page.route('**/api/candidates**',route=>{
+    if(new URL(route.request().url()).pathname!=='/api/candidates')return route.fallback()
+    return route.fulfill({json:{data:[{id:'80000000-0000-4000-8000-000000000001',association_id:'80000000-0000-4000-8000-000000000001',candidate_id:'80000000-0000-4000-8000-000000000002',candidate_display_id:'CA1',full_name:'Test Candidate 301',mobile_number:'9876500301',email:'example@example.test',consultant_name:'Test Consultant',consultant_user_id:assigned.CONSULTANT,status:'Interested',client_id:assignment.client_id,client_name:'Example Client',job_id:assignment.job_id,job_title:'Finance Manager',created_at:assignment.assigned_at,cv_storage_path:'synthetic/Candidate-301.pdf',cv_original_name:'Candidate-301.pdf'}],total:1,page:1,totalPages:1}})
+  })
+  const style=node=>{const s=getComputedStyle(node);return Object.fromEntries(['fontFamily','fontSize','fontWeight','color','backgroundColor','backgroundImage','borderRadius','padding','letterSpacing'].map(key=>[key,s[key]]))}
+  await page.goto('/dashboard/candidates')
+  const main=page.locator('.candidates-master-table tbody tr').filter({has:page.locator('.candidate-name-text',{hasText:'Test Candidate 301'})})
+  await expect(main.locator('.candidate-name-text')).toHaveText('Test Candidate 301');await page.evaluate(()=>document.fonts.ready)
+  const expected={name:await main.locator('.candidate-name-text').evaluate(style),avatar:await main.locator('.name-avatar').evaluate(style),consultant:await main.locator('.candidate-consultant-chip').evaluate(style),consultantAvatar:await main.locator('.candidate-consultant-avatar').evaluate(style),status:await main.getByRole('button',{name:'Interested',exact:true}).evaluate(style),mobile:await main.getByRole('cell',{name:'9876500301',exact:true}).evaluate(style),client:await main.getByRole('cell',{name:'Example Client',exact:true}).evaluate(style),cv:await main.locator('.document-icon-link').evaluate(style)}
+  await goto(page);await setStatus(page,'Test Candidate 301','Interested')
+  const assignedRow=row(page,'Test Candidate 301');await expect(assignedRow.getByRole('button',{name:/^Status for .*: Interested$/})).toBeVisible()
+  await page.getByRole('button',{name:'Consultant filter'}).click();await page.getByRole('button',{name:/Test Consultant/}).click()
+  await expect(page.locator('.assigned-kpis').getByText('31',{exact:true})).toBeVisible();await expect(assignedRow).toBeVisible()
+  const filter=page.getByRole('button',{name:'Consultant filter'})
+  const sample=async()=>({name:await assignedRow.locator('.candidate-name-text').evaluate(style),avatar:await assignedRow.locator('.name-avatar').evaluate(style),consultant:await filter.locator('.candidate-consultant-chip').evaluate(style),consultantAvatar:await filter.locator('.candidate-consultant-avatar').evaluate(style),status:await assignedRow.getByRole('button',{name:/^Status for /}).evaluate(style),mobile:await assignedRow.getByRole('cell',{name:'9876500301',exact:true}).evaluate(style),client:await assignedRow.getByRole('cell',{name:'Example Client',exact:true}).evaluate(style),cv:await assignedRow.locator('.document-icon-link').evaluate(style)})
+  await expect.poll(sample).toEqual(expected)
+  const actual=await sample()
+  const headings=await page.locator('.assigned-table th').evaluateAll(nodes=>nodes.map(node=>({label:node.textContent,visible:node.clientWidth,content:node.scrollWidth})))
+  for(const heading of headings)expect(heading.content,heading.label).toBeLessThanOrEqual(heading.visible+1)
+  await expect(assignedRow.locator('.candidate-name-text')).toHaveCSS('white-space','nowrap')
+  expect(app.consoleErrors).toEqual([])
+  await fs.writeFile(info.outputPath('candidates-table-style-comparison.json'),JSON.stringify({main:expected,assigned:actual},null,2))
+  if(info.project.name==='chromium'){await fs.mkdir('outputs/assigned-candidates-verification',{recursive:true});await page.screenshot({path:'outputs/assigned-candidates-verification/pill-table.png',fullPage:true})}
 })

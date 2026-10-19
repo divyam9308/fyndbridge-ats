@@ -11,6 +11,10 @@ This module stores preliminary CV assignments independently of Candidates. “No
 - The actual `CandidatesPage` form in modal-only mode, all existing fields, existing validation and duplicate dialog, editable client/mandate defaults, stored-CV full parsing, and atomic candidate/association/link creation.
 - Administrator reassignment, individual/bulk deletion and scoped Delete All. Delete All always preserves both pending contact statuses, including Added assignments that were later returned to those statuses.
 - Frontend safety follow-up: centered 760px wizard, reserved scrollbar space while assigned popups are open, native Candidates row-action buttons, viewport-bounded action/filter menus, and form dropdowns that fit inside the popup and support keyboard navigation/Escape without closing the parent dialog.
+- Sidebar scrollbars are hidden while wheel/keyboard scrolling remains available. During CV processing, individual Remove, Cancel and Close remain available. Removed queued files never start, removed active files cannot reappear or be saved, and late upload results are retired after the existing parser/storage request settles. Closing the wizard follows the same rule; successful batch saves retain their CVs.
+- If some files have already uploaded while another is still processing, the individual cross deletes that uploaded file; Cancel or the dialog cross deletes all unsaved uploaded files. Any outstanding upload is discarded when its request finishes. Mixed-batch browser checks verify storage removal and manifest deletion for both completed and late uploads.
+- Table presentation reuses the main Candidates name/avatar and consultant-chip components, mobile typography, status badge color map and popup menu styling. Clicking a status pill opens the assignment status menu, including both assignment-only pending states; keyboard editing and viewport boundaries are supported. Names retain their stored spelling/capitalization. The original assignment column order and white/yellow/grey row groups remain intact.
+- A centered CV column before Actions uses the same `DocumentIconGroup` component, document icon, colors, filename tooltip and loading spinner as main Candidates. The former eye action is removed. Opening still uses the assignment-authorized signed-URL endpoint; repeated clicks while that request is pending do not issue duplicate requests.
 
 ## Database and deployment status
 
@@ -23,9 +27,9 @@ New tables:
 
 Existing table change: one nullable, indexed `candidate_associations.assigned_candidate_id` foreign key. Existing Candidates IDs, client IDs, mandate IDs, and historical migrations are preserved. Main candidate IDs use the existing database allocation trigger.
 
-The migration was executed and tested in isolated PostgreSQL using PGlite. **It has not been applied to production.** The production schema and private bucket configuration were inspected read-only, and the absence of `assigned_candidates` in production was confirmed.
+The migration was executed and tested in isolated PostgreSQL using PGlite. It was not applied to production by this implementation session. A later read-only inspection on 19 October 2026 confirmed that the assignment tables and cleanup functions are now present in production; no production data or files were changed during that inspection.
 
-Apply the migration to the intended Supabase project before deploying this application revision. Deploy the existing Express/Vercel entrypoint and frontend together. No new bucket or environment variable is required. Recheck Supabase advisors and exercise actual administrator/consultant accounts after deployment.
+For environments without these tables, apply the migration to the intended Supabase project before deploying this application revision. Deploy the existing Express/Vercel entrypoint and frontend together. No new bucket or environment variable is required. Recheck Supabase advisors and exercise actual administrator/consultant accounts after deployment.
 
 ## APIs
 
@@ -64,6 +68,8 @@ The existing parser is PDF based. DOC/DOCX files can be stored and assigned, but
 
 Cleanup checks both assignment ownership and main-candidate legacy/attachment references. Main Candidates document cleanup also preserves assignment-owned objects. Deletion retires upload metadata; cleanup claims prevent reuse while removal is in progress. Failed removals remain queued. Expired abandoned uploads are eligible after 24 hours. Cleanup runs in bounded batches after deletion/discard and on administrator page entry, with a Retry cleanup action when needed. Main-referenced documents are preserved and checked again after 24 hours. There is no new background scheduler; cleanup resumes on subsequent administrator activity.
 
+Deleting an assignment automatically removes its unused CV and upload manifest in the same API request. A follow-up corrected the JSONB attachment-reference filter: passing a JavaScript array to the SDK encoded a PostgreSQL array and caused HTTP 400 / SQLSTATE `22P02`, leaving cleanup pending. The filter now sends serialized JSON. Regression coverage uses the real Supabase SDK filter serialization against isolated PostgreSQL, plus the actual delete routes, to verify unused-file removal and preservation through all three legacy CV fields, the attachment list, and live assignments. No additional migration is required.
+
 ## Existing components and integrations reused
 
 `CandidatesPage` form and duplicate dialog; candidate controller normalization, validation, duplicate detection, permission checks and reference resolution; candidate ID trigger; `createBulkResumeParser`, existing OCR and extractors; `resumeController.rowFromParsed`; `ReportKpiCard`; `PaginationBar`; `FloatingDropdown`; shared table/modal/form styles; dialog focus/body-scroll helpers; `apiFetch`/protected URL opening; employee directory and admin/page permissions; realtime refresh and existing update events.
@@ -73,6 +79,8 @@ Dashboard and Reports queries remain unchanged. Untransferred assignments never 
 ## Files
 
 New application files:
+
+- `src/components/CandidateTableIdentity.jsx` (also used by main Candidates)
 
 - `server/src/controllers/assignedCandidatesController.js`
 - `server/src/routes/assignedCandidates.js`
@@ -117,4 +125,4 @@ npm run test:browser
 
 On macOS hosts where bundled Firefox cannot locate its profile directory, `FYNDBRIDGE_FIREFOX_EXECUTABLE` can point to a test-only launcher using a distinct application.ini identity. The application itself is unaffected.
 
-Final test counts and repository-wide lint/dependency findings are recorded in `outputs/assigned-candidates-verification/verification.md`. Application deployment and the production database migration remain pending. Source publication is recorded in Git history.
+Final test counts and repository-wide lint/dependency findings are recorded in `outputs/assigned-candidates-verification/verification.md`. The follow-up fixes and verification artifacts are included in the accompanying commit. Source publication is recorded in Git history; deployment is required before the fixes affect the live site.

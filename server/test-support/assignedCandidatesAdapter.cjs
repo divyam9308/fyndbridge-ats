@@ -22,7 +22,7 @@ function databaseAdapter(db) {
         in(f,x){filters.push(`${key(f)}=any(${value(x)})`);return b},
         is(f,x){filters.push(x===null?`${key(f)} is null`:condition(f,'=',x));return b},
         not(f,op,x){filters.push(op==='is'?`${key(f)} is not null`:condition(f,'<>',x));return b},
-        contains(f,x){filters.push(`${key(f)} @> ${value(JSON.stringify(x))}::jsonb`);return b},
+        contains(f,x){filters.push(`${key(f)} @> ${value(typeof x==='string'?x:JSON.stringify(x))}::jsonb`);return b},
         or(expression){filters.push('('+expression.split(',').map(term=>{const [field,op,...rest]=term.split('.');const x=rest.join('.');if(op==='not'&&x==='is.null')return `${key(field)} is not null`;return condition(field,{eq:'=',lt:'<',ilike:'ilike'}[op],x)}).join(' or ')+')');return b},
         order(f,{ascending=true}={}){orders.push(`${key(f)} ${ascending?'asc':'desc'}`);return b},
         limit(n){take=n;return b},range(from,to){offset=from;take=to-from+1;return b},

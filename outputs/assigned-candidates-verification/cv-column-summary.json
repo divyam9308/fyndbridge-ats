@@ -1,0 +1,66 @@
+{
+  "provenance": "Actual React app and Express assignment endpoint with isolated synthetic database/storage; signed document URL serves a synthetic HTML preview for consistent headless browser verification",
+  "stats": {
+    "startTime": "2026-10-19T06:03:23.593Z",
+    "duration": 124107.26599999999,
+    "expected": 39,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "checks_per_engine": 13,
+  "style_comparisons": {
+    "webkit": {
+      "all_styles_match": true,
+      "compared_elements": [
+        "name",
+        "avatar",
+        "consultant",
+        "consultantAvatar",
+        "status",
+        "mobile",
+        "client",
+        "cv"
+      ]
+    },
+    "chromium": {
+      "all_styles_match": true,
+      "compared_elements": [
+        "name",
+        "avatar",
+        "consultant",
+        "consultantAvatar",
+        "status",
+        "mobile",
+        "client",
+        "cv"
+      ]
+    },
+    "firefox": {
+      "all_styles_match": true,
+      "compared_elements": [
+        "name",
+        "avatar",
+        "consultant",
+        "consultantAvatar",
+        "status",
+        "mobile",
+        "client",
+        "cv"
+      ]
+    }
+  },
+  "coverage": [
+    "CV column before Actions for admin and consultant tables",
+    "shared main Candidates document icon, colors and centered cell",
+    "eye action removed",
+    "assigned consultant opens authorized signed URL in a new tab",
+    "loading spinner and duplicate-click guard",
+    "existing status, identity, upload, cancellation, transfer, deletion and popup geometry checks"
+  ],
+  "build": "passed",
+  "focused_eslint": "passed",
+  "diff_check": "passed",
+  "migration_required": false,
+  "published": false
+}

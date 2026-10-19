@@ -2,19 +2,25 @@
 .assigned-toolbar,.assigned-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .assigned-toolbar { justify-content: space-between; }
 .assigned-toolbar h2 { font-size: 20px; color: var(--navy); margin: 0; }
-.assigned-consultant-filter { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-width: 220px; }
+.assigned-consultant-filter { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-width: 220px; max-width: 300px; }
+.assigned-consultant-filter .candidate-consultant-chip { min-width: 0; }
+.assigned-consultant-option .candidate-consultant-chip { max-width: calc(100% - 40px); }
 .assigned-consultant-options { max-height: 320px; overflow-y: auto; }
 .assigned-consultant-option { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 10px 12px; border: 0; background: var(--white, #fff); color: var(--navy); text-align: left; cursor: pointer; font: inherit; font-size: 12px; }
 .assigned-consultant-option:hover,.assigned-consultant-option:focus-visible { background: var(--bg-primary, #f3f5f9); }
 .assigned-consultant-option .sidebar-count-badge { background: var(--navy); color: white; min-width: 24px; }
 .assigned-kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
-.assigned-table { min-width: 1040px; }
+.assigned-table { min-width: 1480px; table-layout: fixed; }
+.assigned-table th,.assigned-table td { height: 48px; max-height: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assigned-table .assigned-selection-cell { padding-left: 12px; padding-right: 12px; text-overflow: clip; }
+.assigned-table .assigned-selection-cell input { margin: 0; vertical-align: middle; }
+.assigned-table .assigned-mobile { font-family: monospace; font-size: 12px; }
+.assigned-table .mandate-status-control { width: max-content; max-width: 100%; }
 .assigned-table tbody tr.assigned-group-0 { background: white; }
 .assigned-table tbody tr.assigned-group-1 { background: #fff9e5; }
 .assigned-table tbody tr.assigned-group-2 { background: #f1f3f5; }
 .assigned-table tbody tr:hover { filter: brightness(.985); }
 .assigned-table tbody tr.is-selected { box-shadow: inset 3px 0 var(--gold, #DAB111); }
-.assigned-status { max-width: 165px; background: rgba(255,255,255,.75); border: 1px solid var(--border-color, #dce1e9); border-radius: 5px; padding: 5px 6px; font: inherit; font-size: 11px; color: var(--navy); }
 .assigned-row-actions { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
 .assigned-add { border: 0; background: transparent; color: var(--navy); font: inherit; font-size: 11px; font-weight: 650; padding: 4px; cursor: pointer; }
 .assigned-add:disabled { color: var(--text-muted, #758095); cursor: not-allowed; }

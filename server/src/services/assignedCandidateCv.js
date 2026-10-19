@@ -43,7 +43,8 @@ async function cleanupAssignedCvs(supabase) {
       const legacy = await supabase.from('candidates').select('id', { head: true, count: 'exact' })
         .or(`cv_storage_path.eq.${path},cv_link.eq.${path},resume_url.eq.${path}`)
       const attachments = await supabase.from('candidates').select('id', { head: true, count: 'exact' })
-        .contains('cv_attachments', [{ path }])
+        // A JS array uses PostgreSQL array syntax; this column contains JSONB.
+        .contains('cv_attachments', JSON.stringify([{ path }]))
       if (legacy.error || attachments.error) throw legacy.error || attachments.error
       if (legacy.count || attachments.count) {
         const kept = await supabase.from('assigned_candidate_uploads').update({ cleanup_claimed_at: null, retired_at: null, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() }).eq('id', row.id)

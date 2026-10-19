@@ -1,0 +1,42 @@
+{
+  "provenance": "Actual Express API with synthetic isolated PostgreSQL/storage; real Supabase SDK candidate-filter serialization; browser checks use local fixtures",
+  "root_cause": {
+    "original_status": 400,
+    "original_postgres_code": "22P02",
+    "cause": "JSONB containment received PostgreSQL array syntax from a JavaScript array",
+    "fix": "Serialize the JSON array before passing it to the containment filter"
+  },
+  "production_read_only_verification": {
+    "eligible_manifests": 4,
+    "corrected_reference_queries_succeeded": 4,
+    "writes": 0,
+    "storage_removals": 0
+  },
+  "backend": {
+    "passed": 777,
+    "failed": 0,
+    "new_cleanup_cases": 7
+  },
+  "browser": {
+    "startTime": "2026-10-19T06:10:08.415Z",
+    "duration": 44011.668000000005,
+    "expected": 12,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "coverage": [
+    "automatic file and manifest removal after deleting an untransferred assignment",
+    "all three legacy main-Candidates CV fields protect referenced objects",
+    "JSONB attachment-only reference protects adopted CV",
+    "live assignment ownership protects CV",
+    "storage failure remains retryable",
+    "browser deletion produces no pending banner on successful cleanup",
+    "upload cancellation and transfer regressions"
+  ],
+  "focused_eslint": "passed",
+  "diff_check": "passed",
+  "frontend_build": "unchanged from preceding verified build",
+  "migration_required": false,
+  "published": false
+}

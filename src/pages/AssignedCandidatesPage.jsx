@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Eye, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
+import { ChevronDown, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 import { useDialogFocus } from '../hooks/useDialogFocus'
@@ -8,8 +8,10 @@ import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
 import FloatingDropdown from '../components/FloatingDropdown'
 import PaginationBar from '../components/PaginationBar'
 import ReportKpiCard from '../components/ReportKpiCard'
+import { CandidateName, ConsultantChip } from '../components/CandidateTableIdentity'
+import { DocumentIconGroup } from '../components/DocumentAttachments'
 import AssignmentWizard from '../features/assigned-candidates/AssignmentWizard'
-import { ASSIGNMENT_STATUSES } from '../features/assigned-candidates/assignmentStatuses'
+import { ASSIGNMENT_STATUSES, ASSIGNMENT_STATUS_BADGE_MAP } from '../features/assigned-candidates/assignmentStatuses'
 import AssignmentSelect from '../features/assigned-candidates/AssignmentSelect'
 import { assignedRequest, assignmentsChanged, openAssignedCv } from '../services/assignedCandidatesApi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
@@ -45,6 +47,10 @@ export default function AssignedCandidatesPage() {
   const [menu, setMenu] = useState(null)
   const [reassign, setReassign] = useState(null)
   const [rowBusy, setRowBusy] = useState('')
+  const [openingDocument, setOpeningDocument] = useState('')
+  const openingCvs = useRef(new Set())
+  const [statusMenu, setStatusMenu] = useState(null)
+  const statusOptions = useRef(null)
   const abortRef = useRef(null)
   const operationLock = useRef(false)
   const scopeButton = useRef(null)
@@ -76,6 +82,7 @@ export default function AssignedCandidatesPage() {
   const consultants = data?.consultants || []
   const selectedName = consultants.find(c => c.id === scope)?.name || (scope ? 'Selected consultant' : 'Overall (All Consultants)')
   const status = async (row, value) => {
+    setStatusMenu(null)
     setRowBusy(row.id)
     try { await assignedRequest(`/${row.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: value }) }); changed() }
     catch (err) { setError(err.message) } finally { setRowBusy('') }
@@ -94,34 +101,56 @@ export default function AssignedCandidatesPage() {
     try { await assignedRequest(`/${reassign.id}/consultant`, { method: 'PATCH', body: JSON.stringify({ assigned_consultant_id: reassign.consultant }) }); setReassign(null); changed() }
     catch (err) { setError(err.message) } finally { operationLock.current = false; setPending(false) }
   }
-  const viewCv = async row => { try { await openAssignedCv(row.id) } catch (err) { setError(err.message) } }
+  const viewCv = async (row, key) => {
+    if (openingCvs.current.has(row.id)) return
+    openingCvs.current.add(row.id); setOpeningDocument(key)
+    try { await openAssignedCv(row.id) } catch (err) { setError(err.message) }
+    finally { openingCvs.current.delete(row.id); setOpeningDocument(current => current === key ? '' : current) }
+  }
   const toggleScope = id => { setScope(id); setPage(1); setSelection([]); setMenu(null); setDropdown(null) }
+  const openStatus = (row, element, keyboard = false) => {
+    setMenu(null); setDropdown(null)
+    setStatusMenu(current => current?.row.id === row.id ? null : { row, element, rect: element.getBoundingClientRect() })
+    if (keyboard) window.requestAnimationFrame(() => statusOptions.current?.querySelector('[aria-checked="true"]')?.focus({ preventScroll: true }))
+  }
   return <div className="assigned-page">
     <div className="assigned-toolbar"><h2>Assigned Candidates</h2><div className="assigned-controls">
-      {admin && <><button ref={scopeButton} className="filter-select assigned-consultant-filter" aria-label="Consultant filter" aria-expanded={Boolean(dropdown)} onClick={() => setDropdown(dropdown ? null : {rect:scopeButton.current.getBoundingClientRect(),element:scopeButton.current})}>{selectedName}<ChevronDown size={14} /></button>
+      {admin && <><button ref={scopeButton} className="filter-select assigned-consultant-filter" aria-label="Consultant filter" aria-expanded={Boolean(dropdown)} onClick={() => { setStatusMenu(null); setDropdown(dropdown ? null : {rect:scopeButton.current.getBoundingClientRect(),element:scopeButton.current}) }}>{scope ? <ConsultantChip name={selectedName} /> : selectedName}<ChevronDown size={14} /></button>
         <button className="btn-primary" onClick={() => setWizard(true)} disabled={loading || !consultants.length}><Plus size={15} />New</button>
         <button className="btn-secondary" disabled={!selection.length || loading} onClick={() => { setError(''); setConfirm({ ids: selection }) }}><Trash2 size={14} />Bulk Delete{selection.length ? ` (${selection.length})` : ''}</button>
         <button className="btn-secondary" disabled={loading || !data?.total} onClick={() => { setError(''); setConfirm({ all: true }) }}>Delete All</button></>}
     </div></div>
     {dropdown && <FloatingDropdown fitViewport anchorRect={dropdown.rect} ignoreElement={dropdown.element} width={280} onClose={() => setDropdown(null)} className="assigned-consultant-options">
-      {[{ id: '', name: 'Overall (All Consultants)', not_contacted: consultants.reduce((n, c) => n + c.not_contacted, 0) }, ...consultants].map(c => <button key={c.id} className="assigned-consultant-option" onClick={() => toggleScope(c.id)}><span>{c.name}</span><span className="sidebar-count-badge">{c.not_contacted}</span></button>)}
+      {[{ id: '', name: 'Overall (All Consultants)', not_contacted: consultants.reduce((n, c) => n + c.not_contacted, 0) }, ...consultants].map(c => <button key={c.id} className="assigned-consultant-option" onClick={() => toggleScope(c.id)}>{c.id ? <ConsultantChip name={c.name} /> : <span>{c.name}</span>}<span className="sidebar-count-badge">{c.not_contacted}</span></button>)}
     </FloatingDropdown>}
     {notice && <div className="assigned-notice" role="status">{notice}<button className="modal-close" aria-label="Dismiss confirmation" onClick={() => setNotice('')}><X size={14} /></button></div>}
     {admin && cleanupPending && <div className="assigned-notice" role="status">CV cleanup is pending.<button className="btn-secondary" onClick={() => assignedRequest('/uploads/discard', { method: 'POST', body: JSON.stringify({ ids: [] }) }).then(result => setCleanupPending(Boolean(result.cleanup_pending))).catch(error => setError(error.message))}>Retry cleanup</button></div>}
     {error && !confirm && !reassign && <div className="form-error" role="alert">{error}<button className="btn-secondary" onClick={refresh}>Retry</button></div>}
     <div className="assigned-kpis">{[['Assigned Candidates', 'assigned', 'navy'], ['Added Candidates', 'added', 'green'], ['Didn’t Pick Up', 'did_not_pick_up', 'amber'], ['Not Contacted', 'not_contacted', 'neutral']].map(([label, key, tone]) => <ReportKpiCard key={key} label={label} value={data?.stats?.[key]} tone={tone} loading={loading} />)}</div>
     <div className="table-card"><div className="table-wrapper" tabIndex={0} role="region" aria-label="Assigned candidate details"><table className="data-table fb-theme-table assigned-table" aria-label="Assigned Candidates" aria-busy={loading}>
-      <thead><tr>{admin && <th><input type="checkbox" aria-label="Select all assignments on this page" disabled={loading || !data?.data?.length} checked={Boolean(data?.data?.length && selection.length === data.data.length)} onChange={event => setSelection(event.target.checked ? data.data.map(row => row.id) : [])} /></th>}{['Name', 'Mobile', 'Client', 'Mandate', 'Status', 'Assigned Date', 'Contacted Date', 'Actions'].map(label => <th key={label}>{label}</th>)}</tr></thead>
-      <tbody>{loading ? <tr><td colSpan={admin ? 9 : 8} className="table-loading-cell"><FyndbridgeLoader /></td></tr> : data?.data?.length ? data.data.map(row => <tr key={row.id} className={`assigned-group-${row.sort_group}${selection.includes(row.id) ? ' is-selected' : ''}`}>
-        {admin && <td><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selection.includes(row.id)} onChange={event => setSelection(current => event.target.checked ? [...current, row.id] : current.filter(id => id !== row.id))} /></td>}
-        <td className="name-text">{row.full_name}</td><td>{row.mobile_number}</td><td>{row.clients?.name || row.clients?.client_name || 'Unavailable'}</td><td>{row.jobs?.title || 'Unavailable'}</td>
-        <td><select className="assigned-status" aria-label={`Status for ${row.full_name}`} value={row.status} disabled={rowBusy === row.id} onChange={event => status(row, event.target.value)}>{ASSIGNMENT_STATUSES.map(value => <option key={value}>{value}</option>)}</select></td>
-        <td>{formatDateDDMMYYYY(row.assigned_at)}</td><td>{row.contacted_at ? formatDateDDMMYYYY(row.contacted_at) : '—'}</td>
-        <td><div className="assigned-row-actions"><button className="row-action-btn" aria-label={`View CV for ${row.full_name}`} title="View CV" onClick={() => viewCv(row)}><Eye size={16} /></button>
+      <colgroup>{admin && <col style={{ width: 44 }} />}{[220,120,180,210,190,150,150,110,210].map((width,index) => <col key={index} style={{ width }} />)}</colgroup>
+      <thead><tr>{admin && <th className="assigned-selection-cell"><input type="checkbox" aria-label="Select all assignments on this page" disabled={loading || !data?.data?.length} checked={Boolean(data?.data?.length && selection.length === data.data.length)} onChange={event => setSelection(event.target.checked ? data.data.map(row => row.id) : [])} /></th>}{['Name', 'Mobile', 'Client', 'Mandate', 'Status', 'Assigned Date', 'Contacted Date', 'CV', 'Actions'].map(label => <th key={label} style={label === 'CV' ? { textAlign: 'center' } : undefined}>{label}</th>)}</tr></thead>
+      <tbody>{loading ? <tr><td colSpan={admin ? 10 : 9} className="table-loading-cell"><FyndbridgeLoader /></td></tr> : data?.data?.length ? data.data.map(row => <tr key={row.id} className={`assigned-group-${row.sort_group}${selection.includes(row.id) ? ' is-selected' : ''}`}>
+        {admin && <td className="assigned-selection-cell"><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selection.includes(row.id)} onChange={event => setSelection(current => event.target.checked ? [...current, row.id] : current.filter(id => id !== row.id))} /></td>}
+        <td><CandidateName name={row.full_name} /></td><td className="assigned-mobile">{row.mobile_number}</td><td className="cell-ellipsis" title={row.clients?.name || row.clients?.client_name}>{row.clients?.name || row.clients?.client_name || '-'}</td><td className="cell-ellipsis" title={row.jobs?.title}>{row.jobs?.title || '-'}</td>
+        <td><div className="candidate-columns-control mandate-status-control"><button type="button" className={`badge ${ASSIGNMENT_STATUS_BADGE_MAP[row.status] || 'badge-status-unset'}`} aria-label={`Status for ${row.full_name}: ${row.status}`} aria-haspopup="menu" aria-expanded={statusMenu?.row.id === row.id} disabled={rowBusy === row.id} onClick={event => openStatus(row,event.currentTarget,event.detail === 0)} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); openStatus(row,event.currentTarget,true) } }}>{row.status}</button></div></td>
+        <td>{formatDateDDMMYYYY(row.assigned_at)}</td><td>{formatDateDDMMYYYY(row.contacted_at)}</td>
+        <td style={{ textAlign: 'center' }}><DocumentIconGroup attachments={[{ path: row.id, name: row.assigned_candidate_uploads?.cv_original_name || `${row.full_name} CV` }]} keyPrefix="assigned-cv" openingKey={openingDocument} onOpen={key => viewCv(row, key)} /></td>
+        <td><div className="assigned-row-actions">
           {row.added_at ? <span className="badge badge-status-unset">Added</span> : <button className="assigned-add" disabled={row.status === 'Not Contacted' || row.status === 'Didn’t Pick Up'} title={row.sort_group < 2 ? 'Contact the candidate and update their status first' : 'Add to Candidates'} onClick={() => setTransfer({ ...row, consultant_name: consultants.find(c => c.id === row.assigned_consultant_id)?.name || user?.profile_name || user?.user_metadata?.full_name || user?.name || '' })}>Add to Candidates</button>}
           {admin && <button className="row-action-btn" aria-label={`Actions for ${row.full_name}`} onClick={event => setMenu({ row, anchor: event.currentTarget.getBoundingClientRect() })}><MoreHorizontal size={17} /></button>}</div></td>
-      </tr>) : <tr><td colSpan={admin ? 9 : 8} className="table-empty-cell">No assigned candidates{admin ? '. Select a consultant and click New to assign CVs.' : '.'}</td></tr>}</tbody>
+      </tr>) : <tr><td colSpan={admin ? 10 : 9} className="table-empty-cell">No assigned candidates{admin ? '. Select a consultant and click New to assign CVs.' : '.'}</td></tr>}</tbody>
     </table></div><PaginationBar page={page} totalPages={data?.totalPages || 1} total={data?.total || 0} pageSize={limit} onPageChange={setPage} onPageSizeChange={value => { setLimit(value); setPage(1); setSelection([]) }} loading={loading} /></div>
+    {statusMenu && <FloatingDropdown fitViewport anchorRect={statusMenu.rect} ignoreElement={statusMenu.element} width={200} className="table-portal-popover" onClose={() => setStatusMenu(null)}><div ref={statusOptions} role="menu" aria-label={`Status for ${statusMenu.row.full_name}`} onKeyDown={event => {
+      if (event.key === 'Escape') { event.stopPropagation(); setStatusMenu(null); statusMenu.element.focus({ preventScroll: true }) }
+      if (['ArrowDown','ArrowUp'].includes(event.key)) {
+        event.preventDefault()
+        const options = [...statusOptions.current.querySelectorAll('button')]
+        const index = options.indexOf(document.activeElement)
+        const next = options[(index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length]
+        next?.focus({ preventScroll: true }); next?.scrollIntoView({ block: 'nearest' })
+      }
+    }}>{ASSIGNMENT_STATUSES.map(value => <button type="button" role="menuitemradio" aria-checked={value === statusMenu.row.status} className="candidate-columns-action" key={value} onClick={() => status(statusMenu.row,value)}>{value}</button>)}</div></FloatingDropdown>}
     {menu && <FloatingDropdown fitViewport anchorRect={menu.anchor} width={190} onClose={() => setMenu(null)}><button className="assigned-consultant-option" onClick={() => { setReassign({ id: menu.row.id, consultant: menu.row.assigned_consultant_id }); setMenu(null) }}>Reassign consultant</button><button className="assigned-consultant-option" onClick={() => { setConfirm({ ids: [menu.row.id] }); setMenu(null) }}>Delete assignment</button></FloatingDropdown>}
     {wizard && <AssignmentWizard consultants={consultants} defaultConsultant={scope} onClose={() => setWizard(false)} onSaved={count => { setWizard(false); setNotice(`${count} Candidates Assigned Successfully`); changed() }} />}
     {transfer && <Suspense fallback={<div role="status">Loading candidate form…</div>}><CandidateForm assignedCandidate={transfer} onAssignedClose={() => setTransfer(null)} onAssignedSaved={() => { setTransfer(null); setNotice('Candidate Added Successfully. The candidate has been added to the Candidates module.'); assignmentsChanged({ candidates: true }) }} /></Suspense>}

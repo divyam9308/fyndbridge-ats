@@ -1,0 +1,24 @@
+{
+  "provenance": "Actual React wizard and Express API with synthetic isolated PostgreSQL and storage; controlled in-flight requests",
+  "browser": {
+    "startTime": "2026-10-19T06:12:40.955Z",
+    "duration": 20193.374000000003,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "checks_per_engine": 2,
+  "coverage": [
+    "per-file cross deletes an already-uploaded file while another is processing",
+    "Cancel deletes completed unsaved uploads before the remaining upload finishes",
+    "dialog cross deletes completed unsaved uploads before the remaining upload finishes",
+    "late upload result is discarded and removed after request completion",
+    "removed queued files never upload",
+    "cancelled files leave no staging manifests or assignments"
+  ],
+  "application_changes": "none; existing behavior verified",
+  "focused_eslint": "passed",
+  "diff_check": "passed",
+  "published": false
+}
