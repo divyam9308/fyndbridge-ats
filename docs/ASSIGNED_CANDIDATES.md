@@ -37,6 +37,18 @@ For environments without these tables, apply the migration to the intended Supab
 
 ## APIs
 
+The summary strip has nine compact, clickable cards: Total Candidates, Added
+Candidates and each of the seven assignment statuses. It keeps the previous
+112px card-row height on desktop; smaller screens scroll the strip horizontally.
+Every card filters on the server before pagination and resets page/selection while
+retaining consultant scope. Counts cover the entire authorized scope, independent
+of the selected card and current page. Status counts include added assignments
+whose current status matches; Added is an overlapping lifecycle count, not an
+eighth status. The list endpoint reuses the existing aggregate RPC and adds five
+parallel, exact, count-only queries for the additional statuses; no migration is
+needed. Browser regression coverage was updated but not executed, at the user's
+request.
+
 All paths below are relative to `/api/assigned-candidates`, behind existing authentication, employee status and page-view middleware. Responses are private/no-store.
 
 | Method | Path | Behavior |

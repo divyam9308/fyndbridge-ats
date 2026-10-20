@@ -23,6 +23,17 @@ import '../styles/Shared.css'
 import './AssignedCandidatesPage.css'
 
 const CandidateForm = lazy(() => import('./CandidatesPage'))
+const ASSIGNMENT_KPIS = [
+  ['Total Candidates', 'assigned', 'navy'],
+  ['Added Candidates', 'added', 'green'],
+  ['Didn’t Pick Up', 'did_not_pick_up', 'amber'],
+  ['Not Contacted', 'not_contacted', 'neutral'],
+  ['Interested', 'interested', 'blue'],
+  ['Not Interested', 'not_interested', 'rose'],
+  ['In Discussion', 'in_discussion', 'purple'],
+  ['Rejected by Recruiter', 'rejected_by_recruiter', 'red'],
+  ['Not Relevant', 'not_relevant', 'orange']
+]
 const canTransfer = row => !row.added_at && row.status !== 'Not Contacted' && row.status !== 'Didn’t Pick Up' && row.status !== 'Not Relevant'
 // Row tone describes contact state; it no longer decides database order.
 const rowTone = row => row.added_at ? 4 : row.status === 'Not Contacted' ? 0 : row.status === 'Didn’t Pick Up' ? 1 : row.status === 'Not Relevant' ? 2 : 3
@@ -203,7 +214,7 @@ export default function AssignedCandidatesPage() {
     {notice && <div className="assigned-notice" role="status">{notice}<button className="modal-close" aria-label="Dismiss confirmation" onClick={() => setNotice('')}><X size={14} /></button></div>}
     {canCreate && cleanupPending && <div className="assigned-notice" role="status">CV cleanup is pending.<button className="btn-secondary" onClick={() => assignedRequest('/uploads/discard', { method: 'POST', body: JSON.stringify({ ids: [] }) }).then(result => setCleanupPending(Boolean(result.cleanup_pending))).catch(error => setError(error.message))}>Retry cleanup</button></div>}
     {(error || statusError) && !confirm && !reassign && <div className="form-error" role="alert">{error || statusError}<button className="btn-secondary" onClick={refresh}>{error ? 'Retry' : 'Refresh'}</button></div>}
-    <div className="assigned-kpis">{[['Total Candidates', 'assigned', 'navy'], ['Added Candidates', 'added', 'green'], ['Didn’t Pick Up', 'did_not_pick_up', 'amber'], ['Not Contacted', 'not_contacted', 'neutral']].map(([label, key, tone]) => <ReportKpiCard key={key} label={label} value={data?.stats?.[key]} tone={tone} loading={loading} selected={filter === key} onClick={() => { setFilter(key); setPage(1); setSelection(new Map()); setStatusMenu(null); setMenu(null) }} />)}</div>
+    <div className="assigned-kpis" role="group" aria-label="Filter assignments by status">{ASSIGNMENT_KPIS.map(([label, key, tone]) => <ReportKpiCard key={key} compact label={label} value={data?.stats?.[key]} tone={tone} loading={loading} selected={filter === key} onClick={() => { setFilter(key); setPage(1); setSelection(new Map()); setStatusMenu(null); setMenu(null) }} />)}</div>
     <div className="table-card"><div className="table-wrapper" tabIndex={0} role="region" aria-label="Assigned candidate details"><table className="data-table fb-theme-table assigned-table" aria-label="Assigned Candidates" aria-busy={loading}>
       <colgroup><col style={{ width: 44 }} />{[220,120,180,210,190,...(showConsultant ? [200] : []),150,150,110,210].map((width,index) => <col key={index} style={{ width }} />)}</colgroup>
       <thead><tr><th className="assigned-selection-cell"><input type="checkbox" aria-label="Select all assignments on this page" disabled={loading || !selectableRows.length} checked={selectedOnPage > 0 && selectedOnPage === selectableRows.length} ref={node => { if (node) node.indeterminate = selectedOnPage > 0 && selectedOnPage < selectableRows.length }} onChange={event => selectRows(selectableRows,event.target.checked)} /></th>{['Name', 'Mobile', 'Client', 'Mandate', 'Status', ...(showConsultant ? ['Consultant'] : []), 'Assigned Date', 'Contacted Date', 'CV', 'Actions'].map(label => <th key={label} style={label === 'CV' ? { textAlign: 'center' } : undefined}>{label}</th>)}</tr></thead>

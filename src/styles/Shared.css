@@ -1656,7 +1656,7 @@
 }
 .badge-interested         { background: #EBF5FB; color: #1A73E8; }
 .badge-in-discussion      { background: #EEEAF4; color: #5F527A; border: 1px solid #D8D0E4; }
-.badge-not-interested     { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-200); }
+.badge-not-interested     { background: #FCE7F3; color: #9D174D; border: 1px solid #FBCFE8; }
 .badge-interview          { background: #FFF3CD; color: #856404; }
 .badge-client-submission  { background: #D1ECF1; color: #0C5460; }
 .badge-offered            { background: #D4EDDA; color: #155724; }

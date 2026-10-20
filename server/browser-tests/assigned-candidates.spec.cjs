@@ -99,7 +99,7 @@ test('native layout, KPI scope, grouping over pages, badges and consultant restr
   const table=page.getByRole('table',{name:'Assigned Candidates',exact:true});await expect(table).toBeVisible()
   await expect(table.getByRole('columnheader',{name:'Consultant',exact:true})).toBeVisible()
   await expect(row(page,'Test Candidate 301').locator('.candidate-consultant-chip > span:last-child')).toHaveText('Test Consultant')
-  await expect(page.locator('.assigned-kpis .report-kpi-label')).toHaveText(['Total Candidates','Added Candidates','Didn’t Pick Up','Not Contacted'])
+  await expect(page.locator('.assigned-kpis .report-kpi-label')).toHaveText(['Total Candidates','Added Candidates','Didn’t Pick Up','Not Contacted','Interested','Not Interested','In Discussion','Rejected by Recruiter','Not Relevant'])
   await expect(page.locator('#nav-assigned-candidates .sidebar-count-badge')).toHaveText('12')
   const groups=await table.locator('tbody tr').evaluateAll(rows=>rows.map(r=>r.className));expect(groups.slice(0,12).every(x=>x.includes('group-0'))).toBeTruthy();expect(groups.slice(12,24).every(x=>x.includes('group-3'))).toBeTruthy();expect(groups[24]).toContain('group-1')
   await expect(row(page,'Test Candidate 301')).toHaveCSS('background-color','rgb(255, 255, 255)')
@@ -595,6 +595,33 @@ test('bulk Save retains failed drafts and retries remaining assignments without 
   expect(saved.candidates).toHaveLength(2);expect(saved.associations).toHaveLength(2)
 })
 
+test('all seven status KPIs count the full scope and filter exact statuses',async({page,assigned})=>{
+  const state=await (await fetch(assigned.url+'/test/state')).json()
+  const statuses=['Interested','Not Interested','In Discussion','Rejected by Recruiter','Not Relevant']
+  for (let index=0;index<statuses.length;index++) {
+    const assignment=state.assignments.find(item=>item.full_name===`Test Candidate ${301+index}`)
+    const response=await page.request.patch(`${assigned.url}/api/assigned-candidates/${assignment.id}/status`,{headers:{'x-test-user':assigned.ADMIN},data:{status:statuses[index]}})
+    expect(response.ok()).toBeTruthy()
+  }
+  await goto(page)
+  const cards=page.locator('.assigned-kpis')
+  const table=page.getByRole('table',{name:'Assigned Candidates',exact:true})
+  await expect(cards.getByRole('button')).toHaveCount(9)
+  await expect(cards.locator('.report-kpi-value strong')).toHaveText(['32','0','8','7','13','1','1','1','1'])
+  for(const [status,count] of [['Not Contacted',7],['Didn’t Pick Up',8],...statuses.map(status=>[status,status==='Interested'?13:1])]) {
+    const card=cards.getByRole('button',{name:new RegExp(`^${status}\\s`)})
+    await card.click()
+    await expect(card).toHaveAttribute('aria-pressed','true')
+    await expect(table.locator('tbody tr')).toHaveCount(count)
+    await expect(table.getByRole('button',{name:/^Status for /})).toHaveText(Array(count).fill(status))
+    await expect(cards.locator('.report-kpi-value strong')).toHaveText(['32','0','8','7','13','1','1','1','1'])
+  }
+  await page.getByRole('button',{name:'Consultant filter'}).click()
+  await page.getByRole('button',{name:/Other Consultant/}).click()
+  await expect(table).toContainText('No assigned candidates')
+  await expect(cards.locator('.report-kpi-value strong')).toHaveText(['1','0','0','0','1','0','0','0','0'])
+})
+
  test('KPI cards filter all pages, preserve scope and clear selections',async({page,assigned},info)=>{
   await goto(page)
   const cards=page.locator('.assigned-kpis');const table=page.getByRole('table',{name:'Assigned Candidates',exact:true})
@@ -604,7 +631,7 @@ test('bulk Save retains failed drafts and retries remaining assignments without 
   await expect(table.locator('tbody tr')).toHaveCount(8)
   await expect(cards.getByRole('button',{name:/Didn’t Pick Up/})).toHaveAttribute('aria-pressed','true')
   await expect(page.locator('.assigned-selection-dock')).toHaveAttribute('aria-hidden','true')
-  await expect(cards.locator('.report-kpi-value strong')).toHaveText(['32','0','8','12'])
+  await expect(cards.locator('.report-kpi-value strong')).toHaveText(['32','0','8','12','12','0','0','0','0'])
   await cards.getByRole('button',{name:/Not Contacted/}).focus();await page.keyboard.press('Enter')
   await expect(table.locator('tbody tr')).toHaveCount(12)
   await cards.getByRole('button',{name:/Added Candidates/}).click()
@@ -626,7 +653,7 @@ test('bulk Save retains failed drafts and retries remaining assignments without 
   await expect(row(page,'Test Candidate 332').getByText('Added',{exact:true})).toBeVisible()
   await expect(row(page,'Test Candidate 332')).toHaveCSS('background-color','rgb(226, 243, 231)')
   await expect(table.locator('tbody tr')).toHaveCount(1)
-  await expect(cards.locator('.report-kpi-value strong')).toHaveText(['1','1','0','0'])
+  await expect(cards.locator('.report-kpi-value strong')).toHaveText(['1','1','0','0','1','0','0','0','0'])
   if(info.project.name==='chromium')await page.screenshot({path:'outputs/assigned-candidates-verification/kpi-filter.png',animations:'disabled'})
   const invalid=await page.request.get(assigned.url+'/api/assigned-candidates?filter=unknown',{headers:{'x-test-user':assigned.ADMIN}});expect(invalid.status()).toBe(400)
 })

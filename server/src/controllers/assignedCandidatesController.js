@@ -12,6 +12,15 @@ const { prepareAssignedCv, cleanupAssignedCvs } = require('../services/assignedC
 const { ASSIGNED_STATUSES, NOT_CONTACTED, DID_NOT_PICK_UP, assignmentScope, validateAssignment, isUuid, fail } = require('../services/assignedCandidates')
 
 const SELECT = '*,clients(name,client_name,client_display_id),jobs(title,job_display_id),assigned_candidate_uploads(cv_original_name)'
+const STATUS_FILTERS = Object.freeze({
+  not_contacted: NOT_CONTACTED,
+  did_not_pick_up: DID_NOT_PICK_UP,
+  interested: 'Interested',
+  not_interested: 'Not Interested',
+  in_discussion: 'In Discussion',
+  rejected_by_recruiter: 'Rejected by Recruiter',
+  not_relevant: 'Not Relevant'
+})
 const unwrap = result => { if (result.error) throw result.error; return result.data }
 async function context(req) {
   if(req.assignedAccess) return req.assignedAccess
@@ -43,15 +52,30 @@ exports.list = handle(async (req,res) => {
   const { admin, scope, canCreate, canViewOverall } = await context(req)
   const page = Math.max(1,parseInt(req.query.page,10)||1); const limit = Math.min(100,Math.max(1,parseInt(req.query.limit,10)||25))
   const filter = req.query.filter || 'assigned'
-  if (!['assigned','added','did_not_pick_up','not_contacted'].includes(filter)) throw fail('Invalid assignment filter')
+  if (!['assigned','added'].includes(filter) && !Object.hasOwn(STATUS_FILTERS,filter)) throw fail('Invalid assignment filter')
   let query = supabase.from('assigned_candidates').select(SELECT,{count:'exact'})
   if (filter === 'added') query = query.not('added_at','is',null)
-  if (filter === 'did_not_pick_up') query = query.eq('status',DID_NOT_PICK_UP)
-  if (filter === 'not_contacted') query = query.eq('status',NOT_CONTACTED)
+  if (Object.hasOwn(STATUS_FILTERS,filter)) query = query.eq('status',STATUS_FILTERS[filter])
   if (scope) query = query.eq('assigned_consultant_id',scope)
   const result = await query.order('sort_group').order('assigned_at').order('id').range((page-1)*limit,page*limit-1)
   unwrap(result)
-  const stats = unwrap(await supabase.rpc('assigned_candidates_stats',{p_scope:scope,p_active_only:false}))
+  // The existing RPC supplies Total, Added and the two pending statuses. Count
+  // the remaining statuses across the same authorized scope, not this page or
+  // the currently selected status. Head requests return no candidate records.
+  const additionalStatuses = Object.entries(STATUS_FILTERS).filter(([key]) => !['not_contacted','did_not_pick_up'].includes(key))
+  const [statsResult,...statusCounts] = await Promise.all([
+    supabase.rpc('assigned_candidates_stats',{p_scope:scope,p_active_only:false}),
+    ...additionalStatuses.map(([,status]) => {
+      let countQuery = supabase.from('assigned_candidates').select('id',{count:'exact',head:true}).eq('status',status)
+      if (scope) countQuery = countQuery.eq('assigned_consultant_id',scope)
+      return countQuery
+    })
+  ])
+  const stats = { ...unwrap(statsResult) }
+  statusCounts.forEach((result,index) => {
+    unwrap(result)
+    stats[additionalStatuses[index][0]] = result.count
+  })
   const directory = (admin || canCreate || canViewOverall) ? await listEmployeeDirectory() : []
   const consultantNames = new Map(directory.map(e=>[e.user_id,e.name]))
   const counts = canViewOverall ? unwrap(await supabase.rpc('assigned_candidates_consultant_counts')) || [] : []

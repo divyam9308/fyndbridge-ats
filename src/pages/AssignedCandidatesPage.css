@@ -9,7 +9,12 @@
 .assigned-consultant-option { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 10px 12px; border: 0; background: var(--white, #fff); color: var(--navy); text-align: left; cursor: pointer; font: inherit; font-size: 12px; }
 .assigned-consultant-option:hover,.assigned-consultant-option:focus-visible { background: var(--bg-primary, #f3f5f9); }
 .assigned-consultant-option .sidebar-count-badge { background: var(--navy); color: white; min-width: 24px; }
-.assigned-kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+.assigned-kpis { display: grid; grid-template-columns: repeat(9, minmax(0,1fr)); gap: 8px; min-width: 0; }
+.assigned-kpis .report-kpi.is-compact { min-width: 0; min-height: 112px; padding: 12px 9px 10px; border-width: 2px; border-radius: 9px; }
+.assigned-kpis .report-kpi-top { min-height: 38px; gap: 0; }
+.assigned-kpis .report-kpi-label { font-size: 9px; letter-spacing: .01em; white-space: normal; overflow-wrap: anywhere; }
+.assigned-kpis .report-kpi-icon { display: none; }
+.assigned-kpis .report-kpi-value strong { font-size: 24px; overflow-wrap: anywhere; }
 .assigned-table { min-width: 1480px; table-layout: fixed; }
 .assigned-table th,.assigned-table td { height: 48px; max-height: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .assigned-table .assigned-selection-cell { padding-left: 12px; padding-right: 12px; text-overflow: clip; }
@@ -40,7 +45,7 @@
 .assigned-wizard .modal-body { min-height: 250px; max-height: 65vh; overflow: auto; }
 .assigned-wizard .form-group { min-width: 0; }
 .assigned-wizard .client-suggestions button { display: flex; justify-content: space-between; gap: 12px; }
-@media (max-width: 1050px) { .assigned-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 1050px) { .assigned-kpis { grid-template-columns: repeat(9,minmax(104px,1fr)); overflow-x: auto; padding-bottom: 4px; } }
 @media (max-width: 600px) { .assigned-wizard .form-grid-2 { grid-template-columns: 1fr; } .assigned-controls { width: 100%; } .assigned-progress { flex-direction: column; } }
 
 .assigned-wizard .client-search-wrap,.assigned-wizard .client-search-wrap>.form-control { width: 100%; }
