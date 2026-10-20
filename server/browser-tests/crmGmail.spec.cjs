@@ -132,6 +132,9 @@ test('manual Gmail sync starts immediately, disables repeat clicks and puts a re
   await expect(dialog).toHaveCount(0)
   await page.clock.resume()
   await sync.click()
+  await expect(sync).toHaveText('Sync failed')
+  await expect(dialog).toHaveCount(0)
+  await page.getByRole('button', { name: 'Gmail connection details' }).click()
   await expect(dialog.getByRole('alert')).toContainText('30 seconds')
   await page.keyboard.press('Escape')
   await page.locator('.crm-table tbody tr').filter({ hasText: 'Manual Sync Client' }).getByRole('button', { name: 'Activity History', exact: true }).click()
@@ -142,6 +145,65 @@ test('manual Gmail sync starts immediately, disables repeat clicks and puts a re
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(sync).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
+  expect(app.consoleErrors).toEqual([])
+})
+test('a partial Gmail sync and repeated syncs show the green tick for five seconds without opening a popup', async ({ page, gmailCrm, app }, info) => {
+  await gmailCrm.post('/api/crm', { organisation_name: 'Partial Sync Client', contacts: [{ name: 'HR', email: 'hr@client.test' }] })
+  await gmailCrm.post('/test/gmail', { missingMessage: true })
+  await page.goto('/dashboard/crm')
+  const sync = page.locator('.crm-toolbar').getByRole('button', { name: 'Sync Gmail now' })
+  const dialog = page.getByRole('dialog', { name: 'Gmail Connection' })
+  await expect(sync).toBeEnabled()
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt) {
+      await gmailCrm.post('/test/gmail', { missingMessage: true, resetCooldown: true })
+      await page.getByRole('button', { name: 'Gmail connection details' }).click()
+      await expect(dialog).toBeVisible()
+    }
+    const response = page.waitForResponse(response => response.url().endsWith('/api/crm/gmail/sync') && response.request().method() === 'POST')
+    await (attempt ? dialog.getByRole('button', { name: 'Sync Gmail now' }) : sync).click()
+    const result = await (await response).json()
+    expect(result.state).toBe('partial')
+    expect(result.failed_jobs).toBe(1)
+    await expect(sync).toHaveText('Synced')
+    await expect(sync).toHaveClass(/is-synced/)
+    await expect(sync.locator('svg.lucide-check')).toBeVisible()
+    await expect(dialog).toHaveCount(0)
+    if (!attempt && info.project.name === 'chromium') await page.screenshot({ path: '/tmp/crm-gmail-partial-synced.png', animations: 'disabled' })
+    await page.clock.fastForward(4999)
+    await expect(sync).toHaveText('Synced')
+    await page.clock.fastForward(1)
+    await expect(sync).toHaveText('Sync now')
+    await expect(dialog).toHaveCount(0)
+  }
+  await page.getByRole('button', { name: 'Gmail connection details' }).click()
+  await expect(dialog).toContainText('Some emails could not be processed')
+  expect(app.consoleErrors).toEqual([])
+})
+test('queued, paused and failed sync requests stay on the button with details available only on demand', async ({ page, gmailCrm, app }) => {
+  await gmailCrm.post('/test/gmail')
+  await page.goto('/dashboard/crm')
+  const sync = page.locator('.crm-toolbar').getByRole('button', { name: 'Sync Gmail now' })
+  const dialog = page.getByRole('dialog', { name: 'Gmail Connection' })
+  for (const [state, label, detail] of [
+    ['pending', 'Sync queued', 'Remaining emails are queued'],
+    ['quota_paused', 'Sync paused', 'paused by provider quota'],
+    ['failed', 'Sync failed', 'Synthetic sync failure.']
+  ]) {
+    await page.route('**/api/crm/gmail/sync', route => route.fulfill(state === 'failed'
+      ? { status: 503, json: { error: detail } }
+      : { json: { state, connection: { connected: true, status: 'connected', email: 'recruiter@fyndbridge.in' } } }))
+    await sync.click()
+    await expect(sync).toHaveText(label)
+    await expect(sync).not.toHaveClass(/is-synced/)
+    await expect(dialog).toHaveCount(0)
+    await page.getByRole('button', { name: 'Gmail connection details' }).click()
+    await expect(dialog).toContainText(detail)
+    await page.keyboard.press('Escape')
+    await page.unroute('**/api/crm/gmail/sync')
+  }
   expect(app.consoleErrors).toEqual([])
 })
 test('unread CRM changes and emails use Assigned Candidates tints, persist per viewer and Read all crosses filters and pages', async ({ page, gmailCrm, app }, info) => {

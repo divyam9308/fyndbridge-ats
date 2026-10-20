@@ -26,6 +26,7 @@ import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTION
 import { normalizeMandateStatus } from '../utils/mandateStatuses'
 import { validateDocumentSelection } from '../utils/documentAttachments'
 import { highlightText } from '../utils/aiFilterUi'
+import SearchInterpretation from '../components/SearchInterpretation'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 
@@ -338,6 +339,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
   const [filterJob, setFilterJob]       = useState('All')
   const [aiFilterText, setAiFilterText] = useState('')
   const [aiFilters, setAiFilters] = useState(null)
+  const [aiSearchNotice, setAiSearchNotice] = useState('')
   const [aiFilterLoading, setAiFilterLoading] = useState(false)
   const [aiFilterError, setAiFilterError] = useState('')
   const [sortField, setSortField] = useState('')
@@ -1193,14 +1195,15 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
         throw new Error(payload.error || 'AI filter failed.')
       }
       if (requestId !== aiFilterRequestRef.current) return
-      if (!isSupportedCandidateFilter(payload.filters)) throw new Error("I couldn't confidently understand this filter. Try specifying a candidate field, condition, and value.")
+      if (!isSupportedCandidateFilter(payload.filters)) throw new Error("I couldn't understand the whole request. Try describing it in two shorter sentences.")
 
       setAiFilters(payload.filters)
+      setAiSearchNotice(payload.notice || '')
       setPage(1)
     } catch (err) {
       if (requestId !== aiFilterRequestRef.current) return
       notifyAiQuota(err.message)
-      setAiFilterError(err.message || "I couldn't confidently understand this filter. Try specifying a candidate field, condition, and value.")
+      setAiFilterError(err.message || "I couldn't understand the whole request. Try describing it in two shorter sentences.")
     } finally {
       if (requestId === aiFilterRequestRef.current) setAiFilterLoading(false)
     }
@@ -2329,6 +2332,9 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
           <span className="filter-label">AI Filter</span>
           <input
             className="filter-input candidate-ai-filter-input"
+            placeholder="Ask in plain language…"
+            aria-label="Search candidates in plain language"
+            maxLength={600}
             value={aiFilterText}
             onChange={e => { aiFilterRequestRef.current += 1; setAiFilterLoading(false); setAiFilterText(e.target.value); setAiFilterError('') }}
             id="filter-ai-candidates"
@@ -2363,6 +2369,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
         <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalCandidates / pageSize))} onPageChange={setPage} loading={loadingCandidates} />
       </div>
 
+      <SearchInterpretation filters={aiFilters} notice={aiSearchNotice} entity="candidates" />
       {aiFilterError && (
         <div className="form-error" style={{ display:'block', marginBottom:12 }}>
           {aiFilterError}

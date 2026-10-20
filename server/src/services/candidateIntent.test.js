@@ -64,6 +64,7 @@ test('AI is attempted first exactly once and candidate calls request primary-onl
 
   assert.equal(calls, 1)
   assert.equal(request.primaryOnly, true)
+  assert.equal(request.preservePrompt, true)
   assert.equal(request.temperature, 0)
   assert.equal(request.schemaName, 'candidate_intent_v2')
   assert.equal(result.ai, true)
@@ -174,10 +175,9 @@ test('invalid JSON/provider failure falls back deterministically after one attem
   assert.equal(result.filters.conditions[0].field, 'consultant')
 })
 
-test('low-confidence and unsupported AI output use deterministic fallback', async () => {
+test('low-confidence AI output uses deterministic fallback', async () => {
   for (const response of [
-    structured([{ field: 'experience', operator: 'greater_than', value: 8 }], { confidence: 0.2 }),
-    structured([{ field: 'experience', operator: 'greater_than', value: 8 }], { unsupported: true })
+    structured([{ field: 'experience', operator: 'greater_than', value: 8 }], { confidence: 0.2 })
   ]) {
     let calls = 0
     const result = await parseCandidateIntent('experience greater than 8', {
@@ -204,13 +204,11 @@ test('invalid AI field, operator, range and extra properties never reach the ret
   }
 })
 
-test('permission-disallowed AI and deterministic fields fall through to safe keyword mode', async () => {
-  const result = await parseCandidateIntent('email is empty', {
+test('permission-disallowed conditions cannot be silently converted into keyword searches', async () => {
+  await assert.rejects(parseCandidateIntent('email is empty', {
     allowedFields: ['consultant'],
     aiCall: async () => structured([{ field: 'email', operator: 'is_empty' }])
-  })
-  assert.equal(result.filters.mode, 'keyword')
-  assert.equal(result.filters.search_text, 'email is empty')
+  }), error => error.code === 'SEARCH_NOT_UNDERSTOOD')
 })
 
 test('unstructured queries preserve the original request in keyword fallback', async () => {

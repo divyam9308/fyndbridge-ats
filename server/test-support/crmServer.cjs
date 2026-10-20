@@ -26,12 +26,16 @@ async function start() {
   const { encrypt } = require('../src/services/crmGmailGoogle')
   const gmailTarget = require.resolve('../src/services/crmGmail')
   const gmailExports = require(gmailTarget)
+  let missingGmailMessage = false
   const gmailService = gmailExports.createGmailService({ db: adapter,
     authorize: async id => { if (id !== USER_ID) throw Object.assign(new Error('Denied'), { code: 'ACCESS_DENIED' }); return 'recruiter@fyndbridge.in' },
     google: {
       revoke: async () => {},
-      api: async (access, endpoint) => endpoint === 'history' ? { historyId: '101', history: [{ messagesAdded: [{ message: { id: 'manual-sync-message' } }] }] } : {
+      api: async (access, endpoint) => {
+        if (endpoint === 'messages/missing-sync-message') throw Object.assign(new Error('Synthetic missing email'), { status: 404, code: 'GMAIL_API_ERROR' })
+        return endpoint === 'history' ? { historyId: '101', history: [{ messagesAdded: [{ message: { id: 'manual-sync-message' } }, ...(missingGmailMessage ? [{ message: { id: 'missing-sync-message' } }] : [])] }] } : {
         id: 'manual-sync-message', internalDate: String(Date.now()), payload: { mimeType: 'text/plain', headers: [{ name: 'From', value: 'hr@client.test' }, { name: 'To', value: 'recruiter@fyndbridge.in' }, { name: 'Subject', value: 'Manual sync meeting' }], body: { data: Buffer.from('Can we meet Friday at 2 PM? No requirements at present.').toString('base64url') } }
+        }
       }
     },
     ai: async () => ({ summary: 'Client requested a meeting.', meeting: { status: 'proposed', when: 'Friday at 2 PM', evidence: 'Can we meet Friday at 2 PM?' }, negative_response: { category: 'no_requirements', permanence: 'temporary', evidence: 'No requirements at present.' }, sentiment: { label: 'neutral', evidence: 'No requirements at present.' } })
@@ -46,8 +50,10 @@ async function start() {
   app.get('/test/permissions', async (req,res) => res.json((await db.query('select * from page_view_permissions')).rows))
   app.post('/test/permission', async (req,res) => { await db.query("update page_view_permissions set view_permission=$1 where page_key='crm'", [req.body.permission]); res.json({ ok: true }) })
   app.post('/test/gmail', async (req, res) => {
+    missingGmailMessage = Boolean(req.body.missingMessage)
     const credentials = encrypt({ access_token: 'synthetic-access', refresh_token: 'synthetic-refresh', expires_at: Date.now() + 3600000 }, USER_ID)
     await db.query('insert into crm_gmail_connections(user_id,email,credentials,history_id,last_sync_at) values($1,$2,$3,$4,now()) on conflict(user_id) do nothing', [USER_ID,'recruiter@fyndbridge.in',credentials,'100'])
+    if (req.body.resetCooldown) await db.query('update crm_gmail_connections set last_manual_sync_at=null where user_id=$1', [USER_ID])
     res.json({ ok: true })
   })
   app.post('/test/gmail-activity', async (req, res) => {

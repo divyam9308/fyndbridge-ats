@@ -199,7 +199,13 @@ const clientAiFilter = createEntityFilter({
   guidance: [
     'terms_signed is a derived boolean indicating that a real terms model is present; it is separate from contract_signed.',
     'follow_up_date means any related follow-up; next_follow_up_date means the earliest scheduled date on or after today.',
-    'value is normalized to absolute Indian rupees; percentage and slab-percentage terms are not numeric client values.'
+    'value is normalized to absolute Indian rupees; percentage and slab-percentage terms are not numeric client values.',
+    'Technology/tech/software and fintech/banking/insurance describe sector, not words to search in the client name. Use the supplied sector and status synonyms.',
+    'Need to call back/pending callback/past-due follow-ups means follow_up_overdue equals true only when overdue is stated. Due tomorrow/this week maps to follow_up_date; no callback planned means follow_up_date is_empty.',
+    'Paperwork not uploaded/missing agreement file means contract_document is_empty, separately from whether contract_signed is true. Agreed commercials/accepted terms means terms_signed equals true, not contract_signed.',
+    'Contact fields search all stored contacts. Separate contact clauses can match different contacts on the same client; same-person contact correlation is unsupported. Active mandate counts and candidate counts are not filterable client fields.',
+    'Example request: "Find tech or fintech accounts in Delhi or Gurgaon where commercials are agreed but the contract file is still missing". Use AND of sector in ["Technology","Financial Services"], an OR group of location contains Delhi/Gurgaon/Gurugram, terms_signed equals true, and contract_document is_empty. search_text=null.',
+    'Example request: "Who do we need to call back, excluding inactive accounts, biggest value first?". Use follow_up_overdue equals true only if the user says overdue; otherwise the callback timing is ambiguous and unsupported=true. Never invent an overdue requirement.'
   ]
 })
 

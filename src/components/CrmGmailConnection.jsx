@@ -25,11 +25,13 @@ const SYNC_MESSAGES = {
   not_connected: 'Gmail was disconnected. Connect again to synchronise.',
   reauthorization_required: 'Gmail access needs to be renewed. Reconnect Gmail to synchronise.'
 }
+const SYNC_LABELS = { pending: 'Sync queued', quota_paused: 'Sync paused', not_connected: 'Reconnect Gmail', reauthorization_required: 'Reconnect Gmail', failed: 'Sync failed' }
 export default function CrmGmailConnection({ onSynced }) {
   const { user } = useAuth()
   const [connection, setConnection] = useState(null)
   const [busy, setBusy] = useState('')
-  const [synced, setSynced] = useState(false)
+  const [syncFeedback, setSyncFeedback] = useState('')
+  const synced = ['completed', 'partial'].includes(syncFeedback)
   const syncedTimer = useRef(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState(() => {
@@ -71,30 +73,30 @@ export default function CrmGmailConnection({ onSynced }) {
   }
   const syncNow = async () => {
     if (lock.current) return
-    clearTimeout(syncedTimer.current); setSynced(false)
-    lock.current = true; setBusy('syncing'); setError(''); setNotice(null)
+    clearTimeout(syncedTimer.current); setSyncFeedback('')
+    lock.current = true; setBusy('syncing'); setError(''); setNotice(null); setOpen(false)
     try {
       const result = await crmRequest('/gmail/sync', { method: 'POST' })
       setConnection(result.connection)
       onSynced?.()
       setNotice({ text: SYNC_MESSAGES[result.state] || SYNC_MESSAGES.pending, success: !['not_connected', 'reauthorization_required'].includes(result.state) })
-      if (result.state === 'completed') {
-        setOpen(false)
-        setSynced(true)
-        syncedTimer.current = setTimeout(() => setSynced(false), 5000)
-      } else setOpen(true)
-    } catch (failure) { setError(failure.message); setOpen(true) }
-    finally { lock.current = false; setBusy('') }
+      setSyncFeedback(result.state)
+    } catch (failure) { setError(failure.message); setSyncFeedback('failed') }
+    finally {
+      syncedTimer.current = setTimeout(() => setSyncFeedback(''), 5000)
+      lock.current = false; setBusy('')
+    }
   }
-  const syncButton = connection?.connected && <button type="button" className={`btn-secondary crm-gmail-sync${busy === 'syncing' ? ' is-syncing' : synced ? ' is-synced' : ''}`} disabled={Boolean(busy) || connection.status !== 'connected'} aria-label="Sync Gmail now" aria-busy={busy === 'syncing'} onClick={syncNow}>
-    {synced ? <Check size={16} /> : <RefreshCw size={16} />}<span aria-live="polite">{busy === 'syncing' ? 'Syncing...' : synced ? 'Synced' : 'Sync now'}</span>
+  const syncDescription = error || notice?.text || undefined
+  const syncButton = connection?.connected && <button type="button" className={`btn-secondary crm-gmail-sync${busy === 'syncing' ? ' is-syncing' : synced ? ' is-synced' : ''}`} disabled={Boolean(busy) || connection.status !== 'connected'} aria-label="Sync Gmail now" aria-description={syncDescription} title={syncDescription} aria-busy={busy === 'syncing'} onClick={syncNow}>
+    {synced ? <Check size={16} /> : <RefreshCw size={16} />}<span aria-live="polite">{busy === 'syncing' ? 'Syncing...' : synced ? 'Synced' : SYNC_LABELS[syncFeedback] || 'Sync now'}</span>
   </button>
   return <div className="crm-gmail-control">
     <button type="button" className="btn-secondary crm-gmail-button" disabled={busy || (!connection && !error)} onClick={() => connection?.connected ? disconnect() : error ? setOpen(true) : connect()}>
       <Mail size={16} />{busy === 'disconnecting' ? 'Disconnecting...' : busy === 'connecting' ? 'Connecting...' : !connection && !error ? 'Loading Gmail...' : connection?.connected ? 'Disconnect Gmail' : 'Connect Gmail'}
     </button>
     {syncButton}
-    {connection?.connected && <button type="button" className="row-action-btn" aria-label="Gmail connection details" disabled={Boolean(busy)} onClick={() => setOpen(true)}><Info size={16} /></button>}
+    {connection?.connected && <button type="button" className="row-action-btn" aria-label="Gmail connection details" title={syncDescription} aria-description={syncDescription} disabled={Boolean(busy)} onClick={() => setOpen(true)}><Info size={16} /></button>}
     {open && <CrmDialog title="Gmail Connection" onClose={() => setOpen(false)} busy={Boolean(busy)} footer={<>
       <button className="btn-secondary" disabled={Boolean(busy)} onClick={() => setOpen(false)}>Close</button>
       {syncButton}

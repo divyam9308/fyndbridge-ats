@@ -105,15 +105,22 @@ async function requestProvider(providerName, fullPrompt, temperature, options = 
   return text
 }
 
-async function generateAIResponse(prompt, { temperature = 0.1, schema = null, schemaName = 'ats_json', primaryOnly = false, model, timeoutMs, safeErrors = false } = {}) {
+async function generateAIResponse(prompt, { temperature = 0.1, schema = null, schemaName = 'ats_json', primaryOnly = false, model, timeoutMs, safeErrors = false, preservePrompt = false } = {}) {
   validateAiConfig({ primaryOnly })
 
   const started = Date.now()
+  const promptText = String(prompt || '').trim()
+  // Search contracts include a permission-scoped field registry. Cutting it
+  // silently can remove the sentence or the final fields. Other callers keep
+  // their existing 12k limit (including resume parsing).
+  if (preservePrompt && promptText.length > 32000) {
+    throw new Error('AI search instructions exceed the supported prompt length')
+  }
   const fullPrompt = [
     'Return valid JSON only. Do not include markdown or explanatory text.',
     schema ? `JSON schema name: ${schemaName}` : '',
     schema ? `JSON schema: ${JSON.stringify(schema)}` : '',
-    trimPrompt(prompt, 12000)
+    preservePrompt ? promptText : trimPrompt(prompt, 12000)
   ].filter(Boolean).join('\n\n')
 
   try {
@@ -182,8 +189,8 @@ async function generateAIResponse(prompt, { temperature = 0.1, schema = null, sc
   }
 }
 
-async function callAiJson({ prompt, schema, temperature = 0.1, schemaName = 'ats_json', returnRaw = false, primaryOnly = false, model, timeoutMs, safeErrors = false }) {
-  const rawText = await generateAIResponse(prompt, { schema, temperature, schemaName, primaryOnly, model, timeoutMs, safeErrors })
+async function callAiJson({ prompt, schema, temperature = 0.1, schemaName = 'ats_json', returnRaw = false, primaryOnly = false, model, timeoutMs, safeErrors = false, preservePrompt = false }) {
+  const rawText = await generateAIResponse(prompt, { schema, temperature, schemaName, primaryOnly, model, timeoutMs, safeErrors, preservePrompt })
   const jsonText = extractJsonText(rawText)
 
   try {

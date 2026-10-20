@@ -23,6 +23,7 @@ import { STORAGE_BUCKETS } from '../utils/storageBuckets'
 import { normalizeAttachments, validateDocumentSelection } from '../utils/documentAttachments'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { highlightText } from '../utils/aiFilterUi'
+import SearchInterpretation from '../components/SearchInterpretation'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 import { ConsultantPill } from '../components/ConsultantPill'
@@ -312,6 +313,7 @@ export default function ClientsPage() {
   const effectiveStatusFilter = dashboardFilters?.status || statusFilter
   const [aiFilterText, setAiFilterText] = useState('')
   const [aiFilters, setAiFilters] = useState(null)
+  const [aiSearchNotice, setAiSearchNotice] = useState('')
   const [aiFilterLoading, setAiFilterLoading] = useState(false)
   const [aiFilterError, setAiFilterError] = useState('')
   const [page, setPage] = useState(1)
@@ -1309,14 +1311,15 @@ export default function ClientsPage() {
       if (requestId !== aiFilterRequestRef.current || controller.signal.aborted) return
       if (!res.ok) throw new Error(data.error || 'Could not parse Clients filter.')
       if (!isSupportedIntentFilter(data.filters)) {
-        throw new Error("I couldn't confidently understand this filter. Try specifying a client field, condition, and value.")
+        throw new Error("I couldn't understand the whole request. Try describing it in two shorter sentences.")
       }
       setAiFilters(data.filters)
+      setAiSearchNotice(data.notice || '')
       setPage(1)
     } catch (err) {
       if (requestId !== aiFilterRequestRef.current || controller.signal.aborted || err?.name === 'AbortError') return
       notifyAiQuota(err.message)
-      setAiFilterError(err.message || "I couldn't confidently understand this filter. Try specifying a client field, condition, and value.")
+      setAiFilterError(err.message || "I couldn't understand the whole request. Try describing it in two shorter sentences.")
     } finally {
       if (aiFilterAbortRef.current === controller) aiFilterAbortRef.current = null
       if (requestId === aiFilterRequestRef.current) setAiFilterLoading(false)
@@ -1564,6 +1567,9 @@ export default function ClientsPage() {
           <span className="filter-label">AI Filter</span>
           <input
             className="filter-input candidate-ai-filter-input"
+            placeholder="Ask in plain language…"
+            aria-label="Search clients in plain language"
+            maxLength={600}
             value={aiFilterText}
             onChange={e => {
               aiFilterRequestRef.current += 1
@@ -1603,6 +1609,7 @@ export default function ClientsPage() {
         <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalClients / pageSize))} onPageChange={setPage} loading={loading} />
       </div>
 
+      <SearchInterpretation filters={aiFilters} notice={aiSearchNotice} entity="clients" />
       {aiFilterError && (
         <div className="form-error" style={{ display:'block', marginBottom:12 }}>
           {aiFilterError}

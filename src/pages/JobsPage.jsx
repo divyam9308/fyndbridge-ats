@@ -20,6 +20,7 @@ import '../styles/Shared.css'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, mandateStatusLabel, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { highlightText } from '../utils/aiFilterUi'
+import SearchInterpretation from '../components/SearchInterpretation'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { parseDashboardFiltersFromUrl } from '../utils/dashboardDrilldown'
 import { ConsultantPill, ConsultantPillGroup } from '../components/ConsultantPill'
@@ -226,6 +227,7 @@ export default function JobsPage() {
   const [duplicateMoreOpen, setDuplicateMoreOpen] = useState(false)
   const [aiText, setAiText] = useState('')
   const [aiFilters, setAiFilters] = useState(null)
+  const [aiSearchNotice, setAiSearchNotice] = useState('')
   const [aiError, setAiError] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [sortField, setSortField] = useState('')
@@ -969,14 +971,15 @@ export default function JobsPage() {
       if (requestId !== aiFilterRequestRef.current || controller.signal.aborted) return
       if (!res.ok) throw new Error(data.error || 'Could not parse Mandates filter.')
       if (!isSupportedIntentFilter(data.filters)) {
-        throw new Error("I couldn't confidently understand this filter. Try specifying a mandate field, condition, and value.")
+        throw new Error("I couldn't understand the whole request. Try describing it in two shorter sentences.")
       }
       setAiFilters(data.filters)
+      setAiSearchNotice(data.notice || '')
       setPage(1)
     } catch (err) {
       if (requestId !== aiFilterRequestRef.current || controller.signal.aborted || err?.name === 'AbortError') return
       notifyAiQuota(err.message)
-      setAiError(err.message || "I couldn't confidently understand this filter. Try specifying a mandate field, condition, and value.")
+      setAiError(err.message || "I couldn't understand the whole request. Try describing it in two shorter sentences.")
     } finally {
       if (aiFilterAbortRef.current === controller) aiFilterAbortRef.current = null
       if (requestId === aiFilterRequestRef.current) setAiLoading(false)
@@ -1349,6 +1352,9 @@ export default function JobsPage() {
           <span className="filter-label">AI Filter</span>
           <input
             className="filter-input candidate-ai-filter-input"
+            placeholder="Ask in plain language…"
+            aria-label="Search mandates in plain language"
+            maxLength={600}
             value={aiText}
             onChange={e => {
               aiFilterRequestRef.current += 1
@@ -1384,6 +1390,7 @@ export default function JobsPage() {
         <div className="filter-bar-spacer" />
         <CompactPagination page={page} totalPages={Math.max(1, Math.ceil(totalJobs / pageSize))} onPageChange={setPage} loading={loading} />
       </div>
+      <SearchInterpretation filters={aiFilters} notice={aiSearchNotice} entity="mandates" />
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}
       {listError && jobs.length > 0 && (
         <div className="form-error" style={{ display: 'block', marginBottom: 12 }} role="alert">

@@ -11,7 +11,8 @@ test('keyword fallback uses only approved and permission-visible candidate field
   const result = buildCandidateKeywordFilter('senior react', {
     allowedFields: ['candidate_name', 'designation', 'consultant']
   })
-  assert.equal(result.root.combinator, 'OR')
+  assert.equal(result.root.combinator, 'AND')
+  assert.ok(result.root.children.every(group => group.combinator === 'OR'))
   assert.deepEqual(new Set(result.conditions.map(item => item.field)), new Set(['candidate_name', 'designation']))
   assert.ok(result.conditions.every(item => item.operator === 'contains'))
   assert.ok(result.conditions.every(item => ['senior', 'react'].includes(item.value.toLowerCase())))
@@ -40,4 +41,14 @@ test('keyword fallback fails safely when permissions hide every searchable field
     () => buildCandidateKeywordFilter('react', { allowedFields: ['consultant'] }),
     error => error.statusCode === 400
   )
+})
+
+test('keyword matching preserves later words instead of truncating the query', () => {
+  const result = buildCandidateKeywordFilter('senior strategic product operations leaders')
+  assert.deepEqual([...new Set(result.conditions.map(node => node.value))], ['senior', 'strategic', 'product', 'operations', 'leaders'])
+  assert.equal(result.root.combinator, 'AND')
+})
+
+test('keyword requests beyond the budget are rejected instead of partially applied', () => {
+  assert.throws(() => buildCandidateKeywordFilter('one two three four five six seven eight nine'), error => error.code === 'SEARCH_NOT_UNDERSTOOD')
 })

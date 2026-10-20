@@ -1,4 +1,5 @@
 const { normalizeMoney, normalizeDate } = require('./candidateAiFilter')
+const { keywordTokens, assertKeywordBudget, MAX_KEYWORD_CONDITIONS, isMutationSearch } = require('./naturalLanguageSearch')
 
 const MAX_QUERY_LENGTH = 600
 const MAX_DEPTH = 5
@@ -522,6 +523,7 @@ function createEntityFilter(config) {
   }
 
   function validateFilter(input, options = {}) {
+    const conditionLimit = options.keywordSearch === true ? MAX_KEYWORD_CONDITIONS : MAX_CONDITIONS
     const allowed = options.allowedFields ? new Set(options.allowedFields) : null
     const now = options.now instanceof Date && Number.isFinite(options.now.getTime()) ? options.now : new Date()
     let count = 0
@@ -539,7 +541,7 @@ function createEntityFilter(config) {
       if (node.type !== 'condition') throw invalid(label, `Invalid ${label} filter node.`)
       if (Object.keys(node).some(key => !NODE_KEYS.condition.has(key))) throw invalid(label, `Invalid ${label} filter condition keys.`)
       count += 1
-      if (count > MAX_CONDITIONS) throw invalid(label, `Too many ${label} filter conditions.`)
+      if (count > conditionLimit) throw invalid(label, `Too many ${label} filter conditions.`)
       const requested = normalizeWords(node.field)
       let fieldName = aliasToField.get(requested) || clean(node.field)
       let meta = registry[fieldName]
@@ -598,7 +600,7 @@ function createEntityFilter(config) {
   function promptIssue(prompt) {
     if (typeof prompt !== 'string' || !clean(prompt)) return `A ${label} filter query is required.`
     if (prompt.length > MAX_QUERY_LENGTH) return `The ${label} filter query is too long.`
-    if (/\b(?:delete|update|insert|drop|alter|truncate|run sql|select \*|ignore permissions?|bypass permissions?|show everything)\b/i.test(prompt)) return `Only read-only ${label} filters are supported.`
+    if (isMutationSearch(prompt)) return `Only read-only ${label} filters are supported.`
     if ((prompt.match(/\(/g) || []).length !== (prompt.match(/\)/g) || []).length) return `The ${label} filter has unbalanced parentheses.`
     return ''
   }
@@ -711,14 +713,6 @@ function createEntityFilter(config) {
     return `${node.combinator.toLowerCase()}(${node.children.map(compileAst).join(',')})`
   }
 
-  function keywordTokens(searchText) {
-    const stop = new Set(['a', 'all', 'an', 'and', 'any', 'client', 'clients', 'job', 'jobs', 'mandate', 'mandates', 'show', 'find', 'list', 'get', 'give', 'the', 'with', 'where', 'who', 'whose'])
-    const values = clean(searchText).split(/\s+/)
-      .map(item => item.replace(/^[^\p{L}\p{N}@+#.-]+|[^\p{L}\p{N}@+#.-]+$/gu, ''))
-      .filter(item => item && !stop.has(item.toLowerCase()))
-    return [...new Map(values.map(item => [item.toLowerCase(), item])).values()].slice(0, 4)
-  }
-
   function buildKeywordFilter(searchText, options = {}) {
     const issue = promptIssue(searchText)
     if (issue) throw invalid(label, issue)
@@ -727,14 +721,13 @@ function createEntityFilter(config) {
     const fields = [...new Set(config.keywordFields || [])].filter(name => allowed.has(name) && !registry[name]?.internal && searchableTypes.has(registry[name]?.type))
     const tokens = keywordTokens(searchText)
     if (!fields.length || !tokens.length) throw invalid(label, `No searchable ${label} fields are available.`)
-    const boundedFields = fields.slice(0, MAX_CONDITIONS)
-    const boundedTokens = tokens.slice(0, Math.max(1, Math.floor(MAX_CONDITIONS / boundedFields.length)))
-    const tokenGroups = boundedTokens.map(value => group('OR', boundedFields.map(fieldName => condition(
+    assertKeywordBudget(tokens, fields)
+    const tokenGroups = tokens.map(value => group('OR', fields.map(fieldName => condition(
       fieldName,
       registry[fieldName].type === 'array' ? 'contains' : 'contains',
       value
     ))))
-    return validateFilter({ root: group('AND', tokenGroups) }, options)
+    return validateFilter({ root: group('AND', tokenGroups) }, { ...options, keywordSearch: true })
   }
 
   return {

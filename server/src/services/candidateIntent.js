@@ -1,5 +1,9 @@
 const { callAiJson } = require('./aiProvider')
 const {
+  NATURAL_LANGUAGE_GUIDANCE, searchRequest, assertKeywordSearchIsSafe,
+  searchNotUnderstoodError, fallbackNotice
+} = require('./naturalLanguageSearch')
+const {
   FIELD_REGISTRY,
   candidatePromptIssue,
   parseCandidatePrompt,
@@ -115,7 +119,7 @@ function candidateIntentSchema(allowedFields = Object.keys(FIELD_REGISTRY)) {
         additionalProperties: false,
         properties: {
           field: { type: 'string', enum: fields },
-          operator: { type: 'string' },
+          operator: { type: 'string', enum: [...new Set(fields.flatMap(name => FIELD_REGISTRY[name].operators))] },
           value: {
             anyOf: [
               { type: 'string' },
@@ -135,6 +139,7 @@ function candidateIntentSchema(allowedFields = Object.keys(FIELD_REGISTRY)) {
           logic: { type: 'string', enum: ['and', 'or'] },
           filters: {
             type: 'array',
+            minItems: 2,
             items: { anyOf: [{ $ref: '#/$defs/filter' }, { $ref: '#/$defs/group' }] }
           }
         },
@@ -161,6 +166,7 @@ function buildCandidateIntentPrompt(prompt, allowedFields = Object.keys(FIELD_RE
 
   return [
     'Convert one natural-language Candidates-page filter into the strict JSON object described below.',
+    searchRequest(prompt),
     'Return JSON only. Do not return markdown, prose, SQL, PostgREST, JavaScript, database column names, mutations, or permission instructions.',
     'You receive only field metadata and the user sentence. Never request, reveal, or invent candidate personal data. Never invent fields, operators, enum values, or dates.',
     'Output exactly these keys: mode, logic, filters, search_text, sort, confidence, unsupported. No additional properties are allowed at any level.',
@@ -172,7 +178,7 @@ function buildCandidateIntentPrompt(prompt, allowedFields = Object.keys(FIELD_RE
     'sort must always be [] because AI sorting is not enabled. Set unsupported=true only when the request cannot be represented safely.',
     'Use equals only for explicit identity/equality. Use contains for conversational partial text. For lists use in/not_in, and for skills use contains_all/contains_any.',
     'Normalize more than/above to greater_than, at least to greater_than_or_equal, below to less_than, up to to less_than_or_equal, and ranges to between.',
-    'Normalize salary/CTC to absolute INR rupees, experience to years, and notice period to days. Convert two months notice to 60 days.',
+    'Normalize salary/CTC to annual absolute INR rupees, experience to years, and notice period to days. Convert explicitly monthly pay to annual pay by multiplying by 12. Convert two months notice to 60 days.',
     'Normalize open/willing/can relocate to boolean true and not open/unwilling/cannot relocate to boolean false.',
     'Missing, unavailable, blank, whitespace, null, dash, and an empty array mean is_empty; available/present/not empty mean is_not_empty.',
     `Today in Asia/Kolkata is ${today}. Resolve all relative dates deterministically and return YYYY-MM-DD boundaries. The current financial year is ${financialYearStart} through ${financialYearEnd}.`,
@@ -180,12 +186,16 @@ function buildCandidateIntentPrompt(prompt, allowedFields = Object.keys(FIELD_RE
     'The Candidates Month concept is the candidate created month: use created_date with between covering that complete calendar month. There is no separate month field.',
     'Consultant means the assigned recruiter/owner. Possessive requests such as "Alex\'s candidates" mean consultant equals Alex.',
     'A candidate "from Infosys or Wipro" refers to organisation; a candidate "in Delhi or Gurgaon" refers to current_location. Preserve the OR alternatives.',
+    ...NATURAL_LANGUAGE_GUIDANCE,
+    'A technology such as React/Python is skills; a person working as an engineer is designation; role is the mandate they were submitted for, not their current designation. Use organisation for their current employer and client_name for the hiring client.',
+    'Current earnings/current package map to current_ctc; asking for/wants/expects/seeking a package map to expected_ctc; an offer amount maps to offered_ctc. An unqualified CTC/salary is current_ctc. Net take-home pay is not a recorded field; do not equate it with CTC. Never mix these fields.',
+    'Can join within a month means notice_period less_than_or_equal 30; immediately available/immediate joiner means notice_period equals 0. Without a notice period recorded means notice_period is_empty, not zero.',
+    'Skills are stored text-array elements: use common spelling variants in contains_any when the user uses an abbreviation, for example ["JavaScript","Javascript","javascript","JS","js"]. For React AND Node use two AND-connected contains_any leaves, one per technology, with their spelling variants. Never broaden AND to OR.',
     'Never discard a reliable clause. If general recruiting words remain after extracting every reliable field clause, use hybrid mode and put only those remaining words in search_text.',
     'Example structured: {"mode":"structured","logic":"and","filters":[{"field":"consultant","operator":"equals","value":"Alex"}],"search_text":null,"sort":[],"confidence":0.98,"unsupported":false}',
-    'Example hybrid: {"mode":"hybrid","logic":"and","filters":[{"field":"consultant","operator":"equals","value":"Alex"}],"search_text":"senior react","sort":[],"confidence":0.9,"unsupported":false}',
+    'Example hybrid: {"mode":"hybrid","logic":"and","filters":[{"field":"consultant","operator":"equals","value":"Alex"}],"search_text":"strategic product leadership","sort":[],"confidence":0.9,"unsupported":false}',
     'Example nested: {"mode":"structured","logic":"and","filters":[{"logic":"or","filters":[{"field":"current_location","operator":"contains","value":"Delhi"},{"field":"current_location","operator":"contains","value":"Gurgaon"}]},{"field":"experience","operator":"greater_than","value":5}],"search_text":null,"sort":[],"confidence":0.96,"unsupported":false}',
-    `Allowed candidate fields:\n${fields || '(none; use keyword mode)'}`,
-    `User request: ${clean(prompt)}`
+    `Allowed candidate fields:\n${fields || '(none; use keyword mode)'}`
   ].join('\n\n')
 }
 
@@ -415,19 +425,26 @@ async function parseCandidateIntent(prompt, options = {}) {
   if (issue) throw Object.assign(new Error(issue), { statusCode: 400 })
 
   const aiCall = options.aiCall || callAiJson
+  let unsupported = false
   try {
     const parsed = await aiCall({
       prompt: buildCandidateIntentPrompt(prompt, options.allowedFields, options.now || new Date()),
       schema: candidateIntentSchema(options.allowedFields),
       schemaName: 'candidate_intent_v2',
       temperature: 0,
-      primaryOnly: true
+      primaryOnly: true,
+      preservePrompt: true
     })
-    return { filters: validateCandidateIntent(parsed, options), ai: true, semantic: true }
+    unsupported = parsed?.unsupported === true
+    const filters = validateCandidateIntent(parsed, options)
+    if (filters.mode === 'keyword') assertKeywordSearchIsSafe(prompt)
+    return { filters, ai: true, semantic: true }
   } catch {
+    if (unsupported) throw searchNotUnderstoodError()
     const deterministic = parseCandidatePrompt(prompt, options)
-    if (deterministic) return { filters: deterministicIntent(deterministic), parser: true, fallback: true }
-    return { filters: keywordIntent(prompt), keyword: true, fallback: true }
+    if (deterministic) return { filters: deterministicIntent(deterministic), parser: true, fallback: true, notice: fallbackNotice() }
+    assertKeywordSearchIsSafe(prompt)
+    return { filters: keywordIntent(prompt), keyword: true, fallback: true, notice: fallbackNotice(true) }
   }
 }
 

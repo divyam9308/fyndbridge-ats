@@ -1,4 +1,5 @@
 const { CANDIDATE_STATUSES } = require('./candidateStatuses')
+const { MAX_KEYWORD_CONDITIONS, isMutationSearch } = require('./naturalLanguageSearch')
 
 const MAX_QUERY_LENGTH = 600
 const MAX_DEPTH = 5
@@ -435,7 +436,7 @@ function parseCandidatePrompt(prompt, options = {}) {
 function candidatePromptIssue(prompt) {
   if (typeof prompt !== 'string' || !clean(prompt)) return 'A filter query is required.'
   if (prompt.length > MAX_QUERY_LENGTH) return 'The filter query is too long.'
-  if (/\b(?:delete|update|insert|drop|alter|truncate|run sql|select \*|ignore permissions?|bypass permissions?|show everything)\b/i.test(prompt)) return 'Only read-only candidate filters are supported.'
+  if (isMutationSearch(prompt)) return 'Only read-only candidate filters are supported.'
   if ((prompt.match(/\(/g) || []).length !== (prompt.match(/\)/g) || []).length) return 'The filter has unbalanced parentheses.'
   return ''
 }
@@ -487,6 +488,7 @@ function normalizeValue(meta, fieldName, operator, raw, now) {
 
 function validateCandidateFilter(input, options = {}) {
   const allowed = options.allowedFields ? new Set(options.allowedFields) : null
+  const conditionLimit = options.keywordSearch === true ? MAX_KEYWORD_CONDITIONS : MAX_CONDITIONS
   let count = 0
   function visit(node, depth) {
     if (!node || typeof node !== 'object' || depth > MAX_DEPTH) throw invalid('Filter is too deeply nested.')
@@ -497,7 +499,7 @@ function validateCandidateFilter(input, options = {}) {
     }
     if (node.type !== 'condition') throw invalid('Invalid filter node.')
     count += 1
-    if (count > MAX_CONDITIONS) throw invalid('Too many filter conditions.')
+    if (count > conditionLimit) throw invalid('Too many filter conditions.')
     const requestedField = normalizeWords(node.field)
     const fieldName = aliasToField.get(requestedField) || node.field
     const meta = FIELD_REGISTRY[fieldName]

@@ -4,21 +4,21 @@ import NotificationBell from './NotificationBell'
 import './Topbar.css'
 
 const pageTitles = {
-  '/dashboard':            { title: 'Dashboard',   crumb: 'Home / Dashboard' },
-  '/dashboard/jobs':       { title: 'Mandates', crumb: 'Home / Mandates' },
-  '/dashboard/crm': { title: 'CRM', crumb: 'Home / CRM' },
-  '/dashboard/clients':    { title: 'Clients',     crumb: 'Home / Clients' },
-  '/dashboard/candidates': { title: 'Candidates',  crumb: 'Home / Candidates' },
-  '/dashboard/assigned-candidates': { title: 'Assigned Candidates', crumb: 'Home / Assigned Candidates' },
-  '/dashboard/applied-candidates': { title: 'Applied Candidates', crumb: 'Home / Applied Candidates' },
-  '/dashboard/performance': { title: 'PMS', crumb: 'Home / PMS' },
-  '/dashboard/attendance': { title: 'Attendance', crumb: 'Home / Attendance' },
-  '/dashboard/reports/consultant': { title: 'Report', crumb: 'Home / Report' },
-  '/dashboard/user-manual': { title: 'User Manual', crumb: 'Home / User Manual' },
-  '/dashboard/admin':      { title: 'Admin Panel', crumb: 'Home / Admin Panel' },
-  '/dashboard/settings':   { title: 'Settings',    crumb: 'Home / Settings' },
-  '/dashboard/profile':    { title: 'Profile Settings', crumb: 'Home / Profile Settings' },
-  '/invoice':              { title: 'Invoice',     crumb: 'Home / Invoice' },
+  '/dashboard':            { title: 'Dashboard' },
+  '/dashboard/jobs':       { title: 'Mandates' },
+  '/dashboard/crm': { title: 'CRM' },
+  '/dashboard/clients':    { title: 'Clients' },
+  '/dashboard/candidates': { title: 'Candidates' },
+  '/dashboard/assigned-candidates': { title: 'Assigned Candidates' },
+  '/dashboard/applied-candidates': { title: 'Applied Candidates' },
+  '/dashboard/performance': { title: 'PMS' },
+  '/dashboard/attendance': { title: 'Attendance' },
+  '/dashboard/reports/consultant': { title: 'Report' },
+  '/dashboard/user-manual': { title: 'User Manual' },
+  '/dashboard/admin':      { title: 'Admin Panel' },
+  '/dashboard/settings':   { title: 'Settings' },
+  '/dashboard/profile':    { title: 'Profile Settings' },
+  '/invoice':              { title: 'Invoice' },
 }
 
 export default function Topbar() {
@@ -29,15 +29,15 @@ export default function Topbar() {
   const getPageInfo = (path) => {
     if (pageTitles[path]) return pageTitles[path]
     if (path.startsWith('/dashboard/clients/') && path.endsWith('/candidates')) {
-      return { title: 'Client Mandate Candidates', crumb: 'Home / Clients / Client Details / Candidates' }
+      return { title: 'Client Mandate Candidates' }
     }
     if (path.startsWith('/dashboard/clients/')) {
-      return { title: 'Client Details', crumb: 'Home / Clients / Client Details' }
+      return { title: 'Client Details' }
     }
     if (path.startsWith('/invoice/entities/')) {
-      return { title: 'Entity Details', crumb: 'Home / Invoice / Entity Details' }
+      return { title: 'Entity Details' }
     }
-    return { title: 'Dashboard', crumb: 'Home / Dashboard' }
+    return { title: 'Dashboard' }
   }
 
   const page = getPageInfo(pathname)
@@ -52,7 +52,6 @@ export default function Topbar() {
     <header className="topbar" role="banner">
       <div className="topbar-left">
         <h1 className="topbar-title">{page.title}</h1>
-        <div className="topbar-breadcrumb">{page.crumb}</div>
       </div>
 
       <div className="topbar-right">

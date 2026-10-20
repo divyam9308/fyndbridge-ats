@@ -107,6 +107,7 @@ test('AI is attempted exactly once with deterministic, primary-only provider set
 
   assert.equal(calls, 1)
   assert.equal(request.primaryOnly, true)
+  assert.equal(request.preservePrompt, true)
   assert.equal(request.temperature, 0)
   assert.equal(request.schemaName, 'client_intent_v2')
   assert.equal(result.ai, true)
@@ -234,10 +235,9 @@ test('valid sort-only AI intent and deterministic sort fallback remain executabl
   assert.deepEqual(fallback.filters.sort, [{ field: 'created_at', direction: 'desc' }])
 })
 
-test('low-confidence, unsupported and invalid AI outputs fall back after one request', async () => {
+test('low-confidence and invalid AI outputs fall back after one request', async () => {
   for (const response of [
     structured([{ field: 'status', operator: 'equals', value: 'Active' }], { confidence: 0.2 }),
-    structured([{ field: 'status', operator: 'equals', value: 'Active' }], { unsupported: true }),
     structured([{ field: 'unknown', operator: 'equals', value: 'Active' }])
   ]) {
     let calls = 0
@@ -249,6 +249,19 @@ test('low-confidence, unsupported and invalid AI outputs fall back after one req
     assert.equal(result.parser, true)
     assert.equal(result.filters.conditions[0].field, 'status')
   }
+})
+
+test('explicitly unsupported intent is rejected instead of losing the unsupported condition', async () => {
+  await assert.rejects(intent.parseIntent('active clients with at least three open mandates', {
+    aiCall: async () => structured([{ field: 'status', operator: 'equals', value: 'Active' }], { unsupported: true })
+  }), error => error.code === 'SEARCH_NOT_UNDERSTOOD')
+})
+
+test('a sort-only fallback must not swallow an unparsed constraint', async () => {
+  await assert.rejects(intent.parseIntent('latest clients without a contract', {
+    deterministicParser: async () => null,
+    aiCall: async () => { throw new Error('provider unavailable') }
+  }), error => error.code === 'SEARCH_NOT_UNDERSTOOD')
 })
 
 test('provider or validation failure ends in a bounded keyword fallback when deterministic parsing cannot help', async () => {

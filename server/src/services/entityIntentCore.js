@@ -1,5 +1,9 @@
 const { callAiJson } = require('./aiProvider')
 const {
+  NATURAL_LANGUAGE_GUIDANCE, searchRequest, assertKeywordSearchIsSafe,
+  searchNotUnderstoodError, requiresFilterBeyondSort, fallbackNotice
+} = require('./naturalLanguageSearch')
+const {
   MAX_DEPTH,
   MAX_CONDITIONS,
   MAX_LIST_VALUES,
@@ -301,6 +305,7 @@ function createEntityIntent(config = {}) {
             logic: { type: 'string', enum: ['and', 'or'] },
             filters: {
               type: 'array',
+              minItems: 2,
               maxItems: MAX_CONDITIONS,
               items: { anyOf: [{ $ref: '#/$defs/filter' }, { $ref: '#/$defs/group' }] }
             }
@@ -323,6 +328,7 @@ function createEntityIntent(config = {}) {
         `operators=${(meta.operators || []).join(',')}`,
         meta.aliases?.length ? `aliases=${meta.aliases.join(',')}` : '',
         meta.values?.length ? `values=${meta.values.join(',')}` : '',
+        meta.valueAliases ? `value synonyms=${JSON.stringify(meta.valueAliases)}` : '',
         meta.semantics ? `semantics=${clean(meta.semantics)}` : ''
       ]
       return parts.filter(Boolean).join('; ')
@@ -366,6 +372,7 @@ function createEntityIntent(config = {}) {
     return [
       config.promptIntro,
       `Convert one natural-language ${displayName}-page filter into the strict JSON object described below.`,
+      searchRequest(prompt),
       'Return JSON only. Do not return markdown, prose, SQL, PostgREST, JavaScript, database column names, database functions, mutations, or permission instructions.',
       `You receive only ${singular} field metadata and the user sentence. Never invent fields, operators, enum values, profile IDs, or dates.`,
       'Output exactly these keys: mode, logic, filters, search_text, sort, confidence, unsupported. No additional properties are allowed at any level.',
@@ -379,14 +386,14 @@ function createEntityIntent(config = {}) {
       'Missing, unavailable, blank, whitespace, null, dash, and an empty array mean is_empty. Available, present, and not empty mean is_not_empty.',
       `Today in Asia/Kolkata is ${today}. Resolve relative dates deterministically and return YYYY-MM-DD values or inclusive between boundaries.`,
       'Never discard a reliable filter because a sort is invalid. Omit unsupported sort entries and preserve every valid filter.',
+      ...NATURAL_LANGUAGE_GUIDANCE,
       sortLines
         ? `Sort is an array of at most ${MAX_SORTS} objects with exactly field and direction (asc or desc). Allowed sort fields:\n${sortLines}`
         : 'Sorting is not enabled; sort must be [].',
       ...extraInstructions,
       structuredExample ? `Example structured: ${structuredExample}` : '',
       ...examples.map(example => `Module example: ${example}`),
-      `Allowed ${singular} fields:\n${fields || '(none; use keyword mode or a safe sort)'}`,
-      `User request: ${clean(prompt)}`
+      `Allowed ${singular} fields:\n${fields || '(none; use keyword mode or a safe sort)'}`
     ].map(item => String(item ?? '').trim()).filter(Boolean).join('\n\n')
   }
 
@@ -599,16 +606,22 @@ function createEntityIntent(config = {}) {
     if (issue) throw Object.assign(new Error(issue), { statusCode: 400 })
 
     const aiCall = options.aiCall || callAiJson
+    let unsupported = false
     try {
       const parsed = await aiCall({
         prompt: buildIntentPrompt(prompt, options.allowedFields, options.now || new Date()),
         schema: intentSchema(options.allowedFields),
         schemaName: config.schemaName || `${entityKey}_intent_v2`,
         temperature: 0,
-        primaryOnly: true
+        primaryOnly: true,
+        preservePrompt: true
       })
-      return { filters: validateIntent(parsed, options), ai: true, semantic: true }
+      unsupported = parsed?.unsupported === true
+      const filters = validateIntent(parsed, options)
+      if (filters.mode === 'keyword') assertKeywordSearchIsSafe(prompt)
+      return { filters, ai: true, semantic: true }
     } catch {
+      if (unsupported) throw searchNotUnderstoodError()
       let parsed = null
       let sort = []
       try {
@@ -621,13 +634,17 @@ function createEntityIntent(config = {}) {
         sort = []
       }
       if (parsed?.root || sort.length) {
-        return { filters: deterministicIntent(parsed, sort), parser: true, fallback: true }
+        // A sort alone must not hide filters that the rule parser failed to
+        // understand ("newest clients without a contract", for example).
+        if (!parsed?.root && requiresFilterBeyondSort(prompt)) throw searchNotUnderstoodError()
+        return { filters: deterministicIntent(parsed, sort), parser: true, fallback: true, notice: fallbackNotice() }
       }
+      assertKeywordSearchIsSafe(prompt)
       const fallback = keywordIntent(prompt)
       // Prove that the bounded keyword plan is executable with the caller's
       // visible fields before returning it as the final fallback.
       entityFilter.buildKeywordFilter(fallback.search_text, options)
-      return { filters: fallback, keyword: true, fallback: true }
+      return { filters: fallback, keyword: true, fallback: true, notice: fallbackNotice(true) }
     }
   }
 

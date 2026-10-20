@@ -128,6 +128,10 @@ Supabase or deployed the application.
   own inbox read status. Newly arriving activity remains unread.
 - Current-page unread state refreshes after manual Gmail sync, activity reads,
   returning to the tab and the existing minute refresh.
+- Manual sync never opens the connection dialog automatically. Finished runs,
+  including partial runs with failed email jobs, show a green tick and **Synced**
+  for five seconds. Queued, quota-paused and failed requests use brief button
+  labels without claiming completion. The info icon opens the retained details.
 
 `server/src/services/crmActivityReads.test.js` exercises real PostgreSQL receipts,
 idempotency, concurrent arrivals, sentiment choice and browser-role denial.

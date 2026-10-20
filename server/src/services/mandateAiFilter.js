@@ -185,7 +185,13 @@ const mandateAiFilter = createEntityFilter({
     'consultant is a true array: contains_any means either assignee, contains_all means every named assignee, and not_contains excludes an exact array element.',
     'budget is measured in LPA and compared against parsed stored range-label bounds, never lexical label order.',
     'experience is measured in years and compared against experience_min plus the parsed experience_label maximum.',
-    'date_of_allocation always uses allocation_date, never created_at.'
+    'date_of_allocation always uses allocation_date, never created_at.',
+    'Hiring for/looking for/need a role maps to role; for a named employer maps to client_name. Tech/fintech/business function describes sector. Remote is a location text match; work mode and JD file contents are not separate searchable fields.',
+    'Active/open/running/in progress means Ongoing (P1); delivered means Delivered (P2); on hold means Paused (P3); closed/done means Completed; cancelled/dropped means Scrapped.',
+    'A missing JD/description attachment means jd is_empty. JD available/attached means jd is_not_empty. Do not search the contents of the attached JD.',
+    'A mandate budget is an interval in LPA: above N uses the upper bound, below N uses the lower bound, and between uses overlapping ranges. Do not claim the whole stored range lies inside the requested interval.',
+    'Example request: "Open finance roles in either Bangalore or Pune, at least 20 LPA, assigned to both Cherry and Rahul but not Amit". Use AND of status equals Ongoing (P1), sector equals Financial Services, an OR location group for Bangalore/Bengaluru/Pune, budget greater_than_or_equal 20, consultant contains_all ["Cherry","Rahul"], and consultant not_contains "Amit". search_text=null.',
+    'Example request: "Roles allocated last month with no JD, highest budget first". Use date_of_allocation between that calendar month\'s boundaries, jd is_empty, and sort [{"field":"budget","direction":"desc"}]. Do not use created_at.'
   ]
 })
 
