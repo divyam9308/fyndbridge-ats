@@ -143,6 +143,19 @@ Existing files modified:
 
 ## Verification boundaries
 
+Status feedback follow-up (20 October 2026): choosing a status immediately overlays
+the row's badge and tone while the existing authorized PATCH runs asynchronously.
+Pending choices survive realtime/focus refreshes; mutation revisions discard list
+responses started before a status operation settled. Each row accepts one status
+save at a time, while other rows remain usable. Transfer, row actions, selected
+deletion and Delete All are guarded against conflicting pending saves. Success
+updates the cached row and selection, then refreshes server ordering, timestamps,
+counts and permissions in the background. Failure removes the optimistic overlay,
+keeps an error visible and refreshes authoritative state (including a possible
+commit with a lost response). No backend transaction or authorization logic was
+moved outside the durable save. Runtime checks were not run for this follow-up,
+at the user's request.
+
 Synthetic fixtures are labelled Test/Example and never connect to production. Node API tests invoke the actual Express routes and candidate controller with a Supabase-compatible query adapter backed by isolated PostgreSQL. Browser tests run the real React application and those routes with synthetic Auth/session fixtures; uploads travel directly from the browser to the local fixture API. Storage is simulated in tests. These checks do not prove deployed Supabase Auth/Storage or real-user acceptance.
 
 PGlite serializes execution through one local database instance. Retry/idempotency and transactional rollback are tested, but these are not multi-connection production concurrency/load measurements.
