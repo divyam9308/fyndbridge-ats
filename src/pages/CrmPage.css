@@ -1,12 +1,20 @@
 .crm-page { min-width: 0; }
-.crm-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
-.crm-search { display: flex; align-items: center; position: relative; margin-left: auto; width: 280px; }
+.crm-toolbar { display: grid; grid-template-columns: auto minmax(110px, 1fr) auto minmax(100px, .6fr) minmax(120px, .8fr) auto; align-items: center; gap: 8px; margin-bottom: 20px; }
+.crm-toolbar > * { min-width: 0; }
+.crm-toolbar > .btn-primary, .crm-toolbar > .btn-secondary { white-space: nowrap; padding: 9px 10px; font-size: 12px; }
+.crm-toolbar > .filter-select { width: 100%; font-size: 12px; padding-left: 9px; padding-right: 22px; }
+.crm-search { display: flex; align-items: center; position: relative; min-width: 0; }
 .crm-search svg { position: absolute; left: 12px; color: var(--gray-500); }
-.crm-search input { padding-left: 36px; }
+.crm-search input { padding-left: 33px; width: 100%; min-width: 0; font-size: 12px; }
 .crm-table { table-layout: fixed; min-width: 2525px; }
 .crm-delete-organisation { color: var(--danger, #dc3545); }
 .btn-primary.crm-confirm-delete, .btn-primary.crm-confirm-delete:hover { background: var(--danger, #dc3545); color: white; }
 .crm-table td { overflow-wrap: anywhere; }
+.crm-contact-cell { overflow: hidden; }
+.crm-contact-cell .inline-action-cell { display: flex; min-width: 0; max-width: 100%; gap: 6px; }
+.crm-contact-name { min-width: 0; flex: 1 1 auto; white-space: normal; overflow-wrap: anywhere; }
+.crm-contact-cell .compact-select { min-width: 0; width: 0; flex: 1 1 auto; }
+.crm-contact-cell .row-action-btn { flex: 0 0 auto; }
 /* Match Assigned Candidates' added, neutral and negative row tints. */
 .crm-table tbody tr.crm-unread-positive, .crm-history-entry.crm-unread-positive { background: #e2f3e7; }
 .crm-table tbody tr.crm-unread-neutral, .crm-history-entry.crm-unread-neutral { background: #f1f3f5; }
@@ -36,7 +44,8 @@
 .crm-error { padding: 12px 16px; border: 1px solid var(--danger); border-radius: 8px; color: var(--danger); margin-bottom: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .crm-history-entry { padding: 14px 0; border-bottom: 1px solid var(--gray-100); overflow-wrap: anywhere; white-space: pre-wrap; }
 .crm-history-entry p { margin: 5px 0; }
-@media (max-width: 760px) { .crm-search { margin-left: 0; width: 100%; } .crm-toolbar > .btn-primary { order: -1; } }
+@media (max-width: 1000px) { .crm-toolbar { display: flex; flex-wrap: wrap; } .crm-search { flex: 1 1 160px; } .crm-toolbar > .filter-select { width: auto; } }
+@media (max-width: 760px) { .crm-search { flex: 1 1 180px; } }
 /* Constrain the flex item so the wide table scrolls inside the ATS content. */
 .dashboard-main:has(.crm-page) { min-width: 0; }
 .crm-page > .page-header { justify-content: flex-start; }
@@ -63,9 +72,10 @@
 .crm-probability-high { background: #fff5cf; color: #7a5c00; border: 1px solid #ecdc9c; }
 .crm-probability-highest { background: #D4EDDA; color: #155724; border: 1px solid #b8dac1; }
 
-.crm-gmail-control { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.crm-gmail-control { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.crm-toolbar .crm-gmail-control .btn-secondary { padding: 9px 10px; font-size: 12px; gap: 6px; }
 .crm-gmail-button { color: var(--brand-blue, #001264); white-space: nowrap; }
-.crm-gmail-sync { white-space: nowrap; min-width: 110px; }
+.crm-gmail-sync { white-space: nowrap; min-width: 96px; }
 .crm-gmail-sync.is-syncing svg { animation: crm-gmail-spin 1s linear infinite; }
 .crm-gmail-sync.is-synced { color: #15803d; border-color: #86efac; background: #f0fdf4; }
 @keyframes crm-gmail-spin { to { transform: rotate(360deg); } }

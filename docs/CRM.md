@@ -55,6 +55,15 @@ Editing a record excludes itself and rechecks a changed organisation name.
 
 ## Database and API
 
+CRM contact rules now require only Organisation Name and Contact Person. Mobile,
+email and other contact details are optional; a supplied email/LinkedIn URL is
+still validated, and duplicate checks ignore blank phone/email values. Apply
+`20261020042221_crm_optional_contact_details.sql` before deploying these form changes.
+The CRM toolbar uses one desktop row in this order: New, search, Read all,
+Follow-ups, sort, Gmail disconnect, sync, connection details. Narrow screens wrap
+the controls. The top bar supplies the page heading. Long contact names wrap within
+their table cell and contact controls remain inside that column.
+
 Migration `supabase/migrations/20261019105523_business_development_crm.sql` was applied
 to the configured ATS FYNDBRIDGE Supabase project (`owheruvatjcfqwsejnmo`) on
 19 October 2026. The local filename matches hosted migration version `20261019105523`.

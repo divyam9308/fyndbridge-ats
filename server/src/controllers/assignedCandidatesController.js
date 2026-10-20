@@ -30,11 +30,10 @@ async function getRow(req, { write = true } = {}) {
   if (!row) throw fail('Assignment not found.', 404)
   return row
 }
-async function adminContext(req) { const result = await context(req); if (!result.admin) throw fail('Admin required.', 403); return result }
 async function creationContext(req) { const result = await context(req); if (!result.canCreate) throw fail('New / Delete All access required.',403); return result }
 const handle = fn => async (req, res) => {
   try { await fn(req, res) } catch (error) {
-    const status = error.statusCode || (error.code === '42501' ? 403 : ['22023','23505','P0001','23514','22P02'].includes(error.code) ? 409 : error.code === 'P0002' ? 404 : 500)
+    const status = error.statusCode || (error.code === '42501' ? 403 : ['22023','23505','P0001','23514','22P02','40001'].includes(error.code) ? 409 : error.code === 'P0002' ? 404 : 500)
     if (status === 500) console.error('assigned candidates:', error.code || error.message)
     res.status(status).json({ error: status === 500 ? 'Unable to complete this request. Please retry.' : error.message })
   }
@@ -102,21 +101,34 @@ exports.create = handle(async(req,res)=>{
   res.status(201).json({count:saved})
 })
 exports.status = handle(async(req,res)=>{
-  await getRow(req)
-  const {admin}=await context(req)
+  await creationContext(req)
   if(!ASSIGNED_STATUSES.includes(req.body.status)) throw fail('Select a valid status.')
-  let query=supabase.from('assigned_candidates').update({status:req.body.status}).eq('id',req.params.id)
-  if(!admin) query=query.eq('assigned_consultant_id',req.user.id)
-  const result=await query.select('id').maybeSingle()
-  if(!unwrap(result)) throw fail('Assignment no longer exists.',404)
+  const row=await getRow(req)
+  unwrap(await supabase.rpc('update_assigned_candidate',{p_actor:req.user.id,p_id:row.id,p_data:{status:req.body.status},p_expected_version:row.version}))
   res.json({success:true})
 })
+exports.detail = handle(async(req,res)=>{
+  await creationContext(req)
+  const row=await getRow(req)
+  res.json({data:Object.fromEntries(['full_name','mobile_number','client_id','job_id','assigned_consultant_id','status','version'].map(key=>[key,row[key]]))})
+})
+exports.update = handle(async(req,res)=>{
+  await creationContext(req)
+  const row=await getRow(req)
+  const allowed=new Set(['full_name','mobile_number','client_id','job_id','assigned_consultant_id','status','expected_version'])
+  if (!req.body || Object.keys(req.body).some(key=>!allowed.has(key)) || !Number.isSafeInteger(req.body.expected_version) || req.body.expected_version<1) throw fail('Send valid assignment fields and the original record version.')
+  const values=validateAssignment({...row,...req.body})
+  await validateMandateReference(supabase,values)
+  const changes=Object.fromEntries(['full_name','mobile_number','client_id','job_id','assigned_consultant_id','status'].map(key=>[key,values[key]]))
+  const data=unwrap(await supabase.rpc('update_assigned_candidate',{p_actor:req.user.id,p_id:row.id,p_data:changes,p_expected_version:req.body.expected_version}))
+  res.json({data})
+})
 exports.reassign = handle(async(req,res)=>{
-  await adminContext(req)
+  await creationContext(req)
   const row=await getRow(req); const id=req.body.assigned_consultant_id
   const employees=await listEmployeeDirectory()
   if(!employees.some(e=>e.user_id===id&&e.status==='active')) throw fail('Select an Active consultant.')
-  unwrap(await supabase.from('assigned_candidates').update({assigned_consultant_id:id}).eq('id',row.id))
+  unwrap(await supabase.rpc('update_assigned_candidate',{p_actor:req.user.id,p_id:row.id,p_data:{assigned_consultant_id:id},p_expected_version:row.version}))
   res.json({success:true})
 })
 exports.cv = handle(async(req,res)=>{
@@ -125,6 +137,7 @@ exports.cv = handle(async(req,res)=>{
   res.json({url:data.signedUrl,fileName:cv.cv_original_name,contentType:cv.cv_mimetype})
 })
 exports.parse = handle(async(req,res)=>{
+  await creationContext(req)
   const row=await getRow(req)
   const file=path.join(os.tmpdir(),`${randomUUID()}.pdf`)
   try {
@@ -136,6 +149,7 @@ exports.parse = handle(async(req,res)=>{
   } finally {await fs.unlink(file).catch(()=>{})}
 })
 async function transfer(req,res) {
+  await creationContext(req)
   const row=await getRow(req)
   if(row.added_at) return res.json({candidate_id:row.candidate_id,association_id:row.association_id,idempotent:true})
   if(row.status === 'Not Relevant') throw fail('Not Relevant assignments cannot be added to Candidates.',409)
@@ -157,7 +171,7 @@ exports.review = handle(async(req,res)=>{
 exports.remove = handle(async(req,res)=>{
   const access=await context(req)
   const all=req.body.contacted_only===true
-  if (all ? !access.canCreate : !access.admin) throw fail(all?'Delete All access required.':'Admin required.',403)
+  if (!access.canCreate) throw fail('New / Delete access required.',403)
   const {scope}=access
   const ids=req.params.id?[req.params.id]:req.body.ids
   if(!all&&(!Array.isArray(ids)||!ids.length||ids.some(id=>!isUuid(id)))) throw fail('Select valid assignments to delete.')

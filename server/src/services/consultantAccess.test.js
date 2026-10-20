@@ -42,7 +42,7 @@ test('selected-consultant permissions persist and enforce separate CRM, New/Dele
     assert.equal((await request('/api/admin/page-view-permissions','PATCH',{pageKey:'crm',viewPermission:'invalid',allowedUserIds:[]})).status,400)
     await assert.rejects(db.query("update page_view_permissions set allowed_user_ids=array[null]::uuid[] where page_key='crm'"),error=>error.code==='23514')
   })
-  await t.test('New permission permits owned uploads and atomic creation without overall access or row admin powers',async()=>{
+  await t.test('New permission permits owned uploads, creation and own-row actions without overall access',async()=>{
     await set('assigned_candidates_manage',[CONSULTANT]);current=CONSULTANT
     const result=await request('/api/assigned-candidates')
     assert.equal(result.can_create,true);assert.equal(result.can_delete_all,true);assert.equal(result.can_view_overall,false);assert.equal(result.can_manage,false)
@@ -50,8 +50,9 @@ test('selected-consultant permissions persist and enforce separate CRM, New/Dele
     await upload(db,806,CONSULTANT)
     const created=await request('/api/assigned-candidates','POST',{rows:[{upload_id:id(806),full_name:'Delegated assignment',mobile_number:'9876543210',client_id:CLIENT,job_id:JOB,assigned_consultant_id:OTHER,status:'Not Contacted'}]})
     assert.equal(created.status,201,JSON.stringify(created))
-    assert.equal((await request(`/api/assigned-candidates/${own.id}/consultant`,'PATCH',{assigned_consultant_id:OTHER})).status,403)
-    assert.equal((await request(`/api/assigned-candidates/${own.id}`,'DELETE',{})).status,403)
+    assert.equal((await request(`/api/assigned-candidates/${own.id}/consultant`,'PATCH',{assigned_consultant_id:CONSULTANT})).status,200)
+    const disposable=await assign(db,807)
+    assert.equal((await request(`/api/assigned-candidates/${disposable.id}`,'DELETE',{})).status,200)
     assert.equal((await request(`/api/assigned-candidates?consultant_id=${OTHER}`)).status,403)
   })
   await t.test('delegated Delete All is own-scope, contacted-only and cannot be changed into selected-ID deletion',async()=>{
@@ -72,8 +73,8 @@ test('selected-consultant permissions persist and enforce separate CRM, New/Dele
     const count=await request('/api/assigned-candidates/count');assert.equal(count.threshold,50);assert.equal(count.can_view_overall,true)
     const colleague=result.data.find(row=>row.assigned_consultant_id===CONSULTANT)
     assert.equal((await request(`/api/assigned-candidates/${colleague.id}/cv`)).status,200)
-    assert.equal((await request(`/api/assigned-candidates/${colleague.id}/status`,'PATCH',{status:'Interested'})).status,404)
-    assert.equal((await request(`/api/assigned-candidates/${colleague.id}/transfer`,'POST',{})).status,404)
+    assert.equal((await request(`/api/assigned-candidates/${colleague.id}/status`,'PATCH',{status:'Interested'})).status,403)
+    assert.equal((await request(`/api/assigned-candidates/${colleague.id}/transfer`,'POST',{})).status,403)
     assert.equal((await request('/api/assigned-candidates/delete','POST',{contacted_only:true})).status,403)
     current=CONSULTANT;const individual=await request('/api/assigned-candidates/count');assert.equal(individual.threshold,10);assert.equal(individual.can_view_overall,false)
   })

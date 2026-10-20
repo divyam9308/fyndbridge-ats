@@ -58,7 +58,7 @@ export function CrmClientForm({ record, onClose, onSaved }) {
       if (duplicate.source === 'crm') {
         const { data } = await crmRequest(`/${duplicate.id}`)
         setTarget(data)
-        setForm({ ...data, contacts: [...data.contacts, ...form.contacts.filter(contact => (contact.name || contact.mobile || contact.email) && !data.contacts.some(existing => existing.email.trim().toLowerCase() === contact.email.trim().toLowerCase() || existing.mobile.replace(/\s+/g, '') === contact.mobile.replace(/\s+/g, '')))], comment: form.comment })
+        setForm({ ...data, contacts: [...data.contacts, ...form.contacts.filter(contact => (contact.name || contact.mobile || contact.email) && !data.contacts.some(existing => (contact.email?.trim() && existing.email?.trim().toLowerCase() === contact.email.trim().toLowerCase()) || (contact.mobile?.trim() && existing.mobile?.replace(/\s+/g, '') === contact.mobile.replace(/\s+/g, ''))))], comment: form.comment })
       } else {
         // Select the existing ATS identity, but save only in CRM.
         setForm(current => ({ ...current, organisation_name: duplicate.organisation_name, ats_client_id: duplicate.id }))
@@ -97,7 +97,7 @@ export function CrmClientForm({ record, onClose, onSaved }) {
       </div>
       {form.contacts.map((contact, index) => <section className="crm-contact-form" key={index} aria-label={`Contact ${index + 1}`}>
         <div className="crm-contact-heading"><span className="section-label">Contact {index + 1}</span>{form.contacts.length > 1 && <button type="button" className="row-action-btn" title={`Remove Contact ${index + 1}`} onClick={() => set('contacts', form.contacts.filter((_, i) => i !== index))}><Trash2 size={14} /></button>}</div>
-        <div className="form-grid-2">{[['name', 'Contact Person', true], ['mobile', 'Mobile', true], ['email', 'Email', true], ['designation', 'Designation'], ['linkedin', 'LinkedIn']].map(([key, label, required]) => field(`contacts.${index}.${key}`, label, { value: contact[key] || '', required, type: key === 'email' ? 'email' : 'text', maxLength: key === 'name' ? 200 : key === 'mobile' ? 100 : key === 'email' ? 320 : 500, onChange: value => contactSet(index, key, value) }))}</div>
+        <div className="form-grid-2">{[['name', 'Contact Person', true], ['mobile', 'Mobile'], ['email', 'Email'], ['designation', 'Designation'], ['linkedin', 'LinkedIn']].map(([key, label, required]) => field(`contacts.${index}.${key}`, label, { value: contact[key] || '', required, type: key === 'email' ? 'email' : 'text', maxLength: key === 'name' ? 200 : key === 'mobile' ? 100 : key === 'email' ? 320 : 500, onChange: value => contactSet(index, key, value) }))}</div>
       </section>)}
       <button type="button" className="btn-secondary crm-add-contact" disabled={form.contacts.length >= 50} onClick={() => set('contacts', [...form.contacts, emptyContact()])}><Plus size={14} /> Add Contact Person</button>
       <div className="form-grid-2">

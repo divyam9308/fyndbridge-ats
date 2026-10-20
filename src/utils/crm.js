@@ -16,12 +16,12 @@ export function validLinkedIn(value) {
 }
 export function validateCrm(form) {
   const errors = {}
-  if (!form.organisation_name.trim()) errors.organisation_name = 'Organisation Name is required'
+  if (!String(form.organisation_name || '').trim()) errors.organisation_name = 'Organisation Name is required'
   form.contacts.forEach((contact, index) => {
-    if (!contact.name.trim()) errors[`contacts.${index}.name`] = `Contact ${index + 1}: Contact Person is required`
-    if (!contact.mobile.trim()) errors[`contacts.${index}.mobile`] = `Contact ${index + 1}: Mobile is required`
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim())) errors[`contacts.${index}.email`] = `Contact ${index + 1}: Enter a valid email`
-    if (!validLinkedIn(contact.linkedin.trim())) errors[`contacts.${index}.linkedin`] = `Contact ${index + 1}: Enter a valid HTTPS LinkedIn profile URL`
+    if (!String(contact.name || '').trim()) errors[`contacts.${index}.name`] = `Contact ${index + 1}: Contact Person is required`
+    const email = String(contact.email || '').trim()
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors[`contacts.${index}.email`] = `Contact ${index + 1}: Enter a valid email`
+    if (!validLinkedIn(String(contact.linkedin || '').trim())) errors[`contacts.${index}.linkedin`] = `Contact ${index + 1}: Enter a valid HTTPS LinkedIn profile URL`
   })
   return errors
 }

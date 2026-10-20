@@ -15,13 +15,16 @@ const navItems = [
   { to: '/dashboard',            label: 'Dashboard', key: 'dashboard', Icon: LayoutDashboard, end: true },
   { to: '/dashboard/jobs',       label: 'Mandates', key: 'mandates', Icon: Briefcase },
   { to: '/dashboard/clients',    label: 'Clients', key: 'clients', Icon: Building2 },
-  { to: '/dashboard/crm', label: 'CRM', key: 'crm', Icon: Handshake },
   { to: '/dashboard/candidates', label: 'Candidates', key: 'candidates', Icon: Users },
-  { to: '/dashboard/assigned-candidates', label: 'Assigned Candidates', key: 'assigned_candidates', Icon: UserRoundCheck },
   { to: '/dashboard/attendance', label: 'Attendance', key: 'attendance', Icon: CalendarCheck },
   { to: '/dashboard/reports/consultant', label: 'Report', key: 'report', Icon: ChartNoAxesCombined },
   { to: '/dashboard/performance', label: 'PMS', key: 'performance_review', Icon: ClipboardList },
   { to: '/dashboard/user-manual', label: 'User Manual', key: 'user_manual', Icon: BookOpenText },
+  { to: '/invoice', label: 'Invoice', key: 'invoice', Icon: FileText },
+  { to: '/dashboard/crm', label: 'CRM', key: 'crm', Icon: Handshake },
+  { to: '/dashboard/assigned-candidates', label: 'Assigned Candidates', key: 'assigned_candidates', Icon: UserRoundCheck },
+  // Admin Panel retains the existing Invoice visibility gate.
+  { to: '/dashboard/admin', label: 'Admin Panel', key: 'invoice', Icon: ShieldCheck },
 ]
 
 const trailingNavItems = [
@@ -161,34 +164,6 @@ export default function Sidebar() {
       {/* Nav links */}
       <nav className="sidebar-nav">
         {!pageViews.loading && navItems.filter(item => pageViews.canView(item.key)).map(renderNavItem)}
-        {!pageViews.loading && pageViews.canView('invoice') && (
-          <>
-          <NavLink
-            to="/invoice"
-            className={({ isActive }) =>
-              `sidebar-nav-link${isActive ? ' active' : ''}`
-            }
-            id="nav-invoice"
-            onPointerEnter={() => preload('/invoice')}
-            onFocus={() => preload('/invoice')}
-          >
-            <span className="nav-icon"><FileText size={17} strokeWidth={1.8} /></span>
-            <span className="sidebar-nav-label">Invoice</span>
-          </NavLink>
-          <NavLink
-            to="/dashboard/admin"
-            className={({ isActive }) =>
-              `sidebar-nav-link${isActive ? ' active' : ''}`
-            }
-            id="nav-admin-panel"
-            onPointerEnter={() => preload('/dashboard/admin')}
-            onFocus={() => preload('/dashboard/admin')}
-          >
-            <span className="nav-icon"><ShieldCheck size={17} strokeWidth={1.8} /></span>
-            <span className="sidebar-nav-label">Admin Panel</span>
-          </NavLink>
-          </>
-        )}
         {!pageViews.loading && trailingNavItems.filter(item => item.external || pageViews.canView(item.key)).map(renderNavItem)}
       </nav>
 

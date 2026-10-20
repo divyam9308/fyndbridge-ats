@@ -37,7 +37,7 @@ test('mandatory-only creation, native modal, multi-contact association and durab
   await add(page, 'Browser CRM', true)
   await expect(page.getByLabel('Assigned Consultant')).toHaveValue(crm.USER_ID)
   await expect(page.getByLabel('Assigned Consultant')).not.toContainText('Former Consultant')
-  expect(await dialog(page).locator('input[required]').count()).toBe(7)
+  expect(await dialog(page).locator('input[required]').count()).toBe(3)
   await page.getByLabel('Comments', { exact: true }).fill('Initial outreach sent.')
   await page.getByLabel('Assigned Consultant').selectOption(crm.OTHER)
   if (info.project.name === 'chromium') await page.screenshot({ animations: 'disabled', path: 'outputs/crm-verification/add-client.png' })

@@ -8,6 +8,7 @@ async function start() {
   for (const key of Object.keys(process.env)) if (/GEMINI.*KEY|SUPABASE.*KEY/.test(key)) delete process.env[key]
   const db = await createDatabase()
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019105523_business_development_crm.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261020042221_crm_optional_contact_details.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019110948_crm_probability_sorting.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019165228_crm_gmail_integration.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019182711_crm_gmail_manual_sync.sql'), 'utf8'))

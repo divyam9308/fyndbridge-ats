@@ -15,6 +15,7 @@ import AssignmentTransferWizard from '../features/assigned-candidates/Assignment
 import AssignmentSelectionDock from '../features/assigned-candidates/AssignmentSelectionDock'
 import { ASSIGNMENT_STATUSES, ASSIGNMENT_STATUS_BADGE_MAP } from '../features/assigned-candidates/assignmentStatuses'
 import AssignmentSelect from '../features/assigned-candidates/AssignmentSelect'
+import AssignmentEditor from '../features/assigned-candidates/AssignmentEditor'
 import { assignedRequest, assignmentsChanged, openAssignedCv } from '../services/assignedCandidatesApi'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import { lockBodyScroll } from '../utils/lockBodyScroll'
@@ -53,6 +54,7 @@ export default function AssignedCandidatesPage() {
   const [dropdown, setDropdown] = useState(null)
   const [menu, setMenu] = useState(null)
   const [reassign, setReassign] = useState(null)
+  const [editing, setEditing] = useState(null)
   const [rowBusy, setRowBusy] = useState('')
   const [openingDocument, setOpeningDocument] = useState('')
   const openingCvs = useRef(new Set())
@@ -72,7 +74,7 @@ export default function AssignedCandidatesPage() {
       setSelection(current => {
         const next = new Map(current)
         for (const row of payload.data) if (next.has(row.id)) {
-          if (!payload.can_manage && (!canTransfer(row) || row.assigned_consultant_id !== payload.current_user_id)) next.delete(row.id)
+          if (!payload.can_create || (!payload.can_manage && row.assigned_consultant_id !== payload.current_user_id)) next.delete(row.id)
           else next.set(row.id,row)
         }
         return next
@@ -99,7 +101,8 @@ export default function AssignedCandidatesPage() {
       .then(result => setCleanupPending(Boolean(result.cleanup_pending))).catch(() => setCleanupPending(true))
   }, [canCreate])
   const consultants = data?.consultants || []
-  const selectableRows = (data?.data || []).filter(row => admin || (canTransfer(row) && row.assigned_consultant_id === data?.current_user_id))
+  const canAct = row => canCreate && (admin || row.assigned_consultant_id === data?.current_user_id)
+  const selectableRows = (data?.data || []).filter(canAct)
   const selectedOnPage = selectableRows.filter(row => selection.has(row.id)).length
   const selectedRows = [...selection.values()]
   const canAddSelection = selectedRows.length > 0 && selectedRows.every(canTransfer)
@@ -126,8 +129,7 @@ export default function AssignedCandidatesPage() {
         if (!current.has(row.id)) return current
         const next = new Map(current)
         const updated = { ...current.get(row.id), status: value }
-        if (!admin && !canTransfer(updated)) next.delete(row.id)
-        else next.set(row.id, updated)
+        next.set(row.id, updated)
         return next
       })
       changed()
@@ -161,7 +163,7 @@ export default function AssignedCandidatesPage() {
     if (keyboard) window.requestAnimationFrame(() => statusOptions.current?.querySelector('[aria-checked="true"]')?.focus({ preventScroll: true }))
   }
   return <div className={`assigned-page${selection.size ? ' has-bulk-selection' : ''}`}>
-    <div className="assigned-toolbar"><h2>Assigned Candidates</h2><div className="assigned-controls">
+    <div className="assigned-toolbar"><div className="assigned-controls">
       {canViewOverall && <button ref={scopeButton} className="filter-select assigned-consultant-filter" aria-label="Consultant filter" aria-expanded={Boolean(dropdown)} onClick={() => { setStatusMenu(null); setDropdown(dropdown ? null : {rect:scopeButton.current.getBoundingClientRect(),element:scopeButton.current}) }}>{scope ? <ConsultantChip name={selectedName} /> : selectedName}<ChevronDown size={14} /></button>}
       {canCreate && <button className="btn-primary" onClick={() => setWizard(true)} disabled={loading || !consultants.length}><Plus size={15} />New</button>}
       {canDeleteAll && <button className="btn-secondary" disabled={loading || !data?.total} onClick={() => { setError(''); setConfirm({ all: true }) }}>Delete All</button>}
@@ -177,18 +179,18 @@ export default function AssignedCandidatesPage() {
       <colgroup><col style={{ width: 44 }} />{[220,120,180,210,190,...(showConsultant ? [200] : []),150,150,110,210].map((width,index) => <col key={index} style={{ width }} />)}</colgroup>
       <thead><tr><th className="assigned-selection-cell"><input type="checkbox" aria-label="Select all assignments on this page" disabled={loading || !selectableRows.length} checked={selectedOnPage > 0 && selectedOnPage === selectableRows.length} ref={node => { if (node) node.indeterminate = selectedOnPage > 0 && selectedOnPage < selectableRows.length }} onChange={event => selectRows(selectableRows,event.target.checked)} /></th>{['Name', 'Mobile', 'Client', 'Mandate', 'Status', ...(showConsultant ? ['Consultant'] : []), 'Assigned Date', 'Contacted Date', 'CV', 'Actions'].map(label => <th key={label} style={label === 'CV' ? { textAlign: 'center' } : undefined}>{label}</th>)}</tr></thead>
       <tbody>{loading ? <tr><td colSpan={columnCount} className="table-loading-cell"><FyndbridgeLoader /></td></tr> : data?.data?.length ? data.data.map(row => <tr key={row.id} className={`assigned-group-${rowTone(row)}${row.added_at ? ' assigned-added' : ''}${selection.has(row.id) ? ' is-selected' : ''}`}>
-        <td className="assigned-selection-cell"><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selection.has(row.id)} disabled={!admin && (!canTransfer(row) || row.assigned_consultant_id !== data?.current_user_id)} onChange={event => selectRows([row],event.target.checked)} /></td>
+        <td className="assigned-selection-cell"><input type="checkbox" aria-label={`Select ${row.full_name}`} checked={selection.has(row.id)} disabled={!canAct(row)} onChange={event => selectRows([row],event.target.checked)} /></td>
         <td><CandidateName name={row.full_name} /></td><td className="assigned-mobile">{row.mobile_number}</td><td className="cell-ellipsis" title={row.clients?.name || row.clients?.client_name}>{row.clients?.name || row.clients?.client_name || '-'}</td><td className="cell-ellipsis" title={row.jobs?.title}>{row.jobs?.title || '-'}</td>
-        <td><div className="candidate-columns-control mandate-status-control"><button type="button" className={`badge ${ASSIGNMENT_STATUS_BADGE_MAP[row.status] || 'badge-status-unset'}`} aria-label={`Status for ${row.full_name}: ${row.status}`} aria-haspopup="menu" aria-expanded={statusMenu?.row.id === row.id} disabled={rowBusy === row.id || (!admin && row.assigned_consultant_id !== data?.current_user_id)} onClick={event => openStatus(row,event.currentTarget,event.detail === 0)} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); openStatus(row,event.currentTarget,true) } }}>{row.status}</button></div></td>
+        <td><div className="candidate-columns-control mandate-status-control"><button type="button" className={`badge ${ASSIGNMENT_STATUS_BADGE_MAP[row.status] || 'badge-status-unset'}`} aria-label={`Status for ${row.full_name}: ${row.status}`} aria-haspopup="menu" aria-expanded={statusMenu?.row.id === row.id} disabled={rowBusy === row.id || !canAct(row)} onClick={event => openStatus(row,event.currentTarget,event.detail === 0)} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); openStatus(row,event.currentTarget,true) } }}>{row.status}</button></div></td>
         {showConsultant && <td><ConsultantChip name={row.assigned_consultant_name || consultants.find(c => c.id === row.assigned_consultant_id)?.name} /></td>}
         <td>{formatDateDDMMYYYY(row.assigned_at)}</td><td>{formatDateDDMMYYYY(row.contacted_at)}</td>
         <td style={{ textAlign: 'center' }}><DocumentIconGroup attachments={[{ path: row.id, name: row.assigned_candidate_uploads?.cv_original_name || `${row.full_name} CV` }]} keyPrefix="assigned-cv" openingKey={openingDocument} onOpen={key => viewCv(row, key)} /></td>
         <td><div className="assigned-row-actions">
-          {row.added_at ? <span className="badge badge-status-unset">Added</span> : <button className="assigned-add" disabled={!canTransfer(row) || (!admin && row.assigned_consultant_id !== data?.current_user_id)} title={row.status === 'Not Relevant' ? 'Not Relevant assignments cannot be added to Candidates' : ['Not Contacted', 'Didn’t Pick Up'].includes(row.status) ? 'Contact the candidate and update their status first' : 'Add to Candidates'} onClick={() => setTransfer(transferDetails(row))}>Add to Candidates</button>}
-          {admin && <button className="row-action-btn" aria-label={`Actions for ${row.full_name}`} onClick={event => setMenu({ row, anchor: event.currentTarget.getBoundingClientRect() })}><MoreHorizontal size={17} /></button>}</div></td>
+          {row.added_at ? <span className="badge badge-status-unset">Added</span> : <button className="assigned-add" disabled={!canAct(row) || !canTransfer(row)} title={row.status === 'Not Relevant' ? 'Not Relevant assignments cannot be added to Candidates' : ['Not Contacted', 'Didn’t Pick Up'].includes(row.status) ? 'Contact the candidate and update their status first' : 'Add to Candidates'} onClick={() => setTransfer(transferDetails(row))}>Add to Candidates</button>}
+          {canAct(row) && <button className="row-action-btn" aria-label={`Actions for ${row.full_name}`} onClick={event => setMenu({ row, element: event.currentTarget, anchor: event.currentTarget.getBoundingClientRect() })}><MoreHorizontal size={17} /></button>}</div></td>
       </tr>) : <tr><td colSpan={columnCount} className="table-empty-cell">No assigned candidates{admin ? '. Select a consultant and click New to assign CVs.' : '.'}</td></tr>}</tbody>
     </table></div><PaginationBar page={page} totalPages={data?.totalPages || 1} total={data?.total || 0} pageSize={limit} onPageChange={setPage} onPageSizeChange={value => { setLimit(value); setPage(1); setSelection(new Map()) }} loading={loading} /></div>
-    <AssignmentSelectionDock count={selection.size} admin={admin} canAdd={canAddSelection} hidden={loading || Boolean(wizard || transfer || bulkTransfer || confirm || reassign)} onClear={() => setSelection(new Map())}
+    <AssignmentSelectionDock count={selection.size} canDelete={canCreate} canAdd={canAddSelection && canCreate} hidden={!canCreate || loading || Boolean(wizard || transfer || bulkTransfer || confirm || reassign || editing)} onClear={() => setSelection(new Map())}
       onDelete={() => { setError(''); setConfirm({ ids: [...selection.keys()] }) }}
       onAdd={() => { if (canAddSelection) { setError(''); setBulkTransfer(selectedRows.map(transferDetails)) } }} />
     {statusMenu && <FloatingDropdown fitViewport anchorRect={statusMenu.rect} ignoreElement={statusMenu.element} width={200} className="table-portal-popover" onClose={() => setStatusMenu(null)}><div ref={statusOptions} role="menu" aria-label={`Status for ${statusMenu.row.full_name}`} onKeyDown={event => {
@@ -201,7 +203,8 @@ export default function AssignedCandidatesPage() {
         next?.focus({ preventScroll: true }); next?.scrollIntoView({ block: 'nearest' })
       }
     }}>{ASSIGNMENT_STATUSES.map(value => <button type="button" role="menuitemradio" aria-checked={value === statusMenu.row.status} className="candidate-columns-action" key={value} onClick={() => status(statusMenu.row,value)}>{value}</button>)}</div></FloatingDropdown>}
-    {menu && <FloatingDropdown fitViewport anchorRect={menu.anchor} width={190} onClose={() => setMenu(null)}><button className="assigned-consultant-option" onClick={() => { setReassign({ id: menu.row.id, consultant: menu.row.assigned_consultant_id }); setMenu(null) }}>Reassign consultant</button><button className="assigned-consultant-option" onClick={() => { setConfirm({ ids: [menu.row.id] }); setMenu(null) }}>Delete assignment</button></FloatingDropdown>}
+    {menu && canAct(menu.row) && <FloatingDropdown fitViewport anchorRect={menu.anchor} ignoreElement={menu.element} width={190} onClose={() => setMenu(null)}><button className="assigned-consultant-option" onClick={() => { setEditing(menu.row); setMenu(null) }}>Edit assignment</button><button className="assigned-consultant-option" onClick={() => { setReassign({ id: menu.row.id, consultant: menu.row.assigned_consultant_id }); setMenu(null) }}>Reassign consultant</button><button className="assigned-consultant-option" onClick={() => { setConfirm({ ids: [menu.row.id] }); setMenu(null) }}>Delete assignment</button></FloatingDropdown>}
+    {editing && <AssignmentEditor row={editing} consultants={consultants} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setSelection(new Map()); setNotice('Assignment updated.'); changed() }} />}
     {wizard && <AssignmentWizard consultants={consultants} onClose={() => setWizard(false)} onSaved={count => { setWizard(false); setNotice(`${count} Candidates Assigned Successfully`); changed() }} />}
     {transfer && <Suspense fallback={<div role="status">Loading candidate form…</div>}><CandidateForm assignedCandidate={transfer} onAssignedClose={() => setTransfer(null)} onAssignedSaved={() => { setTransfer(null); setNotice('Candidate Added Successfully. The candidate has been added to the Candidates module.'); assignmentsChanged({ candidates: true }) }} /></Suspense>}
     {bulkTransfer && <AssignmentTransferWizard assignments={bulkTransfer} onClose={ids => finishBulkTransfer(ids)} onSaved={ids => finishBulkTransfer(ids,true)} />}

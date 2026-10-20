@@ -4,20 +4,20 @@ This module stores preliminary CV assignments independently of Candidates. “No
 
 ## Features implemented
 
-- Sidebar navigation beside Candidates with a database aggregate badge for Not Contacted. Consultants see their own count; administrators see active consultants' combined count.
+- Sidebar navigation after CRM, below Invoice for administrators or User Manual for non-admin consultants, with a database aggregate badge for Not Contacted. Consultants see their own count; administrators see active consultants' combined count.
 - Administrator Overall/consultant filtering with counts, active employee options, stable selection and four existing Reports KPI components.
 - Requested table columns, checkbox selection retained across pages (up to 100 records), global database grouping and oldest-first ordering, editable statuses, system dates, protected CV access, and soft green completed rows at the end.
 - One bulk upload wizard with three concurrent uploads, per-file recovery, manual correction, individual candidate steps, Back/Next, and an atomic, retry-safe batch Save.
 - The New upload step has Client, Mandate and Consultant batch dropdowns, each starting at None even in a scoped consultant view. All three selected changes Next to Save: files are uploaded/parsed on Save (up to three at once), then the existing atomic batch creates assignments without individual review. Partial selections prefill each candidate while missing choices are completed in the existing review flow. Missing parsed details open for manual correction before any assignments are created. Cancelling/removing processing CVs retains the existing safe cleanup behavior.
 - The actual `CandidatesPage` form in modal-only mode, all existing fields, existing validation and duplicate dialog, editable client/mandate defaults, stored-CV full parsing, and atomic candidate/association/link creation.
-- Administrator reassignment, individual/bulk deletion and scoped Delete All. Delete All always preserves both pending contact statuses, including Added assignments that were later returned to those statuses.
+- New/Delete-authorized reassignment, row editing, individual/bulk deletion and scoped Delete All. Delegated consultants act on their own rows. Delete All always preserves both pending contact statuses, including Added assignments that were later returned to those statuses.
 - Frontend safety follow-up: centered 760px wizard, reserved scrollbar space while assigned popups are open, native Candidates row-action buttons, viewport-bounded action/filter menus, and form dropdowns that fit inside the popup and support keyboard navigation/Escape without closing the parent dialog.
 - Sidebar scrollbars are hidden while wheel/keyboard scrolling remains available. During CV processing, individual Remove, Cancel and Close remain available. Removed queued files never start, removed active files cannot reappear or be saved, and late upload results are retired after the existing parser/storage request settles. Closing the wizard follows the same rule; successful batch saves retain their CVs.
 - If some files have already uploaded while another is still processing, the individual cross deletes that uploaded file; Cancel or the dialog cross deletes all unsaved uploaded files. Any outstanding upload is discarded when its request finishes. Mixed-batch browser checks verify storage removal and manifest deletion for both completed and late uploads.
 - Table presentation reuses the main Candidates name/avatar and consultant-chip components, mobile typography, status badge color map and popup menu styling. Clicking a status pill opens the assignment status menu, including both assignment-only pending states; keyboard editing and viewport boundaries are supported. Names retain their stored spelling/capitalization. The original assignment column order is retained. Not Contacted and other ordinary statuses share the same oldest-assignment-first sorting group, so changing to Interested, In Discussion or another ordinary status leaves the row in place. Their tones remain white (Not Contacted) or grey (other contacted statuses). Didn’t Pick Up moves immediately to the yellow group, Not Relevant immediately to the soft red group, and successful transfer alone moves the row into the final green Added group. Returning an unadded excluded row to an ordinary status restores its original assignment position. Assignment timestamps never change during these operations.
 - A centered CV column before Actions uses the same `DocumentIconGroup` component, document icon, colors, filename tooltip and loading spinner as main Candidates. The former eye action is removed. Opening still uses the assignment-authorized signed-URL endpoint; repeated clicks while that request is pending do not issue duplicate requests.
 - In administrator Overall view, a Consultant column immediately after Status shows the assigned employee using the same `ConsultantChip` as main Candidates. It is hidden when filtering to one consultant or viewing a consultant's own assignments. The existing list endpoint resolves names from the full employee directory, preserving names on historical assignments when employees become inactive; only active employees remain selectable for new assignments/reassignment. No schema change is required.
-- The toolbar Bulk Delete button is replaced by a floating selection popup using the same dock as Applied Candidates. Administrators/superadmins get Delete selected and Add to Candidates; consultants get only Add to Candidates. Clear selection is available to both. Pending-contact, Not Relevant and already-added records cannot enter bulk transfer; consultants cannot select those rows, while administrators may select them for deletion.
+- The toolbar Bulk Delete button is replaced by a floating selection popup using the same dock as Applied Candidates. Users with New/Delete access get Delete selected and Add to Candidates within their permitted row scope. Pending-contact, Not Relevant and already-added records may be selected for deletion but cannot enter bulk transfer. Users without the action grant have no selection or mutation controls.
 - Bulk Add reviews the existing complete candidate form one record at a time with Next/Back and a final Save. Review is read-only; cancelling before Save creates no main candidates or associations and retains the assignment CVs. Final Save uses the existing per-record transactional/idempotent transfer, preserves duplicate dialogs and retains unsaved drafts after an error. Completed records remain saved and are excluded from subsequent retries. This transfer batch is not one all-or-nothing database transaction.
 
 ## Database and deployment status
@@ -46,16 +46,42 @@ All paths below are relative to `/api/assigned-candidates`, behind existing auth
 | POST | `/uploads` | One existing-format CV, initial name/mobile parsing, durable upload token |
 | POST | `/uploads/discard` | Retire owned staging uploads and retry bounded document cleanup |
 | POST | `/` | Validated, atomic assignment batch; upload-token idempotency |
-| PATCH | `/:id/status` | Authorized status change with database-managed contact date |
-| PATCH | `/:id/consultant` | Administrator reassignment to an active employee |
+| GET | `/:id` | Reload editable fields/version with New/Delete and own-row/admin checks |
+| PATCH | `/:id` | Version-checked edit of assignment identity, references, status and consultant |
+| PATCH | `/:id/status` | New/Delete-authorized status change with database-managed contact date |
+| PATCH | `/:id/consultant` | New/Delete-authorized own-row/admin reassignment to an active employee |
 | GET | `/:id/cv` | Record-authorized, short-lived signed document URL |
 | POST | `/:id/parse` | Existing full parser applied to the stored CV |
 | POST | `/:id/review` | Read-only full validation, permissions and duplicate checks for staged bulk review |
 | POST | `/:id/transfer` | Existing candidate validation/duplicate workflow plus atomic transfer |
-| DELETE | `/:id` | Administrator individual assignment deletion |
+| DELETE | `/:id` | New/Delete-authorized own-row/admin assignment deletion |
 | POST | `/delete` | Explicit IDs for bulk deletion, or server-calculated contacted-only deletion |
 
 ## Authorization and data integrity
+
+### Row actions and editing
+
+`20261020042222_assigned_candidate_row_actions.sql` makes the existing
+`assigned_candidates_manage` (New / Delete All) grant control all row mutations:
+status changes, parsing for transfer, Add to Candidates/review, reassignment,
+individual/selected deletion and Edit assignment. Users without that grant retain
+their permitted read/CV access. Overall access alone grants no mutations.
+Delegated consultants can act only on rows currently assigned to them; administrator
+scope remains available within the same action grant. Reassigning a row removes the
+original consultant's mutation access immediately.
+
+Edit assignment changes name, mobile, client, mandate, status and consultant. It
+reuses the existing client/mandate selectors and validates that the mandate belongs
+to the client and that a receiving consultant is active. Assignment/contact dates,
+original assigner, CV ownership and Added/candidate/association links are managed by
+the system. Editing an assignment does not rewrite a transferred master candidate.
+A persisted version, incremented on every row update, blocks stale edits. Database
+RPCs repeat the action grant and ownership check under the row lock; browser roles
+cannot execute them or write assignments directly.
+
+Apply this migration before deploying the new `PATCH /api/assigned-candidates/:id`
+handler and editor. These changes do not apply hosted migrations or deploy code.
+The duplicate page heading is removed; the top bar retains Assigned Candidates.
 
 Assignment SELECT RLS checks active employment and existing page permissions, then permits only the assigned Auth user or an administrator. Anonymous reads and direct authenticated writes are denied. Upload metadata is backend-only. Mutating and aggregate RPCs are service-role-only; transaction functions use invoker privileges and explicitly check the supplied actor where appropriate. Private, fixed-search-path helpers reuse `admin_users` and the existing active-employee helper. The restricted actor lookup avoids granting general Auth-table access to the service role.
 
