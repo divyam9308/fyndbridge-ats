@@ -4,9 +4,10 @@ const { requirePageViewPermission } = require('../middleware/pageViewAccessMiddl
 const { localDate } = require('../services/attendanceUtils')
 const { normalizeClientName } = require('../../../shared/clientNames.cjs')
 const SECTOR_OPTIONS = require('../../../shared/sectorOptions.json')
+const { generateOrganisationSummary, validateSummary } = require('../services/crmOrganisationSummary')
 const router = express.Router()
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const FIELDS = new Set(['organisation_name', 'contacts', 'sector', 'connected_through', 'conversion_probability', 'status', 'assigned_consultant_id', 'next_follow_up_date', 'ats_client_id', 'comment'])
+const FIELDS = new Set(['organisation_name', 'organisation_summary', 'contacts', 'sector', 'connected_through', 'conversion_probability', 'status', 'assigned_consultant_id', 'next_follow_up_date', 'ats_client_id', 'comment'])
 const safe = handler => async (req, res, next) => { try { await handler(req, res) } catch (error) { next(error) } }
 const integer = (value, fallback, max) => Math.min(Math.max(parseInt(value, 10) || fallback, 1), max)
 async function withUnread(rows, userId) {
@@ -18,6 +19,10 @@ async function withUnread(rows, userId) {
 router.use(requirePageViewPermission('crm'))
 router.use((req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next() })
 router.use('/gmail', require('./crmGmail').createHandlers().router)
+router.post('/organisation-summary', safe(async (req, res) => {
+  const summary = await generateOrganisationSummary({ name: req.body?.organisation_name, sector: req.body?.sector, userId: req.user.id })
+  res.json({ data: summary })
+}))
 router.get('/check-duplicate', safe(async (req, res) => {
   const { data, error } = await supabase.rpc('crm_duplicate', { p_name: normalizeClientName(String(req.query.name || '').slice(0, 200)), p_exclude: UUID.test(req.query.exclude || '') ? req.query.exclude : null })
   if (error) throw error
@@ -81,6 +86,7 @@ const save = safe(async (req, res) => {
   const body = req.body || {}
   if (req.params.id && (!Number.isInteger(body.version) || body.version < 1)) return res.status(400).json({ error: 'A record version is required.' })
   const payload = Object.fromEntries(Object.entries(body).filter(([key]) => FIELDS.has(key)))
+  if (Object.hasOwn(payload, 'organisation_summary')) payload.organisation_summary = validateSummary(payload.organisation_summary)
   if (Object.hasOwn(payload, 'organisation_name') && !normalizeClientName(payload.organisation_name)) return res.status(400).json({ error: 'Organisation Name is required.' })
   if (payload.sector && !SECTOR_OPTIONS.includes(payload.sector)) return res.status(400).json({ error: 'Select a valid sector.' })
   if (Object.keys(payload).length === 0) return res.status(400).json({ error: 'No changes supplied.' })
@@ -103,6 +109,11 @@ router.delete('/:id', safe(async (req, res) => {
 }))
 router.use((error, req, res, next) => {
   if (res.headersSent) return next(error)
+  if (error.code?.startsWith('SUMMARY_')) {
+    const status = error.code === 'SUMMARY_INVALID' ? 400 : error.code === 'SUMMARY_UNVERIFIED' ? 422 : ['SUMMARY_COOLDOWN', 'SUMMARY_QUOTA'].includes(error.code) ? 429 : 503
+    if (status === 429) res.set('Retry-After', '30')
+    return res.status(status).json({ error: error.message })
+  }
   if (error.code === '23505') {
     let existing = null
     try { existing = JSON.parse(error.details) } catch { /* A unique constraint still blocks concurrent duplicates. */ }

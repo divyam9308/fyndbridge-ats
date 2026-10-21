@@ -10,6 +10,7 @@ import { SECTOR_OPTIONS } from '../utils/sectorOptions'
 import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import FormattedDateInput from './FormattedDateInput'
 import { crmRequest } from '../services/crmApi'
+import CrmOrganisationSummary from './CrmOrganisationSummary'
 
 export function CrmDialog({ title, onClose, busy = false, large = false, children, footer }) {
   const ref = useDialogFocus(onClose, { closeDisabled: busy })
@@ -23,21 +24,22 @@ export function CrmDialog({ title, onClose, busy = false, large = false, childre
 export function CrmClientForm({ record, onClose, onSaved }) {
   const { user, session } = useAuth()
   const { staff, selectableStaff, loading: staffLoading } = useStaffDirectory()
-  const [form, setForm] = useState(() => ({ organisation_name: '', contacts: [emptyContact()], sector: '', connected_through: '', conversion_probability: '', status: '', assigned_consultant_id: user?.id || session?.user?.id || '', next_follow_up_date: '', ...record, comment: record?.latest_comment?.body || '' }))
+  const [form, setForm] = useState(() => ({ organisation_name: '', organisation_summary: null, contacts: [emptyContact()], sector: '', connected_through: '', conversion_probability: '', status: '', assigned_consultant_id: user?.id || session?.user?.id || '', next_follow_up_date: '', ...record, comment: record?.latest_comment?.body || '' }))
   const [target, setTarget] = useState(record)
   const [errors, setErrors] = useState({})
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [summaryBusy, setSummaryBusy] = useState(false)
   const [duplicate, setDuplicate] = useState(null)
   const [details, setDetails] = useState(false)
   const [conflict, setConflict] = useState(false)
   const saving = useRef(false)
   const inputRefs = useRef({})
-  const set = (key, value) => { setForm(current => ({ ...current, [key]: value })); setErrors(current => ({ ...current, [key]: '' })) }
+  const set = (key, value) => { setForm(current => ({ ...current, [key]: value, ...(key === 'organisation_name' && value.trim().toLowerCase() !== current.organisation_name.trim().toLowerCase() ? { organisation_summary: null } : {}) })); setErrors(current => ({ ...current, [key]: '' })) }
   const contactSet = (index, key, value) => set('contacts', form.contacts.map((contact, i) => i === index ? { ...contact, [key]: value } : contact))
   const save = async event => {
     event.preventDefault()
-    if (saving.current) return
+    if (saving.current || summaryBusy) return
     const nextErrors = validateCrm(form)
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) { inputRefs.current[Object.keys(nextErrors)[0]]?.focus(); return }
@@ -83,7 +85,7 @@ export function CrmClientForm({ record, onClose, onSaved }) {
     <button className="btn-secondary" onClick={() => setDetails(value => !value)} disabled={busy}>View More</button>
     <button className="btn-secondary" onClick={() => { setDuplicate(null); setDetails(false) }} disabled={busy}>Cancel</button>
     <button className="btn-primary" onClick={selectDuplicate} disabled={busy}>{duplicate.source === 'crm' ? 'Update Client' : 'Select Existing Client'}</button>
-  </> : <><button type="button" className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="crm-client-form" className="btn-primary" disabled={busy}>{busy ? 'Saving...' : 'Save'}</button></>}>
+  </> : <><button type="button" className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="crm-client-form" className="btn-primary" disabled={busy || summaryBusy}>{busy ? 'Saving...' : summaryBusy ? 'Generating summary...' : 'Save'}</button></>}>
     {duplicate ? <div className="modal-body">
       <p className="form-error">Client already exists. Select the existing client or add a contact person under that client.</p>
       <div className="duplicate-compare-grid"><div className="duplicate-compare-card"><div className="section-label">Existing Client · {duplicate.source === 'crm' ? 'CRM' : 'ATS Clients'}</div><div className="name-text">{duplicate.organisation_name}</div></div><div className="duplicate-compare-card"><div className="section-label">New Client</div><div className="name-text">{form.organisation_name}</div></div></div>
@@ -95,6 +97,7 @@ export function CrmClientForm({ record, onClose, onSaved }) {
         {field('organisation_name', 'Organisation Name', { required: true, maxLength: 200 })}
         <div className="form-group"><label className="form-label" htmlFor="crm-created">Date</label><input id="crm-created" className="form-control" value={target ? formatDateDDMMYYYY(target.created_at) : 'Automatically set on save'} readOnly /></div>
       </div>
+      <CrmOrganisationSummary name={form.organisation_name} sector={form.sector} value={form.organisation_summary} onChange={value => set('organisation_summary', value)} onBusyChange={setSummaryBusy} disabled={busy} />
       {form.contacts.map((contact, index) => <section className="crm-contact-form" key={index} aria-label={`Contact ${index + 1}`}>
         <div className="crm-contact-heading"><span className="section-label">Contact {index + 1}</span>{form.contacts.length > 1 && <button type="button" className="row-action-btn" title={`Remove Contact ${index + 1}`} onClick={() => set('contacts', form.contacts.filter((_, i) => i !== index))}><Trash2 size={14} /></button>}</div>
         <div className="form-grid-2">{[['name', 'Contact Person', true], ['mobile', 'Mobile'], ['email', 'Email'], ['designation', 'Designation'], ['linkedin', 'LinkedIn']].map(([key, label, required]) => field(`contacts.${index}.${key}`, label, { value: contact[key] || '', required, type: key === 'email' ? 'email' : 'text', maxLength: key === 'name' ? 200 : key === 'mobile' ? 100 : key === 'email' ? 320 : 500, onChange: value => contactSet(index, key, value) }))}</div>
@@ -114,10 +117,11 @@ export function CrmClientForm({ record, onClose, onSaved }) {
   </CrmDialog>
 }
 
-const ACTIVITY_LABELS = { created: 'CRM client created', status_changed: 'Status changed', conversion_probability_changed: 'Conversion probability changed', connected_through_changed: 'Connected Through changed', comment_added: 'Comment added', next_follow_up_date_changed: 'Follow-up date changed', assigned_consultant_id_changed: 'Assigned consultant changed', contacts_changed: 'Contact information updated', organisation_name_changed: 'Organisation name changed', sector_changed: 'Sector changed' }
+const ACTIVITY_LABELS = { created: 'CRM client created', status_changed: 'Status changed', conversion_probability_changed: 'Conversion probability changed', connected_through_changed: 'Connected Through changed', comment_added: 'Comment added', next_follow_up_date_changed: 'Follow-up date changed', assigned_consultant_id_changed: 'Assigned consultant changed', contacts_changed: 'Contact information updated', organisation_name_changed: 'Organisation name changed', organisation_summary_changed: 'Organisation summary updated', sector_changed: 'Sector changed' }
 function activityValue(value, type) {
   if (value === null || value === undefined || value === '') return '-'
   if (type === 'contacts_changed') return value.map(contact => [contact.name, contact.mobile, contact.email, contact.designation, contact.linkedin].filter(Boolean).join(' · ')).join('; ')
+  if (type === 'organisation_summary_changed') return value.text || '-'
   if (type === 'next_follow_up_date_changed') return formatDateDDMMYYYY(value)
   return String(value)
 }

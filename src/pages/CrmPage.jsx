@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { CheckCheck, ChevronDown, CalendarClock, History, Info, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { CrmClientForm, CrmDialog, CrmHistory } from '../components/CrmDialogs'
 import CrmGmailConnection from '../components/CrmGmailConnection'
+import { CrmSummaryContent, summaryPlainText } from '../components/CrmOrganisationSummary'
 import PaginationBar from '../components/PaginationBar'
 import TablePopover from '../components/TablePopover'
 import FormattedDateInput from '../components/FormattedDateInput'
@@ -13,8 +14,8 @@ import { previewWords } from '../utils/tableText'
 import '../styles/Shared.css'
 import './CrmPage.css'
 
-const COLUMNS = ['Organisation Name', 'Contact Person', 'Mobile', 'Email', 'Designation', 'LinkedIn', 'Sector', 'Connected Through', 'Date', 'Comments', 'Conversion Probability', 'Status', 'Actions']
-const WIDTHS = [235, 210, 160, 240, 190, 115, 185, 180, 125, 300, 195, 200, 190]
+const COLUMNS = ['Organisation Name', 'About Organisation', 'Contact Person', 'Mobile', 'Email', 'Designation', 'LinkedIn', 'Sector', 'Connected Through', 'Date', 'Comments', 'Conversion Probability', 'Status', 'Actions']
+const WIDTHS = [235, 215, 210, 160, 240, 190, 115, 185, 180, 125, 300, 195, 200, 190]
 const FOLLOW_LABELS = { overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming', none: 'No Follow-up' }
 
 export default function CrmPage() {
@@ -32,6 +33,7 @@ export default function CrmPage() {
   const [revision, setRevision] = useState(0)
   const [form, setForm] = useState(null)
   const [history, setHistory] = useState(null)
+  const [summaryTarget, setSummaryTarget] = useState(null)
   const [selectedContacts, setSelectedContacts] = useState({})
   const [popover, setPopover] = useState(null)
   const [comment, setComment] = useState(null)
@@ -139,17 +141,19 @@ export default function CrmPage() {
     </div>
     {error && <div className="crm-error" role="alert">{error}<button className="btn-secondary" onClick={() => { setLoading(true); setRevision(value => value + 1) }}>Reload table</button></div>}
     <div className="table-card"><div className="table-wrapper crm-table-scroll"><table className="data-table fb-theme-table crm-table"><colgroup>{WIDTHS.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
-      <thead><tr>{COLUMNS.map((label, index) => <th key={label} scope="col">{[0, 8].includes(index) ? <button className="crm-sort-heading" onClick={() => configure(setSort)(`${index === 0 ? 'organisation_name' : 'created_at'}:${sort.endsWith('asc') ? 'desc' : 'asc'}`)}>{label} ↕</button> : label}</th>)}</tr></thead>
-      <tbody>{loading && !rows.length ? <tr><td colSpan={13}><div className="crm-empty"><FyndbridgeLoader /></div></td></tr> : !rows.length ? <tr><td colSpan={13}><div className="crm-empty">{error ? 'Unable to load CRM clients.' : search || follow !== 'all' ? 'No matching CRM clients.' : 'No CRM clients yet.'}</div></td></tr> : rows.map(record => {
+      <thead><tr>{COLUMNS.map(label => <th key={label} scope="col">{['Organisation Name', 'Date'].includes(label) ? <button className="crm-sort-heading" onClick={() => configure(setSort)(`${label === 'Organisation Name' ? 'organisation_name' : 'created_at'}:${sort.endsWith('asc') ? 'desc' : 'asc'}`)}>{label} ↕</button> : label}</th>)}</tr></thead>
+      <tbody>{loading && !rows.length ? <tr><td colSpan={COLUMNS.length}><div className="crm-empty"><FyndbridgeLoader /></div></td></tr> : !rows.length ? <tr><td colSpan={COLUMNS.length}><div className="crm-empty">{error ? 'Unable to load CRM clients.' : search || follow !== 'all' ? 'No matching CRM clients.' : 'No CRM clients yet.'}</div></td></tr> : rows.map(record => {
         const contactIndex = Math.min(selectedContacts[record.id] || 0, record.contacts.length - 1)
         const contact = record.contacts[contactIndex]
         const state = followUpState(record.next_follow_up_date, today)
         const commentBody = record.latest_comment?.body || ''
         const { isLong, preview } = previewWords(commentBody, 3)
+        const about = previewWords(summaryPlainText(record.organisation_summary), 5)
         const expanded = Boolean(record.latest_comment && expandedComments[record.id] === record.latest_comment.id)
         const unreadTone = record.unread_activity_count > 0 ? (['positive', 'neutral', 'negative'].includes(record.unread_tone) ? record.unread_tone : 'positive') : null
         return <tr key={record.id} className={unreadTone ? `crm-unread-${unreadTone}` : undefined} aria-busy={Boolean(busy[record.id])}>
           <td><span className="name-text">{record.organisation_name}</span>{unreadTone && <span className="crm-unread-label">{record.unread_activity_count} unread {unreadTone === 'positive' ? 'updates' : `${unreadTone} updates`}</span>}<button className={`crm-follow crm-follow-${state}`} type="button" title={record.next_follow_up_date ? `Next follow-up: ${formatDateDDMMYYYY(record.next_follow_up_date)}` : 'Set follow-up date'} onClick={() => setFollowEditor({ record, value: record.next_follow_up_date || '' })}>{FOLLOW_LABELS[state]}{record.next_follow_up_date ? ` · ${formatDateDDMMYYYY(record.next_follow_up_date)}` : ''}</button></td>
+          <td className="crm-summary-cell">{about.preview ? <><span>{about.preview}{about.isLong ? '…' : ''}</span><button type="button" className="table-view-more" aria-label={`View more about ${record.organisation_name}`} aria-haspopup="dialog" onClick={() => setSummaryTarget(record)}>View more</button></> : <span className="sub-text">-</span>}</td>
           <td className="crm-contact-cell"><span className="inline-action-cell">{record.contacts.length > 1 ? <><select className="filter-select compact-select" aria-label={`Contact for ${record.organisation_name}`} value={contactIndex} onChange={event => setSelectedContacts(current => ({ ...current, [record.id]: Number(event.target.value) }))}>{record.contacts.map((item, index) => <option key={index} value={index}>{item.name}</option>)}</select><button type="button" className="row-action-btn" title="Delete Contact" disabled={busy[record.id]} onClick={() => deleteContact(record)}><Trash2 size={12} /></button></> : <span className="crm-contact-name">{contact.name}</span>}<button type="button" className="row-action-btn" title="Add Contact" onClick={() => setForm({ record: { ...record, contacts: [...record.contacts, { name: '', mobile: '', email: '', designation: '', linkedin: '' }] } })}><Plus size={12} /></button></span></td>
           <td className="crm-mobile">{contact.mobile || '-'}</td><td className="crm-email">{contact.email || '-'}</td><td>{contact.designation || '-'}</td>
           <td>{contact.linkedin && validLinkedIn(contact.linkedin) ? <a href={contact.linkedin} className="candidate-linkedin-link" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a> : '-'}</td>
@@ -170,6 +174,7 @@ export default function CrmPage() {
       if (await update(popover.record, { [popover.field]: option })) setPopover(null)
     }}>{option || '-'}</button>)}</TablePopover>}
     {form && <CrmClientForm record={form.record} onClose={() => setForm(null)} onSaved={saved} />}
+    {summaryTarget && <CrmDialog title={`About ${summaryTarget.organisation_name}`} onClose={() => setSummaryTarget(null)} footer={<button type="button" className="btn-secondary" onClick={() => setSummaryTarget(null)}>Close</button>}><div className="modal-body crm-summary-popup"><CrmSummaryContent summary={summaryTarget.organisation_summary} /></div></CrmDialog>}
     {history && <CrmHistory key={`${history.record.id}:${history.kind}`} {...history} onRead={refreshActivities} onClose={() => setHistory(null)} />}
     {deleteTarget && <CrmDialog title="Delete Organisation" busy={Boolean(busy[deleteTarget.id])} onClose={() => setDeleteTarget(null)} footer={<><button type="button" className="btn-secondary" disabled={busy[deleteTarget.id]} onClick={() => setDeleteTarget(null)}>Cancel</button><button type="button" className="btn-primary crm-confirm-delete" disabled={busy[deleteTarget.id]} onClick={deleteOrganisation}>{busy[deleteTarget.id] ? 'Deleting...' : 'Delete organisation'}</button></>}><div className="modal-body"><p>Permanently delete <strong>{deleteTarget.organisation_name}</strong> and its CRM contacts, comments and activity history?</p><p className="sub-text">This cannot be undone. Linked ATS clients, mandates, candidates and Gmail connections are preserved.</p>{deleteError && <p className="form-error" role="alert">{deleteError}</p>}</div></CrmDialog>}
     {followEditor && <CrmDialog title="Next Follow-up Date" onClose={() => setFollowEditor(null)} busy={busy[followEditor.record.id]} footer={<><button className="btn-secondary" disabled={busy[followEditor.record.id]} onClick={() => setFollowEditor(null)}>Cancel</button><button className="btn-primary" disabled={busy[followEditor.record.id]} onClick={async () => { if (await update(followEditor.record, { next_follow_up_date: followEditor.value })) setFollowEditor(null) }}>Save</button></>}><div className="modal-body"><label className="form-label" htmlFor="crm-row-follow-up">{followEditor.record.organisation_name}</label><FormattedDateInput floating id="crm-row-follow-up" value={followEditor.value} onChange={value => setFollowEditor(current => ({ ...current, value }))} disabled={busy[followEditor.record.id]} />{error && <p className="form-error" role="alert">{error}</p>}</div></CrmDialog>}

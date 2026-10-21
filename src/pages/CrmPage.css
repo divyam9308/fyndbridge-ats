@@ -6,7 +6,7 @@
 .crm-search { display: flex; align-items: center; position: relative; min-width: 0; }
 .crm-search svg { position: absolute; left: 12px; color: var(--gray-500); }
 .crm-search input { padding-left: 33px; width: 100%; min-width: 0; font-size: 12px; }
-.crm-table { table-layout: fixed; min-width: 2525px; }
+.crm-table { table-layout: fixed; min-width: 2740px; }
 .crm-delete-organisation { color: var(--danger, #dc3545); }
 .btn-primary.crm-confirm-delete, .btn-primary.crm-confirm-delete:hover { background: var(--danger, #dc3545); color: white; }
 .crm-table td { overflow-wrap: anywhere; }
@@ -38,6 +38,26 @@
 .crm-inline-comment > div { display: flex; gap: 4px; margin-top: 8px; }
 .crm-inline-comment .btn-primary, .crm-inline-comment .btn-secondary { padding: 5px 10px; font-size: 12px; }
 .crm-form-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.crm-summary-field { width: 100%; min-width: 0; margin: 12px 0 16px; }
+.crm-summary-heading, .crm-summary-heading > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.crm-summary-heading { margin-bottom: 8px; flex-wrap: wrap; }
+.crm-summary-heading .form-label { margin: 0; }
+.crm-summary-heading .btn-secondary { padding: 5px 9px; font-size: 12px; }
+.crm-summary-generate { color: var(--brand-blue); }
+.crm-summary-scroll { height: 136px; overflow-y: auto; border: 1px solid var(--gray-200); border-radius: 10px; padding: 10px 14px; background: var(--gray-50, #fafafa); }
+.crm-summary-scroll:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.crm-summary-input { width: 100%; resize: none; font: inherit; font-size: 13px; line-height: 1.6; }
+.crm-summary-content { font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.crm-summary-content ul { margin: 0; padding-left: 20px; }
+.crm-summary-content li + li { margin-top: 7px; }
+.crm-summary-content strong { color: var(--brand-blue); font-weight: 700; }
+.crm-summary-content a { color: var(--info, #175cd3); text-decoration: underline; }
+.crm-summary-sources { border-top: 1px solid var(--gray-200); margin-top: 12px; padding-top: 10px; }
+.crm-summary-sources ul { margin-top: 4px; }
+.crm-summary-search { display: block; width: 100%; height: 110px; border: 0; margin-top: 10px; background: white; }
+.crm-summary-cell > span { display: block; }
+.crm-summary-cell .table-view-more { margin-top: 5px; }
+.crm-summary-popup { max-height: 60vh; overflow-y: auto; }
 .crm-contact-form { border-top: 1px solid var(--gray-200); margin-top: 8px; padding-top: 14px; }
 .crm-contact-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .crm-add-contact { margin-bottom: 20px; }
