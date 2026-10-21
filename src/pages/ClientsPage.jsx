@@ -6,6 +6,7 @@ import { Plus, Pencil, X, Building2, AlertCircle, Loader2, ChevronDown, Search, 
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
+import { useStatusMutationGuard } from '../hooks/useStatusMutationGuard'
 import { useStaffDirectory } from '../hooks/useStaffDirectory'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
@@ -323,6 +324,7 @@ export default function ClientsPage() {
   const [statusOpen, setStatusOpen] = useState(false)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
+  const statusMutations = useStatusMutationGuard()
   const [contactSaving, setContactSaving] = useState({})
   const [statusUpdateError, setStatusUpdateError] = useState('')
   const [expandedCells, setExpandedCells] = useState({})
@@ -370,12 +372,16 @@ export default function ClientsPage() {
   }, [isOpen, followUpClient, deletingFollowUp, clientDuplicate, clientAlreadyAdded])
 
   const fetchClientOptions = useCallback(async () => {
+    if (statusMutations.hasPending()) return
+    const statusRevision = statusMutations.snapshot()
     const res = await fetch('/api/clients?options=true')
     const data = await res.json().catch(() => ({}))
-    if (res.ok) setAllClients(data.data || [])
-  }, [])
+    if (res.ok && statusMutations.accepts(statusRevision)) setAllClients(data.data || [])
+  }, [statusMutations])
 
   const fetchClients = useCallback(async ({ showLoading = true } = {}) => {
+    if (statusMutations.hasPending()) return
+    const statusRevision = statusMutations.snapshot()
     const requestId = ++clientListRequestRef.current
     clientListAbortRef.current?.abort()
     const controller = new AbortController()
@@ -396,7 +402,7 @@ export default function ClientsPage() {
       if (aiFilters) params.set('ai_filters', JSON.stringify(aiFilters))
       const res = await fetch(`/api/clients${params.toString() ? `?${params.toString()}` : ''}`, { signal: controller.signal })
       const data = await res.json().catch(() => ({}))
-      if (requestId !== clientListRequestRef.current || controller.signal.aborted) return
+      if (requestId !== clientListRequestRef.current || controller.signal.aborted || !statusMutations.accepts(statusRevision)) return
       if (!res.ok) throw new Error(data.error || 'Failed to fetch clients from server.')
       const nextTotal = Number(data.total) || 0
       const validPage = Math.min(Number(data.page) || page, Math.max(1, Math.ceil(nextTotal / pageSize)))
@@ -407,13 +413,19 @@ export default function ClientsPage() {
       setError(null)
       setListError('')
     } catch (err) {
-      if (requestId !== clientListRequestRef.current || controller.signal.aborted || err?.name === 'AbortError') return
+      if (requestId !== clientListRequestRef.current || controller.signal.aborted || err?.name === 'AbortError' || !statusMutations.accepts(statusRevision)) return
       setListError(err.message || 'Failed to fetch clients from server.')
     } finally {
       if (clientListAbortRef.current === controller) clientListAbortRef.current = null
       if (requestId === clientListRequestRef.current) setLoading(false)
     }
-  }, [aiFilters, dashboardFilters, effectiveStatusFilter, page, pageSize, sortDirection, sortField])
+  }, [aiFilters, dashboardFilters, effectiveStatusFilter, page, pageSize, sortDirection, sortField, statusMutations])
+
+  useEffect(() => {
+    const refresh = () => { fetchClients({ showLoading: false }); fetchClientOptions() }
+    window.addEventListener('ats:clients-updated', refresh)
+    return () => window.removeEventListener('ats:clients-updated', refresh)
+  }, [fetchClients, fetchClientOptions])
 
   useEffect(() => () => {
     clientListRequestRef.current += 1
@@ -1218,10 +1230,11 @@ export default function ClientsPage() {
   }
 
   const updateClientStatus = async (client, status) => {
-    const previousClients = clients
-    const previousAllClients = allClients
     const rootId = clientRootId(client)
     const nextStatus = status === '-' ? '' : status
+    setTablePopover(null)
+    if (client.status === nextStatus || !statusMutations.begin(rootId)) return
+    const previousStatuses = new Map([...clients, ...allClients].filter(row => clientRootId(row) === rootId).map(row => [row.id, row.status]))
     setStatusUpdateError('')
     setClients(current => current.map(row => clientRootId(row) === rootId ? { ...row, status: nextStatus } : row))
     setAllClients(current => current.map(row => clientRootId(row) === rootId ? { ...row, status: nextStatus } : row))
@@ -1238,11 +1251,14 @@ export default function ClientsPage() {
       setClients(current => current.map(row => clientRootId(row) === rootId ? { ...row, status: data.status } : row))
       setAllClients(current => current.map(row => clientRootId(row) === rootId ? { ...row, status: data.status } : row))
     } catch (err) {
-      setClients(previousClients)
-      setAllClients(previousAllClients)
+      const rollback = current => current.map(row => clientRootId(row) === rootId ? { ...row, status: previousStatuses.has(row.id) ? previousStatuses.get(row.id) : client.status } : row)
+      setClients(rollback)
+      setAllClients(rollback)
       setStatusUpdateError(err.message)
     } finally {
+      statusMutations.finish(rootId)
       setStatusSaving(current => ({ ...current, [rootId]: false }))
+      window.dispatchEvent(new Event('ats:clients-updated'))
     }
   }
 

@@ -206,18 +206,20 @@ test('queued, paused and failed sync requests stay on the button with details av
   }
   expect(app.consoleErrors).toEqual([])
 })
-test('unread CRM changes and emails use Assigned Candidates tints, persist per viewer and Read all crosses filters and pages', async ({ page, gmailCrm, app }, info) => {
+test('only unread incoming emails tint rows; receipts persist per viewer and Read all crosses filters and pages', async ({ page, gmailCrm, app }, info) => {
   const create = async name => (await (await gmailCrm.post('/api/crm', { organisation_name: name, contacts: [{ name: 'HR', email: 'hr@client.test', mobile: '9876543210' }] })).json()).data
   const clients = {}
   for (const tone of ['positive', 'neutral', 'negative', 'changes']) {
     clients[tone] = await create(`Unread ${tone}`)
     if (tone !== 'changes') await gmailCrm.post('/test/gmail-activity', { client_id: clients[tone].id, message_id: `unread-${tone}`, metadata: { direction: 'incoming', subject: `${tone} response`, summary: 'Synthetic email insight.', sender: 'hr@client.test', recipients: ['recruiter@fyndbridge.in'], sentiment: { label: tone } } })
   }
+  await gmailCrm.post('/test/gmail-activity', { client_id: clients.changes.id, message_id: 'unread-outgoing', metadata: { direction: 'outgoing', summary: 'Synthetic outgoing email.', sentiment: { label: 'negative' } } })
   await page.goto('/dashboard/crm')
   const row = tone => page.locator('.crm-table tbody tr').filter({ hasText: `Unread ${tone}` })
-  for (const [tone, color] of [['positive', 'rgb(226, 243, 231)'], ['neutral', 'rgb(241, 243, 245)'], ['negative', 'rgb(252, 235, 234)'], ['changes', 'rgb(226, 243, 231)']]) {
+  for (const [tone, color] of [['positive', 'rgb(226, 243, 231)'], ['neutral', 'rgb(241, 243, 245)'], ['negative', 'rgb(252, 235, 234)']]) {
     await expect(row(tone)).toHaveCSS('background-color', color)
   }
+  await expect(row('changes')).not.toHaveClass(/crm-unread-/)
   const readAll = page.getByRole('button', { name: 'Read all', exact: true })
   const searchBox = await page.getByRole('textbox', { name: 'Search CRM' }).boundingBox()
   const readBox = await readAll.boundingBox()
@@ -268,7 +270,7 @@ test('history acknowledges only displayed entries, preserves concurrent arrivals
   const client = (await (await gmailCrm.post('/api/crm', { organisation_name: 'Concurrent Unread', contacts: [{ name: 'HR', email: 'hr@client.test', mobile: '9876543210' }] })).json()).data
   const row = page.locator('.crm-table tbody tr').filter({ hasText: 'Concurrent Unread' })
   await page.goto('/dashboard/crm')
-  await expect(row).toHaveClass(/crm-unread-positive/)
+  await expect(row).not.toHaveClass(/crm-unread-/)
   let release, reached
   const gate = new Promise(resolve => { release = resolve })
   const requested = new Promise(resolve => { reached = resolve })
@@ -293,6 +295,9 @@ test('history acknowledges only displayed entries, preserves concurrent arrivals
   await expect(row).not.toHaveClass(/crm-unread-/)
   await page.keyboard.press('Escape')
   await gmailCrm.post('/test/gmail-activity', { client_id: client.id, message_id: 'arrived-after-read', metadata: { direction: 'outgoing', subject: 'Unassessable', summary: 'Synthetic outgoing email.', sentiment: { label: 'unknown' } } })
+  await page.reload()
+  await expect(row).not.toHaveClass(/crm-unread-/)
+  await gmailCrm.post('/test/gmail-activity', { client_id: client.id, message_id: 'incoming-after-read', metadata: { direction: 'incoming', subject: 'Neutral response', summary: 'Synthetic incoming email.', sentiment: { label: 'unknown' } } })
   await page.reload()
   await expect(row).toHaveClass(/crm-unread-neutral/)
   await page.route('**/api/crm/activities/read-all', route => route.fulfill({ status: 503, json: { error: 'Synthetic Read all failure.' } }))

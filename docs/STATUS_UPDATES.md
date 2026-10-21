@@ -1,0 +1,13 @@
+# Immediate status selections
+
+Status dropdown selections update the visible value and close their menu before awaiting the server. This applies to Mandates (including the dashboard's embedded drilldown), mandate/candidate status on Client Detail, Candidates, Clients and CRM. Assigned Candidates already uses its own pending-status overlay and retains that flow. Status fields inside Add/Edit forms already update their local draft immediately; Save still submits the full form.
+
+The existing authenticated APIs remain responsible for permissions, validation and database/business rules. Requests are not marked successful until those APIs accept them. A failed status save restores only that row's previous status and leaves a visible error; it never restores the whole table. Concurrent saves on different rows are independent, and repeated writes to the same row are blocked until its pending save settles.
+
+`useStatusMutationGuard` prevents list/realtime responses fetched before or during a pending status save from replacing the immediate selection. After saves settle, the current page refreshes in the background to reconcile filters, ordering, public-role state, mandate completion rules and dashboard totals. Client Detail's candidate-status save no longer waits for a follow-up jobs refresh in the mutation's success path; background refresh failure cannot roll back an already accepted status.
+
+CRM status, conversion probability and Connected Through selections share the same immediate behavior. Existing unread-email metadata is retained during saves, and the incoming-email-only highlighting migration leaves manual/summary changes in the history without colouring the row.
+
+No tests, lint, build, browser checks or Gemini API calls were run for these changes, at the user's request. Backend deployment work is limited to the authorised CRM highlighting migration; read-only schema/permission inspection confirmed its incoming-email predicate and service-only SECURITY INVOKER access. The Assigned Candidates status RPC is also present in the hosted database.
+
+Manual acceptance: try P1 → P2 in the dashboard drilldown and Mandates page with a slow network; the label/menu should change before the PATCH finishes. Repeat for Clients, Candidates, Client Detail, Assigned Candidates and CRM. Try two rows at once and a rejected request: only the failed row should roll back, its error should remain visible, and subsequent refreshes should agree with the server. Check that edits to a CRM summary preserve the existing incoming-email highlight and that outgoing mail alone does not add one.

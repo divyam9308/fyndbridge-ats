@@ -16,11 +16,13 @@ Generation is explicit, with a 25-second timeout per provider, a secondary-key a
 
 Research without web grounding, ambiguous companies and truncated answers produce an inline error rather than an invented or partial overview. Regeneration failures retain the previous draft. The prompt targets 200–250 words but permits shorter results when reliable information is sparse. Google Search grounding has its own quotas/pricing: https://ai.google.dev/gemini-api/docs/generate-content/google-search
 
+Newly generated summaries request seven bullets: Business, Products & markets, Headquarters, Employees worldwide, Employees in India, Annual revenue and Growth. Headcount must include its reporting date/year; India figures must be distinct from worldwide totals. Annual revenue includes currency, reporting year and entity/consolidation scope. Growth prioritises reported revenue growth with comparison periods, or clearly labelled, dated qualitative expansion if no verified percentage is available. Primary annual reports and official disclosures take precedence. Key figures and headings are bold, with source citations. Required metrics omitted from the response receive an explicit "Not verified in available public sources" bullet. Estimates/ranges must be attributed and dated; missing values are never zero or invented. Existing saved summaries change only when the user regenerates/edits and saves them. No additional AI call or automatic retry is introduced for filling these points.
+
 ## Manual acceptance (not run)
 
 No tests, lint, build, browser checks or model API calls were run for this change, at the user's request. The user subsequently authorised applying the migration; only read-only schema/permission inspection followed the migration.
 
-1. Add a client with a distinctive full company name; generate a summary. Confirm the panel position, compact height, internal scrolling, bullet headings and source links.
+1. Add a client with a distinctive full company name; generate a summary. Confirm the panel position, compact height, internal scrolling, bullet headings and source links. Check worldwide/India headcount, headquarters, annual revenue and growth; figures need dates/periods, financial figures need currency/scope, and unverified metrics need an explicit unavailable statement.
 2. Edit the text, finish editing and save. Reload the table: the About Organisation column shows five words and View more opens the correct row's full overview. Close with Escape and the Close button.
 3. Open Edit Client and confirm the saved overview. Save an unrelated status/contact change and confirm the summary is retained. Clear its text and save to remove it.
 4. Try an ambiguous or nonexistent company. Confirm an inline message, optional manual entry and no blocked record creation after generation finishes.

@@ -8,6 +8,7 @@ import { lockBodyScroll } from '../utils/lockBodyScroll'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
+import { useStatusMutationGuard } from '../hooks/useStatusMutationGuard'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import NewActionDropdown from '../components/NewActionDropdown'
 import { useStaffDirectory } from '../hooks/useStaffDirectory'
@@ -354,6 +355,8 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
   const [savedColumns, setSavedColumns] = useState(initialCandidateColumns)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
+  const [statusUpdateError, setStatusUpdateError] = useState('')
+  const statusMutations = useStatusMutationGuard()
   const columnsDropdownRef = useRef(null)
   const sortDropdownRef = useRef(null)
 
@@ -519,6 +522,8 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
   }, [selectedCandidate, focusPopup])
 
   const loadCandidates = useCallback(async (nextPage = page, { showLoading = true } = {}) => {
+    if (statusMutations.hasPending()) return
+    const statusRevision = statusMutations.snapshot()
     const requestId = ++candidateListRequestRef.current
     candidateListAbortRef.current?.abort()
     const controller = new AbortController()
@@ -546,7 +551,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
 
       const response = await fetch(`/api/candidates?${params.toString()}`, { signal: controller.signal })
       const payload = await response.json().catch(() => ({}))
-      if (requestId !== candidateListRequestRef.current || controller.signal.aborted) return
+      if (requestId !== candidateListRequestRef.current || controller.signal.aborted || !statusMutations.accepts(statusRevision)) return
 
       if (!response.ok) {
         throw new Error(payload.error || 'Unable to load candidates.')
@@ -560,13 +565,13 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
       if (import.meta.env.DEV && aiFilters) console.debug('Candidates AI filter', { filters: aiFilters, matched: Number(payload.total) || 0 })
       setApiError('')
     } catch (err) {
-      if (requestId !== candidateListRequestRef.current || controller.signal.aborted || err?.name === 'AbortError') return
+      if (requestId !== candidateListRequestRef.current || controller.signal.aborted || err?.name === 'AbortError' || !statusMutations.accepts(statusRevision)) return
       setApiError(err.message)
     } finally {
       if (candidateListAbortRef.current === controller) candidateListAbortRef.current = null
       if (requestId === candidateListRequestRef.current) setLoadingCandidates(false)
     }
-  }, [aiFilters, dashboardFilters, filterJob, page, pageSize, sortDirection, sortField])
+  }, [aiFilters, dashboardFilters, filterJob, page, pageSize, sortDirection, sortField, statusMutations])
 
   useEffect(() => () => {
     candidateListRequestRef.current += 1
@@ -692,8 +697,9 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
   const updateCandidateStatus = async (candidate, status) => {
     const associationId = candidate.associationId || candidate.id
     if (!associationId || !isCandidateStatusSelected(status)) return
-    const previous = candidates
+    if (candidate.status === status.trim() || !statusMutations.begin(associationId)) { setTablePopover(null); return }
     const nextStatus = status.trim()
+    setStatusUpdateError('')
     setApiError('')
     setCandidates(current => current.map(row => (row.associationId || row.id) === associationId ? { ...row, status: nextStatus } : row))
     setStatusSaving(current => ({ ...current, [associationId]: true }))
@@ -709,10 +715,13 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
       const updated = apiCandidateToUi(payload)
       setCandidates(current => current.map(row => (row.associationId || row.id) === associationId ? updated : row))
     } catch (err) {
-      setCandidates(previous)
-      setApiError(err.message)
+      setCandidates(current => current.map(row => (row.associationId || row.id) === associationId ? { ...row, status: candidate.status } : row))
+      setStatusUpdateError(err.message)
     } finally {
+      statusMutations.finish(associationId)
       setStatusSaving(current => ({ ...current, [associationId]: false }))
+      window.dispatchEvent(new Event('ats:candidates-updated'))
+      window.dispatchEvent(new Event('ats:jobs-updated'))
     }
   }
 
@@ -2262,6 +2271,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
         onChange={handleFileSelect}
         style={{ display: 'none' }}
       />
+      {statusUpdateError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }} role="alert">{statusUpdateError}</div>}
       {apiError && (
         <div className="form-error" style={{ display:'block', marginBottom:12 }}>
           {apiError}

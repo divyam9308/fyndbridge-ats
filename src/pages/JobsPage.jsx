@@ -6,6 +6,7 @@ import NewActionDropdown from '../components/NewActionDropdown'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
+import { useStatusMutationGuard } from '../hooks/useStatusMutationGuard'
 import { useStaffDirectory } from '../hooks/useStaffDirectory'
 import RecordLockButton from '../components/admin/RecordLockButton'
 import PaginationBar from '../components/PaginationBar'
@@ -246,6 +247,8 @@ export default function JobsPage() {
   const [savedColumns, setSavedColumns] = useState(initialMandateColumns)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
+  const [statusUpdateError, setStatusUpdateError] = useState('')
+  const statusMutations = useStatusMutationGuard()
   const [clientSearch, setClientSearch] = useState('')
   const [savedJdAttachments, setSavedJdAttachments] = useState([])
   const [pendingJdFiles, setPendingJdFiles] = useState([])
@@ -282,6 +285,8 @@ export default function JobsPage() {
   const mandateListAbortRef = useRef(null)
 
   const fetchData = useCallback(async ({ showLoading = true } = {}) => {
+    if (statusMutations.hasPending()) return
+    const statusRevision = statusMutations.snapshot()
     const requestId = ++mandateListRequestRef.current
     mandateListAbortRef.current?.abort()
     const controller = new AbortController()
@@ -305,7 +310,7 @@ export default function JobsPage() {
       }
       const jobsRes = await fetch(`/api/jobs?${params.toString()}`, { signal: controller.signal })
       const jobsData = await jobsRes.json().catch(() => ({}))
-      if (requestId !== mandateListRequestRef.current || controller.signal.aborted) return
+      if (requestId !== mandateListRequestRef.current || controller.signal.aborted || !statusMutations.accepts(statusRevision)) return
       if (!jobsRes.ok) throw new Error(jobsData.error || 'Failed to fetch mandates.')
       const nextTotal = Number(jobsData.total) || 0
       const validPage = Math.min(Number(jobsData.page) || page, Math.max(1, Math.ceil(nextTotal / pageSize)))
@@ -316,13 +321,13 @@ export default function JobsPage() {
       setError(null)
       setListError('')
     } catch (err) {
-      if (requestId !== mandateListRequestRef.current || controller.signal.aborted || err?.name === 'AbortError') return
+      if (requestId !== mandateListRequestRef.current || controller.signal.aborted || err?.name === 'AbortError' || !statusMutations.accepts(statusRevision)) return
       setListError(err.message || 'Failed to fetch mandates.')
     } finally {
       if (mandateListAbortRef.current === controller) mandateListAbortRef.current = null
       if (requestId === mandateListRequestRef.current) setLoading(false)
     }
-  }, [aiFilters, dashboardFilters, page, pageSize, sortDirection, sortField])
+  }, [aiFilters, dashboardFilters, page, pageSize, sortDirection, sortField, statusMutations])
 
   useEffect(() => () => {
     mandateListRequestRef.current += 1
@@ -356,6 +361,8 @@ export default function JobsPage() {
   }, [fetchData])
 
   const refreshClientOptions = useCallback(async () => {
+    if (statusMutations.hasPending()) return
+    const statusRevision = statusMutations.snapshot()
     const [clientsRes, jobsRes] = await Promise.all([
       fetch('/api/clients?options=true'),
       fetch('/api/jobs?options=true')
@@ -363,8 +370,8 @@ export default function JobsPage() {
     const clientsData = await clientsRes.json().catch(() => ({}))
     const jobsData = await jobsRes.json().catch(() => ({}))
     if (clientsRes.ok) setDbClients(clientsData.data || [])
-    if (jobsRes.ok) setAllJobs(jobsData.data || [])
-  }, [])
+    if (jobsRes.ok && statusMutations.accepts(statusRevision)) setAllJobs(jobsData.data || [])
+  }, [statusMutations])
 
   const refreshJobsRealtime = useCallback(() => {
     if (isOpen || editingJob) {
@@ -1095,6 +1102,12 @@ export default function JobsPage() {
   }
 
   const updateMandateStatus = async (job, status) => {
+    setTablePopover(null)
+    if (normalizeMandateStatus(job.mandate_status || job.status || job.priority) === normalizeMandateStatus(status) || !statusMutations.begin(job.id)) return
+    setStatusUpdateError('')
+    const preview = rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: status } : row)
+    setJobs(preview)
+    setAllJobs(preview)
     setStatusSaving(current => ({ ...current, [job.id]: true }))
     try {
       const res = await fetch(`/api/jobs/${job.id}`, {
@@ -1107,11 +1120,15 @@ export default function JobsPage() {
       setJobs(rows => rows.map(row => row.id === job.id ? { ...row, ...data } : row))
       setAllJobs(rows => rows.map(row => row.id === job.id ? { ...row, ...data } : row))
       window.dispatchEvent(new Event('ats:public-roles-updated'))
-      setTablePopover(null)
     } catch (err) {
-      setErrors({ form: err.message })
+      const rollback = rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: job.mandate_status } : row)
+      setJobs(rollback)
+      setAllJobs(rollback)
+      setStatusUpdateError(err.message)
     } finally {
+      statusMutations.finish(job.id)
       setStatusSaving(current => ({ ...current, [job.id]: false }))
+      window.dispatchEvent(new Event('ats:jobs-updated'))
     }
   }
 
@@ -1392,6 +1409,7 @@ export default function JobsPage() {
       </div>
       <SearchInterpretation filters={aiFilters} notice={aiSearchNotice} entity="mandates" />
       {aiError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }}>{aiError}</div>}
+      {statusUpdateError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }} role="alert">{statusUpdateError}</div>}
       {listError && jobs.length > 0 && (
         <div className="form-error" style={{ display: 'block', marginBottom: 12 }} role="alert">
           {listError} Previous mandate results are still shown.

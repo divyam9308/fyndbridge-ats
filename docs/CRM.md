@@ -112,10 +112,18 @@ two SECURITY INVOKER RPCs. Apply it after the CRM/Gmail migrations and before
 deploying the updated API/UI. This change has not applied the migration to hosted
 Supabase or deployed the application.
 
-- Unread changes tint a client row green (`#e2f3e7`). The latest unread email's
-  sentiment takes precedence: positive green, neutral/unknown gray (`#f1f3f5`),
-  negative red (`#fcebea`), matching Assigned Candidates. Newly viewed activity
-  cards retain the same tints for the current history view.
+- Only the latest unread **incoming** Gmail email determines a client row's
+  colour: positive green (`#e2f3e7`), neutral/unknown gray (`#f1f3f5`), negative red
+  (`#fcebea`), matching Assigned Candidates. Creating/editing clients, summaries,
+  comments and other fields, and outgoing emails, do not set or change row colours.
+  Activity counts and read receipts still cover the complete history. Apply
+  `20261021093133_crm_incoming_email_row_highlights.sql` before deploying this fix;
+  the migration was applied to ATS FYNDBRIDGE on 21 October 2026 as version `20261021093133`. Read-only inspection confirmed incoming-only selection, no manual green fallback, SECURITY INVOKER and service-only execution grants.
+  History cards retain their existing per-activity tints.
+- Regression expectations cover summary edits and outgoing mail without tint,
+  preserving an existing incoming-email tint after manual edits, and clearing the
+  tint when incoming messages are read even if manual activity remains unread.
+  Tests and browser checks for this correction have not been run at the user's request.
 - Receipts are per authenticated viewer and activity ID, persist across reloads,
   and never alter CRM fields or another viewer's state. Existing activities start
   unread because previous viewing history was not recorded.

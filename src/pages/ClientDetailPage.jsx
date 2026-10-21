@@ -10,6 +10,7 @@ import { CANDIDATE_TABLE_COLUMNS, DEFAULT_CANDIDATE_COLUMN_KEYS, mergeCandidateC
 import { CANDIDATE_STATUSES, CANDIDATE_STATUS_BADGE_MAP, CANDIDATE_STATUS_OPTIONS, REQUIRED_CANDIDATE_STATUS_ERROR, isCandidateStatusSelected } from '../utils/candidateStatuses'
 import { MANDATE_STATUSES, MANDATE_STATUS_BADGE_MAP, mandateStatusLabel, normalizeMandateStatus } from '../utils/mandateStatuses'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
+import { useStatusMutationGuard } from '../hooks/useStatusMutationGuard'
 import TablePopover from '../components/TablePopover'
 import FloatingDropdown from '../components/FloatingDropdown'
 import { FyndbridgeLoader } from '../components/FyndbridgeLoader'
@@ -144,6 +145,8 @@ export default function ClientDetailPage() {
   const [savingCandidate, setSavingCandidate] = useState(false)
   const [tablePopover, setTablePopover] = useState(null)
   const [statusSaving, setStatusSaving] = useState({})
+  const [statusUpdateError, setStatusUpdateError] = useState('')
+  const statusMutations = useStatusMutationGuard()
   const [expandedCells, setExpandedCells] = useState({})
   const [openingDocument, setOpeningDocument] = useState('')
   const columnsDropdownRef = useRef(null)
@@ -227,9 +230,12 @@ export default function ClientDetailPage() {
   }, [clientId])
 
   const refreshDetailData = useCallback(async ({ showLoading = true } = {}) => {
+    if (statusMutations.hasPending()) return
+    const statusRevision = statusMutations.snapshot()
     try {
       if (showLoading) setLoading(true)
       const clientRes = await fetch(`/api/clients/${clientId}`)
+      if (!statusMutations.accepts(statusRevision)) return
       if (clientRes.status === 404) {
         setClient(null)
         return
@@ -243,16 +249,29 @@ export default function ClientDetailPage() {
       ])
       if (!jobsRes.ok) throw new Error('Failed to fetch client jobs.')
       const jobsPayload = await jobsRes.json()
+      if (!statusMutations.accepts(statusRevision)) return
       setClient(clientData)
       setClientJobs(jobsPayload.data || [])
       setCandidates(candidateRows)
       setError(null)
     } catch (err) {
+      if (!statusMutations.accepts(statusRevision)) return
       setError(err.message)
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [clientId, fetchAllCandidates])
+  }, [clientId, fetchAllCandidates, statusMutations])
+
+  useEffect(() => {
+    let timer
+    const refresh = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => refreshDetailData({ showLoading: false }), 0)
+    }
+    window.addEventListener('ats:jobs-updated', refresh)
+    window.addEventListener('ats:candidates-updated', refresh)
+    return () => { window.clearTimeout(timer); window.removeEventListener('ats:jobs-updated', refresh); window.removeEventListener('ats:candidates-updated', refresh) }
+  }, [refreshDetailData])
 
   useEffect(() => {
     refreshDetailData()
@@ -393,17 +412,13 @@ export default function ClientDetailPage() {
     setTablePopover(null)
   }
 
-  const refreshClientJobs = useCallback(async () => {
-    const rootClientId = client?.client_group_id || client?.root_client_id || client?.id || clientId
-    const jobsRes = await fetch(`/api/jobs?client_id=${rootClientId}&all=true`)
-    if (!jobsRes.ok) throw new Error('Failed to refresh client jobs.')
-    const jobsPayload = await jobsRes.json().catch(() => ({}))
-    setClientJobs(jobsPayload.data || [])
-  }, [client?.client_group_id, client?.id, client?.root_client_id, clientId])
-
   const updateMandateStatus = async (group, status) => {
     const job = group.relatedJob
     if (!job?.id) return
+    setTablePopover(null)
+    if (normalizeMandateStatus(job.mandate_status || job.status || job.priority) === normalizeMandateStatus(status) || !statusMutations.begin(job.id)) return
+    setStatusUpdateError('')
+    setClientJobs(rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: status } : row))
     setStatusSaving(current => ({ ...current, [job.id]: true }))
     try {
       const res = await fetch(`/api/jobs/${job.id}`, {
@@ -415,11 +430,13 @@ export default function ClientDetailPage() {
       if (!res.ok) throw new Error(data.error || 'Unable to update mandate status.')
       setClientJobs(rows => rows.map(row => row.id === job.id ? { ...row, ...data } : row))
       window.dispatchEvent(new Event('ats:public-roles-updated'))
-      setTablePopover(null)
     } catch (err) {
-      setError(err.message)
+      setClientJobs(rows => rows.map(row => row.id === job.id ? { ...row, mandate_status: job.mandate_status } : row))
+      setStatusUpdateError(err.message)
     } finally {
+      statusMutations.finish(job.id)
       setStatusSaving(current => ({ ...current, [job.id]: false }))
+      window.dispatchEvent(new Event('ats:jobs-updated'))
     }
   }
 
@@ -434,9 +451,9 @@ export default function ClientDetailPage() {
       setTablePopover(null)
       return
     }
-    const previousCandidates = candidates
-    const optimistic = candidates.map(row => row.associationId === associationId ? { ...row, status } : row)
-    setCandidates(optimistic)
+    if (!statusMutations.begin(associationId)) return
+    setStatusUpdateError('')
+    setCandidates(current => current.map(row => (row.associationId || row.id) === associationId ? { ...row, status } : row))
     setStatusSaving(current => ({ ...current, [associationId]: true }))
     setTablePopover(null)
     try {
@@ -449,15 +466,15 @@ export default function ClientDetailPage() {
       if (!response.ok) throw new Error(data.error || Object.values(data.errors || {})[0] || 'Unable to update candidate status.')
       const updated = apiCandidateToUi(data)
       setCandidates(current => current.map(row => row.associationId === updated.associationId ? updated : row))
-      await refreshClientJobs()
-      window.dispatchEvent(new Event('ats:jobs-updated'))
-      window.dispatchEvent(new Event('ats:candidates-updated'))
       setError(null)
     } catch (err) {
-      setCandidates(previousCandidates)
-      setError(err.message)
+      setCandidates(current => current.map(row => (row.associationId || row.id) === associationId ? { ...row, status: candidate.status } : row))
+      setStatusUpdateError(err.message)
     } finally {
+      statusMutations.finish(associationId)
       setStatusSaving(current => ({ ...current, [associationId]: false }))
+      window.dispatchEvent(new Event('ats:jobs-updated'))
+      window.dispatchEvent(new Event('ats:candidates-updated'))
     }
   }
   const togglePendingColumn = (key) => setPendingColumns(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key])
@@ -692,6 +709,7 @@ export default function ClientDetailPage() {
         <Link to="/dashboard/clients" className="btn-secondary"><ChevronLeft size={15} /> Back to Clients</Link>
       </div>
 
+      {statusUpdateError && <div className="form-error" style={{ display: 'block', marginBottom: 12 }} role="alert">{statusUpdateError}</div>}
       <div className="client-header-card">
         <div className="client-avatar-large">{initials(client.name)}</div>
         <div className="client-header-info">

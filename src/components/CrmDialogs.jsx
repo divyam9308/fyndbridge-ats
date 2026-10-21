@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, X } from 'lucide-react'
 import { useDialogFocus } from '../hooks/useDialogFocus'
@@ -21,7 +21,7 @@ export function CrmDialog({ title, onClose, busy = false, large = false, childre
   </div></div>, document.body)
 }
 
-export function CrmClientForm({ record, onClose, onSaved }) {
+export function CrmClientForm({ record, refreshLatest = false, onClose, onSaved }) {
   const { user, session } = useAuth()
   const { staff, selectableStaff, loading: staffLoading } = useStaffDirectory()
   const [form, setForm] = useState(() => ({ organisation_name: '', organisation_summary: null, contacts: [emptyContact()], sector: '', connected_through: '', conversion_probability: '', status: '', assigned_consultant_id: user?.id || session?.user?.id || '', next_follow_up_date: '', ...record, comment: record?.latest_comment?.body || '' }))
@@ -33,9 +33,34 @@ export function CrmClientForm({ record, onClose, onSaved }) {
   const [duplicate, setDuplicate] = useState(null)
   const [details, setDetails] = useState(false)
   const [conflict, setConflict] = useState(false)
+  const [refreshError, setRefreshError] = useState('')
   const saving = useRef(false)
+  const edited = useRef(false)
+  const refreshController = useRef(null)
   const inputRefs = useRef({})
-  const set = (key, value) => { setForm(current => ({ ...current, [key]: value, ...(key === 'organisation_name' && value.trim().toLowerCase() !== current.organisation_name.trim().toLowerCase() ? { organisation_summary: null } : {}) })); setErrors(current => ({ ...current, [key]: '' })) }
+  const recordId = record?.id
+  useEffect(() => {
+    if (!refreshLatest || !recordId) return undefined
+    const controller = new AbortController()
+    refreshController.current = controller
+    crmRequest(`/${recordId}`, { signal: controller.signal }).then(({ data }) => {
+      if (controller.signal.aborted) return
+      setRefreshError('')
+      // Keep the draft and its original version together once editing starts.
+      // The save RPC will reject stale versions instead of overwriting newer data.
+      if (edited.current || saving.current) return
+      setTarget(data)
+      setForm({ ...data, comment: data.latest_comment?.body || '' })
+    }).catch(failure => {
+      if (!controller.signal.aborted) setRefreshError(failure.status === 404 ? 'This client is no longer available. Save will check the record again.' : 'Could not refresh the latest details. You can continue editing; Save will check for changes.')
+    })
+    return () => { controller.abort(); if (refreshController.current === controller) refreshController.current = null }
+  }, [recordId, refreshLatest])
+  const summaryBusyChanged = useCallback(value => {
+    if (value) edited.current = true
+    setSummaryBusy(value)
+  }, [])
+  const set = (key, value) => { edited.current = true; setForm(current => ({ ...current, [key]: value, ...(key === 'organisation_name' && value.trim().toLowerCase() !== current.organisation_name.trim().toLowerCase() ? { organisation_summary: null } : {}) })); setErrors(current => ({ ...current, [key]: '' })) }
   const contactSet = (index, key, value) => set('contacts', form.contacts.map((contact, i) => i === index ? { ...contact, [key]: value } : contact))
   const save = async event => {
     event.preventDefault()
@@ -43,6 +68,7 @@ export function CrmClientForm({ record, onClose, onSaved }) {
     const nextErrors = validateCrm(form)
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) { inputRefs.current[Object.keys(nextErrors)[0]]?.focus(); return }
+    refreshController.current?.abort()
     saving.current = true; setBusy(true); setError(''); setConflict(false)
     try {
       const comment = form.comment.trim() === (target?.latest_comment?.body || '') ? '' : form.comment.trim()
@@ -55,6 +81,7 @@ export function CrmClientForm({ record, onClose, onSaved }) {
   }
   const selectDuplicate = async () => {
     if (saving.current) return
+    refreshController.current?.abort()
     saving.current = true; setBusy(true); setError('')
     try {
       if (duplicate.source === 'crm') {
@@ -70,8 +97,9 @@ export function CrmClientForm({ record, onClose, onSaved }) {
     finally { saving.current = false; setBusy(false) }
   }
   const reload = async () => {
+    refreshController.current?.abort()
     setBusy(true)
-    try { const { data } = await crmRequest(`/${target.id}`); setTarget(data); setForm({ ...data, comment: data.latest_comment?.body || '' }); setError(''); setConflict(false) } catch (failure) { setError(failure.message) } finally { setBusy(false) }
+    try { const { data } = await crmRequest(`/${target.id}`); setTarget(data); setForm({ ...data, comment: data.latest_comment?.body || '' }); edited.current = false; setError(''); setRefreshError(''); setConflict(false) } catch (failure) { setError(failure.message) } finally { setBusy(false) }
   }
   const field = (key, label, { required = false, type = 'text', value = form[key] || '', onChange = value => set(key, value), options, maxLength } = {}) => <div className="form-group" key={key}>
     <label className="form-label" htmlFor={`crm-${key}`}>{label}{required && <span className="required"> *</span>}</label>
@@ -92,12 +120,13 @@ export function CrmClientForm({ record, onClose, onSaved }) {
       {details && <div className="crm-history-entry">{duplicate.contacts?.map((contact, index) => <p key={index}>{contact.name} · {contact.mobile} · {contact.email}</p>)}{duplicate.source === 'clients' && <p>Selecting this client links its existing identity to a separate CRM record. ATS Client details are unchanged.</p>}</div>}
       {error && <p className="form-error" role="alert">{error}</p>}
     </div> : <form id="crm-client-form" className="modal-body" onSubmit={save} noValidate>
+      {refreshError && <p className="sub-text" role="status">{refreshError}</p>}
       {error && <div className="crm-error" role="alert">{error}{conflict && <button type="button" className="btn-secondary" onClick={reload} disabled={busy}>Reload latest (discard these edits)</button>}</div>}
       <fieldset disabled={busy} className="crm-form-fields"><div className="form-grid-2">
         {field('organisation_name', 'Organisation Name', { required: true, maxLength: 200 })}
         <div className="form-group"><label className="form-label" htmlFor="crm-created">Date</label><input id="crm-created" className="form-control" value={target ? formatDateDDMMYYYY(target.created_at) : 'Automatically set on save'} readOnly /></div>
       </div>
-      <CrmOrganisationSummary name={form.organisation_name} sector={form.sector} value={form.organisation_summary} onChange={value => set('organisation_summary', value)} onBusyChange={setSummaryBusy} disabled={busy} />
+      <CrmOrganisationSummary name={form.organisation_name} sector={form.sector} value={form.organisation_summary} onChange={value => set('organisation_summary', value)} onBusyChange={summaryBusyChanged} disabled={busy} />
       {form.contacts.map((contact, index) => <section className="crm-contact-form" key={index} aria-label={`Contact ${index + 1}`}>
         <div className="crm-contact-heading"><span className="section-label">Contact {index + 1}</span>{form.contacts.length > 1 && <button type="button" className="row-action-btn" title={`Remove Contact ${index + 1}`} onClick={() => set('contacts', form.contacts.filter((_, i) => i !== index))}><Trash2 size={14} /></button>}</div>
         <div className="form-grid-2">{[['name', 'Contact Person', true], ['mobile', 'Mobile'], ['email', 'Email'], ['designation', 'Designation'], ['linkedin', 'LinkedIn']].map(([key, label, required]) => field(`contacts.${index}.${key}`, label, { value: contact[key] || '', required, type: key === 'email' ? 'email' : 'text', maxLength: key === 'name' ? 200 : key === 'mobile' ? 100 : key === 'email' ? 320 : 500, onChange: value => contactSet(index, key, value) }))}</div>

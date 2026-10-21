@@ -30,6 +30,7 @@ export default function CrmPage() {
   const [sort, setSort] = useState('created_at:desc')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [statusUpdateError, setStatusUpdateError] = useState('')
   const [revision, setRevision] = useState(0)
   const [form, setForm] = useState(null)
   const [history, setHistory] = useState(null)
@@ -60,10 +61,10 @@ export default function CrmPage() {
     const [field, direction] = sort.split(':')
     const params = new URLSearchParams({ search: query, page, pageSize, follow_up: follow, sort: field, direction })
     crmRequest(`?${params}`, { signal: controller.signal }).then(result => {
-      if (requestGeneration !== generation.current) return
+      if (requestGeneration !== generation.current || locks.current.size) return
       setRows(result.data); setTotal(result.total); setToday(result.today); setError('')
       if (page > Math.max(1, Math.ceil(result.total / pageSize))) setPage(Math.max(1, Math.ceil(result.total / pageSize)))
-    }).catch(failure => { if (failure.name !== 'AbortError') setError(failure.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    }).catch(failure => { if (!controller.signal.aborted && failure.name !== 'AbortError' && requestGeneration === generation.current && !locks.current.size) setError(failure.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [follow, page, pageSize, query, revision, sort])
   // Re-evaluate company-local follow-up boundaries after midnight / returning to tab.
@@ -84,21 +85,40 @@ export default function CrmPage() {
     } catch (failure) { if (mounted.current) setError(failure.message) }
     finally { locks.current.delete('read-all'); if (mounted.current) setReadingAll(false) }
   }
-  const replace = useCallback(record => setRows(current => current.map(row => row.id === record.id ? record : row)), [])
+  // Save responses omit unread metadata. Preserve it until the background list refresh.
+  const replace = useCallback(record => setRows(current => current.map(row => row.id === record.id ? { ...row, ...record } : row)), [])
   const reloadRow = async record => {
-    try { const { data } = await crmRequest(`/${record.id}`); replace(data); setComment(current => current?.record.id === data.id ? { ...current, record: data } : current); setError('') } catch (failure) { setError(failure.message) }
+    if (locks.current.has(record.id)) return
+    const requestGeneration = generation.current
+    try {
+      const { data } = await crmRequest(`/${record.id}`)
+      if (requestGeneration !== generation.current || locks.current.has(record.id) || !mounted.current) return
+      replace(data); setComment(current => current?.record.id === data.id ? { ...current, record: data } : current); setError('')
+    } catch (failure) { if (requestGeneration === generation.current && mounted.current) setError(failure.message) }
   }
   const update = async (record, values) => {
     if (locks.current.has(record.id)) return false
+    const instant = Object.keys(values).every(key => ['status', 'conversion_probability', 'connected_through'].includes(key))
     locks.current.add(record.id); setBusy(current => ({ ...current, [record.id]: true })); setError('')
+    if (instant) { setStatusUpdateError(''); replace({ id: record.id, ...values }) }
     // Invalidate in-flight list responses so they cannot replace a successful edit.
     ++generation.current
     try {
       const { data } = await crmRequest(`/${record.id}`, { method: 'PATCH', body: JSON.stringify({ ...values, version: record.version }) })
       if (mounted.current) { ++generation.current; replace(data); setRevision(value => value + 1) }
       return true
-    } catch (failure) { if (mounted.current) setError(failure.message); return false }
-    finally { locks.current.delete(record.id); if (mounted.current) setBusy(current => ({ ...current, [record.id]: false })) }
+    } catch (failure) {
+      if (mounted.current) {
+        if (instant) {
+          replace({ id: record.id, ...Object.fromEntries(Object.keys(values).map(key => [key, record[key]])) })
+          setStatusUpdateError(failure.message)
+        } else setError(failure.message)
+      }
+      return false
+    } finally {
+      locks.current.delete(record.id)
+      if (mounted.current) { setBusy(current => ({ ...current, [record.id]: false })); if (!locks.current.size) refreshActivities() }
+    }
   }
   const openPopover = (record, field, options, element) => setPopover({ record, field, options, anchorRect: element.getBoundingClientRect() })
   const drop = (record, field, options) => <button type="button" className={field === 'connected_through' ? 'filter-select compact-select' : `badge ${CRM_BADGES[record[field]] || 'badge-status-unset'}`} disabled={busy[record.id]} aria-label={`Edit ${field.replaceAll('_', ' ')} for ${record.organisation_name}`} onClick={event => openPopover(record, field, options, event.currentTarget)}>{record[field] || '-'}</button>
@@ -110,9 +130,7 @@ export default function CrmPage() {
     if (!window.confirm(`Delete ${record.contacts[index]?.name || 'this contact'}?`)) return
     if (await update(record, { contacts: record.contacts.filter((_, i) => i !== index) })) setSelectedContacts(current => ({ ...current, [record.id]: 0 }))
   }
-  const openEdit = async record => {
-    try { const { data } = await crmRequest(`/${record.id}`); setForm({ record: data }) } catch (failure) { setError(failure.message) }
-  }
+  const openEdit = record => setForm({ record, refreshLatest: true })
   const deleteOrganisation = async () => {
     const record = deleteTarget
     if (!record || locks.current.has(record.id)) return
@@ -139,7 +157,7 @@ export default function CrmPage() {
       <select className="filter-select" aria-label="Sort CRM" value={sort} onChange={event => configure(setSort)(event.target.value)}><option value="created_at:desc">Newest first</option><option value="created_at:asc">Oldest first</option><option value="conversion_probability:desc">Probability: highest to lowest</option><option value="organisation_name:asc">Organisation A–Z</option><option value="organisation_name:desc">Organisation Z–A</option></select>
       <CrmGmailConnection onSynced={refreshActivities} />
     </div>
-    {error && <div className="crm-error" role="alert">{error}<button className="btn-secondary" onClick={() => { setLoading(true); setRevision(value => value + 1) }}>Reload table</button></div>}
+    {(error || statusUpdateError) && <div className="crm-error" role="alert">{statusUpdateError || error}<button className="btn-secondary" onClick={() => { setStatusUpdateError(''); setLoading(true); setRevision(value => value + 1) }}>Reload table</button></div>}
     <div className="table-card"><div className="table-wrapper crm-table-scroll"><table className="data-table fb-theme-table crm-table"><colgroup>{WIDTHS.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
       <thead><tr>{COLUMNS.map(label => <th key={label} scope="col">{['Organisation Name', 'Date'].includes(label) ? <button className="crm-sort-heading" onClick={() => configure(setSort)(`${label === 'Organisation Name' ? 'organisation_name' : 'created_at'}:${sort.endsWith('asc') ? 'desc' : 'asc'}`)}>{label} ↕</button> : label}</th>)}</tr></thead>
       <tbody>{loading && !rows.length ? <tr><td colSpan={COLUMNS.length}><div className="crm-empty"><FyndbridgeLoader /></div></td></tr> : !rows.length ? <tr><td colSpan={COLUMNS.length}><div className="crm-empty">{error ? 'Unable to load CRM clients.' : search || follow !== 'all' ? 'No matching CRM clients.' : 'No CRM clients yet.'}</div></td></tr> : rows.map(record => {
@@ -150,7 +168,7 @@ export default function CrmPage() {
         const { isLong, preview } = previewWords(commentBody, 3)
         const about = previewWords(summaryPlainText(record.organisation_summary), 5)
         const expanded = Boolean(record.latest_comment && expandedComments[record.id] === record.latest_comment.id)
-        const unreadTone = record.unread_activity_count > 0 ? (['positive', 'neutral', 'negative'].includes(record.unread_tone) ? record.unread_tone : 'positive') : null
+        const unreadTone = record.unread_activity_count > 0 && ['positive', 'neutral', 'negative'].includes(record.unread_tone) ? record.unread_tone : null
         return <tr key={record.id} className={unreadTone ? `crm-unread-${unreadTone}` : undefined} aria-busy={Boolean(busy[record.id])}>
           <td><span className="name-text">{record.organisation_name}</span>{unreadTone && <span className="crm-unread-label">{record.unread_activity_count} unread {unreadTone === 'positive' ? 'updates' : `${unreadTone} updates`}</span>}<button className={`crm-follow crm-follow-${state}`} type="button" title={record.next_follow_up_date ? `Next follow-up: ${formatDateDDMMYYYY(record.next_follow_up_date)}` : 'Set follow-up date'} onClick={() => setFollowEditor({ record, value: record.next_follow_up_date || '' })}>{FOLLOW_LABELS[state]}{record.next_follow_up_date ? ` · ${formatDateDDMMYYYY(record.next_follow_up_date)}` : ''}</button></td>
           <td className="crm-summary-cell">{about.preview ? <><span>{about.preview}{about.isLong ? '…' : ''}</span><button type="button" className="table-view-more" aria-label={`View more about ${record.organisation_name}`} aria-haspopup="dialog" onClick={() => setSummaryTarget(record)}>View more</button></> : <span className="sub-text">-</span>}</td>
@@ -171,9 +189,10 @@ export default function CrmPage() {
     <PaginationBar page={page} totalPages={Math.max(1, Math.ceil(total / pageSize))} total={total} pageSize={pageSize} loading={loading || search !== query} onPageChange={value => { setLoading(true); setPage(value) }} onPageSizeChange={configure(setPageSize)} />
     {popover && <TablePopover anchorRect={popover.anchorRect} width={210} onClose={() => setPopover(null)}>{['', ...popover.options].map(option => <button className="candidate-columns-action" key={option} disabled={busy[popover.record.id]} onClick={async () => {
       if (option === (popover.record[popover.field] || '')) { setPopover(null); return }
-      if (await update(popover.record, { [popover.field]: option })) setPopover(null)
+      setPopover(null)
+      void update(popover.record, { [popover.field]: option })
     }}>{option || '-'}</button>)}</TablePopover>}
-    {form && <CrmClientForm record={form.record} onClose={() => setForm(null)} onSaved={saved} />}
+    {form && <CrmClientForm key={form.record?.id || 'new'} record={form.record} refreshLatest={form.refreshLatest} onClose={() => setForm(null)} onSaved={saved} />}
     {summaryTarget && <CrmDialog title={`About ${summaryTarget.organisation_name}`} onClose={() => setSummaryTarget(null)} footer={<button type="button" className="btn-secondary" onClick={() => setSummaryTarget(null)}>Close</button>}><div className="modal-body crm-summary-popup"><CrmSummaryContent summary={summaryTarget.organisation_summary} /></div></CrmDialog>}
     {history && <CrmHistory key={`${history.record.id}:${history.kind}`} {...history} onRead={refreshActivities} onClose={() => setHistory(null)} />}
     {deleteTarget && <CrmDialog title="Delete Organisation" busy={Boolean(busy[deleteTarget.id])} onClose={() => setDeleteTarget(null)} footer={<><button type="button" className="btn-secondary" disabled={busy[deleteTarget.id]} onClick={() => setDeleteTarget(null)}>Cancel</button><button type="button" className="btn-primary crm-confirm-delete" disabled={busy[deleteTarget.id]} onClick={deleteOrganisation}>{busy[deleteTarget.id] ? 'Deleting...' : 'Delete organisation'}</button></>}><div className="modal-body"><p>Permanently delete <strong>{deleteTarget.organisation_name}</strong> and its CRM contacts, comments and activity history?</p><p className="sub-text">This cannot be undone. Linked ATS clients, mandates, candidates and Gmail connections are preserved.</p>{deleteError && <p className="form-error" role="alert">{deleteError}</p>}</div></CrmDialog>}
