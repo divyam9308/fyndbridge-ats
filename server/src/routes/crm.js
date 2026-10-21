@@ -110,9 +110,14 @@ router.delete('/:id', safe(async (req, res) => {
 router.use((error, req, res, next) => {
   if (res.headersSent) return next(error)
   if (error.code?.startsWith('SUMMARY_')) {
+    if (req.path === '/organisation-summary') console.warn('crm_organisation_summary_failed', {
+      code: error.code, userId: req.user?.id,
+      providerStatus: error.providerStatus, googleStatus: error.googleStatus,
+      providerReason: error.providerReason, model: error.model, provider: error.provider
+    })
     const status = error.code === 'SUMMARY_INVALID' ? 400 : error.code === 'SUMMARY_UNVERIFIED' ? 422 : ['SUMMARY_COOLDOWN', 'SUMMARY_QUOTA'].includes(error.code) ? 429 : 503
     if (status === 429) res.set('Retry-After', '30')
-    return res.status(status).json({ error: error.message })
+    return res.status(status).json({ error: error.message, code: error.code })
   }
   if (error.code === '23505') {
     let existing = null
