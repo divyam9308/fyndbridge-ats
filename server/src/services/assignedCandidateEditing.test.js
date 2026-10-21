@@ -18,13 +18,13 @@ test('assignment editing repeats action grants, ownership, reference validation 
   const row = await assign(db, 901), colleague = await assign(db, 902, { consultant: OTHER })
   const current = async () => (await db.query('select * from assigned_candidates where id=$1', [row.id])).rows[0]
   const original = await current()
-  const endpoints = [[`/${row.id}/status`, 'PATCH', { status: 'Interested' }], [`/${row.id}/consultant`, 'PATCH', { assigned_consultant_id: OTHER }], [`/${row.id}`, 'PATCH', { full_name: 'Edit', expected_version: 1 }], [`/${row.id}`, 'DELETE', {}], [`/${row.id}/parse`, 'POST', {}], [`/${row.id}/review`, 'POST', {}], [`/${row.id}/transfer`, 'POST', {}]]
+  const endpoints = [[`/${row.id}/consultant`, 'PATCH', { assigned_consultant_id: OTHER }], [`/${row.id}`, 'PATCH', { full_name: 'Edit', expected_version: 1 }], [`/${row.id}`, 'DELETE', {}]]
   for (const [path, method, body] of endpoints) assert.equal((await request(path, method, body)).httpStatus, 403)
   assert.equal((await request(`/${row.id}`)).httpStatus, 403)
   assert.equal((await request(`/${row.id}/cv`)).httpStatus, 200)
   await db.query("update page_view_permissions set allowed_user_ids=$1 where page_key='assigned_candidates_overall'", [[CONSULTANT]])
   assert.equal((await request('')).can_view_overall, true)
-  assert.equal((await request(`/${colleague.id}/status`, 'PATCH', { status: 'Interested' })).httpStatus, 403)
+  assert.equal((await request(`/${colleague.id}/status`, 'PATCH', { status: 'Interested' })).httpStatus, 404)
   await db.query("update page_view_permissions set allowed_user_ids=$1 where page_key='assigned_candidates_manage'", [[CONSULTANT]])
   for (const [path, method, body] of [[`/${colleague.id}`, 'PATCH', { full_name: 'Denied', expected_version: 1 }], [`/${colleague.id}/consultant`, 'PATCH', { assigned_consultant_id: CONSULTANT }]]) assert.equal((await request(path, method, body)).httpStatus, 404)
   assert.equal((await request(`/${colleague.id}`, 'DELETE', {})).httpStatus, 403)

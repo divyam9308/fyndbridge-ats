@@ -125,10 +125,10 @@ exports.create = handle(async(req,res)=>{
   res.status(201).json({count:saved})
 })
 exports.status = handle(async(req,res)=>{
-  await creationContext(req)
+  await context(req)
   if(!ASSIGNED_STATUSES.includes(req.body.status)) throw fail('Select a valid status.')
   const row=await getRow(req)
-  unwrap(await supabase.rpc('update_assigned_candidate',{p_actor:req.user.id,p_id:row.id,p_data:{status:req.body.status},p_expected_version:row.version}))
+  unwrap(await supabase.rpc('set_assigned_candidate_status',{p_actor:req.user.id,p_id:row.id,p_status:req.body.status,p_expected_version:row.version}))
   res.json({success:true})
 })
 exports.detail = handle(async(req,res)=>{
@@ -161,7 +161,7 @@ exports.cv = handle(async(req,res)=>{
   res.json({url:data.signedUrl,fileName:cv.cv_original_name,contentType:cv.cv_mimetype})
 })
 exports.parse = handle(async(req,res)=>{
-  await creationContext(req)
+  await context(req)
   const row=await getRow(req)
   const file=path.join(os.tmpdir(),`${randomUUID()}.pdf`)
   try {
@@ -173,7 +173,7 @@ exports.parse = handle(async(req,res)=>{
   } finally {await fs.unlink(file).catch(()=>{})}
 })
 async function transfer(req,res) {
-  await creationContext(req)
+  await context(req)
   const row=await getRow(req)
   if(row.added_at) return res.json({candidate_id:row.candidate_id,association_id:row.association_id,idempotent:true})
   if(row.status === 'Not Relevant') throw fail('Not Relevant assignments cannot be added to Candidates.',409)

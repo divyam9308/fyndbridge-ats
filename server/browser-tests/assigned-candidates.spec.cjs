@@ -27,14 +27,15 @@ async function grantActions(assigned, users = [assigned.CONSULTANT]) {
   expect(response.status).toBe(200)
 }
 
-test('New/Delete permission controls editing, reassignment and mutations while read-only consultants keep CV access', async ({ page, assigned, app }, info) => {
+test('New/Delete controls full editing while assignees retain status and transfer access', async ({ page, assigned, app }, info) => {
   assigned.admin = false; app.superAdmin = false
   await goto(page)
   const first = row(page, 'Test Candidate 301')
   await expect(page.getByRole('button', { name: 'New', exact: true })).toHaveCount(0)
-  await expect(first.getByRole('button', { name: /Status for/ })).toBeDisabled()
+  await expect(first.getByRole('button', { name: /Status for/ })).toBeEnabled()
   await expect(first.getByRole('button', { name: /Actions for/ })).toHaveCount(0)
   await expect(first.getByRole('button', { name: 'Add to Candidates', exact: true })).toBeDisabled()
+  await expect(row(page, 'Test Candidate 321').getByRole('button', { name: 'Add to Candidates', exact: true })).toBeEnabled()
   await expect(first.getByRole('link', { name: 'Open Candidate-301.pdf', exact: true })).toBeVisible()
   await expect(page.locator('.assigned-toolbar h2')).toHaveCount(0)
   await grantActions(assigned); await page.reload()
@@ -116,7 +117,7 @@ test('native layout, KPI scope, grouping over pages, badges and consultant restr
   assigned.admin=false;app.superAdmin=false;await page.reload();await expect(table).toBeVisible()
   await expect(table.getByRole('columnheader',{name:'Consultant',exact:true})).toHaveCount(0)
   await expect(page.getByRole('button',{name:'Consultant filter'})).toHaveCount(0);await expect(page.getByRole('button',{name:'Delete All',exact:true})).toHaveCount(0)
-  await expect(page.getByRole('button',{name:'New',exact:true})).toHaveCount(0);await expect(table.getByRole('checkbox')).toHaveCount(26);await expect(row(page,'Test Candidate 301').getByRole('checkbox')).toBeDisabled()
+  await expect(page.getByRole('button',{name:'New',exact:true})).toHaveCount(0);await expect(table.getByRole('checkbox')).toHaveCount(26);await expect(row(page,'Test Candidate 301').getByRole('checkbox')).toBeEnabled()
 })
 
 test('multiple uploads, parsing failure, manual correction, Back and batch Save preserve every entry',async({page,assigned},info)=>{
@@ -501,8 +502,8 @@ test('selection popup matches Applied Candidates, preserves page selections and 
   await dock.getByRole('button',{name:'Clear selection',exact:true}).click()
   await expect(dock).toHaveAttribute('inert','')
   assigned.admin=false;app.superAdmin=false;await page.reload()
-  await expect(row(page,'Test Candidate 301').getByRole('checkbox')).toBeDisabled()
-  await expect(row(page,'Test Candidate 301').getByRole('button',{name:/Status for/})).toBeDisabled()
+  await expect(row(page,'Test Candidate 301').getByRole('checkbox')).toBeEnabled()
+  await expect(row(page,'Test Candidate 301').getByRole('button',{name:/Status for/})).toBeEnabled()
   await grantActions(assigned);await page.reload()
   await setStatus(page,'Test Candidate 301','Interested')
   await row(page,'Test Candidate 301').getByRole('checkbox').check()
@@ -513,7 +514,6 @@ test('selection popup matches Applied Candidates, preserves page selections and 
 
 test('consultant bulk review supports Next, Back and Cancel without writes until final Save',async({page,assigned,app},info)=>{
   assigned.admin=false;app.superAdmin=false
-  await grantActions(assigned)
   await selectTransferPair(page)
   let form=transferForm(page)
   await form.locator('input[name=name]').fill('Reviewed First Candidate')

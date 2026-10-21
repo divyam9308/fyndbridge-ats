@@ -23,10 +23,11 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     assert.equal((await request(`/${own.id}/consultant`,'PATCH',{assigned_consultant_id:OTHER})).httpStatus,403)
     const other=(await db.query('select id from assigned_candidates where assigned_consultant_id=$1',[OTHER])).rows[0].id
     assert.equal((await request(`/${other}/cv`)).httpStatus,404)
-    assert.equal((await request(`/${other}/review`,'POST',{})).httpStatus,403)
+    assert.equal((await request(`/${other}/review`,'POST',{})).httpStatus,404)
     assert.equal((await request(`/${own.id}/cv`)).httpStatus,200)
-    for (const [endpoint,method,body] of [[`/${own.id}/status`,'PATCH',{status:'Interested'}],[`/${own.id}/transfer`,'POST',{}],[`/${own.id}/review`,'POST',{}],[`/${own.id}`,'PATCH',{full_name:'Denied',expected_version:1}]]) assert.equal((await request(endpoint,method,body)).httpStatus,403)
-    await db.query("update page_view_permissions set allowed_user_ids=$1 where page_key='assigned_candidates_manage'",[[CONSULTANT]])
+    assert.equal((await request(`/${own.id}/status`,'PATCH',{status:'Not Contacted'})).httpStatus,200)
+    for (const endpoint of ['transfer','review']) assert.equal((await request(`/${own.id}/${endpoint}`,'POST',{})).httpStatus,409)
+    assert.equal((await request(`/${own.id}`,'PATCH',{full_name:'Denied',expected_version:1})).httpStatus,403)
   })
   await t.test('only seven assignment statuses are offered and unsupported updates are rejected',async()=>{
     const statuses=['Not Contacted','Didn’t Pick Up','Interested','Not Interested','In Discussion','Rejected by Recruiter','Not Relevant']

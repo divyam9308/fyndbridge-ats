@@ -73,14 +73,31 @@ All paths below are relative to `/api/assigned-candidates`, behind existing auth
 
 ### Row actions and editing
 
-`20261020042222_assigned_candidate_row_actions.sql` makes the existing
-`assigned_candidates_manage` (New / Delete All) grant control all row mutations:
-status changes, parsing for transfer, Add to Candidates/review, reassignment,
-individual/selected deletion and Edit assignment. Users without that grant retain
-their permitted read/CV access. Overall access alone grants no mutations.
-Delegated consultants can act only on rows currently assigned to them; administrator
-scope remains available within the same action grant. Reassigning a row removes the
-original consultant's mutation access immediately.
+`assigned_candidates_manage` (New / Delete All) controls New, individual/selected
+deletion, Delete All, Edit assignment and consultant reassignment. These operations
+retain the full-edit RPC and its existing management grant.
+
+The follow-up `20261021073154_assigned_candidate_owner_workflow.sql` separates
+everyday work from that administrative grant. Active consultants with Assigned
+Candidates page access can change status on their own assignments without
+New/Delete permission. Add to Candidates, its review flow and its CV parsing also
+work for their own assignments, subject to existing Candidates page/column access,
+transfer status validation and duplicate handling. Administrators retain their
+existing cross-assignment scope. Overall-view permission alone does not allow a
+consultant to change somebody else's rows.
+
+Status-only saves use a separate service-role-only, security-invoker RPC accepting
+only actor, assignment ID, status and expected version. It checks active employment,
+current ownership/admin access under the row lock, status validity and record
+version; it cannot alter identity, client, mandate, consultant, dates or Added links.
+The transfer RPC already checks authoritative ownership/status under its row lock
+and does not require the New/Delete grant. Reassigning a row immediately removes
+the former assignee's action access. Bulk selection/Add remains available without
+the management grant; bulk deletion stays restricted.
+
+Apply the new migration before deploying the updated status handler. This follow-up
+prepared the local migration and regression coverage without applying it to a
+hosted database, running tests or making application API calls.
 
 Edit assignment changes name, mobile, client, mandate, status and consultant. It
 reuses the existing client/mandate selectors and validates that the mandate belongs
