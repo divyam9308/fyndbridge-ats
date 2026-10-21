@@ -30,3 +30,12 @@ jobs:
       - name: Full backend regression tests
         working-directory: server
         run: npm test
+      - name: Compare full test suite against production baseline commit
+        if: always()
+        continue-on-error: true
+        run: |
+          git fetch --depth=1 origin ceab5cf9b2e2c6e803c4139debce526cad0bd1a1
+          git checkout --detach ceab5cf9b2e2c6e803c4139debce526cad0bd1a1
+          cd server
+          npm ci
+          npm test
