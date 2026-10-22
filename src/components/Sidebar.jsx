@@ -126,7 +126,7 @@ export default function Sidebar() {
     <a className="sidebar-nav-link" href={to} target="_blank" rel="noopener noreferrer" id="nav-public-roles" key={to}>
       <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
       <span className="sidebar-nav-label">{label}</span>
-      {Number.isFinite(counts[key]) && <span className={`sidebar-count-badge${key === 'assigned_candidates' ? ` assigned-count-${counts[key] > (counts.assigned_overall ? 50 : 10) ? 'high' : 'low'}` : ''}`} aria-label={`${label}: ${counts[key]}`}>{counts[key] > 99 ? '99+' : counts[key]}</span>}
+      {Number.isFinite(counts[key]) && <span className={`sidebar-count-badge${key === 'assigned_candidates' ? ` assigned-count-${counts[key] > (counts.assigned_overall ? 50 : 10) ? 'high' : 'low'}` : ''}`} aria-label={`${label}: ${counts[key]}`}>{key === 'assigned_candidates' ? counts[key] : counts[key] > 99 ? '99+' : counts[key]}</span>}
     </a>
   ) : (
     <NavLink
@@ -142,7 +142,7 @@ export default function Sidebar() {
     >
       <span className="nav-icon"><Icon size={17} strokeWidth={1.8} /></span>
       <span className="sidebar-nav-label">{label}</span>
-      {Number.isFinite(counts[key]) && <span className={`sidebar-count-badge${key === 'assigned_candidates' ? ` assigned-count-${counts[key] > (counts.assigned_overall ? 50 : 10) ? 'high' : 'low'}` : ''}`} aria-label={`${label}: ${counts[key]}`}>{counts[key] > 99 ? '99+' : counts[key]}</span>}
+      {Number.isFinite(counts[key]) && <span className={`sidebar-count-badge${key === 'assigned_candidates' ? ` assigned-count-${counts[key] > (counts.assigned_overall ? 50 : 10) ? 'high' : 'low'}` : ''}`} aria-label={`${label}: ${counts[key]}`}>{key === 'assigned_candidates' ? counts[key] : counts[key] > 99 ? '99+' : counts[key]}</span>}
     </NavLink>
   )
 

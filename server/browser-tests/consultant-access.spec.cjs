@@ -86,7 +86,7 @@ test('Assigned badge uses individual 10 and overall 50 boundaries and the dashbo
   await page.route('**/api/assigned-candidates/count',route=>route.fulfill({json:{count,can_view_overall:overall,threshold:overall?50:10}}))
   await page.goto('/dashboard/assigned-candidates')
   const badge=page.locator('#nav-assigned-candidates .sidebar-count-badge')
-  for(const [value,canOverall,high] of [[10,false,false],[11,false,true],[50,true,false],[51,true,true]]){
+  for(const [value,canOverall,high] of [[10,false,false],[11,false,true],[50,true,false],[51,true,true],[99,false,true],[100,false,true],[1234,true,true]]){
     count=value;overall=canOverall
     await page.evaluate(()=>window.dispatchEvent(new Event('ats:assigned-candidates-updated')))
     await expect(badge).toHaveText(String(value));await expect(badge).toHaveClass(new RegExp(high?'assigned-count-high':'assigned-count-low'))
@@ -94,7 +94,7 @@ test('Assigned badge uses individual 10 and overall 50 boundaries and the dashbo
     const animation=await badge.evaluate(node=>getComputedStyle(node,'::after').animationName)
     expect(animation).toBe(high?'assigned-count-reminder':'none')
   }
-  if(info.project.name==='chromium')await page.screenshot({path:'outputs/consultant-access-verification/sidebar-alert.png',animations:'disabled',fullPage:true})
+  if(info.project.name==='chromium')await page.screenshot({path:'/tmp/fyndbridge-playwright-artifacts/assigned-sidebar-actual-count.png',animations:'disabled',fullPage:true})
   await page.emulateMedia({reducedMotion:'reduce'})
   expect(await badge.evaluate(node=>getComputedStyle(node,'::after').animationName)).toBe('none')
   await expect(badge).toHaveCSS('background-color','rgb(220, 38, 38)')
