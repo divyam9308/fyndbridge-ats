@@ -69,7 +69,7 @@ export default function CrmGmailConnection({ onSynced }) {
     return () => { clearTimeout(timer); controller.abort() }
   }, [open, oldPicker, clientSearch, clientRetry])
   const reload = useCallback(async signal => {
-    try { const data = await crmRequest('/gmail/status', { signal }); if (!signal?.aborted) { setConnection(data); setStatusError('') } }
+    try { const data = await crmRequest('/gmail/status', { signal }); if (!signal?.aborted) { setConnection(data); setStatusError('') }; return data }
     catch (failure) { if (!signal?.aborted) setStatusError(failure.message) }
   }, [])
   useEffect(() => {
@@ -93,6 +93,15 @@ export default function CrmGmailConnection({ onSynced }) {
     refresh()
     return () => { controller.abort(); clearTimeout(timer) }
   }, [open, queueActive, reload])
+  useEffect(() => {
+    if (syncFeedback !== 'pending' || !connection || connection.pending_jobs > 0 || connection.discovery_pending) return
+    clearTimeout(syncedTimer.current)
+    syncedTimer.current = setTimeout(() => {
+      setSyncFeedback('completed')
+      setNotice({ text: SYNC_MESSAGES.completed, success: true })
+      syncedTimer.current = setTimeout(() => setSyncFeedback(''), 5000)
+    }, 0)
+  }, [connection, syncFeedback])
   const chooseClient = client => {
     setSelectedClients(selected => selected.some(value => value.id === client.id) ? selected : [...selected, { id: client.id, organisation_name: client.organisation_name }])
     clearInterval(oldCooldownTimer.current); setOldCooldownSeconds(0)
@@ -123,6 +132,7 @@ export default function CrmGmailConnection({ onSynced }) {
   const syncNow = async () => {
     if (lock.current) return
     clearTimeout(syncedTimer.current); setSyncFeedback('')
+    let queued = false
     lock.current = true; setBusy('syncing'); setError(''); setNotice(null); setOpen(false)
     try {
       const result = await crmRequest('/gmail/sync', { method: 'POST' })
@@ -131,6 +141,7 @@ export default function CrmGmailConnection({ onSynced }) {
       onSynced?.()
       setNotice({ text: SYNC_MESSAGES[result.state] || SYNC_MESSAGES.pending, success: !['not_connected', 'reauthorization_required'].includes(result.state) })
       setSyncFeedback(result.state)
+      queued = result.state === 'pending'
     } catch (failure) {
       const retryAfter = Number(failure.retry_after)
       if (failure.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) {
@@ -145,7 +156,7 @@ export default function CrmGmailConnection({ onSynced }) {
       } else { setError(failure.message); setSyncFeedback('failed') }
     }
     finally {
-      syncedTimer.current = setTimeout(() => setSyncFeedback(''), 5000)
+      if (!queued) syncedTimer.current = setTimeout(() => setSyncFeedback(''), 5000)
       lock.current = false; setBusy('')
     }
   }
