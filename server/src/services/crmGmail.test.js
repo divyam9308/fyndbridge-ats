@@ -13,13 +13,13 @@ const email = 'consultant@fyndbridge.in'
 const insight = { summary: 'Client requested a meeting. No requirements at present.', meeting: { status: 'proposed', when: 'Friday at 2 PM', evidence: 'Can we meet Friday at 2 PM?' }, negative_response: { category: 'no_requirements', permanence: 'temporary', evidence: 'No requirements at present.' }, sentiment: { label: 'neutral', evidence: 'No requirements at present.' } }
 const body = 'Can we meet Friday at 2 PM? No requirements at present.'
 function message(id = 'm1', outgoing = false) { return { id, internalDate: String(Date.now() + 1000), labelIds: outgoing ? ['SENT'] : ['INBOX'], payload: { mimeType: 'text/plain', headers: [{ name: 'From', value: outgoing ? email : 'HR <hr@client.test>' }, { name: 'To', value: outgoing ? 'hr@client.test' : email }, { name: 'Subject', value: 'Recruitment discussion' }], body: { data: Buffer.from(body).toString('base64url') } } } }
-async function fixture(t) {
+async function fixture(t, { historicalMigration = true } = {}) {
   process.env.GMAIL_TOKEN_ENCRYPTION_KEY = '01'.repeat(32)
   process.env.GOOGLE_GMAIL_CLIENT_ID = 'synthetic-client'
   process.env.GOOGLE_GMAIL_CLIENT_SECRET = 'synthetic-secret'
   process.env.GOOGLE_GMAIL_REDIRECT_URI = 'https://example.test/api/crm/gmail/callback'
   const db = await createDatabase(); t.after(() => db.close())
-  for (const name of ['20261019105523_business_development_crm.sql', migration, '20261019182711_crm_gmail_manual_sync.sql']) await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations', name), 'utf8'))
+  for (const name of ['20261019105523_business_development_crm.sql', migration, '20261019182711_crm_gmail_manual_sync.sql', ...(historicalMigration ? ['20261023094350_crm_gmail_historical_sync.sql'] : [])]) await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations', name), 'utf8'))
   const adapter = databaseAdapter(db), rawRpc = adapter.rpc
   adapter.rpc = (name, args) => rawRpc(name, Object.fromEntries(Object.entries(args || {}).map(([key,value]) => [key, Array.isArray(value) ? JSON.stringify(value) : value])))
   const saved = await adapter.rpc('crm_save', { p_actor: CONSULTANT, p_id: null, p_version: null, p_data: { organisation_name: 'Gmail Client', contacts: [contact, { ...contact, email: 'other@client.test', mobile: '9876543211' }], status: 'Outreach Sent', conversion_probability: '<25%', comment: 'Preserve this comment.' } })
@@ -34,7 +34,7 @@ async function fixture(t) {
       calls.push({ endpoint, params })
       if (endpoint === 'profile') return { emailAddress: profileEmail, historyId: '100' }
       if (endpoint === 'history') { if (historyFailure) throw historyFailure; return page || { historyId: '102', history: [{ messagesAdded: [{ message: { id: 'm1' } }, { message: { id: 'm1' } }] }] } }
-      if (endpoint === 'messages') return { messages: [{ id: 'recovered' }] }
+      if (endpoint === 'messages') return { messages: params.q.startsWith('after:') ? [{ id: 'recovered' }] : [] }
       return message(endpoint.split('/')[1], endpoint.includes('outgoing'))
     }
   }
@@ -81,7 +81,7 @@ test('OAuth state is browser-bound, single-use, expires, validates scope/account
   f.google.exchange = async () => ({ access_token: 'replacement', expires_in: 3600, scope: SCOPE })
   const replacement = await f.connect()
   assert.equal(replacement.id, connection.id); assert.equal(decrypt(replacement.credentials, CONSULTANT).refresh_token, 'synthetic-refresh')
-  assert.deepEqual(Object.keys(await service.status(CONSULTANT)).sort(), ['connected','coverage_warning','email','last_error','last_sync_at','status'])
+  assert.deepEqual(Object.keys(await service.status(CONSULTANT)).sort(), ['backfill_completed_at','backfill_started_at','connected','coverage_warning','email','last_error','last_sync_at','status'])
   assert.deepEqual(await service.status(OTHER), { connected: false })
   const expired = encrypt({ access_token: 'old', refresh_token: 'synthetic-refresh', expires_at: 0 }, CONSULTANT)
   await db.query('update crm_gmail_connections set credentials=$1', [expired]); replacement.credentials = expired
@@ -159,7 +159,9 @@ test('quota circuit breaker, persistent retry, lease recovery, expired history a
   await service.run({ schedule: true })
   const retry = (await db.query('select * from crm_gmail_jobs')).rows[0]
   assert.equal(retry.status, 'retryable_failure'); assert.equal(retry.last_error, 'QUOTA_PAUSED')
-  assert.ok(new Date(retry.available_at).getTime() > Date.now() + 23 * 3600000)
+  const resumeAt = new Date(await scalar(db, 'select ai_resume_at from crm_gmail_worker')).getTime()
+  assert.equal(new Date(retry.available_at).getTime(), resumeAt)
+  assert.ok(resumeAt > Date.now() + 55000 && resumeAt <= Date.now() + 60000)
   await service.run(); assert.equal(f.aiCalls, 1)
   assert.ok(backoff(3) >= 480000)
   const lease = crypto.randomUUID()
@@ -183,6 +185,7 @@ test('operational tables and RPCs deny all browser roles', async t => {
     await assert.rejects(db.query('select crm_gmail_disconnect($1)', [CONSULTANT]), /permission denied/)
     for (const name of ['request_manual_sync','manual_sync_status']) await assert.rejects(db.query(`select crm_gmail_${name}($1)`, [CONSULTANT]), /permission denied/)
     for (const name of ['claim_user_sync','claim_user_job']) await assert.rejects(db.query(`select crm_gmail_${name}($1,$2)`, [crypto.randomUUID(), CONSULTANT]), /permission denied/)
+    await assert.rejects(db.query('select crm_gmail_commit_backfill_page($1,$2,$3,$4)', [crypto.randomUUID(),crypto.randomUUID(),'[]',null]), /permission denied/)
     await db.exec('reset role')
   }
   await db.exec('set role service_role')
@@ -261,6 +264,140 @@ test('manual sync discovers and analyses immediately, scopes both claims to the 
   await f.db.query("update crm_gmail_connections set last_manual_sync_at=now()-interval '31 seconds' where id=$1", [c.id])
   assert.equal((await f.service.syncNow(CONSULTANT)).state, 'completed')
   assert.equal(f.aiCalls, 1)
+})
+test('manual sync imports all fourteen historical pages, resumes across workers and rechecks old mail for new contacts without duplicate analysis', async t => {
+  const f = await fixture(t), c = await f.connect()
+  const originalApi = f.google.api, listed = [], fullFetches = []
+  const ids = [...Array.from({ length: 40 }, (_, index) => `old-${index + 1}`), 'old-unrelated', 'old-spam']
+  f.page = { historyId: '101', history: [{ messagesAdded: [{ message: { id: 'old-1' } }] }] }
+  f.google.api = async (access, endpoint, params) => {
+    if (endpoint === 'messages') {
+      listed.push({ ...params })
+      const page = Number(params.pageToken || 0), start = page * 3
+      return { messages: ids.slice(start, start + 3).map(id => ({ id })), ...(start + 3 < ids.length ? { nextPageToken: String(page + 1) } : {}) }
+    }
+    if (endpoint.startsWith('messages/old-')) {
+      const id = endpoint.split('/')[1], item = message(id, Number(id.slice(4)) % 2 === 0)
+      if (params.format === 'full') fullFetches.push(id)
+      item.internalDate = String(Date.UTC(2018, 0, 1))
+      if (id === 'old-unrelated') item.payload.headers[0].value = 'new@client.test'
+      if (id === 'old-spam') item.labelIds = ['SPAM']
+      return item
+    }
+    return originalApi(access, endpoint, params)
+  }
+  await f.service.run({ schedule: true })
+  assert.equal(f.aiCalls, 0)
+  assert.equal(await scalar(f.db, "select outcome from crm_gmail_jobs where message_id='old-1'"), 'before_connection')
+  assert.equal(await scalar(f.db, 'select backfill_started_at from crm_gmail_connections'), null)
+  const result = await f.service.syncNow(CONSULTANT)
+  assert.equal(result.state, 'pending')
+  assert.equal(result.backfill_pending, true)
+  assert.ok(await scalar(f.db, 'select backfill_page_token from crm_gmail_connections'))
+  let restartedAi = 0
+  const resumed = createGmailService({ db: f.adapter, google: f.google, authorize: async () => email, ai: async () => { restartedAi++; return structuredClone(insight) } })
+  for (let run = 0; run < 8; run++) {
+    const progress = (await f.adapter.rpc('crm_gmail_manual_sync_status', { p_user: CONSULTANT })).data
+    if (!progress.pending_jobs && !progress.backfill_pending) break
+    await resumed.run()
+  }
+  const complete = (await f.adapter.rpc('crm_gmail_manual_sync_status', { p_user: CONSULTANT })).data
+  assert.equal(complete.pending_jobs, 0); assert.equal(complete.backfill_pending, false)
+  assert.ok(complete.connection.backfill_completed_at)
+  assert.equal(listed.length, 14)
+  assert.deepEqual(listed.map(page => page.pageToken || null), [null,...Array.from({ length: 13 }, (_, index) => String(index + 1))])
+  assert.ok(listed.every(page => page.q.startsWith('before:') && !page.q.includes('after:')))
+  assert.equal(f.aiCalls + restartedAi, 40)
+  assert.equal(await scalar(f.db, "select count(*)::int from crm_activities where activity_type='gmail_email'"), 40)
+  assert.equal(await scalar(f.db, "select count(*)::int from crm_activities where email_metadata->>'email_at'='2018-01-01T00:00:00.000Z'"), 40)
+  assert.equal(await scalar(f.db, 'select history_id from crm_gmail_connections'), '101')
+  assert.equal(fullFetches.length, 40)
+  assert.ok(!fullFetches.includes('old-unrelated')); assert.ok(!fullFetches.includes('old-spam'))
+  const newClient = await f.adapter.rpc('crm_save', { p_actor: CONSULTANT, p_id: null, p_version: null, p_data: { organisation_name: 'New historical contact', contacts: [{ ...contact, email: 'new@client.test', mobile: '9876543212' }] } })
+  assert.ifError(newClient.error)
+  await f.db.query("update crm_gmail_connections set last_manual_sync_at=now()-interval '31 seconds' where id=$1", [c.id])
+  await f.service.syncNow(CONSULTANT)
+  for (let run = 0; run < 4; run++) await resumed.run()
+  assert.equal(f.aiCalls + restartedAi, 41)
+  assert.equal(await scalar(f.db, "select count(*)::int from crm_activities where activity_type='gmail_email'"), 41)
+  assert.equal(await scalar(f.db, "select count(*)::int from crm_activities where gmail_message_id='old-1'"), 1)
+})
+test('historical page commits are atomic, lease-fenced and keep their cursor when manual sync is repeated', async t => {
+  const f = await fixture(t), c = await f.connect(), lease = crypto.randomUUID()
+  await f.adapter.rpc('crm_gmail_request_manual_sync', { p_user: CONSULTANT })
+  const startedAt = await scalar(f.db, 'select backfill_started_at from crm_gmail_connections')
+  await f.db.exec("update crm_gmail_connections set sync_requested=false,page_token='incremental-cursor'")
+  await f.adapter.rpc('crm_gmail_claim_user_sync', { p_lease: lease, p_user: CONSULTANT })
+  const args = { p_id: c.id, p_lease: lease, p_ids: [''], p_page: 'next-historical-page' }
+  const failed = await f.adapter.rpc('crm_gmail_commit_backfill_page', args)
+  assert.ok(failed.error)
+  assert.equal(await scalar(f.db, 'select backfill_page_token from crm_gmail_connections'), null)
+  assert.equal(await scalar(f.db, 'select count(*)::int from crm_gmail_jobs'), 0)
+  await f.db.exec("update crm_gmail_connections set lease_until=now()-interval '1 second'")
+  assert.equal((await f.adapter.rpc('crm_gmail_commit_backfill_page', { ...args, p_ids: ['old-message'] })).data, false)
+  await f.db.exec("update crm_gmail_connections set lease_until=now()+interval '1 minute'")
+  assert.equal((await f.adapter.rpc('crm_gmail_commit_backfill_page', { ...args, p_lease: crypto.randomUUID(), p_ids: ['old-message'] })).data, false)
+  assert.equal((await f.adapter.rpc('crm_gmail_commit_backfill_page', { ...args, p_ids: ['old-message'] })).data, true)
+  await f.db.exec("update crm_gmail_connections set last_manual_sync_at=now()-interval '31 seconds'")
+  await f.adapter.rpc('crm_gmail_request_manual_sync', { p_user: CONSULTANT })
+  assert.equal(String(await scalar(f.db, 'select backfill_started_at from crm_gmail_connections')), String(startedAt))
+  assert.equal(await scalar(f.db, 'select backfill_page_token from crm_gmail_connections'), 'next-historical-page')
+  assert.equal(await scalar(f.db, 'select page_token from crm_gmail_connections'), 'incremental-cursor')
+  assert.equal(await scalar(f.db, 'select history_id from crm_gmail_connections'), '100')
+})
+test('an expired historical page cursor restarts listing without replacing the incremental checkpoint', async t => {
+  const f = await fixture(t); await f.connect()
+  await f.db.exec("update crm_gmail_connections set backfill_started_at=now(),backfill_page_token='expired-cursor',sync_requested=false")
+  const originalApi = f.google.api, tokens = []
+  f.google.api = async (access, endpoint, params) => {
+    if (endpoint === 'messages') {
+      tokens.push(params.pageToken || null)
+      if (params.pageToken) throw Object.assign(new Error('Expired list cursor'), { status: 400 })
+      return { messages: [{ id: 'old-restored' }] }
+    }
+    const result = await originalApi(access, endpoint, params)
+    if (endpoint === 'messages/old-restored') result.internalDate = String(Date.UTC(2018, 0, 1))
+    return result
+  }
+  await f.service.run()
+  assert.deepEqual(tokens, ['expired-cursor',null])
+  assert.ok(await scalar(f.db, 'select backfill_completed_at from crm_gmail_connections'))
+  assert.equal(await scalar(f.db, 'select history_id from crm_gmail_connections'), '100')
+  assert.equal(await scalar(f.db, "select count(*)::int from crm_activities where activity_type='gmail_email'"), 1)
+})
+test('AI minute quota resumes the same queued email after one minute instead of a daily pause', async t => {
+  const f = await fixture(t); await f.connect()
+  f.failAi = Object.assign(new Error('Minute limit'), { statusCode: 429, code: 'AI_QUOTA_REACHED' })
+  const paused = await f.service.syncNow(CONSULTANT)
+  assert.equal(paused.state, 'quota_paused')
+  assert.equal(paused.pending_jobs, 1); assert.equal(f.aiCalls, 1)
+  assert.equal(await scalar(f.db, "select count(*)::int from crm_activities where activity_type='gmail_email'"), 0)
+  await f.service.run(); assert.equal(f.aiCalls, 1)
+  f.failAi = null
+  // Expire the persisted minute, without waiting or altering production records.
+  await f.db.exec("update crm_gmail_worker set ai_resume_at=now()-interval '1 second'; update crm_gmail_jobs set available_at=now()-interval '1 second'")
+  await f.service.run()
+  assert.equal(f.aiCalls, 2)
+  assert.equal(await scalar(f.db, 'select status from crm_gmail_jobs'), 'completed')
+  assert.equal(await scalar(f.db, "select count(*)::int from crm_activities where activity_type='gmail_email'"), 1)
+})
+test('historical migration shortens existing AI day-long pauses while preserving other retry schedules and service-only access', async t => {
+  const f = await fixture(t, { historicalMigration: false }), c = await f.connect()
+  await f.db.exec("update crm_gmail_worker set ai_resume_at=now()+interval '1 day'")
+  await f.db.query("insert into crm_gmail_jobs(connection_id,message_id,status,last_error,available_at) values($1,'ai-paused','retryable_failure','QUOTA_PAUSED',now()+interval '1 day'),($1,'other-retry','retryable_failure','PROCESSING_FAILED',now()+interval '1 day')", [c.id])
+  const original = await scalar(f.db, "select available_at from crm_gmail_jobs where message_id='other-retry'")
+  await f.db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261023094350_crm_gmail_historical_sync.sql'), 'utf8'))
+  const delay = Number(await scalar(f.db, 'select extract(epoch from ai_resume_at-now()) from crm_gmail_worker'))
+  assert.ok(delay > 55 && delay <= 60)
+  assert.equal(await scalar(f.db, "select available_at=(select ai_resume_at from crm_gmail_worker) from crm_gmail_jobs where message_id='ai-paused'"), true)
+  assert.equal(String(await scalar(f.db, "select available_at from crm_gmail_jobs where message_id='other-retry'")), String(original))
+  const functions = (await f.db.query("select p.proname,p.prosecdef,p.proconfig,has_function_privilege('anon',p.oid,'execute') as anon_allowed,has_function_privilege('authenticated',p.oid,'execute') as authenticated_allowed,has_function_privilege('service_role',p.oid,'execute') as service_allowed from pg_proc p where p.proname in ('crm_gmail_request_manual_sync','crm_gmail_claim_sync','crm_gmail_claim_user_sync','crm_gmail_commit_backfill_page','crm_gmail_manual_sync_status')")).rows
+  assert.equal(functions.length, 5)
+  for (const fn of functions) {
+    assert.equal(fn.prosecdef, false)
+    assert.equal(fn.anon_allowed, false); assert.equal(fn.authenticated_allowed, false); assert.equal(fn.service_allowed, true)
+    assert.ok(fn.proconfig.some(option => option.startsWith('search_path=')))
+  }
 })
 test('manual sync persists work when the worker is busy, then normal workers drain it without hourly discovery', async t => {
   const f = await fixture(t); await f.connect()

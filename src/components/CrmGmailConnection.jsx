@@ -18,9 +18,9 @@ const CALLBACK_MESSAGES = {
 }
 const dateTime = value => value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }).format(new Date(value)) + ' IST' : 'Not yet synchronised'
 const SYNC_MESSAGES = {
-  completed: 'Gmail sync complete. New matching emails are available in Activity History.',
+  completed: 'Gmail sync complete. Matching emails are available in Activity History.',
   pending: 'Sync requested. Remaining emails are queued and will continue automatically.',
-  quota_paused: 'Email processing is paused by provider quota. Queued emails will retry automatically.',
+  quota_paused: 'Email processing is paused by the AI minute limit. Queued emails will retry automatically after about a minute.',
   partial: 'Sync finished. Some emails could not be processed. Contact an administrator.',
   not_connected: 'Gmail was disconnected. Connect again to synchronise.',
   reauthorization_required: 'Gmail access needs to be renewed. Reconnect Gmail to synchronise.'
@@ -81,7 +81,7 @@ export default function CrmGmailConnection({ onSynced }) {
       const result = await crmRequest('/gmail/sync', { method: 'POST' })
       setConnection(result.connection)
       onSynced?.()
-      setNotice({ text: SYNC_MESSAGES[result.state] || SYNC_MESSAGES.pending, success: !['not_connected', 'reauthorization_required'].includes(result.state) })
+      setNotice({ text: result.state === 'pending' && result.backfill_pending ? 'Importing older matching emails. This will continue automatically in the background.' : SYNC_MESSAGES[result.state] || SYNC_MESSAGES.pending, success: !['not_connected', 'reauthorization_required'].includes(result.state) })
       setSyncFeedback(result.state)
     } catch (failure) {
       const retryAfter = Number(failure.retry_after)

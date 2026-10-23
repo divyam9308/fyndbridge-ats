@@ -30,7 +30,8 @@ Only exact, case-normalized contact emails match. All contact persons are includ
 Public domains receive no special domain matching; an exact address can still match.
 Ambiguous organisations and unrelated messages are skipped before any full-message
 fetch or AI call. Incoming matching uses the external sender; outgoing matching uses
-To/Cc/Bcc. Drafts, spam, trash and messages predating the connection are excluded.
+To/Cc/Bcc. Drafts, spam and trash are excluded. Messages predating the connection
+are included after the consultant explicitly clicks **Sync now**.
 Contact matching is rechecked in the activity-write transaction.
 
 Only `crm_activities` receives CRM writes: one `gmail_email` row per consultant and
@@ -133,12 +134,28 @@ No new environment variables or cron changes are required.
 
 Results distinguish completed, pending, quota-paused, partial and reconnect-required
 states. A processed-job count is not treated as proof that every email produced an
-activity. Only matching emails create history entries, and no historical import is
-introduced. This migration and application change must be applied/deployed together;
+activity. Only matching emails create history entries. Historical import additionally
+requires `20261023094350_crm_gmail_historical_sync.sql` before the updated backend.
+This migration and application change must be applied/deployed together;
 this manual-sync task did not change hosted Supabase or Vercel.
 
 Initial authorization records the current Gmail history ID, importing no historical
-mailbox. Normal history pages enqueue message IDs and commit the next page/checkpoint
+mailbox automatically. **Sync now** starts a full historical scan of available mail,
+with no lookback-date or total-page cap. A separate persisted cursor and fixed upper
+date bound let later worker invocations resume without changing the incremental
+checkpoint. Only matched messages are fetched in full and analysed. Active scans
+keep their cursor on repeated clicks; a completed scan can run again to include
+old messages matching newly added CRM contacts. Completed email activities are not
+analysed again or duplicated. Previously skipped pre-connection/unmatched/ambiguous
+jobs may be reconsidered; permanent failures are retained. Spam, trash, drafts and
+unrelated/ambiguous messages do not generate activities. Gmail's paginated full sync
+is documented at https://developers.google.com/workspace/gmail/api/guides/sync .
+
+The migration also shortens any existing AI quota pause to at most one minute,
+without clearing jobs, existing activities or other retry schedules. It has not
+been applied to hosted Supabase by this change.
+
+Normal history pages enqueue message IDs and commit the next page/checkpoint
 in the same database transaction. A failed enqueue rolls back checkpoint movement.
 Analysis failures do not lose discovered messages because jobs remain durable.
 
@@ -157,7 +174,8 @@ still own a valid lease. An overlapping cron returns `busy` and leaves work dura
 
 Throughput is bounded, not guaranteed to drain any mailbox size within one hour.
 Monitor queue age and failure counts against actual consultant volume. The theoretical
-cap is twelve jobs per minute; provider latency/quota can reduce this substantially.
+cap is twelve jobs per worker invocation; this is not a shared requests-per-minute
+rate limiter. Provider latency/quota can reduce throughput substantially.
 
 ## Gemini configuration and retries
 
@@ -185,8 +203,11 @@ accuracy; human review of actual summaries and classifications remains necessary
 
 Network/Gmail failures and invalid output retry with exponential backoff and jitter.
 Gmail rate-limit reasons are distinguished from revoked access; daily Gmail quota
-waits 24 hours without pausing unrelated AI work. Exhausted Gemini quota pauses CRM
-AI jobs globally for 24 hours and retains pending jobs without retry-count discard.
+waits 24 hours without pausing unrelated AI work. A Gemini minute-quota response
+pauses CRM AI jobs globally for 60 seconds, with the affected job eligible at the
+same time. Subsequent minute-worker runs retry automatically. Pending jobs are
+retained without retry-count discard, and repeated quota responses use another
+60-second pause rather than an exponential or day-long AI pause.
 Other failures become permanent after eight failed claims; missing messages are
 permanent. Workers do not rotate keys or create a new provider fallback strategy.
 

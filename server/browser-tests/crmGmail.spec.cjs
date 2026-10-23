@@ -149,6 +149,32 @@ test('manual Gmail sync starts immediately, disables repeat clicks and puts a re
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
   expect(app.consoleErrors).toEqual([])
 })
+test('Sync now imports older incoming and outgoing emails across pages without duplicate history or outgoing sentiment', async ({ page, gmailCrm, app }, info) => {
+  await gmailCrm.post('/api/crm', { organisation_name: 'Historical email client', contacts: [{ name: 'HR', email: 'hr@client.test' }] })
+  await gmailCrm.post('/test/gmail', { historicalMessages: true })
+  await page.goto('/dashboard/crm')
+  const sync = page.locator('.crm-toolbar').getByRole('button', { name: 'Sync Gmail now' })
+  await sync.click()
+  await expect(sync).toHaveText('Synced')
+  const history = page.getByRole('dialog', { name: 'Activity History' })
+  await page.getByRole('button', { name: 'Activity History', exact: true }).click()
+  const oldEntries = history.locator('.crm-history-entry').filter({ hasText: 'Historical recruitment email' })
+  await expect(oldEntries).toHaveCount(2)
+  const incoming = oldEntries.filter({ hasText: 'Incoming email · Gmail' }), outgoing = oldEntries.filter({ hasText: 'Outgoing email · Gmail' })
+  await expect(incoming).toHaveCount(1); await expect(outgoing).toHaveCount(1)
+  await expect(incoming).toContainText('Client interest: neutral')
+  await expect(outgoing).not.toContainText('Client interest:')
+  await expect(outgoing).not.toHaveClass(/crm-unread-/)
+  if (info.project.name === 'chromium') await page.screenshot({ path: '/tmp/crm-historical-emails.png', animations: 'disabled' })
+  await page.keyboard.press('Escape')
+  await gmailCrm.post('/test/gmail', { historicalMessages: true, resetCooldown: true })
+  await sync.click()
+  await expect(sync).toHaveText('Synced')
+  await page.getByRole('button', { name: 'Activity History', exact: true }).click()
+  await expect(oldEntries).toHaveCount(2)
+  await expect(history.locator('.crm-history-entry').filter({ hasText: 'email · Gmail' })).toHaveCount(3)
+  expect(app.consoleErrors).toEqual([])
+})
 test('Gmail cooldown counts down, clears its message and allows a successful retry after 30 seconds', async ({ page, gmailCrm, app }, info) => {
   await gmailCrm.post('/test/gmail')
   await page.goto('/dashboard/crm')
@@ -227,14 +253,15 @@ test('queued, paused and failed sync requests stay on the button with details av
   await page.goto('/dashboard/crm')
   const sync = page.locator('.crm-toolbar').getByRole('button', { name: 'Sync Gmail now' })
   const dialog = page.getByRole('dialog', { name: 'Gmail Connection' })
-  for (const [state, label, detail] of [
+  for (const [state, label, detail, backfillPending] of [
     ['pending', 'Sync queued', 'Remaining emails are queued'],
-    ['quota_paused', 'Sync paused', 'paused by provider quota'],
+    ['pending', 'Sync queued', 'Importing older matching emails', true],
+    ['quota_paused', 'Sync paused', 'AI minute limit'],
     ['failed', 'Sync failed', 'Synthetic sync failure.']
   ]) {
     await page.route('**/api/crm/gmail/sync', route => route.fulfill(state === 'failed'
       ? { status: 503, json: { error: detail } }
-      : { json: { state, connection: { connected: true, status: 'connected', email: 'recruiter@fyndbridge.in' } } }))
+      : { json: { state, backfill_pending: Boolean(backfillPending), connection: { connected: true, status: 'connected', email: 'recruiter@fyndbridge.in' } } }))
     await sync.click()
     await expect(sync).toHaveText(label)
     await expect(sync).not.toHaveClass(/is-synced/)

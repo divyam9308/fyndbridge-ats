@@ -3,6 +3,7 @@ const { AsyncLocalStorage } = require('node:async_hooks')
 const { SCOPE, hash, encrypt, decrypt, config, createGoogle, authorizationUrl } = require('./crmGmailGoogle')
 const { normalizeEmail, headers, matchMessage, extractBody, SCHEMA, validateAnalysis, analysisPrompt } = require('./crmGmailContent')
 const CRM_MODEL = process.env.GEMINI_CRM_MODEL || 'gemini-3.5-flash-lite'
+const AI_QUOTA_RETRY_MS = 60000
 function fault(code) { return Object.assign(new Error(code), { code }) }
 function backoff(attempts, quota = false) { return quota ? 24 * 60 * 60 * 1000 : Math.min(6 * 3600000, 60000 * 2 ** Math.min(attempts, 9)) + crypto.randomInt(1000) }
 async function verifiedConsultant(db, userId, access = require('./adminAccess')) {
@@ -68,8 +69,8 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
   }
   async function status(userId) {
     // Explicit projection: never send encrypted credentials or operational payloads.
-    const c = await checked(db.from('crm_gmail_connections').select('email,status,last_sync_at,last_error,coverage_warning').eq('user_id', userId).maybeSingle())
-    return c ? { connected: true, email: c.email, status: c.status, last_sync_at: c.last_sync_at, last_error: c.last_error, coverage_warning: c.coverage_warning } : { connected: false }
+    const c = await checked(db.from('crm_gmail_connections').select('email,status,last_sync_at,last_error,coverage_warning,backfill_started_at,backfill_completed_at').eq('user_id', userId).maybeSingle())
+    return c ? { connected: true, email: c.email, status: c.status, last_sync_at: c.last_sync_at, last_error: c.last_error, coverage_warning: c.coverage_warning, backfill_started_at: c.backfill_started_at, backfill_completed_at: c.backfill_completed_at } : { connected: false }
   }
   async function disconnect(userId) {
     const credentials = await rpc('disconnect', { p_user: userId })
@@ -106,6 +107,20 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
   }
   async function discover(c, lease) {
     await allowedConnection(c)
+    if (!c.sync_requested && c.backfill_started_at && !c.backfill_completed_at) {
+      // Snapshot the upper date bound once; incremental history covers newer mail.
+      const params = { maxResults: '100', q: `before:${Math.ceil(new Date(c.backfill_started_at).getTime() / 1000)} -in:spam -in:trash -in:drafts`, ...(c.backfill_page_token ? { pageToken: c.backfill_page_token } : {}) }
+      let result
+      try { result = await gmail(c, 'messages', params) }
+      catch (error) {
+        if (error.status !== 400 || !params.pageToken) throw error
+        // An expired list cursor restarts safely because message IDs are deduplicated.
+        delete params.pageToken
+        result = await gmail(c, 'messages', params)
+      }
+      await rpc('commit_backfill_page', { p_id: c.id, p_lease: lease, p_ids: [...new Set((result.messages || []).map(message => message.id).filter(Boolean))], p_page: result.nextPageToken || null })
+      return
+    }
     const params = { maxResults: '25', startHistoryId: c.history_id, historyTypes: 'messageAdded', ...(c.page_token ? { pageToken: c.page_token } : {}) }
     let page
     if (!c.recovery_history_id) {
@@ -142,7 +157,7 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       if (message.id !== job.message_id || !Number.isFinite(Number(message.internalDate)) || Number(message.internalDate) <= 0) throw fault('GMAIL_INVALID_MESSAGE')
       let outcome = 'before_connection'
       let match
-      if (Number(message.internalDate) >= new Date(c.connected_at).getTime()) {
+      if (c.backfill_started_at || Number(message.internalDate) >= new Date(c.connected_at).getTime()) {
         const h = headers(message)
         const { addresses } = require('./crmGmailContent')
         const peers = addresses(h.from).includes(c.email) ? [...addresses(h.to), ...addresses(h.cc), ...addresses(h.bcc)] : addresses(h.from)
@@ -168,10 +183,11 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       const revoked = ['GMAIL_REVOKED','WORK_EMAIL_CHANGED','ACCESS_DENIED','WORK_EMAIL_REQUIRED'].includes(error.code) || [401,403].includes(error.status)
       if (revoked) await reauthorize(c, 'REAUTHORIZE')
       // Global circuit breaker persists across serverless instances and consultants.
-      if (quota) await checked(db.from('crm_gmail_worker').update({ ai_resume_at: new Date(now() + backoff(0, true)).toISOString() }).eq('id', true))
+      const retryAt = new Date(now() + (quota ? AI_QUOTA_RETRY_MS : backoff(job.attempts, error.code === 'GMAIL_DAILY_QUOTA'))).toISOString()
+      if (quota) await checked(db.from('crm_gmail_worker').update({ ai_resume_at: retryAt }).eq('id', true))
       const gmailQuota = ['GMAIL_DAILY_QUOTA','GMAIL_RATE_LIMIT'].includes(error.code)
       const permanent = error.status === 404 || (!quota && !gmailQuota && job.attempts >= 8)
-      await checked(db.from('crm_gmail_jobs').update({ status: permanent ? 'permanent_failure' : 'retryable_failure', available_at: new Date(now() + backoff(job.attempts, quota || error.code === 'GMAIL_DAILY_QUOTA')).toISOString(), last_error: quota ? 'QUOTA_PAUSED' : revoked ? 'REAUTHORIZE' : error.code === 'INVALID_AI_OUTPUT' ? 'INVALID_AI_OUTPUT' : 'PROCESSING_FAILED', lease_id: null, lease_until: null }).eq('id', job.id).eq('lease_id', lease))
+      await checked(db.from('crm_gmail_jobs').update({ status: permanent ? 'permanent_failure' : 'retryable_failure', available_at: retryAt, last_error: quota ? 'QUOTA_PAUSED' : revoked ? 'REAUTHORIZE' : error.code === 'INVALID_AI_OUTPUT' ? 'INVALID_AI_OUTPUT' : 'PROCESSING_FAILED', lease_id: null, lease_until: null }).eq('id', job.id).eq('lease_id', lease))
     }
   }
   async function run({ schedule = false, budgetMs = 45000, userId = null } = {}) {
@@ -220,7 +236,7 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       const state = !snapshot.connection.connected ? 'not_connected'
         : snapshot.connection.status !== 'connected' ? 'reauthorization_required'
           : snapshot.ai_paused && snapshot.pending_jobs ? 'quota_paused'
-            : result.busy || snapshot.discovery_pending || snapshot.pending_jobs ? 'pending'
+            : result.busy || snapshot.discovery_pending || snapshot.backfill_pending || snapshot.pending_jobs ? 'pending'
               : snapshot.failed_jobs ? 'partial' : 'completed'
       return { ...snapshot, state }
     })

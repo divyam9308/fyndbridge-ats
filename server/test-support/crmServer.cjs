@@ -12,6 +12,7 @@ async function start() {
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019110948_crm_probability_sorting.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019165228_crm_gmail_integration.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019182711_crm_gmail_manual_sync.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261023094350_crm_gmail_historical_sync.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019185136_crm_activity_read_receipts.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261021093133_crm_incoming_email_row_highlights.sql'), 'utf8'))
   await db.query('insert into auth.users values($1,$2)', [USER_ID, 'recruiter@fyndbridge.in'])
@@ -28,14 +29,19 @@ async function start() {
   const gmailTarget = require.resolve('../src/services/crmGmail')
   const gmailExports = require(gmailTarget)
   let missingGmailMessage = false
+  let historicalMessages = false
   const gmailService = gmailExports.createGmailService({ db: adapter,
     authorize: async id => { if (id !== USER_ID) throw Object.assign(new Error('Denied'), { code: 'ACCESS_DENIED' }); return 'recruiter@fyndbridge.in' },
     google: {
       revoke: async () => {},
-      api: async (access, endpoint) => {
+      api: async (access, endpoint, params) => {
         if (endpoint === 'messages/missing-sync-message') throw Object.assign(new Error('Synthetic missing email'), { status: 404, code: 'GMAIL_API_ERROR' })
+        if (endpoint === 'messages') return historicalMessages
+          ? params.pageToken ? { messages: [{ id: 'historical-outgoing' }] } : { messages: [{ id: 'historical-incoming' }], nextPageToken: 'historical-page-2' }
+          : { messages: [] }
+        const id = endpoint.split('/')[1], historical = id?.startsWith('historical-'), outgoing = id === 'historical-outgoing'
         return endpoint === 'history' ? { historyId: '101', history: [{ messagesAdded: [{ message: { id: 'manual-sync-message' } }, ...(missingGmailMessage ? [{ message: { id: 'missing-sync-message' } }] : [])] }] } : {
-        id: 'manual-sync-message', internalDate: String(Date.now()), payload: { mimeType: 'text/plain', headers: [{ name: 'From', value: 'hr@client.test' }, { name: 'To', value: 'recruiter@fyndbridge.in' }, { name: 'Subject', value: 'Manual sync meeting' }], body: { data: Buffer.from('Can we meet Friday at 2 PM? No requirements at present.').toString('base64url') } }
+        id, internalDate: String(Date.now() - (historical ? 90 * 86400000 : 0)), payload: { mimeType: 'text/plain', headers: [{ name: 'From', value: outgoing ? 'recruiter@fyndbridge.in' : 'hr@client.test' }, { name: 'To', value: outgoing ? 'hr@client.test' : 'recruiter@fyndbridge.in' }, { name: 'Subject', value: historical ? 'Historical recruitment email' : 'Manual sync meeting' }], body: { data: Buffer.from('Can we meet Friday at 2 PM? No requirements at present.').toString('base64url') } }
         }
       }
     },
@@ -52,6 +58,7 @@ async function start() {
   app.post('/test/permission', async (req,res) => { await db.query("update page_view_permissions set view_permission=$1 where page_key='crm'", [req.body.permission]); res.json({ ok: true }) })
   app.post('/test/gmail', async (req, res) => {
     missingGmailMessage = Boolean(req.body.missingMessage)
+    historicalMessages = Boolean(req.body.historicalMessages)
     const credentials = encrypt({ access_token: 'synthetic-access', refresh_token: 'synthetic-refresh', expires_at: Date.now() + 3600000 }, USER_ID)
     await db.query('insert into crm_gmail_connections(user_id,email,credentials,history_id,last_sync_at) values($1,$2,$3,$4,now()) on conflict(user_id) do nothing', [USER_ID,'recruiter@fyndbridge.in',credentials,'100'])
     if (req.body.resetCooldown) await db.query('update crm_gmail_connections set last_manual_sync_at=null where user_id=$1', [USER_ID])
