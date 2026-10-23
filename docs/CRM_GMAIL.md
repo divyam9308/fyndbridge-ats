@@ -28,9 +28,23 @@ now supports selected consultants in Admin → Page View Permissions, as describ
 **Sync now** processes new messages across all connected consultant mailboxes.
 It is available even if the caller has no personal Gmail connection. Shared requests
 have a 30-second cooldown; results stay inline and details open only through ⓘ.
-Inside ⓘ, **Sync old emails** opens a searchable client picker. **Sync selected client**
-queues historical mail for that client across all connected mailboxes, including
-another consultant's mailbox, while retaining that mailbox owner's access checks.
+Inside ⓘ, the email queue count refreshes every two seconds while the panel is open.
+The ⓘ badge also keeps updating while queued work or discovery is active.
+It counts pending, processing and retryable emails across all connected mailboxes,
+including selected-client historical imports. Successfully completed and permanently
+failed jobs are excluded. Discovery has a separate searching indicator, so newly
+found emails can increase the count while processing reduces it. Polling stops when
+the panel closes and no queued work or discovery remains; no synthetic countdown is used.
+
+**Sync old emails** opens one search field. Select clients directly from the search
+results; selections remain as removable chips while searching for another client.
+Choose up to 25 clients and press **Sync old emails** once. The batch validates all
+selected clients before scheduling, queues each across connected mailboxes and
+runs one bounded worker pass. The existing background worker continues the rest.
+Per-client cooldowns are preserved: already requested clients are reported separately
+and do not prevent other selected clients from being queued. Mailbox ownership,
+current-contact matching and activity deduplication protections remain in force.
+These controls reuse existing tables and RPCs; no database migration is required.
 
 Only exact, case-normalized contact emails match. All contact persons are included.
 Public domains receive no special domain matching; an exact address can still match.
@@ -57,6 +71,7 @@ mandate, calendar, reminder, sending or reply operation is performed.
 | POST | `/api/crm/gmail/connect` | Existing ATS auth and CRM page permission |
 | GET | `/api/crm/gmail/callback` | Single-use state, browser cookie and PKCE |
 | GET | `/api/crm/gmail/status` | Current consultant only, existing CRM permission |
+| POST | `/api/crm/gmail/sync-old` | Existing CRM access and verified consultant; 1–25 distinct `client_ids`, or legacy `client_id` |
 | DELETE | `/api/crm/gmail/disconnect` | Current consultant only, existing CRM permission |
 | POST | `/api/crm/gmail/sync` | Current verified work mailbox only, existing CRM permission; ignores caller-supplied user IDs |
 | GET | `/api/cron/crm-gmail-sync` | Constant-time `CRON_SECRET` Bearer comparison |

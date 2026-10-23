@@ -81,8 +81,8 @@ test('OAuth state is browser-bound, single-use, expires, validates scope/account
   f.google.exchange = async () => ({ access_token: 'replacement', expires_in: 3600, scope: SCOPE })
   const replacement = await f.connect()
   assert.equal(replacement.id, connection.id); assert.equal(decrypt(replacement.credentials, CONSULTANT).refresh_token, 'synthetic-refresh')
-  assert.deepEqual(Object.keys(await service.status(CONSULTANT)).sort(), ['connected','connected_mailboxes','coverage_warning','email','last_error','last_sync_at','status'])
-  assert.deepEqual(await service.status(OTHER), { connected: false, connected_mailboxes: 1 })
+  assert.deepEqual(Object.keys(await service.status(CONSULTANT)).sort(), ['connected','connected_mailboxes','coverage_warning','discovery_pending','email','last_error','last_sync_at','pending_jobs','status'])
+  assert.deepEqual(await service.status(OTHER), { connected: false, connected_mailboxes: 1, pending_jobs: 0, discovery_pending: false })
   const expired = encrypt({ access_token: 'old', refresh_token: 'synthetic-refresh', expires_at: 0 }, CONSULTANT)
   await db.query('update crm_gmail_connections set credentials=$1', [expired]); replacement.credentials = expired
   assert.equal(await service.access(replacement), 'refreshed'); assert.equal(f.refreshes, 1)
@@ -252,7 +252,7 @@ test('HTTP OAuth callback is public but state-protected; cron uses its own secre
   assert.equal(sync.headers.get('cache-control'), 'private, no-store')
   const repeated = await fetch(base + '/api/crm/gmail/sync', { method: 'POST' })
   assert.equal(repeated.status, 429); assert.ok(Number(repeated.headers.get('retry-after')) > 0)
-  for (const payload of [{client_id:'invalid'},{client_id:f.client.id,user_id:OTHER}]) {
+  for (const payload of [{client_id:'invalid'},{client_id:f.client.id,user_id:OTHER},{client_ids:[]},{client_ids:'invalid'},{client_ids:[f.client.id,f.client.id]},{client_ids:Array.from({length:26},()=>crypto.randomUUID())},{client_ids:[f.client.id],client_id:f.client.id},{client_ids:[f.client.id],user_id:OTHER},{client_ids:[42]}]) {
     const invalidClient=await fetch(base+'/api/crm/gmail/sync-old',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     assert.equal(invalidClient.status,400)
   }
@@ -262,6 +262,14 @@ test('HTTP OAuth callback is public but state-protected; cron uses its own secre
   assert.equal(imported.status,200)
   assert.equal((await imported.json()).client_id,f.client.id)
   assert.equal(await scalar(f.db,'select requested_by from crm_gmail_client_imports'),CONSULTANT)
+  const second = (await f.db.query("insert into crm_clients(organisation_name,contacts) values('HTTP batch client',$1) returning id", [JSON.stringify([{...contact,email:'batch@client.test'}])])).rows[0]
+  const batch = await fetch(base+'/api/crm/gmail/sync-old',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_ids:[f.client.id,second.id]})})
+  assert.equal(batch.status,200)
+  const batchResult = await batch.json()
+  assert.equal(batchResult.results.length,2)
+  assert.equal(batchResult.results.find(value=>value.client_id===f.client.id).state,'cooldown')
+  assert.notEqual(batchResult.results.find(value=>value.client_id===second.id).state,'cooldown')
+  assert.equal(await scalar(f.db,'select requested_by from crm_gmail_client_imports where crm_client_id=$1',[second.id]),CONSULTANT)
 })
 test('normal sync checks all connected mailboxes, keeps ownership and never starts historical scans', async t => {
   const f = await fixture(t), c = await f.connect()
@@ -619,4 +627,45 @@ test('confirmed work identity is server-authoritative and current CRM access is 
 test('interrupted successful Gmail responses remain retryable instead of masquerading as empty messages', async () => {
   const google = createGoogle(async () => ({ ok:true,status:200,json:async()=>{ throw new Error('Interrupted response') } }))
   await assert.rejects(google.api('fake','messages/m1'),{code:'GMAIL_NETWORK',status:503})
+})
+
+test('queue status counts all active job kinds and decreases on completion, excluding permanent failures and disconnected mailboxes', async t => {
+  const f = await fixture(t), c = await f.connect()
+  await f.db.query("insert into crm_gmail_jobs(connection_id,message_id,status,historical_client_id) values($1,'waiting','pending',null),($1,'processing','processing',$2),($1,'retry','retryable_failure',$2),($1,'done','completed',null),($1,'permanent','permanent_failure',null)", [c.id,f.client.id])
+  assert.equal((await f.service.status(CONSULTANT)).pending_jobs, 3)
+  await f.db.exec("update crm_gmail_jobs set status='completed' where message_id='processing'")
+  assert.equal((await f.service.status(CONSULTANT)).pending_jobs, 2)
+  await f.db.exec("update crm_gmail_jobs set status='completed' where message_id in ('waiting','retry')")
+  assert.equal((await f.service.status(CONSULTANT)).pending_jobs, 0)
+  await f.adapter.rpc('crm_gmail_request_client_import', { p_actor: CONSULTANT, p_client:f.client.id, p_emails:[contact.email] })
+  assert.equal((await f.service.status(OTHER)).discovery_pending, true)
+  await f.db.exec("update crm_gmail_connections set status='reauthorization_required'; update crm_gmail_jobs set status='pending'")
+  assert.equal((await f.service.status(CONSULTANT)).pending_jobs, 0)
+  assert.equal((await f.service.status(CONSULTANT)).discovery_pending, false)
+})
+test('multi-client history validates before scheduling, accepts all selected clients and reports partial cooldown without losing other selections', async t => {
+  const f = await fixture(t); await f.connect()
+  await f.db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261020042221_crm_optional_contact_details.sql'), 'utf8'))
+  const save = async (name, contacts) => {
+    const value = await f.adapter.rpc('crm_save', { p_actor:CONSULTANT,p_id:null,p_version:null,p_data:{organisation_name:name,contacts:contacts.map(value=>({...value,mobile:'9876543210'}))} })
+    if (value.error) throw value.error
+    return value.data
+  }
+  const second = await save('Second history client', [{name:'Second HR',email:'second@client.test'}])
+  const empty = await save('No contact email', [{name:'No email'}])
+  await assert.rejects(f.service.syncClientHistories(CONSULTANT,[f.client.id,empty.id]),{code:'CLIENT_EMAIL_REQUIRED'})
+  assert.equal(await scalar(f.db,'select count(*)::int from crm_gmail_client_imports'),0)
+  const batch = await f.service.syncClientHistories(CONSULTANT,[f.client.id,second.id])
+  assert.equal(batch.results.length,2)
+  assert.equal(await scalar(f.db,'select count(*)::int from crm_gmail_client_imports'),2)
+  assert.equal(batch.discovery_pending,true)
+  assert.equal(batch.state,'pending')
+  assert.equal(await scalar(f.db,'select requested_by from crm_gmail_client_imports limit 1'),CONSULTANT)
+  const third = await save('Third history client', [{name:'Third HR',email:'third@client.test'}])
+  const partial = await f.service.syncClientHistories(CONSULTANT,[f.client.id,third.id])
+  assert.equal(partial.results.find(value=>value.client_id===f.client.id).state,'cooldown')
+  assert.notEqual(partial.results.find(value=>value.client_id===third.id).state,'cooldown')
+  assert.equal(await scalar(f.db,'select count(*)::int from crm_gmail_client_imports'),3)
+  await f.service.run()
+  assert.equal(await scalar(f.db,"select count(*)::int from crm_gmail_client_imports where status='completed'"),3)
 })

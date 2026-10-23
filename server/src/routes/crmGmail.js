@@ -18,7 +18,7 @@ const MESSAGES = {
   SYNC_COOLDOWN: 'Please wait 30 seconds between manual Gmail syncs.',
   NO_CONNECTED_MAILBOXES: 'No Gmail mailboxes are currently connected.',
   CLIENT_NOT_FOUND: 'CRM client not found.',
-  CLIENT_EMAIL_REQUIRED: 'Add a contact email to this CRM client before syncing old emails.'
+  CLIENT_EMAIL_REQUIRED: 'Every selected client needs a contact email before syncing old emails.'
 }
 const cookieName = () => config().secure ? '__Host-crm_gmail_oauth' : 'crm_gmail_oauth'
 const cookieOptions = () => ({ httpOnly: true, secure: config().secure, sameSite: 'lax', path: '/', maxAge: 600000 })
@@ -43,8 +43,11 @@ function createHandlers(service = createGmailService()) {
   router.post('/sync', safe(async (req, res) => res.json(await service.syncNow(req.user.id))))
   router.post('/sync-old', safe(async (req, res) => {
     const body = req.body || {}
-    if (Object.keys(body).some(key => key !== 'client_id') || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.client_id || '')) return res.status(400).json({ error: 'Choose a valid CRM client.' })
-    return res.json(await service.syncClientHistory(req.user.id, body.client_id))
+    const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    const multiple = Object.hasOwn(body, 'client_ids')
+    const ids = multiple ? body.client_ids : [body.client_id]
+    if (Object.keys(body).some(key => key !== (multiple ? 'client_ids' : 'client_id')) || !Array.isArray(ids) || !ids.length || ids.length > 25 || !ids.every(uuid) || new Set(ids.map(id => id.toLowerCase())).size !== ids.length) return res.status(400).json({ error: 'Choose between 1 and 25 different CRM clients.' })
+    return res.json(multiple ? await service.syncClientHistories(req.user.id, ids.map(id => id.toLowerCase())) : await service.syncClientHistory(req.user.id, body.client_id.toLowerCase()))
   }))
   async function callback(req, res) {
     res.set({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' })

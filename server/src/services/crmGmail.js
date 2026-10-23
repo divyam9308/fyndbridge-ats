@@ -75,7 +75,22 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
   async function status(userId) {
     // Explicit projection: never send encrypted credentials or operational payloads.
     const snapshot = await rpc('all_sync_status', { p_user: userId })
-    return { ...snapshot.connection, connected_mailboxes: snapshot.connected_mailboxes }
+    const connections = await checked(db.from('crm_gmail_connections').select('id').eq('status', 'connected'))
+    const ids = connections.map(connection => connection.id)
+    const count = async (table, field, states) => {
+      if (!ids.length) return 0
+      let query = db.from(table).select('id', { count: 'exact', head: true }).in('connection_id', ids).in(field, states)
+      if (typeof query.abortSignal === 'function') query = query.abortSignal(AbortSignal.timeout(4000))
+      const result = await query
+      if (result.error) throw result.error
+      return result.count
+    }
+    const [pendingJobs, pendingImports] = await Promise.all([
+      count('crm_gmail_jobs', 'status', ['pending', 'processing', 'retryable_failure']),
+      count('crm_gmail_client_imports', 'status', ['pending', 'processing'])
+    ])
+    return { ...snapshot.connection, connected_mailboxes: snapshot.connected_mailboxes, pending_jobs: pendingJobs,
+      discovery_pending: snapshot.discovery_pending || pendingImports > 0 }
   }
   async function disconnect(userId) {
     const credentials = await rpc('disconnect', { p_user: userId })
@@ -291,22 +306,38 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
     })
   }
   async function syncClientHistory(userId, clientId) {
+    return syncClientHistories(userId, [clientId])
+  }
+  async function syncClientHistories(userId, clientIds) {
     const deadline = now() + 45000
     return budgets.run({ deadline }, async () => {
       await authorizeWithinBudget(userId)
-      const client = await checked(db.from('crm_clients').select('id,organisation_name,contacts').eq('id', clientId).maybeSingle())
-      if (!client) throw fault('CLIENT_NOT_FOUND')
-      const emails = contactEmails(client.contacts)
-      if (!emails.length) throw fault('CLIENT_EMAIL_REQUIRED')
-      const requested = await rpc('request_client_import', { p_actor: userId, p_client: clientId, p_emails: emails })
-      if (requested.state === 'not_connected') throw fault('NO_CONNECTED_MAILBOXES')
-      if (requested.state === 'client_not_found') throw fault('CLIENT_NOT_FOUND')
-      if (requested.state === 'cooldown') throw Object.assign(fault('SYNC_COOLDOWN'), { retryAfter: requested.retry_after })
-      const result = await run({ clientId, budgetMs: deadline - now() - 4000 })
-      const snapshot = await rpc('client_import_status', { p_client: clientId })
-      return { ...snapshot, client_name: client.organisation_name, state: syncState(snapshot, result.busy) }
+      const clients = await checked(db.from('crm_clients').select('id,organisation_name,contacts').in('id', clientIds))
+      if (clients.length !== clientIds.length) throw fault('CLIENT_NOT_FOUND')
+      // Validate the entire selection before scheduling any client.
+      const selected = clientIds.map(id => clients.find(client => client.id === id))
+      if (selected.some(client => !contactEmails(client.contacts).length)) throw fault('CLIENT_EMAIL_REQUIRED')
+      const results = []
+      for (const client of selected) {
+        const requested = await rpc('request_client_import', { p_actor: userId, p_client: client.id, p_emails: contactEmails(client.contacts) })
+        if (requested.state === 'not_connected') throw fault('NO_CONNECTED_MAILBOXES')
+        if (requested.state === 'client_not_found') throw fault('CLIENT_NOT_FOUND')
+        results.push({ client_id: client.id, client_name: client.organisation_name, ...requested })
+      }
+      const accepted = results.filter(result => result.state !== 'cooldown')
+      if (!accepted.length) throw Object.assign(fault('SYNC_COOLDOWN'), { retryAfter: Math.max(...results.map(result => result.retry_after)) })
+      // One bounded worker execution; the existing background worker continues the rest.
+      const worker = await run({ clientId: accepted[0].client_id, budgetMs: Math.max(0, deadline - now() - 8000) })
+      const snapshots = await Promise.all(accepted.map(result => rpc('client_import_status', { p_client: result.client_id })))
+      const snapshot = { connected_mailboxes: snapshots[0].connected_mailboxes,
+        pending_jobs: snapshots.reduce((sum, value) => sum + value.pending_jobs, 0),
+        failed_jobs: snapshots.reduce((sum, value) => sum + value.failed_jobs, 0),
+        discovery_pending: snapshots.some(value => value.discovery_pending), ai_paused: snapshots.some(value => value.ai_paused) }
+      return { ...snapshot, ...(selected.length === 1 ? { client_id: selected[0].id, client_name: selected[0].organisation_name } : {}),
+        results: results.map(result => ({ ...result, state: result.state === 'cooldown' ? 'cooldown' : syncState(snapshots[accepted.findIndex(value => value.client_id === result.client_id)], worker.busy) })),
+        state: syncState(snapshot, worker.busy) }
     })
   }
-  return { start, callback, status, disconnect, syncNow, syncNewEmails, syncClientHistory, run, access, discover, discoverClientImport, processJob }
+  return { start, callback, status, disconnect, syncNow, syncNewEmails, syncClientHistory, syncClientHistories, run, access, discover, discoverClientImport, processJob }
 }
 module.exports = { createGmailService, verifiedConsultant, backoff, CRM_MODEL }

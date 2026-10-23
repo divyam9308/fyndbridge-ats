@@ -7,7 +7,15 @@ const test = base.extend({ gmailCrm: [async ({ page, app }, use) => {
   const ready = await new Promise((resolve,reject) => { child.once('message',resolve); child.once('error',reject); child.once('exit', code => reject(new Error(`CRM fixture exited ${code}`))) })
   const url = `http://127.0.0.1:${ready.port}`
   app.staff = [{ id: ready.USER_ID, name: 'Test Recruiter', status: 'active' }]
-  await page.route('**/api/crm**', async route => { const target = new URL(route.request().url()); await route.fulfill({ response: await route.fetch({ url: url + target.pathname + target.search }) }) })
+  await page.route('**/api/crm**', async route => {
+    const target = new URL(route.request().url())
+    try { await route.fulfill({ response: await route.fetch({ url: url + target.pathname + target.search }) }) }
+    catch (error) {
+      // Closing the panel intentionally aborts its in-flight status poll. WebKit
+      // may finish that route before the local proxy response is ready.
+      if (!error.message.includes('Route is already handled')) throw error
+    }
+  })
   await page.route('**/rest/v1/page_view_permissions*', async route => route.fulfill({ json: await (await fetch(url + '/test/permissions')).json() }))
   const post = (endpoint, body = {}) => fetch(url + endpoint, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(body) })
   await fs.mkdir('outputs/crm-gmail-verification', { recursive:true })
@@ -164,10 +172,10 @@ test('Sync now imports current-contact history and a later selected-client impor
   const connection = page.getByRole('dialog', { name: 'Gmail Connection' })
   await page.getByRole('button', { name: 'Gmail connection details' }).click()
   await connection.getByRole('button', { name: 'Sync old emails', exact: true }).click()
-  await expect(connection.getByRole('button', { name: 'Sync selected client', exact: true })).toBeDisabled()
-  await expect(connection.getByLabel('Client for old emails').getByRole('option', { name: 'Historical email client', exact: true })).toHaveCount(1)
-  await connection.getByLabel('Client for old emails').selectOption({ label: 'Historical email client' })
-  await connection.getByRole('button', { name: 'Sync selected client', exact: true }).click()
+  await expect(connection.getByRole('button', { name: 'Sync old emails', exact: true })).toBeDisabled()
+  await connection.getByLabel('Search clients for old emails').fill('Historical')
+  await connection.getByRole('button', { name: 'Add Historical email client', exact: true }).click()
+  await connection.getByRole('button', { name: 'Sync old emails', exact: true }).click()
   await expect(connection).toContainText('Old email sync completed')
   if (info.project.name === 'chromium') await page.screenshot({ path: '/tmp/crm-client-history-picker.png', animations: 'disabled' })
   await page.keyboard.press('Escape')
@@ -182,7 +190,7 @@ test('Sync now imports current-contact history and a later selected-client impor
   await page.keyboard.press('Escape')
   await gmailCrm.post('/test/gmail', { historicalMessages: true, resetCooldown: true })
   await page.getByRole('button', { name: 'Gmail connection details' }).click()
-  await connection.getByRole('button', { name: 'Sync selected client', exact: true }).click()
+  await connection.getByRole('button', { name: 'Sync old emails', exact: true }).click()
   await expect(connection).toContainText('Old email sync completed')
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Activity History', exact: true }).click()
@@ -190,6 +198,66 @@ test('Sync now imports current-contact history and a later selected-client impor
   await expect(history.locator('.crm-history-entry').filter({ hasText: 'email · Gmail' })).toHaveCount(3)
   expect(app.consoleErrors).toEqual([])
 })
+test('old-email search keeps multiple client selections across searches and sends one batch without a separate dropdown', async ({ page, gmailCrm, app }, info) => {
+  const first = await (await gmailCrm.post('/api/crm', { organisation_name:'Alpha history client',contacts:[{name:'HR',email:'alpha@client.test'}] })).json()
+  const second = await (await gmailCrm.post('/api/crm', { organisation_name:'Beta history client',contacts:[{name:'HR',email:'beta@client.test'}] })).json()
+  await gmailCrm.post('/test/gmail')
+  const requests=[]
+  await page.route('**/api/crm/gmail/sync-old', async route => { requests.push(route.request().postDataJSON()); await route.fallback() })
+  await page.goto('/dashboard/crm')
+  await page.getByRole('button',{name:'Gmail connection details'}).click()
+  const dialog=page.getByRole('dialog',{name:'Gmail Connection'})
+  await dialog.getByRole('button',{name:'Sync old emails',exact:true}).click()
+  const submit=dialog.getByRole('button',{name:'Sync old emails',exact:true})
+  await expect(submit).toBeDisabled()
+  await expect(dialog.getByRole('combobox')).toHaveCount(0)
+  const search=dialog.getByLabel('Search clients for old emails')
+  await search.fill('Alpha')
+  await dialog.getByRole('button',{name:'Add Alpha history client',exact:true}).click()
+  await expect(search).toHaveValue('')
+  await search.fill('no matching organisation')
+  await expect(dialog).toContainText('No matching clients found.')
+  await expect(dialog.getByRole('button',{name:'Remove Alpha history client'})).toBeVisible()
+  await search.fill('Beta')
+  await dialog.getByRole('button',{name:'Add Beta history client',exact:true}).click()
+  await dialog.getByRole('button',{name:'Remove Alpha history client'}).click()
+  await search.fill('Alpha')
+  await dialog.getByRole('button',{name:'Add Alpha history client',exact:true}).click()
+  const selected=dialog.getByRole('group',{name:'Selected clients'})
+  await expect(selected.getByRole('button')).toHaveCount(2)
+  await page.setViewportSize({width:390,height:844})
+  if(info.project.name==='chromium') await page.screenshot({path:'/tmp/crm-multi-client-picker.png',animations:'disabled'})
+  await submit.click()
+  await expect(dialog).toContainText('Old emails for 2 clients are queued')
+  expect(requests).toEqual([{client_ids:[second.data.id,first.data.id]}])
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy()
+  expect(app.consoleErrors).toEqual([])
+})
+
+test('Gmail info refreshes the pending queue count as emails finish and stops polling when closed', async ({ page, gmailCrm, app }) => {
+  await gmailCrm.post('/test/gmail')
+  let remaining=3, requests=0
+  await page.route('**/api/crm/gmail/status', route => { requests++; return route.fulfill({json:{connected:true,status:'connected',email:'recruiter@fyndbridge.in',connected_mailboxes:1,pending_jobs:remaining,discovery_pending:remaining>0}}) })
+  await page.goto('/dashboard/crm')
+  const info=page.getByRole('button',{name:'Gmail connection details'})
+  await expect(info).toContainText('3')
+  await info.click()
+  const dialog=page.getByRole('dialog',{name:'Gmail Connection'})
+  await expect(dialog).toContainText('3 emails remaining in queue')
+  await expect(dialog).toContainText('Searching for matching emails')
+  for(const value of [2,1,0]) {
+    remaining=value
+    await expect(dialog).toContainText(`${value} ${value===1?'email':'emails'} remaining in queue`)
+  }
+  await expect(dialog).not.toContainText('Searching for matching emails')
+  await expect(info).toHaveText('')
+  await dialog.getByRole('button',{name:'Close',exact:true}).last().click()
+  const afterClose=requests
+  await page.waitForTimeout(2300)
+  expect(requests).toBe(afterClose)
+  expect(app.consoleErrors).toEqual([])
+})
+
 test('Gmail cooldown counts down, clears its message and allows a successful retry after 30 seconds', async ({ page, gmailCrm, app }, info) => {
   await gmailCrm.post('/test/gmail')
   await page.goto('/dashboard/crm')
@@ -226,6 +294,7 @@ test('Gmail cooldown counts down, clears its message and allows a successful ret
   await expect(sync).toHaveText('Synced')
   expect(requests).toBe(2)
   await expect(dialog).toHaveCount(0)
+  await page.clock.resume()
   expect(app.consoleErrors).toEqual([])
 })
 test('shared sync covers both mailboxes and selected-client history works through another consultant without my Gmail connected', async ({ page, gmailCrm, app }, info) => {
@@ -251,16 +320,18 @@ test('shared sync covers both mailboxes and selected-client history works throug
   const dialog=page.getByRole('dialog',{name:'Gmail Connection'})
   await expect(dialog).toContainText('all 1 connected mailbox')
   await dialog.getByRole('button',{name:'Sync old emails',exact:true}).click()
-  const client=dialog.getByLabel('Client for old emails')
-  await expect(client.getByRole('option',{name:'No email client',exact:true})).toHaveCount(1)
-  await client.selectOption({label:'No email client'})
-  await dialog.getByRole('button',{name:'Sync selected client',exact:true}).click()
-  await expect(dialog.getByRole('alert')).toContainText('Add a contact email')
-  await client.selectOption({label:'Shared target client'})
+  const search=dialog.getByLabel('Search clients for old emails')
+  await search.fill('No email')
+  await dialog.getByRole('button',{name:'Add No email client',exact:true}).click()
+  await dialog.getByRole('button',{name:'Sync old emails',exact:true}).click()
+  await expect(dialog.getByRole('alert')).toContainText('Every selected client needs a contact email')
+  await dialog.getByRole('button',{name:'Remove No email client',exact:true}).click()
+  await search.fill('Shared target')
+  await dialog.getByRole('button',{name:'Add Shared target client',exact:true}).click()
   await expect(dialog.getByRole('alert')).toHaveCount(0)
   await page.setViewportSize({width:390,height:844})
   if(info.project.name==='chromium') await page.screenshot({path:'/tmp/crm-shared-history-mobile.png',animations:'disabled'})
-  await dialog.getByRole('button',{name:'Sync selected client',exact:true}).click()
+  await dialog.getByRole('button',{name:'Sync old emails',exact:true}).click()
   await expect(dialog).toContainText('Old email sync completed for Shared target client')
   await page.keyboard.press('Escape')
   await target.getByRole('button',{name:'Activity History',exact:true}).click()
@@ -572,5 +643,22 @@ test('email intelligence stays in one existing history card, escapes HTML and pr
   await expect(page.getByRole('button',{ name:'Connect Gmail',exact:true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
   if(info.project.name === 'chromium') await page.screenshot({ path:'outputs/crm-gmail-verification/mobile.png',animations:'disabled',fullPage:true })
+  expect(app.consoleErrors).toEqual([])
+})
+
+test('pending Gmail badge keeps decreasing while the info panel is closed', async ({ page, gmailCrm, app }) => {
+  await gmailCrm.post('/test/gmail')
+  let remaining=2
+  await page.route('**/api/crm/gmail/status', route => route.fulfill({json:{connected:true,status:'connected',email:'recruiter@fyndbridge.in',connected_mailboxes:1,pending_jobs:remaining,discovery_pending:false}}))
+  await page.goto('/dashboard/crm')
+  const info=page.getByRole('button',{name:'Gmail connection details'})
+  await expect(info).toContainText('2')
+  await expect(page.getByRole('dialog',{name:'Gmail Connection'})).toHaveCount(0)
+  remaining=1
+  await expect(info).toContainText('1')
+  remaining=0
+  await expect(info).toHaveText('')
+  await info.click()
+  await expect(page.getByRole('dialog',{name:'Gmail Connection'})).toContainText('0 emails remaining in queue')
   expect(app.consoleErrors).toEqual([])
 })
