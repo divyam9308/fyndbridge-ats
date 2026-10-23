@@ -85,14 +85,15 @@ const SCHEMA = { type: 'object', additionalProperties: false, required: ['summar
   sentiment: { type: 'object', properties: { label: { enum: ['positive','neutral','negative','unknown'] }, evidence: { type: ['string','null'] } }, required: ['label','evidence'], additionalProperties: false }
 } }
 function validateAnalysis(value, body, direction) {
-  const invalid = () => { throw Object.assign(new Error('Invalid email analysis'), { code: 'INVALID_AI_OUTPUT' }) }
+  const invalid = reason => { throw Object.assign(new Error(`Invalid email analysis: ${reason}`), { code: 'INVALID_AI_OUTPUT', validationReason: reason }) }
   const keys = (object, expected) => object && typeof object === 'object' && !Array.isArray(object) && Object.keys(object).length === expected.length && expected.every(key => Object.hasOwn(object, key))
   const currentText = body.split('\n[Earlier conversation]\n')[0]
-  const evidence = (text, source = body) => typeof text === 'string' && text.trim().length >= 3 && text.length <= 600 && source.toLowerCase().includes(text.trim().toLowerCase())
-  if (!keys(value, ['summary','meeting','negative_response','sentiment']) || typeof value.summary !== 'string' || !value.summary.trim() || value.summary.length > 1600) invalid()
-  if (value.meeting !== null && (!keys(value.meeting, ['status','evidence','when']) || !SCHEMA.properties.meeting.properties.status.enum.includes(value.meeting.status) || !evidence(value.meeting.evidence, currentText) || !(value.meeting.when === null || evidence(value.meeting.when)))) invalid()
-  if (value.negative_response !== null && (!keys(value.negative_response, ['category','permanence','evidence']) || !SCHEMA.properties.negative_response.properties.category.enum.includes(value.negative_response.category) || !['temporary','permanent','unknown'].includes(value.negative_response.permanence) || !evidence(value.negative_response.evidence, currentText))) invalid()
-  if (!keys(value.sentiment, ['label','evidence']) || !['positive','neutral','negative','unknown'].includes(value.sentiment.label) || (value.sentiment.label !== 'unknown' && !evidence(value.sentiment.evidence, currentText)) || (value.sentiment.evidence !== null && !evidence(value.sentiment.evidence, currentText))) invalid()
+  const normalizeEvidence = text => String(text || '').normalize('NFKC').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, ' ').trim().toLowerCase()
+  const evidence = (text, source = body) => typeof text === 'string' && text.trim().length >= 3 && text.length <= 600 && normalizeEvidence(source).includes(normalizeEvidence(text))
+  if (!keys(value, ['summary','meeting','negative_response','sentiment']) || typeof value.summary !== 'string' || !value.summary.trim() || value.summary.length > 1600) invalid('top-level fields or summary')
+  if (value.meeting !== null && (!keys(value.meeting, ['status','evidence','when']) || !SCHEMA.properties.meeting.properties.status.enum.includes(value.meeting.status) || !evidence(value.meeting.evidence, currentText) || !(value.meeting.when === null || evidence(value.meeting.when, currentText)))) invalid('meeting evidence or fields')
+  if (value.negative_response !== null && (!keys(value.negative_response, ['category','permanence','evidence']) || !SCHEMA.properties.negative_response.properties.category.enum.includes(value.negative_response.category) || !['temporary','permanent','unknown'].includes(value.negative_response.permanence) || !evidence(value.negative_response.evidence, currentText))) invalid('rejection evidence or fields')
+  if (!keys(value.sentiment, ['label','evidence']) || !['positive','neutral','negative','unknown'].includes(value.sentiment.label) || (value.sentiment.label !== 'unknown' && !evidence(value.sentiment.evidence, currentText)) || (value.sentiment.evidence !== null && !evidence(value.sentiment.evidence, currentText))) invalid('sentiment evidence or fields')
   // A consultant's outgoing words cannot establish the client's current attitude.
   if (direction === 'outgoing') { value.sentiment = { label: 'unknown', evidence: null }; value.negative_response = null }
   return value

@@ -111,12 +111,14 @@ test('MIME plain/HTML alternatives, charset, quoted context and attachments are 
 })
 test('AI JSON validation: meeting vs confirmation, rejection category/permanence, sentiment evidence, unknown outgoing, invalid fields', () => {
   assert.equal(validateAnalysis(structuredClone(insight), body, 'incoming').meeting.status, 'proposed')
+  assert.equal(validateAnalysis(structuredClone(insight), 'Can we meet Friday at 2\u00a0PM?\nNo requirements at present.', 'incoming').meeting.status, 'proposed')
   for (const status of ['requested','confirmed','rescheduled','cancelled']) { const value = structuredClone(insight); value.meeting.status = status; assert.equal(validateAnalysis(value, body, 'incoming').meeting.status, status) }
   const outgoing = validateAnalysis(structuredClone(insight), body, 'outgoing')
   assert.equal(outgoing.sentiment.label, 'unknown'); assert.equal(outgoing.negative_response, null)
   const unknown = { summary: 'Consultant sent an introduction.', meeting: null, negative_response: null, sentiment: { label: 'unknown', evidence: null } }
   assert.deepEqual(validateAnalysis(unknown, 'Introduction', 'outgoing'), unknown)
   for (const mutate of [v => { v.probability = 70 }, v => { v.meeting.when = '2030-01-01' }, v => { v.meeting.status = 'accepted' }, v => { v.sentiment.label = 'positive'; v.sentiment.evidence = 'Invented' }, v => { v.negative_response.permanence = 'forever' }, v => { v.summary = '' }]) { const value = structuredClone(insight); mutate(value); assert.throws(() => validateAnalysis(value, body, 'incoming'), { code: 'INVALID_AI_OUTPUT' }) }
+  assert.throws(() => validateAnalysis({ ...structuredClone(insight), meeting: { ...insight.meeting, evidence: 'Invented' } }, body, 'incoming'), error => error.code === 'INVALID_AI_OUTPUT' && error.validationReason === 'meeting evidence or fields')
 })
 test('incremental sync/checkpoints, atomic claims, durable jobs, dedup, activity-only writes and disconnect fencing', async t => {
   const f = await fixture(t), c = await f.connect(), { db, service } = f
