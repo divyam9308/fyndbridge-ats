@@ -1,0 +1,139 @@
+
+> ats-fyndbridge@0.0.0 prebuild
+> node scripts/write-version.js
+
+
+> ats-fyndbridge@0.0.0 build
+> vite build
+
+vite v8.0.16 building client environment for production...
+[2Ktransforming...✓ 2502 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                         0.78 kB │ gzip:  0.45 kB
+dist/assets/SettingsPage-B0fpaSm6.css                   0.77 kB │ gzip:  0.39 kB
+dist/assets/UserManualPage-BP03FJiX.css                 1.07 kB │ gzip:  0.48 kB
+dist/assets/FyndbridgeLoader-DNoMKixI.css               1.13 kB │ gzip:  0.46 kB
+dist/assets/ClientJobCandidatesPage-DfxKo5XE.css        1.48 kB │ gzip:  0.62 kB
+dist/assets/FloatingActionDock-B-4HBYKr.css             1.68 kB │ gzip:  0.72 kB
+dist/assets/ReportKpiCard-C1tAZ7Ez.css                  2.65 kB │ gzip:  0.97 kB
+dist/assets/AuthenticatedShell-B25_Abrk.css             4.15 kB │ gzip:  1.19 kB
+dist/assets/ClientDetailPage-BYkpN2P7.css               4.71 kB │ gzip:  1.41 kB
+dist/assets/LoginPage-CGrqenRU.css                      5.33 kB │ gzip:  1.68 kB
+dist/assets/DashboardHome-uHdUFtRE.css                  6.11 kB │ gzip:  1.74 kB
+dist/assets/AssignedCandidatesPage-DWYbO2UH.css         7.01 kB │ gzip:  1.89 kB
+dist/assets/CrmPage-BDRIjV1n.css                        7.72 kB │ gzip:  2.21 kB
+dist/assets/index-qazVV2aR.css                         14.89 kB │ gzip:  4.22 kB
+dist/assets/AppliedCandidatesPage-BwT3XsIW.css         15.59 kB │ gzip:  3.61 kB
+dist/assets/PublicRolesPage-CUVu71Q3.css               19.04 kB │ gzip:  4.30 kB
+dist/assets/AttendancePage-CQawYF3s.css                20.23 kB │ gzip:  4.29 kB
+dist/assets/PerformanceReviewPage-NDHYV5Zb.css         20.46 kB │ gzip:  4.46 kB
+dist/assets/InvoicePage-CbxVZ5kc.css                   21.51 kB │ gzip:  4.47 kB
+dist/assets/ConsultantReportPage-D2wYqwqU.css          26.63 kB │ gzip:  6.05 kB
+dist/assets/DashboardHome-DnGpD07B.css                 34.77 kB │ gzip:  6.56 kB
+dist/assets/AdminPage-CeD1YRjA.css                     42.94 kB │ gzip:  7.70 kB
+dist/assets/Shared-CmK2CXB9.css                        48.21 kB │ gzip:  8.94 kB
+dist/assets/storageBuckets-DEYbLCGL.js                  0.08 kB │ gzip:  0.10 kB
+dist/assets/check-Dit396tG.js                           0.12 kB │ gzip:  0.14 kB
+dist/assets/chevron-down-rH8OxMnE.js                    0.12 kB │ gzip:  0.14 kB
+dist/assets/chevron-left-pM938Qip.js                    0.13 kB │ gzip:  0.14 kB
+dist/assets/chevron-right-dsTdNju5.js                   0.13 kB │ gzip:  0.14 kB
+dist/assets/loader-circle-CwsIqJIh.js                   0.14 kB │ gzip:  0.15 kB
+dist/assets/plus-DMOgp8KD.js                            0.15 kB │ gzip:  0.15 kB
+dist/assets/tableText-3RSeMbJ5.js                       0.15 kB │ gzip:  0.15 kB
+dist/assets/x-C7rxjqOa.js                               0.15 kB │ gzip:  0.15 kB
+dist/assets/clock-3-D38VyPTb.js                         0.16 kB │ gzip:  0.16 kB
+dist/assets/search-f2DeeSgi.js                          0.17 kB │ gzip:  0.16 kB
+dist/assets/circle-check-DL0Wdn8B.js                    0.17 kB │ gzip:  0.16 kB
+dist/assets/rotate-ccw-CAoH_gcK.js                      0.20 kB │ gzip:  0.18 kB
+dist/assets/info-BAJipu7w.js                            0.20 kB │ gzip:  0.17 kB
+dist/assets/lock-CAx6-jLN.js                            0.20 kB │ gzip:  0.19 kB
+dist/assets/circle-x-Cc5Fv6oc.js                        0.20 kB │ gzip:  0.17 kB
+dist/assets/mail-kyBdqkXw.js                            0.21 kB │ gzip:  0.20 kB
+dist/assets/briefcase-CQJyvst-.js                       0.22 kB │ gzip:  0.19 kB
+dist/assets/useAuth-BGM6egeH.js                         0.22 kB │ gzip:  0.19 kB
+dist/assets/upload-iOUTONrD.js                          0.23 kB │ gzip:  0.19 kB
+dist/assets/user-round-check-D0fmmcZ0.js                0.23 kB │ gzip:  0.20 kB
+dist/assets/user-check-CODj2NIs.js                      0.24 kB │ gzip:  0.20 kB
+dist/assets/circle-alert-BqwDFl99.js                    0.25 kB │ gzip:  0.18 kB
+dist/assets/chart-column-DuYlem9z.js                    0.25 kB │ gzip:  0.19 kB
+dist/assets/external-link-Dxgwve_o.js                   0.25 kB │ gzip:  0.19 kB
+dist/assets/eye-BH7ub9tf.js                             0.25 kB │ gzip:  0.20 kB
+dist/assets/triangle-alert-ye721G1N.js                  0.26 kB │ gzip:  0.21 kB
+dist/assets/PublicLayout-CQUXKRft.js                    0.27 kB │ gzip:  0.18 kB
+dist/assets/pencil-BiQhtRFl.js                          0.27 kB │ gzip:  0.22 kB
+dist/assets/list-checks-B5F9NOko.js                     0.27 kB │ gzip:  0.18 kB
+dist/assets/sectorOptions-D8iV5opl.js                   0.29 kB │ gzip:  0.22 kB
+dist/assets/useStatusMutationGuard-CoB9s8ZT.js          0.29 kB │ gzip:  0.24 kB
+dist/assets/users-Bd8fE1zu.js                           0.30 kB │ gzip:  0.22 kB
+dist/assets/shield-check-DRviwoee.js                    0.32 kB │ gzip:  0.24 kB
+dist/assets/refresh-cw-OssWGd8s.js                      0.32 kB │ gzip:  0.22 kB
+dist/assets/briefcase-business-B-y3d07y.js              0.32 kB │ gzip:  0.24 kB
+dist/assets/save-BWydRiNI.js                            0.32 kB │ gzip:  0.22 kB
+dist/assets/trash-2-6409yx9D.js                         0.32 kB │ gzip:  0.21 kB
+dist/assets/building-2-DJa5ma-G.js                      0.38 kB │ gzip:  0.24 kB
+dist/assets/file-text-Dsxa1IHy.js                       0.38 kB │ gzip:  0.25 kB
+dist/assets/FloatingActionDock-DtRui1GV.js              0.41 kB │ gzip:  0.27 kB
+dist/assets/user-plus-D8mMXPZp.js                       0.46 kB │ gzip:  0.31 kB
+dist/assets/calendar-days-DYyS4s2-.js                   0.49 kB │ gzip:  0.26 kB
+dist/assets/dateFormat-DdQhMhLO.js                      0.53 kB │ gzip:  0.31 kB
+dist/assets/dashboardDrilldown-Z3YIRSlS.js              0.54 kB │ gzip:  0.33 kB
+dist/assets/lockBodyScroll-BXqorbmZ.js                  0.54 kB │ gzip:  0.33 kB
+dist/assets/PageViewGuard-BP7AdnEo.js                   0.55 kB │ gzip:  0.36 kB
+dist/assets/presenceSession-CYiJYk_W.js                 0.56 kB │ gzip:  0.40 kB
+dist/assets/log-out-B7N2KL5C.js                         0.58 kB │ gzip:  0.32 kB
+dist/assets/supabaseRealtimeDebug-DqFMMh58.js           0.70 kB │ gzip:  0.35 kB
+dist/assets/FyndbridgeLoader-BZnX1Hp1.js                0.83 kB │ gzip:  0.48 kB
+dist/assets/candidateStatuses-CQ20jWU9.js               0.84 kB │ gzip:  0.39 kB
+dist/assets/useRealtimeRefresh-7-m6IdHA.js              0.93 kB │ gzip:  0.57 kB
+dist/assets/mandateStatuses-AXIiIyLw.js                 1.04 kB │ gzip:  0.44 kB
+dist/assets/SettingsPage-D-lkMAbT.js                    1.07 kB │ gzip:  0.52 kB
+dist/assets/CompactPagination--6a50FDh.js               1.12 kB │ gzip:  0.52 kB
+dist/assets/useDialogFocus-CkPtuPiN.js                  1.18 kB │ gzip:  0.59 kB
+dist/assets/TablePopover-CSKqONKh.js                    1.18 kB │ gzip:  0.66 kB
+dist/assets/candidateTableColumns-BUfmNWKv.js           1.34 kB │ gzip:  0.51 kB
+dist/assets/ConsultantPill-DVMTE5v4.js                  1.36 kB │ gzip:  0.70 kB
+dist/assets/createLucideIcon-DmoCLUcw.js                1.37 kB │ gzip:  0.77 kB
+dist/assets/useStaffDirectory-Cbm2gD_m.js               1.62 kB │ gzip:  0.90 kB
+dist/assets/documentAttachments-Dvv1csqY.js             1.65 kB │ gzip:  0.90 kB
+dist/assets/attendanceApi-fPgT3g3_.js                   1.86 kB │ gzip:  0.86 kB
+dist/assets/FloatingDropdown-DdeHmqA1.js                2.02 kB │ gzip:  1.03 kB
+dist/assets/assignedCandidatesApi-AOz8oWhc.js           2.15 kB │ gzip:  1.06 kB
+dist/assets/UserManualPage-DL2KJJ8T.js                  2.67 kB │ gzip:  1.22 kB
+dist/assets/PaginationBar-CUEEsIAd.js                   2.68 kB │ gzip:  1.05 kB
+dist/assets/DocumentAttachments-pxDL6_4E.js             3.20 kB │ gzip:  1.00 kB
+dist/assets/candidateUtils-RpHVKrlE.js                  3.36 kB │ gzip:  1.37 kB
+dist/assets/ProfileSettingsPage-6mgY20kr.js             3.56 kB │ gzip:  1.53 kB
+dist/assets/performanceApi-CnDQMCAQ.js                  3.83 kB │ gzip:  1.34 kB
+dist/assets/usePageViewPermissions-pRyAhYuZ.js          3.94 kB │ gzip:  1.51 kB
+dist/assets/FormattedDateInput-D0eNB-aP.js              4.20 kB │ gzip:  1.83 kB
+dist/assets/AttendancePermissionSettings-Da42K5RO.js    4.80 kB │ gzip:  1.91 kB
+dist/assets/LoginPage-3qIdOrDM.js                       4.88 kB │ gzip:  2.01 kB
+dist/assets/SearchInterpretation-fn6BY0uo.js            5.02 kB │ gzip:  2.32 kB
+dist/assets/ReportKpiCard-BASkq-gV.js                   5.33 kB │ gzip:  1.96 kB
+dist/assets/useAdminAccess-BQgkwBmg.js                  6.94 kB │ gzip:  2.20 kB
+dist/assets/AuthContext-CRcfluSY.js                     7.00 kB │ gzip:  2.74 kB
+dist/assets/ClientJobCandidatesPage-CT4yj_Kn.js         7.20 kB │ gzip:  2.44 kB
+dist/assets/InvoiceEntityDetailPage-C2IMgSRb.js         8.59 kB │ gzip:  2.74 kB
+dist/assets/useOnlineUsers-Cg0Q_Xse.js                 10.40 kB │ gzip:  4.04 kB
+dist/assets/AuthenticatedShell-Cad_jslk.js             17.20 kB │ gzip:  5.56 kB
+dist/assets/PerformanceReviewPage-DVTGLY1g.js          19.81 kB │ gzip:  6.16 kB
+dist/assets/InvoicePage-DJwZI9xt.js                    22.05 kB │ gzip:  6.49 kB
+dist/assets/InvoicePage-DVW6mKzR.js                    24.35 kB │ gzip:  6.58 kB
+dist/assets/PublicRolesPage-h2O1Jruj.js                29.78 kB │ gzip:  8.85 kB
+dist/assets/ClientDetailPage-CTBlmvET.js               32.27 kB │ gzip:  9.13 kB
+dist/assets/AssignedCandidatesPage-DZJTNlA0.js         39.04 kB │ gzip: 11.63 kB
+dist/assets/AppliedCandidatesPage-DKKXOEXc.js          45.50 kB │ gzip: 12.87 kB
+dist/assets/AttendancePage-Cku9Dzeo.js                 46.18 kB │ gzip: 12.49 kB
+dist/assets/CrmPage-BkVzziiR.js                        49.88 kB │ gzip: 14.59 kB
+dist/assets/ConsultantReportPage-C8VpdhDv.js           54.51 kB │ gzip: 16.07 kB
+dist/assets/JobsPage-CeF2Zb5v.js                       60.94 kB │ gzip: 15.97 kB
+dist/assets/ClientsPage-VbqaFHBt.js                    61.28 kB │ gzip: 15.35 kB
+dist/assets/AdminPage-Cg-icLMn.js                      67.16 kB │ gzip: 17.81 kB
+dist/assets/CandidatesPage-82KuBLbX.js                 77.90 kB │ gzip: 20.11 kB
+dist/assets/DashboardHome-Dfr8sx5m.js                  86.15 kB │ gzip: 24.03 kB
+dist/assets/supabaseClient-DkUQkPhE.js                199.93 kB │ gzip: 51.11 kB
+dist/assets/index-Bg5MV5Nq.js                         260.77 kB │ gzip: 83.08 kB
+dist/assets/CartesianChart-Dk9C2GHG.js                318.93 kB │ gzip: 95.26 kB
+
+✓ built in 227ms

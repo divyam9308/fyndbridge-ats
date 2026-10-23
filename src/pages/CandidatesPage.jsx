@@ -653,7 +653,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
     const formBody = new FormData()
     Object.entries(body).forEach(([key, value]) => {
       if (value === undefined) return
-      if (value === '') return
+      if (value === '' && !update) return
       formBody.append(key, Array.isArray(value) ? JSON.stringify(value) : value ?? '')
     })
     const manualCvFiles = Array.isArray(candidate.cvFiles) ? candidate.cvFiles : []

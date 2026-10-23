@@ -107,3 +107,6 @@
 .crm-email-sentiment-positive { color: #166534; background: #e2f3e7; }
 .crm-email-sentiment-neutral, .crm-email-sentiment-unknown { color: #4b5563; background: #f1f3f5; }
 .crm-email-sentiment-negative { color: #b91c1c; background: #fcebea; }
+.crm-history-sync-form { display: grid; gap: 12px; margin: 16px 0; }
+.crm-history-sync-form .form-group { margin: 0; }
+.crm-history-sync-form > button { justify-self: start; }

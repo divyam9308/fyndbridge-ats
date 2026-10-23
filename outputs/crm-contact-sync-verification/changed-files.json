@@ -1,0 +1,118 @@
+[
+  {
+    "file": "server/src/services/crmGmail.js",
+    "sha256": "3e336c97160bf1c789d4d218798a6bd58670799b74439ae0d0efc2f6c830254b"
+  },
+  {
+    "file": "server/src/services/crmGmailContent.js",
+    "sha256": "e2c8c4aa14d9fca37d28feda1175774901243fcc945436d975d685085ea5b1c1"
+  },
+  {
+    "file": "server/src/services/crmGmail.test.js",
+    "sha256": "3c9de088a6c7d4c323ea22744de9c46f574ec59b45b09b9dc37fe1c585c55a85"
+  },
+  {
+    "file": "server/src/services/crmGmailContactSearch.test.js",
+    "sha256": "9d25cb35d6b34a437a4d74a1b650b73ad7540b6ea142a9f2711f3b34db0aa2f6"
+  },
+  {
+    "file": "server/src/routes/crm.js",
+    "sha256": "d6164b2145e82a6546278335d4388b1580e7fed769a513edd5d5b473e63e1d44"
+  },
+  {
+    "file": "server/src/routes/crmGmail.js",
+    "sha256": "2b67f736e0c85faf80d9df0cb7e7d4343b2f14d739298c291c18410067b1393d"
+  },
+  {
+    "file": "server/test-support/crmServer.cjs",
+    "sha256": "11a19325e9bf7b02310835a6b1877195f0333b4290412364a0bbc35e0a89138d"
+  },
+  {
+    "file": "server/browser-tests/crm.spec.cjs",
+    "sha256": "52c56f3234766e5a9fb483ae3a30c4d294d9f8bbc31faeabdd5f3540213563e1"
+  },
+  {
+    "file": "server/browser-tests/crmGmail.spec.cjs",
+    "sha256": "a7f61bcc700d4136ae3ccc6f18aaf9f484930e3f306a88c3ae0086a54fe80b77"
+  },
+  {
+    "file": "server/browser-tests/crmGmailEventTime.spec.cjs",
+    "sha256": "ef10ff5639033dee543dc2fe70b15dbd3a06e1d0dc9495fec7a6131bc0c8d93e"
+  },
+  {
+    "file": "src/components/CrmDialogs.jsx",
+    "sha256": "5460ec347bd91039ab836cdef183deb753c2d8474e9047dfd3abaa4251d21583"
+  },
+  {
+    "file": "src/components/CrmGmailConnection.jsx",
+    "sha256": "ed831e2869331a1db13e53fa8e425827ac2011fd02c1ded564ec15f042ccf4f5"
+  },
+  {
+    "file": "src/pages/CrmPage.css",
+    "sha256": "8614b7ac336fb21961a43fe05df52f6cbaad96191c7bc9eda45d87fdf894e058"
+  },
+  {
+    "file": "supabase/migrations/20261023112550_crm_gmail_shared_sync_and_client_history.sql",
+    "sha256": "1695053f3f5e936450ea56d7797594a3e19851e6f760c08b2eb126ea5783d188"
+  },
+  {
+    "file": "supabase/migrations/20261023112559_crm_gmail_contact_search_and_event_time.sql",
+    "sha256": "3981b7b1b1bee2b64bf559691f97fa6ed1d149e225792da9c1e129f537b82e51"
+  },
+  {
+    "file": "supabase/migrations/20261023112632_crm_gmail_obsolete_queue_cleanup.sql",
+    "sha256": "e9c618408f92bc7d11fa7684c223b403875a53e1230717b2591d776a75b5ed9a"
+  },
+  {
+    "file": "supabase/migrations/20261023112611_crm_gmail_explicit_history_modes.sql",
+    "sha256": "1a22263cbc41b0161cf4b4401bf5ee8b57d8680b79cc495b5a01d7d7a8f4606d"
+  },
+  {
+    "file": "docs/CRM_GMAIL_CONTACT_SYNC_ROLLOUT.md",
+    "sha256": "ca11cfc6c87f01497af232e09849aea3a6fc4a3b577a33802762809da4a2e93e"
+  },
+  {
+    "file": "docs/CRM_GMAIL.md",
+    "sha256": "4e6661a61a7d18bea715fa684f279acebbb6ec963e4f067ee3ed51f2d3a59e68"
+  },
+  {
+    "file": "outputs/crm-contact-sync-verification/backend.log",
+    "sha256": "64af28a388efd670358585fe2fa5b01466aeea176c15d5e86f1123206431d7c3",
+    "kind": "verification artifact"
+  },
+  {
+    "file": "outputs/crm-contact-sync-verification/browser-retry.log",
+    "sha256": "c8a054276beaee001acd92f0a7d2195ffb96cf6bf98317cecb92aa11d3af1bd4",
+    "kind": "verification artifact"
+  },
+  {
+    "file": "outputs/crm-contact-sync-verification/browser.log",
+    "sha256": "e0a76088878b6eaae2ac3677f1dc0db9bf18d898e555405aeb18a50d9d4fd013",
+    "kind": "verification artifact"
+  },
+  {
+    "file": "outputs/crm-contact-sync-verification/build.log",
+    "sha256": "3b9d5290a34aa8ee126d3da32e552d31183f9667937ec19373732daa8ebf2a48",
+    "kind": "verification artifact"
+  },
+  {
+    "file": "outputs/crm-contact-sync-verification/changed-file-lint.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kind": "verification artifact"
+  },
+  {
+    "file": "outputs/crm-contact-sync-verification/deployed-source-sha256.json",
+    "sha256": "b5dad344c31a3f5d1b54fc4fd09744336bd22678ff8bc0e8a385ded255596ff3",
+    "kind": "verification artifact"
+  },
+  {
+    "file": "outputs/crm-contact-sync-verification/event-time.png",
+    "sha256": "5ecd924607a52ec384abacacfc47360fb8138eda09ef36d35177412dfb11f068",
+    "kind": "verification artifact"
+  },
+  {
+    "file": "outputs/crm-contact-sync-verification/live-results.json",
+    "sha256": "aeca0d07ca01ef7ea806263532bff5e72efc5766fa5e337a1ca0bd5dceea3216",
+    "kind": "verification artifact"
+  }
+]

@@ -1,5 +1,9 @@
 # CRM Gmail integration — implementation and rollout
 
+> The 23 October 2026 production contact-search, original-date and one-time queue
+> maintenance rollout is documented in [CRM_GMAIL_CONTACT_SYNC_ROLLOUT.md](CRM_GMAIL_CONTACT_SYNC_ROLLOUT.md).
+> The sections below describe earlier implementation stages.
+
 Implemented locally in the nested Fyndbridge ATS checkout on 19 October 2026.
 No commit, push, hosted migration, or deployment was performed. No real Google
 mailbox was authorized. Synthetic browser data is confined to test fixtures.
@@ -21,17 +25,19 @@ opens connection details. The existing 13 columns remain unchanged. CRM visibili
 now supports selected consultants in Admin → Page View Permissions, as described in
 [the follow-up access report](CONSULTANT_ACCESS.md).
 
-A connected mailbox also has **Sync now** in the toolbar and connection dialog.
-Clicking it immediately requests discovery and analysis for the signed-in mailbox,
-shows **Syncing...**, and disables duplicate actions while the request is running.
-The result and errors stay in the dialog without adding inline toolbar text.
+**Sync now** processes new messages across all connected consultant mailboxes.
+It is available even if the caller has no personal Gmail connection. Shared requests
+have a 30-second cooldown; results stay inline and details open only through ⓘ.
+Inside ⓘ, **Sync old emails** opens a searchable client picker. **Sync selected client**
+queues historical mail for that client across all connected mailboxes, including
+another consultant's mailbox, while retaining that mailbox owner's access checks.
 
 Only exact, case-normalized contact emails match. All contact persons are included.
 Public domains receive no special domain matching; an exact address can still match.
 Ambiguous organisations and unrelated messages are skipped before any full-message
 fetch or AI call. Incoming matching uses the external sender; outgoing matching uses
 To/Cc/Bcc. Drafts, spam and trash are excluded. Messages predating the connection
-are included after the consultant explicitly clicks **Sync now**.
+are included only through the explicit **Sync old emails** client selection.
 Contact matching is rechecked in the activity-write transaction.
 
 Only `crm_activities` receives CRM writes: one `gmail_email` row per consultant and
@@ -139,17 +145,19 @@ requires `20261023094350_crm_gmail_historical_sync.sql` before the updated backe
 This migration and application change must be applied/deployed together;
 this manual-sync task did not change hosted Supabase or Vercel.
 
-Initial authorization records the current Gmail history ID, importing no historical
-mailbox automatically. **Sync now** starts a full historical scan of available mail,
-with no lookback-date or total-page cap. A separate persisted cursor and fixed upper
-date bound let later worker invocations resume without changing the incremental
-checkpoint. Only matched messages are fetched in full and analysed. Active scans
-keep their cursor on repeated clicks; a completed scan can run again to include
-old messages matching newly added CRM contacts. Completed email activities are not
-analysed again or duplicated. Previously skipped pre-connection/unmatched/ambiguous
-jobs may be reconsidered; permanent failures are retained. Spam, trash, drafts and
-unrelated/ambiguous messages do not generate activities. Gmail's paginated full sync
-is documented at https://developers.google.com/workspace/gmail/api/guides/sync .
+Initial authorization records the current Gmail history ID without importing old mail.
+Normal sync never starts or advances historical imports. Explicit client imports use
+persisted per-mailbox/client cursors, a fixed upper date bound and current validated
+contact addresses. Background workers resume queued imports after request budgets or
+minute quota pauses. Only the selected client's matched messages reach full-body fetch
+and analysis; contact matching is rechecked before analysis and transactionally before
+activity creation. Existing activities are deduplicated and retain their email dates.
+
+The split requires the shared-sync/client-history migration `20261023104404`, the
+contact-search/event-time migration `20261023105131`, and the final explicit-mode
+migration `20261023105559`, after earlier Gmail migrations. The separate optional
+obsolete-queue cleanup migration is not required by this feature. These changes are
+local until the required schema and backend/frontend are deployed together.
 
 The migration also shortens any existing AI quota pause to at most one minute,
 without clearing jobs, existing activities or other retry schedules. It has not

@@ -13,6 +13,9 @@ async function start() {
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019165228_crm_gmail_integration.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019182711_crm_gmail_manual_sync.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261023094350_crm_gmail_historical_sync.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261023112550_crm_gmail_shared_sync_and_client_history.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261023112559_crm_gmail_contact_search_and_event_time.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261023112611_crm_gmail_explicit_history_modes.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019185136_crm_activity_read_receipts.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261021093133_crm_incoming_email_row_highlights.sql'), 'utf8'))
   await db.query('insert into auth.users values($1,$2)', [USER_ID, 'recruiter@fyndbridge.in'])
@@ -31,7 +34,7 @@ async function start() {
   let missingGmailMessage = false
   let historicalMessages = false
   const gmailService = gmailExports.createGmailService({ db: adapter,
-    authorize: async id => { if (id !== USER_ID) throw Object.assign(new Error('Denied'), { code: 'ACCESS_DENIED' }); return 'recruiter@fyndbridge.in' },
+    authorize: async id => { if (![USER_ID,OTHER].includes(id)) throw Object.assign(new Error('Denied'), { code: 'ACCESS_DENIED' }); return id === OTHER ? 'other@fyndbridge.in' : 'recruiter@fyndbridge.in' },
     google: {
       revoke: async () => {},
       api: async (access, endpoint, params) => {
@@ -39,9 +42,9 @@ async function start() {
         if (endpoint === 'messages') return historicalMessages
           ? params.pageToken ? { messages: [{ id: 'historical-outgoing' }] } : { messages: [{ id: 'historical-incoming' }], nextPageToken: 'historical-page-2' }
           : { messages: [] }
-        const id = endpoint.split('/')[1], historical = id?.startsWith('historical-'), outgoing = id === 'historical-outgoing'
+        const id = endpoint.split('/')[1], historical = id?.startsWith('historical-'), outgoing = id === 'historical-outgoing', mailbox = access === 'synthetic-other-access' ? 'other@fyndbridge.in' : 'recruiter@fyndbridge.in'
         return endpoint === 'history' ? { historyId: '101', history: [{ messagesAdded: [{ message: { id: 'manual-sync-message' } }, ...(missingGmailMessage ? [{ message: { id: 'missing-sync-message' } }] : [])] }] } : {
-        id, internalDate: String(Date.now() - (historical ? 90 * 86400000 : 0)), payload: { mimeType: 'text/plain', headers: [{ name: 'From', value: outgoing ? 'recruiter@fyndbridge.in' : 'hr@client.test' }, { name: 'To', value: outgoing ? 'hr@client.test' : 'recruiter@fyndbridge.in' }, { name: 'Subject', value: historical ? 'Historical recruitment email' : 'Manual sync meeting' }], body: { data: Buffer.from('Can we meet Friday at 2 PM? No requirements at present.').toString('base64url') } }
+        id, internalDate: String(Date.now() - (historical ? 90 * 86400000 : 0)), payload: { mimeType: 'text/plain', headers: [{ name: 'From', value: outgoing ? mailbox : 'hr@client.test' }, { name: 'To', value: outgoing ? 'hr@client.test' : mailbox }, { name: 'Subject', value: historical ? 'Historical recruitment email' : 'Manual sync meeting' }], body: { data: Buffer.from('Can we meet Friday at 2 PM? No requirements at present.').toString('base64url') } }
         }
       }
     },
@@ -59,9 +62,10 @@ async function start() {
   app.post('/test/gmail', async (req, res) => {
     missingGmailMessage = Boolean(req.body.missingMessage)
     historicalMessages = Boolean(req.body.historicalMessages)
-    const credentials = encrypt({ access_token: 'synthetic-access', refresh_token: 'synthetic-refresh', expires_at: Date.now() + 3600000 }, USER_ID)
-    await db.query('insert into crm_gmail_connections(user_id,email,credentials,history_id,last_sync_at) values($1,$2,$3,$4,now()) on conflict(user_id) do nothing', [USER_ID,'recruiter@fyndbridge.in',credentials,'100'])
-    if (req.body.resetCooldown) await db.query('update crm_gmail_connections set last_manual_sync_at=null where user_id=$1', [USER_ID])
+    const owner = req.body.otherMailbox ? OTHER : USER_ID, mailbox = req.body.otherMailbox ? 'other@fyndbridge.in' : 'recruiter@fyndbridge.in'
+    const credentials = encrypt({ access_token: req.body.otherMailbox ? 'synthetic-other-access' : 'synthetic-access', refresh_token: 'synthetic-refresh', expires_at: Date.now() + 3600000 }, owner)
+    await db.query('insert into crm_gmail_connections(user_id,email,credentials,history_id,last_sync_at) values($1,$2,$3,$4,now()) on conflict(user_id) do nothing', [owner,mailbox,credentials,'100'])
+    if (req.body.resetCooldown) await db.exec("update crm_gmail_worker set last_manual_sync_at=null; update crm_gmail_client_imports set requested_at=now()-interval '31 seconds'")
     res.json({ ok: true })
   })
   app.post('/test/gmail-activity', async (req, res) => {

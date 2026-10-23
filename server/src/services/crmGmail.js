@@ -1,9 +1,14 @@
 const crypto = require('node:crypto')
 const { AsyncLocalStorage } = require('node:async_hooks')
 const { SCOPE, hash, encrypt, decrypt, config, createGoogle, authorizationUrl } = require('./crmGmailGoogle')
-const { normalizeEmail, headers, matchMessage, extractBody, SCHEMA, validateAnalysis, analysisPrompt } = require('./crmGmailContent')
+const { normalizeEmail, addresses, contactEmails, contactQuery, emailTimestamp, headers, matchMessage, extractBody, SCHEMA, validateAnalysis, analysisPrompt } = require('./crmGmailContent')
 const CRM_MODEL = process.env.GEMINI_CRM_MODEL || 'gemini-3.5-flash-lite'
 const AI_QUOTA_RETRY_MS = 60000
+function historicalMatchAllowed(job, match) {
+  if (!job.historical_client_id || !match.client) return true
+  if (!job.discovery_contact_email) return match.client.id === job.historical_client_id
+  return (match.direction === 'outgoing' ? match.to : [match.from]).includes(job.discovery_contact_email)
+}
 function fault(code) { return Object.assign(new Error(code), { code }) }
 function backoff(attempts, quota = false) { return quota ? 24 * 60 * 60 * 1000 : Math.min(6 * 3600000, 60000 * 2 ** Math.min(attempts, 9)) + crypto.randomInt(1000) }
 async function verifiedConsultant(db, userId, access = require('./adminAccess')) {
@@ -69,8 +74,8 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
   }
   async function status(userId) {
     // Explicit projection: never send encrypted credentials or operational payloads.
-    const c = await checked(db.from('crm_gmail_connections').select('email,status,last_sync_at,last_error,coverage_warning,backfill_started_at,backfill_completed_at').eq('user_id', userId).maybeSingle())
-    return c ? { connected: true, email: c.email, status: c.status, last_sync_at: c.last_sync_at, last_error: c.last_error, coverage_warning: c.coverage_warning, backfill_started_at: c.backfill_started_at, backfill_completed_at: c.backfill_completed_at } : { connected: false }
+    const snapshot = await rpc('all_sync_status', { p_user: userId })
+    return { ...snapshot.connection, connected_mailboxes: snapshot.connected_mailboxes }
   }
   async function disconnect(userId) {
     const credentials = await rpc('disconnect', { p_user: userId })
@@ -108,17 +113,18 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
   async function discover(c, lease) {
     await allowedConnection(c)
     if (!c.sync_requested && c.backfill_started_at && !c.backfill_completed_at) {
-      // Snapshot the upper date bound once; incremental history covers newer mail.
-      const params = { maxResults: '100', q: `before:${Math.ceil(new Date(c.backfill_started_at).getTime() / 1000)} -in:spam -in:trash -in:drafts`, ...(c.backfill_page_token ? { pageToken: c.backfill_page_token } : {}) }
+      const scan = await rpc('prepare_contact_scan', { p_id: c.id, p_lease: lease })
+      if (!scan || !scan.email) return
+      const params = { maxResults: '100', q: contactQuery(scan.email, scan.before), ...(scan.page ? { pageToken: scan.page } : {}) }
       let result
       try { result = await gmail(c, 'messages', params) }
       catch (error) {
         if (error.status !== 400 || !params.pageToken) throw error
-        // An expired list cursor restarts safely because message IDs are deduplicated.
         delete params.pageToken
         result = await gmail(c, 'messages', params)
       }
-      await rpc('commit_backfill_page', { p_id: c.id, p_lease: lease, p_ids: [...new Set((result.messages || []).map(message => message.id).filter(Boolean))], p_page: result.nextPageToken || null })
+      await rpc('commit_contact_page', { p_id: c.id, p_lease: lease, p_snapshot: scan.snapshot, p_index: scan.index,
+        p_ids: [...new Set((result.messages || []).map(message => message.id).filter(Boolean))], p_page: result.nextPageToken || null })
       return
     }
     const params = { maxResults: '25', startHistoryId: c.history_id, historyTypes: 'messageAdded', ...(c.page_token ? { pageToken: c.page_token } : {}) }
@@ -148,36 +154,67 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
     if (!page.nextPageToken && !/^\d+$/.test(String(page.historyId || ''))) throw fault('GMAIL_API_ERROR')
     await rpc('commit_page', { p_id: c.id, p_lease: lease, p_ids: ids, p_history: page.nextPageToken ? null : String(page.historyId), p_page: page.nextPageToken || null, p_recovery: {} })
   }
+  async function discoverClientImport(task, lease) {
+    const c = await checked(db.from('crm_gmail_connections').select('*').eq('id', task.connection_id).maybeSingle())
+    if (!c || c.status !== 'connected') return
+    try {
+      await allowedConnection(c)
+      const scan = await rpc('prepare_client_scan', { p_id: task.id, p_lease: lease })
+      if (!scan || !scan.email) return
+      const params = { maxResults: '100', q: contactQuery(scan.email, task.scan_before), ...(scan.page ? { pageToken: scan.page } : {}) }
+      let result
+      try { result = await gmail(c, 'messages', params) }
+      catch (error) {
+        if (error.status !== 400 || !params.pageToken) throw error
+        delete params.pageToken
+        result = await gmail(c, 'messages', params)
+      }
+      await rpc('commit_client_contact_page', { p_id: task.id, p_lease: lease, p_snapshot: scan.snapshot, p_index: scan.index, p_ids: [...new Set((result.messages || []).map(message => message.id).filter(Boolean))], p_page: result.nextPageToken || null })
+    } catch (error) {
+      const denied = ['GMAIL_REVOKED','WORK_EMAIL_CHANGED','ACCESS_DENIED','WORK_EMAIL_REQUIRED'].includes(error.code) || [401,403].includes(error.status)
+      if (denied) await reauthorize(c, 'REAUTHORIZE')
+      await checked(db.from('crm_gmail_client_imports').update({ status: denied || task.attempts >= 8 ? 'failed' : 'pending', last_error: denied ? 'REAUTHORIZE' : 'DISCOVERY_RETRY', next_attempt_at: new Date(now() + backoff(task.attempts, error.code === 'GMAIL_DAILY_QUOTA')).toISOString(), lease_id: null, lease_until: null }).eq('id', task.id).eq('lease_id', lease))
+    }
+  }
   async function processJob(job, lease) {
     const c = await checked(db.from('crm_gmail_connections').select('*').eq('id', job.connection_id).maybeSingle())
     if (!c || c.status !== 'connected') return
     try {
       await allowedConnection(c)
+      const imported = await checked(db.from('crm_activities').select('id').eq('gmail_user_id', c.user_id).eq('gmail_message_id', job.message_id).maybeSingle())
+      if (imported) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: 'activity_created' })
       const message = await gmail(c, `messages/${encodeURIComponent(job.message_id)}`, { format: 'metadata' })
       if (message.id !== job.message_id || !Number.isFinite(Number(message.internalDate)) || Number(message.internalDate) <= 0) throw fault('GMAIL_INVALID_MESSAGE')
       let outcome = 'before_connection'
       let match
-      if (c.backfill_started_at || Number(message.internalDate) >= new Date(c.connected_at).getTime()) {
+      if (job.discovery_kind === 'historical' || job.historical_client_id || Number(message.internalDate) >= new Date(c.connected_at).getTime()) {
         const h = headers(message)
-        const { addresses } = require('./crmGmailContent')
         const peers = addresses(h.from).includes(c.email) ? [...addresses(h.to), ...addresses(h.cc), ...addresses(h.bcc)] : addresses(h.from)
         const clients = await rpc('match_clients', { p_peers: peers.filter(email => email !== c.email) })
         match = matchMessage(message, c.email, clients); outcome = match.reason
+        if (!historicalMatchAllowed(job, match)) { match = null; outcome = 'historical_client_mismatch' }
       }
       if (!match?.client) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: outcome })
       // Only matched messages are fetched in full. Never use attachments.get.
       const full = await gmail(c, `messages/${encodeURIComponent(job.message_id)}`, { format: 'full' })
       if (full.id !== job.message_id || !Number.isFinite(Number(full.internalDate)) || Number(full.internalDate) <= 0) throw fault('GMAIL_INVALID_MESSAGE')
-      const body = extractBody(full.payload), h = headers(full)
+      const h = headers(full)
+      const peers = addresses(h.from).includes(c.email) ? [...addresses(h.to), ...addresses(h.cc), ...addresses(h.bcc)] : addresses(h.from)
+      match = matchMessage(full, c.email, await rpc('match_clients', { p_peers: peers.filter(email => email !== c.email) }))
+      if (!match.client) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: match.reason })
+      if (!historicalMatchAllowed(job, match)) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: 'historical_client_mismatch' })
+      const body = extractBody(full.payload)
       if (!body) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: 'empty_body' })
       const raw = await ai({ prompt: analysisPrompt(body, match.direction, h.subject || ''), schema: SCHEMA, schemaName: 'crm_email_analysis', model: CRM_MODEL, timeoutMs: Math.max(1, Math.min(5500, Math.floor((requestDeadline() - now() - 4000) / 3))), safeErrors: true })
       const analysis = validateAnalysis(raw, body, match.direction)
       // Recheck ownership/access and current contacts before committing an insight.
       await allowedConnection(c)
-      const current = await checked(db.from('crm_clients').select('id,contacts').eq('id', match.client.id).maybeSingle())
-      if (!current || !matchMessage(message, c.email, [current]).client) throw fault('CONTACT_CHANGED')
-      return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: current.id,
-        p_metadata: { source: 'gmail', direction: match.direction, sender: match.from, recipients: match.to, subject: (h.subject || '(No subject)').slice(0, 500), email_at: new Date(Number(full.internalDate)).toISOString(), summary: analysis.summary, meeting: analysis.meeting, negative_response: analysis.negative_response, sentiment: analysis.sentiment, model: CRM_MODEL, analysed_at: new Date(now()).toISOString() }, p_outcome: 'activity_created' })
+      const current = matchMessage(full, c.email, await rpc('match_clients', { p_peers: peers.filter(email => email !== c.email) }))
+      if (!current.client) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: current.reason })
+      if (!historicalMatchAllowed(job, current)) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: 'historical_client_mismatch' })
+      match = current
+      return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: current.client.id,
+        p_metadata: { source: 'gmail', direction: match.direction, sender: match.from, recipients: match.to, subject: (h.subject || '(No subject)').slice(0, 500), email_at: emailTimestamp(full), summary: analysis.summary, meeting: analysis.meeting, negative_response: analysis.negative_response, sentiment: analysis.sentiment, model: CRM_MODEL, analysed_at: new Date(now()).toISOString() }, p_outcome: 'activity_created' })
     } catch (error) {
       const quota = error.statusCode === 429 || error.code === 'AI_QUOTA_REACHED'
       const revoked = ['GMAIL_REVOKED','WORK_EMAIL_CHANGED','ACCESS_DENIED','WORK_EMAIL_REQUIRED'].includes(error.code) || [401,403].includes(error.status)
@@ -190,16 +227,16 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       await checked(db.from('crm_gmail_jobs').update({ status: permanent ? 'permanent_failure' : 'retryable_failure', available_at: retryAt, last_error: quota ? 'QUOTA_PAUSED' : revoked ? 'REAUTHORIZE' : error.code === 'INVALID_AI_OUTPUT' ? 'INVALID_AI_OUTPUT' : 'PROCESSING_FAILED', lease_id: null, lease_until: null }).eq('id', job.id).eq('lease_id', lease))
     }
   }
-  async function run({ schedule = false, budgetMs = 45000, userId = null } = {}) {
+  async function run({ schedule = false, budgetMs = 45000, userId = null, newOnly = false, clientId = null } = {}) {
     const deadline = now() + Math.min(45000, budgetMs), lease = crypto.randomUUID()
     return budgets.run({ deadline }, async () => {
-      if (schedule && !userId) await rpc('schedule')
-      if (!await rpc('claim_worker', { p_lease: lease })) return { busy: true }
+      if (schedule && !userId && !clientId) await rpc('schedule')
+      if (!await rpc('claim_worker_v2', { p_lease: lease })) return { busy: true }
       let discovered = 0, processed = 0
       try {
         // Alternate discovery and processing; a large mailbox cannot starve jobs.
         for (let step = 0; step < 12 && now() < deadline - 27000; step++) {
-          const c = await rpc(userId ? 'claim_user_sync' : 'claim_sync', { p_lease: lease, ...(userId ? { p_user: userId } : {}) })
+          const c = clientId ? null : await rpc(newOnly ? 'claim_incremental_sync' : userId ? 'claim_user_sync' : 'claim_sync', { p_lease: lease, ...(userId ? { p_user: userId } : {}) })
           if (c) {
             try { await discover(c, lease); discovered++ }
             catch (error) {
@@ -208,10 +245,13 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
               else await checked(db.from('crm_gmail_connections').update({ last_error: 'SYNC_RETRY', sync_attempts: c.sync_attempts + 1, next_attempt_at: new Date(now() + backoff(c.sync_attempts + 1, error.code === 'GMAIL_DAILY_QUOTA')).toISOString(), lease_id: null, lease_until: null }).eq('id', c.id).eq('lease_id', lease))
             }
           }
+          const task = !c && !newOnly ? await rpc('claim_client_import', { p_lease: lease, p_client: clientId }) : null
+          if (task) { await discoverClientImport(task, lease); discovered++ }
           if (now() >= deadline - 27000) break
-          const job = await rpc(userId ? 'claim_user_job' : 'claim_job', { p_lease: lease, ...(userId ? { p_user: userId } : {}) })
+          const job = clientId ? await rpc('claim_client_job', { p_lease: lease, p_client: clientId })
+            : await rpc(newOnly ? 'claim_incremental_job' : userId ? 'claim_user_job' : 'claim_job', { p_lease: lease, ...(userId && !newOnly ? { p_user: userId } : {}) })
           if (job) { await processJob(job, lease); processed++ }
-          if (!c && !job) break
+          if (!c && !task && !job) break
         }
         return { discovered, processed }
       } finally {
@@ -222,25 +262,51 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
   async function syncNow(userId) {
     const deadline = now() + 45000
     return budgets.run({ deadline }, async () => {
-      // Recheck work identity, employment and current CRM access before scheduling.
-      const email = await authorizeWithinBudget(userId)
-      const c = await connectionFor(userId)
-      if (!c) throw fault('NOT_CONNECTED')
-      if (normalizeEmail(c.email) !== email) throw fault('WORK_EMAIL_CHANGED')
-      const requested = await rpc('request_manual_sync', { p_user: userId })
-      if (requested.state === 'not_connected') throw fault('NOT_CONNECTED')
-      if (requested.state === 'reauthorization_required') throw fault('REAUTHORIZE')
+      await authorizeWithinBudget(userId)
+      const requested = await rpc('request_all_sync', { p_actor: userId })
+      if (requested.state === 'not_connected') throw fault('NO_CONNECTED_MAILBOXES')
       if (requested.state === 'cooldown') throw Object.assign(fault('SYNC_COOLDOWN'), { retryAfter: requested.retry_after })
-      const result = requested.state === 'in_progress' ? { busy: true } : await run({ userId, budgetMs: deadline - now() - 4000 })
-      const snapshot = await rpc('manual_sync_status', { p_user: userId })
-      const state = !snapshot.connection.connected ? 'not_connected'
-        : snapshot.connection.status !== 'connected' ? 'reauthorization_required'
-          : snapshot.ai_paused && snapshot.pending_jobs ? 'quota_paused'
-            : result.busy || snapshot.discovery_pending || snapshot.backfill_pending || snapshot.pending_jobs ? 'pending'
-              : snapshot.failed_jobs ? 'partial' : 'completed'
-      return { ...snapshot, state }
+      const result = await run({ budgetMs: deadline - now() - 4000 })
+      const snapshot = await rpc('all_sync_status', { p_user: userId })
+      return { ...snapshot, state: snapshot.no_contacts ? 'no_contacts' : syncState(snapshot, result.busy) }
     })
   }
-  return { start, callback, status, disconnect, syncNow, run, access, discover, processJob }
+  function syncState(snapshot, busy) {
+    return !snapshot.connected_mailboxes ? 'not_connected' : snapshot.ai_paused && snapshot.pending_jobs ? 'quota_paused'
+      : busy || snapshot.discovery_pending || snapshot.pending_jobs ? 'pending'
+        : snapshot.failed_jobs ? 'partial' : 'completed'
+  }
+  // Public normal-sync entry point. Historical tasks continue only on their own
+  // explicit action or the background worker, never on a toolbar new-mail sync.
+  async function syncNewEmails(userId) {
+    const deadline = now() + 45000
+    return budgets.run({ deadline }, async () => {
+      await authorizeWithinBudget(userId)
+      const requested = await rpc('request_incremental_sync', { p_actor: userId })
+      if (requested.state === 'not_connected') throw fault('NO_CONNECTED_MAILBOXES')
+      if (requested.state === 'cooldown') throw Object.assign(fault('SYNC_COOLDOWN'), { retryAfter: requested.retry_after })
+      const result = await run({ newOnly: true, budgetMs: deadline - now() - 4000 })
+      const snapshot = await rpc('incremental_sync_status', { p_user: userId })
+      return { ...snapshot, state: syncState(snapshot, result.busy) }
+    })
+  }
+  async function syncClientHistory(userId, clientId) {
+    const deadline = now() + 45000
+    return budgets.run({ deadline }, async () => {
+      await authorizeWithinBudget(userId)
+      const client = await checked(db.from('crm_clients').select('id,organisation_name,contacts').eq('id', clientId).maybeSingle())
+      if (!client) throw fault('CLIENT_NOT_FOUND')
+      const emails = contactEmails(client.contacts)
+      if (!emails.length) throw fault('CLIENT_EMAIL_REQUIRED')
+      const requested = await rpc('request_client_import', { p_actor: userId, p_client: clientId, p_emails: emails })
+      if (requested.state === 'not_connected') throw fault('NO_CONNECTED_MAILBOXES')
+      if (requested.state === 'client_not_found') throw fault('CLIENT_NOT_FOUND')
+      if (requested.state === 'cooldown') throw Object.assign(fault('SYNC_COOLDOWN'), { retryAfter: requested.retry_after })
+      const result = await run({ clientId, budgetMs: deadline - now() - 4000 })
+      const snapshot = await rpc('client_import_status', { p_client: clientId })
+      return { ...snapshot, client_name: client.organisation_name, state: syncState(snapshot, result.busy) }
+    })
+  }
+  return { start, callback, status, disconnect, syncNow, syncNewEmails, syncClientHistory, run, access, discover, discoverClientImport, processJob }
 }
 module.exports = { createGmailService, verifiedConsultant, backoff, CRM_MODEL }

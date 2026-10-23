@@ -15,7 +15,10 @@ const MESSAGES = {
   CONFIGURATION: 'Gmail integration is not configured. Please contact an administrator.',
   NOT_CONNECTED: 'Connect Gmail before synchronising.',
   REAUTHORIZE: 'Reconnect Gmail before synchronising.',
-  SYNC_COOLDOWN: 'Please wait 30 seconds between manual Gmail syncs.'
+  SYNC_COOLDOWN: 'Please wait 30 seconds between manual Gmail syncs.',
+  NO_CONNECTED_MAILBOXES: 'No Gmail mailboxes are currently connected.',
+  CLIENT_NOT_FOUND: 'CRM client not found.',
+  CLIENT_EMAIL_REQUIRED: 'Add a contact email to this CRM client before syncing old emails.'
 }
 const cookieName = () => config().secure ? '__Host-crm_gmail_oauth' : 'crm_gmail_oauth'
 const cookieOptions = () => ({ httpOnly: true, secure: config().secure, sameSite: 'lax', path: '/', maxAge: 600000 })
@@ -26,7 +29,7 @@ function createHandlers(service = createGmailService()) {
   const safe = fn => async (req, res) => {
     try { await fn(req, res) }
     catch (error) {
-      const status = error.code === 'SYNC_COOLDOWN' ? 429 : ['NOT_CONNECTED','REAUTHORIZE'].includes(error.code) ? 409 : error.code === 'WORK_EMAIL_REQUIRED' ? 400 : error.code === 'ACCESS_DENIED' ? 403 : 503
+      const status = error.code === 'SYNC_COOLDOWN' ? 429 : error.code === 'CLIENT_NOT_FOUND' ? 404 : ['NOT_CONNECTED','REAUTHORIZE','NO_CONNECTED_MAILBOXES'].includes(error.code) ? 409 : ['WORK_EMAIL_REQUIRED','CLIENT_EMAIL_REQUIRED'].includes(error.code) ? 400 : error.code === 'ACCESS_DENIED' ? 403 : 503
       if (error.retryAfter) res.set('Retry-After', String(error.retryAfter))
       res.status(status).json({ error: MESSAGES[error.code] || 'Unable to complete the Gmail request. Please try again.', ...(error.retryAfter ? { retry_after: error.retryAfter } : {}) })
     }
@@ -38,6 +41,11 @@ function createHandlers(service = createGmailService()) {
   }))
   router.delete('/disconnect', safe(async (req, res) => { await service.disconnect(req.user.id); res.json({ connected: false }) }))
   router.post('/sync', safe(async (req, res) => res.json(await service.syncNow(req.user.id))))
+  router.post('/sync-old', safe(async (req, res) => {
+    const body = req.body || {}
+    if (Object.keys(body).some(key => key !== 'client_id') || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.client_id || '')) return res.status(400).json({ error: 'Choose a valid CRM client.' })
+    return res.json(await service.syncClientHistory(req.user.id, body.client_id))
+  }))
   async function callback(req, res) {
     res.set({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' })
     let result = 'connected'

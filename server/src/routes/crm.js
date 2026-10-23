@@ -66,7 +66,7 @@ for (const kind of ['comments', 'activities']) {
   router.get(`/:id/${kind}`, safe(async (req, res) => {
     const page = integer(req.query.page, 1, 1000000)
     const { data, error, count } = await supabase.from(`crm_${kind}`).select('*', { count: 'exact' }).eq('crm_client_id', req.params.id)
-      .order('created_at', { ascending: false }).order('id', { ascending: false }).range((page - 1) * 25, page * 25 - 1)
+      .order(kind === 'activities' ? 'occurred_at' : 'created_at', { ascending: false }).order('id', { ascending: false }).range((page - 1) * 25, page * 25 - 1)
     if (error) throw error
     const ids = [...new Set((data || []).flatMap(row => [row.created_by, kind === 'activities' && row.activity_type === 'assigned_consultant_id_changed' ? row.previous_value : null, kind === 'activities' && row.activity_type === 'assigned_consultant_id_changed' ? row.new_value : null]).filter(Boolean))]
     const profiles = ids.length ? await supabase.from('user_profiles').select('user_id,name').in('user_id', ids) : { data: [] }

@@ -1,0 +1,52 @@
+{
+  "queue": {
+    "completed": 618,
+    "permanent_failure": 19,
+    "retryable_failure": 1
+  },
+  "observed_at": "2026-10-23T11:34:05.042927+00:00",
+  "obsolete_queue": 0,
+  "gmail_activities": 3,
+  "cleanup_executions": 1,
+  "connected_mailboxes": 2,
+  "completed_contact_scans": 2,
+  "remaining_retry_reasons": [
+    {
+      "reason": "INVALID_AI_OUTPUT",
+      "attempts": 2,
+      "retry_at": "2026-10-23T11:36:32.22+00:00"
+    }
+  ],
+  "unsafe_gmail_rpc_grants": 0,
+  "duplicate_gmail_activity_groups": 0,
+  "incremental_completed_mailboxes": 2,
+  "production_deployment": "dpl_GNtEhyVFCvzueRyw9cc16HZtRqn4",
+  "production_url": "https://fyndbridge-ats.vercel.app",
+  "removed_obsolete_pending_jobs": 5292,
+  "original_activities_preserved": 8,
+  "original_activity_hashes_unchanged": true,
+  "permanent_diagnostics_unchanged": true,
+  "connections_and_checkpoints_unchanged_during_cleanup": true,
+  "normal_cron_configuration_unchanged": true,
+  "git_commit_created": false,
+  "git_push_performed": false,
+  "focused_crm_backend_tests": {
+    "passed": 65,
+    "failed": 0
+  },
+  "browser_cases": {
+    "passed": 46,
+    "focused_retry": 1,
+    "engines": [
+      "Chromium",
+      "WebKit"
+    ]
+  },
+  "broader_server_snapshot": {
+    "passed": 863,
+    "failed": 3,
+    "failures": "Existing Candidates pagination and consultant access tests"
+  },
+  "root_checkout": "/Users/divyamaggarwal/Desktop/files/fyndbridge ats/fyndbridge-ats",
+  "verification_checkout": "/tmp/fyndbridge-gmail-contact-sync"
+}

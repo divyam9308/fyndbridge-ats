@@ -1937,7 +1937,8 @@ async function deleteCandidate(req, res) {
       }
 
       if (!count) {
-        await supabase.from('candidates').delete().eq('id', existingAssoc.candidate_id)
+        const { error: deleteError } = await supabase.from('candidates').delete().eq('id', existingAssoc.candidate_id)
+        if (deleteError) throw deleteError
         await deleteResumeFromStorage(existingAssoc.candidates?.resume_url)
       }
 
@@ -1958,7 +1959,8 @@ async function deleteCandidate(req, res) {
       }
       await assertRowEditable('candidates', existingCand.id, admin)
 
-      await supabase.from('candidates').delete().eq('id', existingCand.id)
+      const { error: deleteError } = await supabase.from('candidates').delete().eq('id', existingCand.id)
+      if (deleteError) throw deleteError
       await deleteResumeFromStorage(existingCand.resume_url)
 
       return res.json({ message: 'Candidate deleted' })

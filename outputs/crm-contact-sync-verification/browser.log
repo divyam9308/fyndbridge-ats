@@ -1,0 +1,97 @@
+[WebServer] (node:8488) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 46 tests using 1 worker
+
+(node:8490) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › server/browser-tests/crm.spec.cjs:31:1 › mandatory-only creation, native modal, multi-contact association and durable inline history (3.7s)
+  ✓   2 [chromium] › server/browser-tests/crm.spec.cjs:82:1 › duplicate handling across CRM and ATS, edit-self and validation (2.6s)
+  ✓   3 [chromium] › server/browser-tests/crm.spec.cjs:116:1 › follow-up filters, dates, search, failures, stale-edit protection and responsive overflow (3.2s)
+  ✓   4 [chromium] › server/browser-tests/crm.spec.cjs:152:1 › page visibility and backend authorization enforce the same existing permission levels (2.5s)
+  ✓   5 [chromium] › server/browser-tests/crm.spec.cjs:166:1 › server pagination, sorting, search, empty histories and safe profile links (2.4s)
+  ✓   6 [chromium] › server/browser-tests/crm.spec.cjs:200:1 › existing ATS pages still render their native tables and forms (3.9s)
+  ✓   7 [chromium] › server/browser-tests/crm.spec.cjs:217:1 › CRM comments match Candidates previews; probability sorting, colours and pills work across pages (4.7s)
+  ✓   8 [chromium] › server/browser-tests/crm.spec.cjs:251:1 › CRM follow-up calendar is fully visible and clickable without modal scrolling (2.8s)
+  ✓   9 [chromium] › server/browser-tests/crmGmail.spec.cjs:16:1 › CRM toolbar stays on one desktop line and name-only long contacts stay inside their column (4.3s)
+  ✓  10 [chromium] › server/browser-tests/crmGmail.spec.cjs:54:1 › Gmail toolbar connection, popup persistence, disconnect and OAuth feedback (4.5s)
+  ✓  11 [chromium] › server/browser-tests/crmGmail.spec.cjs:72:1 › Gmail errors stay in the dialog without moving toolbar controls or the table (4.0s)
+  ✓  12 [chromium] › server/browser-tests/crmGmail.spec.cjs:103:1 › manual Gmail sync starts immediately, disables repeat clicks and puts a real processed email in Activity History (2.9s)
+  ✓  13 [chromium] › server/browser-tests/crmGmail.spec.cjs:152:1 › Sync now imports current-contact history and a later selected-client import stays deduplicated (2.7s)
+  ✓  14 [chromium] › server/browser-tests/crmGmail.spec.cjs:193:1 › Gmail cooldown counts down, clears its message and allows a successful retry after 30 seconds (2.0s)
+  ✓  15 [chromium] › server/browser-tests/crmGmail.spec.cjs:231:1 › shared sync covers both mailboxes and selected-client history works through another consultant without my Gmail connected (2.7s)
+  ✓  16 [chromium] › server/browser-tests/crmGmail.spec.cjs:277:1 › a partial Gmail sync and repeated syncs show the green tick for five seconds without opening a popup (2.0s)
+  ✓  17 [chromium] › server/browser-tests/crmGmail.spec.cjs:312:1 › queued, paused and failed sync requests stay on the button with details available only on demand (3.4s)
+  ✓  18 [chromium] › server/browser-tests/crmGmail.spec.cjs:337:1 › activity history keeps routine updates and outgoing emails plain and rates only incoming emails (2.0s)
+  ✓  19 [chromium] › server/browser-tests/crmGmail.spec.cjs:380:1 › only unread incoming emails tint rows; receipts persist per viewer and Read all crosses filters and pages (4.3s)
+  ✓  20 [chromium] › server/browser-tests/crmGmail.spec.cjs:442:1 › history acknowledges only displayed entries, preserves concurrent arrivals and reports read failures without clearing rows (3.8s)
+  ✓  21 [chromium] › server/browser-tests/crmGmail.spec.cjs:489:1 › organisation deletion supports cancellation, retry, stale-edit protection and final-page recovery (4.4s)
+  ✓  22 [chromium] › server/browser-tests/crmGmail.spec.cjs:547:1 › email intelligence stays in one existing history card, escapes HTML and preserves manual entries and CRM columns (2.0s)
+  ✓  23 [chromium] › server/browser-tests/crmGmailEventTime.spec.cjs:14:1 › original Gmail dates order the database timeline across 25-entry pages and show one IST date per email (2.0s)
+(node:8663) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  24 [webkit] › server/browser-tests/crm.spec.cjs:31:1 › mandatory-only creation, native modal, multi-contact association and durable inline history (4.0s)
+  ✘  25 [webkit] › server/browser-tests/crm.spec.cjs:82:1 › duplicate handling across CRM and ATS, edit-self and validation (8.0s)
+(node:8693) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  26 [webkit] › server/browser-tests/crm.spec.cjs:116:1 › follow-up filters, dates, search, failures, stale-edit protection and responsive overflow (3.7s)
+  ✓  27 [webkit] › server/browser-tests/crm.spec.cjs:152:1 › page visibility and backend authorization enforce the same existing permission levels (2.8s)
+  ✓  28 [webkit] › server/browser-tests/crm.spec.cjs:166:1 › server pagination, sorting, search, empty histories and safe profile links (2.6s)
+  ✓  29 [webkit] › server/browser-tests/crm.spec.cjs:200:1 › existing ATS pages still render their native tables and forms (4.0s)
+  ✓  30 [webkit] › server/browser-tests/crm.spec.cjs:217:1 › CRM comments match Candidates previews; probability sorting, colours and pills work across pages (3.0s)
+  ✓  31 [webkit] › server/browser-tests/crm.spec.cjs:251:1 › CRM follow-up calendar is fully visible and clickable without modal scrolling (5.0s)
+  ✓  32 [webkit] › server/browser-tests/crmGmail.spec.cjs:16:1 › CRM toolbar stays on one desktop line and name-only long contacts stay inside their column (4.9s)
+  ✓  33 [webkit] › server/browser-tests/crmGmail.spec.cjs:54:1 › Gmail toolbar connection, popup persistence, disconnect and OAuth feedback (5.0s)
+  ✓  34 [webkit] › server/browser-tests/crmGmail.spec.cjs:72:1 › Gmail errors stay in the dialog without moving toolbar controls or the table (4.3s)
+  ✓  35 [webkit] › server/browser-tests/crmGmail.spec.cjs:103:1 › manual Gmail sync starts immediately, disables repeat clicks and puts a real processed email in Activity History (3.2s)
+  ✓  36 [webkit] › server/browser-tests/crmGmail.spec.cjs:152:1 › Sync now imports current-contact history and a later selected-client import stays deduplicated (3.0s)
+  ✓  37 [webkit] › server/browser-tests/crmGmail.spec.cjs:193:1 › Gmail cooldown counts down, clears its message and allows a successful retry after 30 seconds (2.3s)
+  ✓  38 [webkit] › server/browser-tests/crmGmail.spec.cjs:231:1 › shared sync covers both mailboxes and selected-client history works through another consultant without my Gmail connected (3.0s)
+  ✓  39 [webkit] › server/browser-tests/crmGmail.spec.cjs:277:1 › a partial Gmail sync and repeated syncs show the green tick for five seconds without opening a popup (2.3s)
+  ✓  40 [webkit] › server/browser-tests/crmGmail.spec.cjs:312:1 › queued, paused and failed sync requests stay on the button with details available only on demand (4.2s)
+  ✓  41 [webkit] › server/browser-tests/crmGmail.spec.cjs:337:1 › activity history keeps routine updates and outgoing emails plain and rates only incoming emails (2.2s)
+  ✓  42 [webkit] › server/browser-tests/crmGmail.spec.cjs:380:1 › only unread incoming emails tint rows; receipts persist per viewer and Read all crosses filters and pages (5.3s)
+  ✓  43 [webkit] › server/browser-tests/crmGmail.spec.cjs:442:1 › history acknowledges only displayed entries, preserves concurrent arrivals and reports read failures without clearing rows (4.1s)
+  ✓  44 [webkit] › server/browser-tests/crmGmail.spec.cjs:489:1 › organisation deletion supports cancellation, retry, stale-edit protection and final-page recovery (4.7s)
+  ✓  45 [webkit] › server/browser-tests/crmGmail.spec.cjs:547:1 › email intelligence stays in one existing history card, escapes HTML and preserves manual entries and CRM columns (2.1s)
+  ✓  46 [webkit] › server/browser-tests/crmGmailEventTime.spec.cjs:14:1 › original Gmail dates order the database timeline across 25-entry pages and show one IST date per email (2.1s)
+
+
+  1) [webkit] › server/browser-tests/crm.spec.cjs:82:1 › duplicate handling across CRM and ATS, edit-self and validation 
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  getByRole('dialog')
+    Expected: "Duplicate Client"
+    Received: "Add Client"
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveAttribute" getByRole('dialog') with timeout 5000ms
+      - waiting for getByRole('dialog')
+        14 × locator resolved to <div tabindex="-1" role="dialog" aria-modal="true" aria-label="Add Client" class="modal-card modal-card-lg">…</div>
+           - unexpected value "Add Client"
+
+
+       99 |   await add(page, '  EXAMPLE CLIENT  ')
+      100 |   await dialog(page).getByRole('button', { name: 'Save', exact: true }).click()
+    > 101 |   await expect(dialog(page)).toHaveAttribute('aria-label', 'Duplicate Client')
+          |                              ^
+      102 |   await dialog(page).getByRole('button', { name: 'Update Client' }).click()
+      103 |   await expect(dialog(page)).toHaveAttribute('aria-label', 'Edit Client')
+      104 |   await dialog(page).getByRole('button', { name: 'Save', exact: true }).click()
+        at /private/tmp/fyndbridge-gmail-contact-sync/server/browser-tests/crm.spec.cjs:101:30
+
+    Error Context: ../../../tmp/crm-isolated-production-browser-artifacts/crm-duplicate-handling-acr-12b1a-TS-edit-self-and-validation-webkit/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../tmp/crm-isolated-production-browser-artifacts/crm-duplicate-handling-acr-12b1a-TS-edit-self-and-validation-webkit/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../tmp/crm-isolated-production-browser-artifacts/crm-duplicate-handling-acr-12b1a-TS-edit-self-and-validation-webkit/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit] › server/browser-tests/crm.spec.cjs:82:1 › duplicate handling across CRM and ATS, edit-self and validation 
+  45 passed (2.7m)
