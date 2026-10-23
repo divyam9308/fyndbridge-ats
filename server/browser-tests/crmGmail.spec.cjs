@@ -132,10 +132,12 @@ test('manual Gmail sync starts immediately, disables repeat clicks and puts a re
   await expect(dialog).toHaveCount(0)
   await page.clock.resume()
   await sync.click()
-  await expect(sync).toHaveText('Sync failed')
+  await expect(sync).toHaveText(/^Wait \d+s$/)
+  await expect(sync).toBeDisabled()
   await expect(dialog).toHaveCount(0)
   await page.getByRole('button', { name: 'Gmail connection details' }).click()
-  await expect(dialog.getByRole('alert')).toContainText('30 seconds')
+  await expect(dialog.getByRole('status')).toContainText(/Please wait \d+ seconds/)
+  await expect(dialog.getByRole('alert')).toHaveCount(0)
   await page.keyboard.press('Escape')
   await page.locator('.crm-table tbody tr').filter({ hasText: 'Manual Sync Client' }).getByRole('button', { name: 'Activity History', exact: true }).click()
   const history = page.getByRole('dialog', { name: 'Activity History' })
@@ -145,6 +147,44 @@ test('manual Gmail sync starts immediately, disables repeat clicks and puts a re
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(sync).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
+  expect(app.consoleErrors).toEqual([])
+})
+test('Gmail cooldown counts down, clears its message and allows a successful retry after 30 seconds', async ({ page, gmailCrm, app }, info) => {
+  await gmailCrm.post('/test/gmail')
+  await page.goto('/dashboard/crm')
+  const sync = page.locator('.crm-toolbar').getByRole('button', { name: 'Sync Gmail now' })
+  await expect(sync).toBeEnabled()
+  let requests = 0
+  await page.route('**/api/crm/gmail/sync', route => {
+    requests++
+    return route.fulfill(requests === 1
+      ? { status: 429, headers: { 'Retry-After': '30' }, json: { error: 'Please wait 30 seconds between manual Gmail syncs.', retry_after: 30 } }
+      : { json: { state: 'completed', connection: { connected: true, status: 'connected', email: 'recruiter@fyndbridge.in' } } })
+  })
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  await sync.click()
+  await expect(sync).toHaveText('Wait 30s')
+  await expect(sync).toBeDisabled()
+  const dialog = page.getByRole('dialog', { name: 'Gmail Connection' })
+  await expect(dialog).toHaveCount(0)
+  await page.getByRole('button', { name: 'Gmail connection details' }).click()
+  await expect(dialog.getByRole('status')).toContainText('Please wait 30 seconds')
+  await expect(dialog.getByRole('alert')).toHaveCount(0)
+  if (info.project.name === 'chromium') await page.screenshot({ path: '/tmp/crm-gmail-cooldown.png', animations: 'disabled' })
+  await page.clock.fastForward(29000)
+  await expect(sync).toHaveText('Wait 1s')
+  await expect(sync).toBeDisabled()
+  expect(requests).toBe(1)
+  await page.clock.fastForward(1000)
+  await expect(sync).toHaveText('Sync now')
+  await expect(sync).toBeEnabled()
+  await expect(dialog).not.toContainText('Please wait')
+  await page.keyboard.press('Escape')
+  await sync.click()
+  await expect(sync).toHaveText('Synced')
+  expect(requests).toBe(2)
+  await expect(dialog).toHaveCount(0)
   expect(app.consoleErrors).toEqual([])
 })
 test('a partial Gmail sync and repeated syncs show the green tick for five seconds without opening a popup', async ({ page, gmailCrm, app }, info) => {
@@ -206,6 +246,49 @@ test('queued, paused and failed sync requests stay on the button with details av
   }
   expect(app.consoleErrors).toEqual([])
 })
+test('activity history keeps routine updates and outgoing emails plain and rates only incoming emails', async ({ page, gmailCrm, app }, info) => {
+  const created = await gmailCrm.post('/api/crm', { organisation_name: 'History colour regression', contacts: [{ name: 'HR' }] })
+  expect(created.ok).toBe(true)
+  const { data } = await created.json()
+  const updated = await fetch(`${gmailCrm.url}/api/crm/${data.id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version: data.version, contacts: [{ name: 'Updated HR' }], status: 'Follow-up Sent', comment: 'Routine follow-up note.' }),
+  })
+  expect(updated.ok).toBe(true)
+  for (const [direction, tones] of [['incoming', ['positive', 'neutral', 'negative', 'unknown']], ['outgoing', ['positive', 'neutral', 'negative']]]) {
+    for (const tone of tones) {
+      const response = await gmailCrm.post('/test/gmail-activity', { client_id: data.id, message_id: `${direction}-${tone}`, metadata: {
+        direction, subject: `${direction} ${tone}`, summary: 'Synthetic email summary.', sentiment: { label: tone, evidence: 'Sentiment evidence.' },
+        negative_response: { category: 'no_requirements', permanence: 'temporary', evidence: 'Rejection evidence.' },
+      } })
+      expect(response.ok).toBe(true)
+    }
+  }
+  await page.goto('/dashboard/crm')
+  await page.getByRole('button', { name: 'Activity History', exact: true }).click()
+  const history = page.getByRole('dialog', { name: 'Activity History' })
+  const manual = history.locator('.crm-history-entry').filter({ hasNotText: 'email · Gmail' })
+  await expect(manual).toHaveCount(4)
+  for (const title of ['CRM client created', 'Contact information updated', 'Status changed', 'Comment added']) await expect(manual.filter({ hasText: title })).toHaveCount(1)
+  const outgoing = history.locator('.crm-history-entry').filter({ hasText: 'Outgoing email · Gmail' })
+  await expect(outgoing).toHaveCount(3)
+  for (const entries of [manual, outgoing]) {
+    for (const entry of await entries.all()) {
+      await expect(entry).not.toHaveClass(/crm-unread-/)
+      await expect(entry).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await expect(entry).not.toContainText('Client interest:')
+      await expect(entry).not.toContainText('Sentiment evidence.')
+      await expect(entry.locator('.crm-email-negative')).toHaveCount(0)
+    }
+  }
+  for (const [tone, color] of [['positive', 'rgb(226, 243, 231)'], ['neutral', 'rgb(241, 243, 245)'], ['negative', 'rgb(252, 235, 234)'], ['unknown', 'rgb(241, 243, 245)']]) {
+    const entry = history.locator('.crm-history-entry').filter({ hasText: `Subject: incoming ${tone}` })
+    await expect(entry).toHaveCSS('background-color', color)
+    await expect(entry).toContainText(`Client interest: ${tone === 'unknown' ? 'Not assessable' : tone}`)
+  }
+  if (info.project.name === 'chromium') await page.screenshot({ path: '/tmp/crm-incoming-only-history.png', animations: 'disabled' })
+  expect(app.consoleErrors).toEqual([])
+})
 test('only unread incoming emails tint rows; receipts persist per viewer and Read all crosses filters and pages', async ({ page, gmailCrm, app }, info) => {
   const create = async name => (await (await gmailCrm.post('/api/crm', { organisation_name: name, contacts: [{ name: 'HR', email: 'hr@client.test', mobile: '9876543210' }] })).json()).data
   const clients = {}
@@ -247,7 +330,9 @@ test('only unread incoming emails tint rows; receipts persist per viewer and Rea
   for (let i = 0; i < 22; i++) await create(`Unread extra ${i}`)
   await page.getByRole('textbox', { name: 'Search CRM' }).fill('Unread changes')
   await expect(page.locator('.crm-table tbody tr')).toHaveCount(1)
+  const readAllResponse = page.waitForResponse(response => response.url().endsWith('/api/crm/activities/read-all') && response.request().method() === 'POST')
   await readAll.click()
+  expect((await readAllResponse).ok()).toBe(true)
   await expect(row('changes')).not.toHaveClass(/crm-unread-/)
   const all = await (await fetch(gmailCrm.url + '/api/crm?pageSize=100')).json()
   expect(all.data).toHaveLength(26)

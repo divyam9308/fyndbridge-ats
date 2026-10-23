@@ -119,11 +119,15 @@ Supabase or deployed the application.
   Activity counts and read receipts still cover the complete history. Apply
   `20261021093133_crm_incoming_email_row_highlights.sql` before deploying this fix;
   the migration was applied to ATS FYNDBRIDGE on 21 October 2026 as version `20261021093133`. Read-only inspection confirmed incoming-only selection, no manual green fallback, SECURITY INVOKER and service-only execution grants.
-  History cards retain their existing per-activity tints.
+  History cards also tint only unread incoming emails. Manual updates and outgoing
+  emails have plain backgrounds; client-interest badges and rejection assessments
+  appear only on incoming emails.
 - Regression expectations cover summary edits and outgoing mail without tint,
   preserving an existing incoming-email tint after manual edits, and clearing the
   tint when incoming messages are read even if manual activity remains unread.
-  Tests and browser checks for this correction have not been run at the user's request.
+  Incoming-only row/history regressions pass in Chromium and WebKit, including
+  plain contact/status/comment updates and outgoing emails, incoming sentiment
+  colours, and read-receipt behaviour.
 - Receipts are per authenticated viewer and activity ID, persist across reloads,
   and never alter CRM fields or another viewer's state. Existing activities start
   unread because previous viewing history was not recorded.
@@ -140,6 +144,9 @@ Supabase or deployed the application.
   including partial runs with failed email jobs, show a green tick and **Synced**
   for five seconds. Queued, quota-paused and failed requests use brief button
   labels without claiming completion. The info icon opens the retained details.
+- A manual-sync cooldown shows a countdown from the server's `retry_after`,
+  disables repeat clicks, and clears automatically when it expires. It is not
+  reported as a sync failure. Email-processing retries keep their separate backoff.
 
 `server/src/services/crmActivityReads.test.js` exercises real PostgreSQL receipts,
 idempotency, concurrent arrivals, sentiment choice and browser-role denial.

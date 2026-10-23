@@ -33,6 +33,8 @@ export default function CrmGmailConnection({ onSynced }) {
   const [syncFeedback, setSyncFeedback] = useState('')
   const synced = ['completed', 'partial'].includes(syncFeedback)
   const syncedTimer = useRef(null)
+  const cooldownTimer = useRef(null)
+  const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState(() => {
     const url = new URL(window.location.href), result = url.searchParams.get('gmail')
@@ -40,7 +42,7 @@ export default function CrmGmailConnection({ onSynced }) {
   })
   const [open, setOpen] = useState(() => Boolean(notice))
   const lock = useRef(false)
-  useEffect(() => () => clearTimeout(syncedTimer.current), [])
+  useEffect(() => () => { clearTimeout(syncedTimer.current); clearInterval(cooldownTimer.current) }, [])
   const reload = useCallback(async signal => {
     try { const data = await crmRequest('/gmail/status', { signal }); if (!signal?.aborted) { setConnection(data); setError('') } }
     catch (failure) { if (!signal?.aborted) setError(failure.message) }
@@ -81,15 +83,28 @@ export default function CrmGmailConnection({ onSynced }) {
       onSynced?.()
       setNotice({ text: SYNC_MESSAGES[result.state] || SYNC_MESSAGES.pending, success: !['not_connected', 'reauthorization_required'].includes(result.state) })
       setSyncFeedback(result.state)
-    } catch (failure) { setError(failure.message); setSyncFeedback('failed') }
+    } catch (failure) {
+      const retryAfter = Number(failure.retry_after)
+      if (failure.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) {
+        const seconds = Math.ceil(retryAfter), until = Date.now() + seconds * 1000
+        setError(''); setCooldownSeconds(seconds); setSyncFeedback('cooldown')
+        clearInterval(cooldownTimer.current)
+        cooldownTimer.current = setInterval(() => {
+          const remaining = Math.max(0, Math.ceil((until - Date.now()) / 1000))
+          setCooldownSeconds(remaining)
+          if (!remaining) clearInterval(cooldownTimer.current)
+        }, 250)
+      } else { setError(failure.message); setSyncFeedback('failed') }
+    }
     finally {
       syncedTimer.current = setTimeout(() => setSyncFeedback(''), 5000)
       lock.current = false; setBusy('')
     }
   }
-  const syncDescription = error || notice?.text || undefined
-  const syncButton = connection?.connected && <button type="button" className={`btn-secondary crm-gmail-sync${busy === 'syncing' ? ' is-syncing' : synced ? ' is-synced' : ''}`} disabled={Boolean(busy) || connection.status !== 'connected'} aria-label="Sync Gmail now" aria-description={syncDescription} title={syncDescription} aria-busy={busy === 'syncing'} onClick={syncNow}>
-    {synced ? <Check size={16} /> : <RefreshCw size={16} />}<span aria-live="polite">{busy === 'syncing' ? 'Syncing...' : synced ? 'Synced' : SYNC_LABELS[syncFeedback] || 'Sync now'}</span>
+  const cooldownMessage = cooldownSeconds > 0 ? `Please wait ${cooldownSeconds} ${cooldownSeconds === 1 ? 'second' : 'seconds'} before syncing again.` : ''
+  const syncDescription = cooldownMessage || error || notice?.text || undefined
+  const syncButton = connection?.connected && <button type="button" className={`btn-secondary crm-gmail-sync${busy === 'syncing' ? ' is-syncing' : synced ? ' is-synced' : ''}`} disabled={Boolean(busy) || cooldownSeconds > 0 || connection.status !== 'connected'} aria-label="Sync Gmail now" aria-description={syncDescription} title={syncDescription} aria-busy={busy === 'syncing'} onClick={syncNow}>
+    {synced ? <Check size={16} /> : <RefreshCw size={16} />}<span aria-live="polite">{busy === 'syncing' ? 'Syncing...' : cooldownSeconds > 0 ? `Wait ${cooldownSeconds}s` : synced ? 'Synced' : SYNC_LABELS[syncFeedback] || 'Sync now'}</span>
   </button>
   return <div className="crm-gmail-control">
     <button type="button" className="btn-secondary crm-gmail-button" disabled={busy || (!connection && !error)} onClick={() => connection?.connected ? disconnect() : error ? setOpen(true) : connect()}>
@@ -108,6 +123,7 @@ export default function CrmGmailConnection({ onSynced }) {
         {connection.coverage_warning && <p className="form-error">{connection.coverage_warning}</p>}
         {connection.status !== 'connected' && <button className="btn-primary" disabled={Boolean(busy)} onClick={connect}>Reconnect Gmail</button>}
         <p className="sub-text">Read-only access. Only emails matching CRM contacts generate Activity History. Disconnecting keeps existing activities.</p></>}
+      {cooldownMessage && <p className="sub-text" role="status">{cooldownMessage}</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
       {!connection && <button className="btn-secondary" disabled={Boolean(busy)} onClick={() => reload()}>Retry connection status</button>}
     </div></CrmDialog>}
