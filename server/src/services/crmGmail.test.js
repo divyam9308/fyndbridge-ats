@@ -24,7 +24,7 @@ async function fixture(t, { historicalMigration = true, sharedMigration = true }
   adapter.rpc = (name, args) => rawRpc(name, Object.fromEntries(Object.entries(args || {}).map(([key,value]) => [key, Array.isArray(value) ? JSON.stringify(value) : value])))
   const saved = await adapter.rpc('crm_save', { p_actor: CONSULTANT, p_id: null, p_version: null, p_data: { organisation_name: 'Gmail Client', contacts: [contact, { ...contact, email: 'other@client.test', mobile: '9876543211' }], status: 'Outreach Sent', conversion_probability: '<25%', comment: 'Preserve this comment.' } })
   if (saved.error) throw saved.error
-  let aiCalls = 0, refreshes = 0, revokes = 0, profileEmail = email, failAi, historyFailure, page
+  let aiCalls = 0, aiInFlight = 0, maxAiInFlight = 0, aiDelay = 0, refreshes = 0, revokes = 0, profileEmail = email, failAi, historyFailure, page
   const calls = []
   const google = {
     async exchange() { return { access_token: 'synthetic-access', refresh_token: 'synthetic-refresh', expires_in: 3600, scope: SCOPE } },
@@ -38,13 +38,13 @@ async function fixture(t, { historicalMigration = true, sharedMigration = true }
       return message(endpoint.split('/')[1], endpoint.includes('outgoing'))
     }
   }
-  const service = createGmailService({ db: adapter, google, authorize: async user => user === CONSULTANT ? email : 'other@fyndbridge.in', ai: async () => { aiCalls++; if (failAi) throw failAi; return structuredClone(insight) } })
+  const service = createGmailService({ db: adapter, google, authorize: async user => user === CONSULTANT ? email : 'other@fyndbridge.in', ai: async () => { aiCalls++; aiInFlight++; maxAiInFlight = Math.max(maxAiInFlight, aiInFlight); if (aiDelay) await new Promise(resolve => setTimeout(resolve, aiDelay)); aiInFlight--; if (failAi) throw failAi; return structuredClone(insight) } })
   async function connect() {
     const initial = await service.start(CONSULTANT), state = new URL(initial.url).searchParams.get('state')
     await service.callback({ state, browser: initial.browser, code: 'synthetic-code' })
     return (await db.query('select * from crm_gmail_connections')).rows[0]
   }
-  return { db, adapter, service, google, connect, client: saved.data, calls, get aiCalls() { return aiCalls }, get refreshes() { return refreshes }, get revokes() { return revokes }, set profileEmail(value) { profileEmail = value }, set failAi(value) { failAi = value }, set historyFailure(value) { historyFailure = value }, set page(value) { page = value } }
+  return { db, adapter, service, google, connect, client: saved.data, calls, get aiCalls() { return aiCalls }, get maxAiInFlight() { return maxAiInFlight }, get refreshes() { return refreshes }, get revokes() { return revokes }, set aiDelay(value) { aiDelay = value }, set profileEmail(value) { profileEmail = value }, set failAi(value) { failAi = value }, set historyFailure(value) { historyFailure = value }, set page(value) { page = value } }
 }
 const scalar = async (db, sql, args = []) => Object.values((await db.query(sql, args)).rows[0])[0]
 test('AES-256-GCM hex decoding, random IV, owner binding and tamper rejection', () => {
@@ -571,11 +571,22 @@ test('one hourly discovery queues bounded work; later worker runs drain it witho
   f.page = { historyId: '200', history: [{ messagesAdded: Array.from({ length: 25 }, (_, index) => ({ message: { id: `batch-${index}` } })) }] }
   await service.run({ schedule: true })
   const first = await scalar(db, "select count(*)::int from crm_gmail_jobs where status='completed'")
-  assert.ok(first > 0 && first <= 12)
+  assert.ok(first > 0 && first <= 25)
   await service.run(); await service.run()
   assert.equal(await scalar(db, "select count(*)::int from crm_gmail_jobs where status='completed'"), 25)
   assert.equal(f.calls.filter(call => call.endpoint === 'history').length, 1)
   assert.equal(await scalar(db, 'select count(*)::int from crm_gmail_jobs'), 25)
+})
+test('worker processes up to six Gmail jobs concurrently without exceeding the batch limit', async t => {
+  const f = await fixture(t), { db, service } = f
+  await f.connect()
+  f.aiDelay = 75
+  f.page = { historyId: '250', history: [{ messagesAdded: Array.from({ length: 8 }, (_, index) => ({ message: { id: `parallel-${index}` } })) }] }
+  const result = await service.run({ schedule: true })
+  assert.equal(result.processed, 8)
+  assert.equal(f.maxAiInFlight, 6)
+  assert.equal(await scalar(db, "select count(*)::int from crm_gmail_jobs where status='processing'"), 0)
+  assert.equal(await scalar(db, "select count(*)::int from crm_gmail_jobs where status='pending'"), 0)
 })
 test('database completion rejects a newly ambiguous contact and invalidates consumed OAuth on disconnect', async t => {
   const f = await fixture(t), c = await f.connect(), lease = crypto.randomUUID()

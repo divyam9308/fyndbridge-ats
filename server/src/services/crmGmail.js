@@ -4,6 +4,7 @@ const { SCOPE, hash, encrypt, decrypt, config, createGoogle, authorizationUrl } 
 const { normalizeEmail, addresses, contactEmails, contactQuery, emailTimestamp, headers, matchMessage, extractBody, SCHEMA, validateAnalysis, analysisPrompt } = require('./crmGmailContent')
 const CRM_MODEL = process.env.GEMINI_CRM_MODEL || 'gemini-3.5-flash-lite'
 const AI_QUOTA_RETRY_MS = 60000
+const JOB_CONCURRENCY = 6
 function historicalMatchAllowed(job, match) {
   if (!job.historical_client_id || !match.client) return true
   if (!job.discovery_contact_email) return match.client.id === job.historical_client_id
@@ -263,10 +264,19 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
           const task = !c && !newOnly ? await rpc('claim_client_import', { p_lease: lease, p_client: clientId }) : null
           if (task) { await discoverClientImport(task, lease); discovered++ }
           if (now() >= deadline - 27000) break
-          const job = clientId ? await rpc('claim_client_job', { p_lease: lease, p_client: clientId })
-            : await rpc(newOnly ? 'claim_incremental_job' : userId ? 'claim_user_job' : 'claim_job', { p_lease: lease, ...(userId && !newOnly ? { p_user: userId } : {}) })
-          if (job) { await processJob(job, lease); processed++ }
-          if (!c && !task && !job) break
+          const claim = () => clientId ? rpc('claim_client_job', { p_lease: lease, p_client: clientId })
+            : rpc(newOnly ? 'claim_incremental_job' : userId ? 'claim_user_job' : 'claim_job', { p_lease: lease, ...(userId && !newOnly ? { p_user: userId } : {}) })
+          const jobs = []
+          for (let slot = 0; slot < JOB_CONCURRENCY; slot++) {
+            const job = await claim()
+            if (!job) break
+            jobs.push(job)
+          }
+          if (jobs.length) {
+            await Promise.all(jobs.map(job => processJob(job, lease)))
+            processed += jobs.length
+          }
+          if (!c && !task && !jobs.length) break
         }
         return { discovered, processed }
       } finally {

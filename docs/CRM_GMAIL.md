@@ -28,6 +28,8 @@ now supports selected consultants in Admin → Page View Permissions, as describ
 **Sync now** processes new messages across all connected consultant mailboxes.
 It is available even if the caller has no personal Gmail connection. Shared requests
 have a 30-second cooldown; results stay inline and details open only through ⓘ.
+The worker claims up to six Gmail jobs per batch and processes them concurrently;
+each job still has its own lease, contact revalidation, deduplication and retry state.
 Inside ⓘ, the email queue count refreshes every two seconds while the panel is open.
 The ⓘ badge also keeps updating while queued work or discovery is active.
 It counts pending, processing and retryable emails across all connected mailboxes,

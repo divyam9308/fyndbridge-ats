@@ -35,7 +35,9 @@ checking that those files had stopped changing. Their prior state is preserved i
   its existing 25-row pagination. Gmail cards have one original-date label in the
   existing IST format. Colours, insights, receipts, comments and permissions remain intact.
 - Incremental Gmail history, OAuth credentials, rate limits, AI configuration,
-  retry delays, concurrency and both cron schedules are preserved.
+  retry delays and both cron schedules are preserved. The worker now processes up to
+  six independently leased Gmail jobs concurrently per batch; contact revalidation,
+  deduplication, per-job retries and the global AI quota circuit breaker are unchanged.
 
 ## Production maintenance and ordering
 
