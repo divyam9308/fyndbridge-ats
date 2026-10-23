@@ -1,6 +1,6 @@
 export const CRM_STATUSES = ['Outreach Sent', 'Follow-up Sent', 'DNP', 'CB', 'Meeting Scheduled', 'Proposal Sent', 'Negotiation', 'Won', 'Lost', 'On Hold', 'Not Interested', 'Nurture / Long-term']
 export const CRM_PROBABILITIES = ['<25%', '25-50%', '50-75%', '75-100%']
-export const CRM_SOURCES = ['LinkedIn', 'Referral', 'Cold Email', 'Cold Call', 'Existing Client', 'Other']
+export const CRM_SOURCES = ['LinkedIn', 'Referral', 'Cold Email', 'Cold Call', 'Existing Client', 'Candidate', 'Other']
 export const CRM_BADGES = {
   'Outreach Sent': 'badge-client-submission', 'Follow-up Sent': 'badge-in-discussion', DNP: 'badge-status-unset', CB: 'badge-offered',
   'Meeting Scheduled': 'badge-interview', 'Proposal Sent': 'badge-client-submission', Negotiation: 'badge-in-discussion', Won: 'badge-hired',

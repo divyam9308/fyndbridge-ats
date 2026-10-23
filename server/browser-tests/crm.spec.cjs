@@ -74,6 +74,8 @@ test('mandatory-only creation, native modal, multi-contact association and durab
   expect(state.comments).toHaveLength(2); expect(state.ats).toHaveLength(1)
   expect(state.activities.every(event => event.created_by === crm.USER_ID)).toBeTruthy()
   expect(await page.locator('.crm-table th').allTextContents()).toEqual(['Organisation Name ↕', 'About Organisation', 'Contact Person', 'Mobile', 'Status', 'Email', 'Designation', 'LinkedIn', 'Sector', 'Connected Through', 'Date ↕', 'Comments', 'Conversion Probability', 'Actions'])
+  await expect(page.getByLabel('Unread filter')).toHaveValue('all')
+  await expect(page.getByLabel('Unread filter').locator('option')).toHaveText(['All', 'Unread'])
   expect(await page.getByRole('combobox', { name: /consultant filter/i }).count()).toBe(0)
   if (info.project.name === 'chromium') await page.screenshot({ animations: 'disabled', path: 'outputs/crm-verification/crm-page.png', fullPage: true })
   expect(app.consoleErrors).toEqual([])

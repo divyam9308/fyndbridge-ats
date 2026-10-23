@@ -108,6 +108,10 @@ hosted Supabase.
 - A GIN expression index over normalized JSON contact addresses supports exact
   matching without modifying contacts or replacing `crm_save`.
 
+The CRM list supports a user-scoped **Unread** filter alongside the existing
+follow-up and sort controls. Unread state is based on activity read receipts and
+does not mark or change any activity.
+
 All four new tables enable RLS and revoke PUBLIC/anon/authenticated access. RPCs are
 SECURITY INVOKER, have an empty search_path and explicitly grant execution only to
 service_role. Existing CRM grants and RPCs are preserved. Operational indexes cover

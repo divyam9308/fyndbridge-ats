@@ -31,7 +31,7 @@ router.get('/check-duplicate', safe(async (req, res) => {
 router.get('/', safe(async (req, res) => {
   const today = localDate()
   const { data, error } = await supabase.rpc('crm_list', {
-    p_search: String(req.query.search || '').slice(0, 300), p_follow_up: String(req.query.follow_up || 'all'), p_today: today,
+    p_search: String(req.query.search || '').slice(0, 300), p_follow_up: String(req.query.follow_up || 'all'), p_today: today, p_user: req.user.id, p_unread_only: req.query.unread === 'unread',
     p_page: integer(req.query.page, 1, 1000000), p_size: integer(req.query.pageSize, 25, 100),
     p_sort: ['organisation_name', 'conversion_probability'].includes(req.query.sort) ? req.query.sort : 'created_at', p_ascending: req.query.direction === 'asc'
   })

@@ -18,6 +18,8 @@ async function start() {
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261023112611_crm_gmail_explicit_history_modes.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261019185136_crm_activity_read_receipts.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261021093133_crm_incoming_email_row_highlights.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261023131500_crm_unread_filter.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261023131600_crm_connected_through_candidate.sql'), 'utf8'))
   await db.query('insert into auth.users values($1,$2)', [USER_ID, 'recruiter@fyndbridge.in'])
   await db.query("insert into employee_statuses(user_id,status) values($1,'active')", [USER_ID])
   await db.query('insert into user_profiles(user_id,name,email) values($1,$2,$3)', [USER_ID, 'Test Recruiter', 'recruiter@fyndbridge.in'])

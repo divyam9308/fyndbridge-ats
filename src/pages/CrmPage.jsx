@@ -27,6 +27,7 @@ export default function CrmPage() {
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [follow, setFollow] = useState('all')
+  const [unread, setUnread] = useState('all')
   const [sort, setSort] = useState('created_at:desc')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -59,14 +60,14 @@ export default function CrmPage() {
     const controller = new AbortController()
     const requestGeneration = ++generation.current
     const [field, direction] = sort.split(':')
-    const params = new URLSearchParams({ search: query, page, pageSize, follow_up: follow, sort: field, direction })
+    const params = new URLSearchParams({ search: query, page, pageSize, follow_up: follow, unread, sort: field, direction })
     crmRequest(`?${params}`, { signal: controller.signal }).then(result => {
       if (requestGeneration !== generation.current || locks.current.size) return
       setRows(result.data); setTotal(result.total); setToday(result.today); setError('')
       if (page > Math.max(1, Math.ceil(result.total / pageSize))) setPage(Math.max(1, Math.ceil(result.total / pageSize)))
     }).catch(failure => { if (!controller.signal.aborted && failure.name !== 'AbortError' && requestGeneration === generation.current && !locks.current.size) setError(failure.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [follow, page, pageSize, query, revision, sort])
+  }, [follow, page, pageSize, query, revision, sort, unread])
   // Re-evaluate company-local follow-up boundaries after midnight / returning to tab.
   useEffect(() => {
     const refresh = () => { if (document.visibilityState === 'visible') setRevision(value => value + 1) }
@@ -154,6 +155,7 @@ export default function CrmPage() {
       <div className="crm-search"><Search size={15} /><input className="form-control" aria-label="Search CRM" placeholder="Search CRM..." value={search} onChange={event => setSearch(event.target.value)} /></div>
       <button type="button" className="btn-secondary crm-read-all" disabled={readingAll} aria-busy={readingAll} onClick={readAll}><CheckCheck size={16} />{readingAll ? 'Marking read...' : 'Read all'}</button>
       <select className="filter-select" aria-label="Follow-up filter" value={follow} onChange={event => configure(setFollow)(event.target.value)}><option value="all">All Follow-ups</option>{Object.entries(FOLLOW_LABELS).map(([key, value]) => <option value={key} key={key}>{value}</option>)}</select>
+      <select className="filter-select" aria-label="Unread filter" value={unread} onChange={event => configure(setUnread)(event.target.value)}><option value="all">All</option><option value="unread">Unread</option></select>
       <select className="filter-select" aria-label="Sort CRM" value={sort} onChange={event => configure(setSort)(event.target.value)}><option value="created_at:desc">Newest first</option><option value="created_at:asc">Oldest first</option><option value="conversion_probability:desc">Probability: highest to lowest</option><option value="organisation_name:asc">Organisation A–Z</option><option value="organisation_name:desc">Organisation Z–A</option></select>
       <CrmGmailConnection onSynced={refreshActivities} />
     </div>
