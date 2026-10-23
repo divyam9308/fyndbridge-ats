@@ -99,7 +99,9 @@ hosted Supabase.
 - `crm_gmail_connections`: encrypted token bundle, mailbox identity, original
   connection time, history checkpoint, page/recovery cursors, retries and sync lease.
 - `crm_gmail_jobs`: Gmail message IDs only, status, attempt/backoff/lease and safe
-  diagnostic codes. No email bodies or attachments are persisted here.
+  diagnostic codes. A bounded `ai_raw_response` is retained only when model output
+  fails analysis validation, so operators can diagnose the rejection; email bodies
+  and attachments are not persisted here.
 - `crm_gmail_worker`: global worker lease and persistent AI quota circuit breaker.
 - Existing `crm_activities`: nullable `email_metadata`, `gmail_user_id`, and
   `gmail_message_id`, provenance check and unique consultant/message index.
@@ -287,6 +289,10 @@ from public.crm_gmail_jobs group by status;
 select email, status, last_sync_at, last_error, coverage_warning
 from public.crm_gmail_connections;
 select ai_resume_at from public.crm_gmail_worker;
+select id, message_id, last_error, ai_raw_response
+from public.crm_gmail_jobs
+where last_error = 'INVALID_AI_OUTPUT'
+order by created_at desc;
 ```
 
 ## Files

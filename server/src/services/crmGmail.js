@@ -221,8 +221,11 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       if (!historicalMatchAllowed(job, match)) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: 'historical_client_mismatch' })
       const body = extractBody(full.payload)
       if (!body) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: 'empty_body' })
-      const raw = await ai({ prompt: analysisPrompt(body, match.direction, h.subject || ''), schema: SCHEMA, schemaName: 'crm_email_analysis', model: CRM_MODEL, timeoutMs: Math.max(1, Math.min(5500, Math.floor((requestDeadline() - now() - 4000) / 3))), safeErrors: true })
-      const analysis = validateAnalysis(raw, body, match.direction)
+      const aiResult = await ai({ prompt: analysisPrompt(body, match.direction, h.subject || ''), schema: SCHEMA, schemaName: 'crm_email_analysis', model: CRM_MODEL, timeoutMs: Math.max(1, Math.min(5500, Math.floor((requestDeadline() - now() - 4000) / 3))), safeErrors: true, returnRaw: true })
+      const raw = aiResult?.parsed || aiResult
+      const rawResponse = typeof aiResult?.rawText === 'string' ? aiResult.rawText : JSON.stringify(raw)
+      let analysis
+      try { analysis = validateAnalysis(raw, body, match.direction) } catch (error) { error.rawText = rawResponse; throw error }
       // Recheck ownership/access and current contacts before committing an insight.
       await allowedConnection(c)
       const current = matchMessage(full, c.email, await rpc('match_clients', { p_peers: peers.filter(email => email !== c.email) }))
@@ -240,7 +243,8 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       if (quota) await checked(db.from('crm_gmail_worker').update({ ai_resume_at: retryAt }).eq('id', true))
       const gmailQuota = ['GMAIL_DAILY_QUOTA','GMAIL_RATE_LIMIT'].includes(error.code)
       const permanent = error.status === 404 || (!quota && !gmailQuota && job.attempts >= 8)
-      await checked(db.from('crm_gmail_jobs').update({ status: permanent ? 'permanent_failure' : 'retryable_failure', available_at: retryAt, last_error: quota ? 'QUOTA_PAUSED' : revoked ? 'REAUTHORIZE' : error.code === 'INVALID_AI_OUTPUT' ? 'INVALID_AI_OUTPUT' : 'PROCESSING_FAILED', lease_id: null, lease_until: null }).eq('id', job.id).eq('lease_id', lease))
+      const diagnostics = typeof error.rawText === 'string' ? error.rawText.slice(0, 20000) : null
+      await checked(db.from('crm_gmail_jobs').update({ status: permanent ? 'permanent_failure' : 'retryable_failure', available_at: retryAt, last_error: quota ? 'QUOTA_PAUSED' : revoked ? 'REAUTHORIZE' : error.code === 'INVALID_AI_OUTPUT' ? 'INVALID_AI_OUTPUT' : 'PROCESSING_FAILED', ...(diagnostics ? { ai_raw_response: diagnostics } : {}), lease_id: null, lease_until: null }).eq('id', job.id).eq('lease_id', lease))
     }
   }
   async function run({ schedule = false, budgetMs = 45000, userId = null, newOnly = false, clientId = null } = {}) {

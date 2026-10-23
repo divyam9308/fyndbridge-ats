@@ -8,6 +8,7 @@ const { createGmailService, backoff } = require('./crmGmail')
 const { encrypt, decrypt, SCOPE, createGoogle } = require('./crmGmailGoogle')
 const { addresses, matchMessage, extractBody, validateAnalysis } = require('./crmGmailContent')
 const migration = '20261019165228_crm_gmail_integration.sql'
+const aiDiagnosticsMigration = '20261023130000_crm_gmail_ai_diagnostics.sql'
 const contact = { name: 'HR', email: 'hr@client.test', mobile: '9876543210', designation: '', linkedin: '' }
 const email = 'consultant@fyndbridge.in'
 const insight = { summary: 'Client requested a meeting. No requirements at present.', meeting: { status: 'proposed', when: 'Friday at 2 PM', evidence: 'Can we meet Friday at 2 PM?' }, negative_response: { category: 'no_requirements', permanence: 'temporary', evidence: 'No requirements at present.' }, sentiment: { label: 'neutral', evidence: 'No requirements at present.' } }
@@ -19,7 +20,7 @@ async function fixture(t, { historicalMigration = true, sharedMigration = true }
   process.env.GOOGLE_GMAIL_CLIENT_SECRET = 'synthetic-secret'
   process.env.GOOGLE_GMAIL_REDIRECT_URI = 'https://example.test/api/crm/gmail/callback'
   const db = await createDatabase(); t.after(() => db.close())
-  for (const name of ['20261019105523_business_development_crm.sql', migration, '20261019182711_crm_gmail_manual_sync.sql', ...(historicalMigration ? ['20261023094350_crm_gmail_historical_sync.sql'] : []), ...(historicalMigration && sharedMigration ? ['20261023112550_crm_gmail_shared_sync_and_client_history.sql','20261023112559_crm_gmail_contact_search_and_event_time.sql','20261023112611_crm_gmail_explicit_history_modes.sql'] : [])]) await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations', name), 'utf8'))
+  for (const name of ['20261019105523_business_development_crm.sql', migration, '20261019182711_crm_gmail_manual_sync.sql', ...(historicalMigration ? ['20261023094350_crm_gmail_historical_sync.sql'] : []), ...(historicalMigration && sharedMigration ? ['20261023112550_crm_gmail_shared_sync_and_client_history.sql','20261023112559_crm_gmail_contact_search_and_event_time.sql','20261023112611_crm_gmail_explicit_history_modes.sql'] : []), aiDiagnosticsMigration]) await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations', name), 'utf8'))
   const adapter = databaseAdapter(db), rawRpc = adapter.rpc
   adapter.rpc = (name, args) => rawRpc(name, Object.fromEntries(Object.entries(args || {}).map(([key,value]) => [key, Array.isArray(value) ? JSON.stringify(value) : value])))
   const saved = await adapter.rpc('crm_save', { p_actor: CONSULTANT, p_id: null, p_version: null, p_data: { organisation_name: 'Gmail Client', contacts: [contact, { ...contact, email: 'other@client.test', mobile: '9876543211' }], status: 'Outreach Sent', conversion_probability: '<25%', comment: 'Preserve this comment.' } })
@@ -551,6 +552,18 @@ test('expired leases recover, revoked tokens require reauthorization, invalid ou
   await service.run()
   assert.equal(await scalar(db, 'select status from crm_gmail_connections'), 'reauthorization_required')
   assert.equal(await scalar(db, "select count(*)::int from crm_activities where activity_type='gmail_email'"), 0)
+})
+
+test('invalid AI output is retained on the Gmail job for diagnostics', async t => {
+  const f = await fixture(t)
+  const connection = await f.connect()
+  await f.db.query("insert into crm_gmail_jobs(connection_id,message_id,status) values($1,'diagnostic','pending')", [connection.id])
+  const diagnostic = JSON.stringify({ summary: '', meeting: null, negative_response: null, sentiment: { label: 'neutral', evidence: 'missing' } })
+  const service = createGmailService({ db: f.adapter, google: f.google, authorize: async () => email, ai: async () => ({ parsed: JSON.parse(diagnostic), rawText: diagnostic }) })
+  const result = await service.run({ userId: CONSULTANT })
+  assert.equal(result.processed, 1)
+  assert.equal(await scalar(f.db, "select last_error from crm_gmail_jobs where message_id='diagnostic'"), 'INVALID_AI_OUTPUT')
+  assert.equal(await scalar(f.db, "select ai_raw_response from crm_gmail_jobs where message_id='diagnostic'"), diagnostic)
 })
 test('unmatched/ambiguous metadata never reaches full message fetch or Gemini; contact changes fence commit', async t => {
   const f = await fixture(t), { db, service } = f

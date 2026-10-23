@@ -195,10 +195,11 @@ async function callAiJson({ prompt, schema, temperature = 0.1, schemaName = 'ats
 
   try {
     const parsed = JSON.parse(jsonText)
-    return returnRaw ? { parsed, rawText: jsonText } : parsed
+    return returnRaw ? { parsed, rawText } : parsed
   } catch (err) {
     const parseError = new Error('Gemini returned invalid JSON')
     parseError.cause = err
+    parseError.rawText = rawText
     throw parseError
   }
 }

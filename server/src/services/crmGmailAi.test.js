@@ -38,3 +38,9 @@ test('non-quota failures never activate secondary, and exhausted quota retains A
   const q = provider({ primary: [quota(), quota()], secondary: [quota()] })
   await assert.rejects(q.api.callAiJson({ prompt: 'CRM', model: 'gemini-3.5-flash-lite' }), { code: 'AI_QUOTA_REACHED' })
 })
+test('returnRaw preserves the original model response alongside parsed JSON', async () => {
+  const p = provider({ primary: ['```json\n{"ok":true}\n```'] })
+  const result = await p.api.callAiJson({ prompt: 'CRM', returnRaw: true })
+  assert.equal(JSON.stringify(result.parsed), '{"ok":true}')
+  assert.equal(result.rawText, '```json\n{"ok":true}\n```')
+})
