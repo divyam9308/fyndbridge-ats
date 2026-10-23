@@ -98,6 +98,11 @@ export default function CrmGmailConnection({ onSynced }) {
     clearInterval(oldCooldownTimer.current); setOldCooldownSeconds(0)
     setClientSearch(''); setClients([]); setClientsLoading(false); setClientError(''); setOldError(''); setOldNotice('')
   }
+  const resetOldSelection = () => {
+    clearInterval(oldCooldownTimer.current); setOldCooldownSeconds(0)
+    setOldPicker(false); setClientSearch(''); setClients([]); setClientsLoading(false); setClientError(''); setSelectedClients([]); setOldError(''); setOldNotice('')
+    setOpen(true)
+  }
   const connect = async () => {
     if (lock.current) return
     lock.current = true; setBusy('connecting'); setError(''); setNotice(null)
@@ -187,7 +192,7 @@ export default function CrmGmailConnection({ onSynced }) {
       <Mail size={16} />{busy === 'disconnecting' ? 'Disconnecting...' : busy === 'connecting' ? 'Connecting...' : !connection && !displayError ? 'Loading Gmail...' : connection?.connected ? 'Disconnect Gmail' : 'Connect Gmail'}
     </button>
     {syncButton}
-    {(connection || displayError) && <button type="button" className="row-action-btn" aria-label="Gmail connection details" title={syncDescription} aria-description={syncDescription} disabled={Boolean(busy)} onClick={() => setOpen(true)}><Info size={16} />{connection?.pending_jobs > 0 && <span className="crm-gmail-queue-badge">{connection.pending_jobs}</span>}</button>}
+    {(connection || displayError) && <button type="button" className="row-action-btn" aria-label="Gmail connection details" title={syncDescription} aria-description={syncDescription} disabled={Boolean(busy)} onClick={resetOldSelection}><Info size={16} />{connection?.pending_jobs > 0 && <span className="crm-gmail-queue-badge">{connection.pending_jobs}</span>}</button>}
     {open && <CrmDialog title="Gmail Connection" onClose={() => setOpen(false)} busy={Boolean(busy)} footer={<>
       <button className="btn-secondary" disabled={Boolean(busy)} onClick={() => setOpen(false)}>Close</button>
       {syncButton}
