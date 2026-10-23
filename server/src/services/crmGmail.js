@@ -226,15 +226,15 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       if (!body) {
         analysis = { summary: attachmentFallback, meeting: null, negative_response: null, sentiment: { label: 'unknown', evidence: null }, fallback: 'attachments_only' }
       } else {
-        const aiResult = await ai({ prompt: analysisPrompt(body, match.direction, h.subject || ''), schema: SCHEMA, schemaName: 'crm_email_analysis', model: CRM_MODEL, timeoutMs: Math.max(1, Math.min(5500, Math.floor((requestDeadline() - now() - 4000) / 3))), safeErrors: true, returnRaw: true })
-        const raw = aiResult?.parsed || aiResult
-        rawResponse = typeof aiResult?.rawText === 'string' ? aiResult.rawText : JSON.stringify(raw)
         try {
+          const aiResult = await ai({ prompt: analysisPrompt(body, match.direction, h.subject || ''), schema: SCHEMA, schemaName: 'crm_email_analysis', model: CRM_MODEL, timeoutMs: Math.max(1, Math.min(5500, Math.floor((requestDeadline() - now() - 4000) / 3))), safeErrors: true, returnRaw: true })
+          const raw = aiResult?.parsed || aiResult
+          rawResponse = typeof aiResult?.rawText === 'string' ? aiResult.rawText : JSON.stringify(raw)
           analysis = validateAnalysis(raw, body, match.direction)
         } catch (error) {
-          if (error.code !== 'INVALID_AI_OUTPUT') throw error
+          if (error.code !== 'INVALID_AI_OUTPUT' || (typeof error.rawText !== 'string' && typeof rawResponse !== 'string')) throw error
+          rawResponse = typeof error.rawText === 'string' ? error.rawText : rawResponse
           analysis = { summary: body, meeting: null, negative_response: null, sentiment: { label: 'unknown', evidence: null }, fallback: 'original_text_after_invalid_ai' }
-          error.rawText = rawResponse
         }
       }
       if (analysis.fallback === 'original_text_after_invalid_ai' && rawResponse) await checked(db.from('crm_gmail_jobs').update({ ai_raw_response: rawResponse }).eq('id', job.id).eq('lease_id', lease))
