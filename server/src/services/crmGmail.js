@@ -220,12 +220,24 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       if (!match.client) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: match.reason })
       if (!historicalMatchAllowed(job, match)) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: 'historical_client_mismatch' })
       const body = extractBody(full.payload)
-      if (!body) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: 'empty_body' })
-      const aiResult = await ai({ prompt: analysisPrompt(body, match.direction, h.subject || ''), schema: SCHEMA, schemaName: 'crm_email_analysis', model: CRM_MODEL, timeoutMs: Math.max(1, Math.min(5500, Math.floor((requestDeadline() - now() - 4000) / 3))), safeErrors: true, returnRaw: true })
-      const raw = aiResult?.parsed || aiResult
-      const rawResponse = typeof aiResult?.rawText === 'string' ? aiResult.rawText : JSON.stringify(raw)
+      const attachmentFallback = 'There are attachments in this email; no readable text was available.'
       let analysis
-      try { analysis = validateAnalysis(raw, body, match.direction) } catch (error) { error.rawText = rawResponse; throw error }
+      let rawResponse = null
+      if (!body) {
+        analysis = { summary: attachmentFallback, meeting: null, negative_response: null, sentiment: { label: 'unknown', evidence: null }, fallback: 'attachments_only' }
+      } else {
+        const aiResult = await ai({ prompt: analysisPrompt(body, match.direction, h.subject || ''), schema: SCHEMA, schemaName: 'crm_email_analysis', model: CRM_MODEL, timeoutMs: Math.max(1, Math.min(5500, Math.floor((requestDeadline() - now() - 4000) / 3))), safeErrors: true, returnRaw: true })
+        const raw = aiResult?.parsed || aiResult
+        rawResponse = typeof aiResult?.rawText === 'string' ? aiResult.rawText : JSON.stringify(raw)
+        try {
+          analysis = validateAnalysis(raw, body, match.direction)
+        } catch (error) {
+          if (error.code !== 'INVALID_AI_OUTPUT') throw error
+          analysis = { summary: body, meeting: null, negative_response: null, sentiment: { label: 'unknown', evidence: null }, fallback: 'original_text_after_invalid_ai' }
+          error.rawText = rawResponse
+        }
+      }
+      if (analysis.fallback === 'original_text_after_invalid_ai' && rawResponse) await checked(db.from('crm_gmail_jobs').update({ ai_raw_response: rawResponse }).eq('id', job.id).eq('lease_id', lease))
       // Recheck ownership/access and current contacts before committing an insight.
       await allowedConnection(c)
       const current = matchMessage(full, c.email, await rpc('match_clients', { p_peers: peers.filter(email => email !== c.email) }))
@@ -233,7 +245,7 @@ function createGmailService({ db = require('./supabaseAdmin'), google, ai = requ
       if (!historicalMatchAllowed(job, current)) return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: null, p_metadata: null, p_outcome: 'historical_client_mismatch' })
       match = current
       return await rpc('finish_job', { p_id: job.id, p_lease: lease, p_client: current.client.id,
-        p_metadata: { source: 'gmail', direction: match.direction, sender: match.from, recipients: match.to, subject: (h.subject || '(No subject)').slice(0, 500), email_at: emailTimestamp(full), summary: analysis.summary, meeting: analysis.meeting, negative_response: analysis.negative_response, sentiment: analysis.sentiment, model: CRM_MODEL, analysed_at: new Date(now()).toISOString() }, p_outcome: 'activity_created' })
+        p_metadata: { source: 'gmail', direction: match.direction, sender: match.from, recipients: match.to, subject: (h.subject || '(No subject)').slice(0, 500), email_at: emailTimestamp(full), summary: analysis.summary, meeting: analysis.meeting, negative_response: analysis.negative_response, sentiment: analysis.sentiment, ...(analysis.fallback ? { analysis_fallback: analysis.fallback } : { model: CRM_MODEL, analysed_at: new Date(now()).toISOString() }) }, p_outcome: 'activity_created' })
     } catch (error) {
       const quota = error.statusCode === 429 || error.code === 'AI_QUOTA_REACHED'
       const revoked = ['GMAIL_REVOKED','WORK_EMAIL_CHANGED','ACCESS_DENIED','WORK_EMAIL_REQUIRED'].includes(error.code) || [401,403].includes(error.status)

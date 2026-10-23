@@ -556,7 +556,7 @@ test('expired leases recover, revoked tokens require reauthorization, invalid ou
   assert.equal(await scalar(db, "select count(*)::int from crm_activities where activity_type='gmail_email'"), 0)
 })
 
-test('invalid AI output is retained on the Gmail job for diagnostics', async t => {
+test('invalid AI output falls back to original email text and retains diagnostics', async t => {
   const f = await fixture(t)
   const connection = await f.connect()
   await f.db.query("insert into crm_gmail_jobs(connection_id,message_id,status) values($1,'diagnostic','pending')", [connection.id])
@@ -564,8 +564,10 @@ test('invalid AI output is retained on the Gmail job for diagnostics', async t =
   const service = createGmailService({ db: f.adapter, google: f.google, authorize: async () => email, ai: async () => ({ parsed: JSON.parse(diagnostic), rawText: diagnostic }) })
   const result = await service.run({ userId: CONSULTANT })
   assert.equal(result.processed, 1)
-  assert.equal(await scalar(f.db, "select last_error from crm_gmail_jobs where message_id='diagnostic'"), 'INVALID_AI_OUTPUT')
+  assert.equal(await scalar(f.db, "select status from crm_gmail_jobs where message_id='diagnostic'"), 'completed')
   assert.equal(await scalar(f.db, "select ai_raw_response from crm_gmail_jobs where message_id='diagnostic'"), diagnostic)
+  assert.equal(await scalar(f.db, "select email_metadata->>'summary' from crm_activities where gmail_message_id='diagnostic'"), body)
+  assert.equal(await scalar(f.db, "select email_metadata->>'analysis_fallback' from crm_activities where gmail_message_id='diagnostic'"), 'original_text_after_invalid_ai')
 })
 test('unmatched/ambiguous metadata never reaches full message fetch or Gemini; contact changes fence commit', async t => {
   const f = await fixture(t), { db, service } = f
