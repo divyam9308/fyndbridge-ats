@@ -14,8 +14,8 @@ import { previewWords } from '../utils/tableText'
 import '../styles/Shared.css'
 import './CrmPage.css'
 
-const COLUMNS = ['Organisation Name', 'About Organisation', 'Contact Person', 'Mobile', 'Email', 'Designation', 'LinkedIn', 'Sector', 'Connected Through', 'Date', 'Comments', 'Conversion Probability', 'Status', 'Actions']
-const WIDTHS = [235, 215, 210, 160, 240, 190, 115, 185, 180, 125, 300, 195, 200, 190]
+const COLUMNS = ['Organisation Name', 'About Organisation', 'Contact Person', 'Mobile', 'Status', 'Email', 'Designation', 'LinkedIn', 'Sector', 'Connected Through', 'Date', 'Comments', 'Conversion Probability', 'Actions']
+const WIDTHS = [235, 215, 210, 160, 200, 240, 190, 115, 185, 180, 125, 300, 195, 190]
 const FOLLOW_LABELS = { overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming', none: 'No Follow-up' }
 
 export default function CrmPage() {
@@ -173,7 +173,7 @@ export default function CrmPage() {
           <td><span className="name-text">{record.organisation_name}</span>{unreadTone && <span className="crm-unread-label">{record.unread_activity_count} unread {unreadTone === 'positive' ? 'updates' : `${unreadTone} updates`}</span>}<button className={`crm-follow crm-follow-${state}`} type="button" title={record.next_follow_up_date ? `Next follow-up: ${formatDateDDMMYYYY(record.next_follow_up_date)}` : 'Set follow-up date'} onClick={() => setFollowEditor({ record, value: record.next_follow_up_date || '' })}>{FOLLOW_LABELS[state]}{record.next_follow_up_date ? ` · ${formatDateDDMMYYYY(record.next_follow_up_date)}` : ''}</button></td>
           <td className="crm-summary-cell">{about.preview ? <><span>{about.preview}{about.isLong ? '…' : ''}</span><button type="button" className="table-view-more" aria-label={`View more about ${record.organisation_name}`} aria-haspopup="dialog" onClick={() => setSummaryTarget(record)}>View more</button></> : <span className="sub-text">-</span>}</td>
           <td className="crm-contact-cell"><span className="inline-action-cell">{record.contacts.length > 1 ? <><select className="filter-select compact-select" aria-label={`Contact for ${record.organisation_name}`} value={contactIndex} onChange={event => setSelectedContacts(current => ({ ...current, [record.id]: Number(event.target.value) }))}>{record.contacts.map((item, index) => <option key={index} value={index}>{item.name}</option>)}</select><button type="button" className="row-action-btn" title="Delete Contact" disabled={busy[record.id]} onClick={() => deleteContact(record)}><Trash2 size={12} /></button></> : <span className="crm-contact-name">{contact.name}</span>}<button type="button" className="row-action-btn" title="Add Contact" onClick={() => setForm({ record: { ...record, contacts: [...record.contacts, { name: '', mobile: '', email: '', designation: '', linkedin: '' }] } })}><Plus size={12} /></button></span></td>
-          <td className="crm-mobile">{contact.mobile || '-'}</td><td className="crm-email">{contact.email || '-'}</td><td>{contact.designation || '-'}</td>
+          <td className="crm-mobile">{contact.mobile || '-'}</td><td>{drop(record, 'status', CRM_STATUSES)}</td><td className="crm-email">{contact.email || '-'}</td><td>{contact.designation || '-'}</td>
           <td>{contact.linkedin && validLinkedIn(contact.linkedin) ? <a href={contact.linkedin} className="candidate-linkedin-link" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a> : '-'}</td>
           <td>{record.sector || '-'}</td><td>{drop(record, 'connected_through', CRM_SOURCES)}</td><td>{formatDateDDMMYYYY(record.created_at)}</td>
           <td className="crm-comment-cell"><button type="button" className="row-action-btn crm-comment-info" aria-label={`Comment history for ${record.organisation_name}`} onClick={() => setHistory({ record, kind: 'comments' })}><Info size={14} /></button>
@@ -181,7 +181,7 @@ export default function CrmPage() {
               <button type="button" className={`crm-comment-text table-comment-text${expanded ? ' is-expanded' : ''}`} onClick={() => setComment({ record, value: commentDrafts.current.get(record.id) || '' })}>{record.latest_comment ? `${commentDate(record.latest_comment.created_at)} - ${expanded || !isLong ? commentBody : preview}` : 'Add comment'}</button>
               {isLong && <button type="button" className="table-view-more" aria-expanded={expanded} onClick={() => setExpandedComments(current => ({ ...current, [record.id]: expanded ? null : record.latest_comment.id }))}><ChevronDown size={12} className={expanded ? 'is-open' : ''} /> {expanded ? 'View less' : 'View more'}</button>}
             </div>}
-          </td><td>{drop(record, 'conversion_probability', CRM_PROBABILITIES)}</td><td>{drop(record, 'status', CRM_STATUSES)}</td>
+          </td><td>{drop(record, 'conversion_probability', CRM_PROBABILITIES)}</td>
           <td><div className="inline-action-cell"><button type="button" className="row-action-btn" title="Edit Client" onClick={() => openEdit(record)} disabled={busy[record.id]}><Pencil size={14} /></button><button type="button" className="row-action-btn" title="Activity History" onClick={() => setHistory({ record, kind: 'activities' })}><History size={14} /></button><button type="button" className="row-action-btn" title="Edit Follow-up" onClick={() => setFollowEditor({ record, value: record.next_follow_up_date || '' })}><CalendarClock size={14} /></button><button type="button" className="row-action-btn crm-delete-organisation" title="Delete Organisation" aria-label={`Delete organisation ${record.organisation_name}`} disabled={busy[record.id]} onClick={() => { setDeleteError(''); setDeleteTarget(record) }}><Trash2 size={14} /></button></div></td>
         </tr>
       })}</tbody>
