@@ -1,0 +1,41 @@
+name: ATS backend security regression
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.22.1'
+          package-manager-cache: false
+      - name: Confirm patched test runtime
+        run: node -v
+      - name: Install backend dependencies
+        working-directory: server
+        run: npm ci
+      - name: Hardened download unit tests
+        working-directory: server
+        run: node --test src/services/publicPdfDownload.test.js
+      - name: Full backend regression tests
+        working-directory: server
+        run: npm test
+      - name: Compare full test suite against production baseline commit
+        if: always()
+        continue-on-error: true
+        run: |
+          git fetch --depth=1 origin ceab5cf9b2e2c6e803c4139debce526cad0bd1a1
+          git checkout --detach ceab5cf9b2e2c6e803c4139debce526cad0bd1a1
+          cd server
+          npm ci
+          npm test

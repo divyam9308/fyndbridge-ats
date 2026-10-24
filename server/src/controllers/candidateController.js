@@ -1,8 +1,8 @@
 const fs = require('fs/promises')
 const path = require('path')
 const os = require('os')
-const axios = require('axios')
 const { v4: uuidv4 } = require('uuid')
+const { downloadPublicPdf } = require('../services/publicPdfDownload')
 const supabase = require('../services/supabaseAdmin')
 const { applyDashboardPeriod } = require('../utils/dashboardPeriod')
 const { parseResume } = require('../services/resumeParser')
@@ -2020,20 +2020,9 @@ async function checkCvDuplicate(req, res) {
 }
 
 async function downloadPdfToTmp(resumeUrl) {
-  const response = await axios.get(resumeUrl, {
-    responseType: 'arraybuffer',
-    timeout: 30000
-  })
-
-  const contentType = response.headers['content-type'] || ''
-  if (!contentType.toLowerCase().includes('application/pdf')) {
-    const error = new Error('URL does not point to a PDF')
-    error.statusCode = 400
-    throw error
-  }
-
+  const pdfBytes = await downloadPublicPdf(resumeUrl)
   const filePath = path.join('/tmp', `${uuidv4()}.pdf`)
-  await fs.writeFile(filePath, Buffer.from(response.data))
+  await fs.writeFile(filePath, pdfBytes)
   return filePath
 }
 
