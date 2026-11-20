@@ -12,12 +12,18 @@ test.before(async () => {
   await db.exec(`create schema auth; create table auth.users(id uuid primary key); create role anon; create role authenticated; create role service_role bypassrls; insert into auth.users values ('${USER}');`)
   await db.exec(`create table public.company_holidays (holiday_date date not null, holiday_type text not null, is_active boolean not null default true); grant select on public.company_holidays to service_role;`)
   await db.exec(await fs.readFile(path.join(__dirname, '../../../supabase/migrations/20261120222043_user_daily_activity.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261120223343_presence_average_tracking_start.sql'), 'utf8'))
 })
 test.after(async () => { await db?.close() })
 
 const record = intervals => db.query('select public.record_user_activity($1::uuid, $2::jsonb)', [USER, JSON.stringify(intervals)])
 const interval = (start, end) => ({ start: new Date(start).toISOString(), end: new Date(end).toISOString() })
-const summary = async (start, end) => (await db.query('select * from public.user_activity_summary($1::uuid[], $2::date, $3::date)', [[USER], start, end])).rows[0]
+const summary = async (start, end, asOf) => {
+  const original = asOf && (await db.query("select pg_get_functiondef('public.user_activity_summary(uuid[],date,date)'::regprocedure) as sql")).rows[0].sql
+  if (original) await db.exec(original.replaceAll('now()', `'${asOf}'::timestamptz`))
+  try { return (await db.query('select * from public.user_activity_summary($1::uuid[], $2::date, $3::date)', [[USER], start, end])).rows[0] }
+  finally { if (original) await db.exec(original) }
+}
 
 test('fiscal quarters validate inputs and handle Q4 in the following calendar year', () => {
   assert.deepEqual(quarterRange('FY 2026-27 Q4'), { period: 'FY 2026-27 Q4', start: '2027-01-01', end: '2027-03-31' })
@@ -42,13 +48,13 @@ test('server bounds reject offline gaps and future credit', async () => {
 
 test('average includes missing/absent Mon-Sat days and excludes Sunday time', async () => {
   await db.exec('truncate public.user_daily_activity')
-  // April 1-7 2026: six Mon-Sat days; Sunday April 5 is excluded.
+  // November 23-29 2026: six Mon-Sat days; Sunday November 29 is excluded.
   await db.query(`insert into public.user_daily_activity(user_id,activity_date,active_periods) values
-    ($1,'2026-04-01',tstzmultirange(tstzrange('2026-04-01T04:00Z','2026-04-01T05:00Z','[)'))),
-    ($1,'2026-04-03',tstzmultirange(tstzrange('2026-04-03T04:00Z','2026-04-03T04:30Z','[)'))),
-    ($1,'2026-04-05',tstzmultirange(tstzrange('2026-04-05T04:00Z','2026-04-05T12:00Z','[)')))
+    ($1,'2026-11-23',tstzmultirange(tstzrange('2026-11-23T04:00Z','2026-11-23T05:00Z','[)'))),
+    ($1,'2026-11-25',tstzmultirange(tstzrange('2026-11-25T04:00Z','2026-11-25T04:30Z','[)'))),
+    ($1,'2026-11-29',tstzmultirange(tstzrange('2026-11-29T04:00Z','2026-11-29T12:00Z','[)')))
   `, [USER])
-  const row = await summary('2026-04-01', '2026-04-07')
+  const row = await summary('2026-11-23', '2026-11-29', '2026-11-30T12:00:00Z')
   assert.equal(row.average_days, 6)
   assert.equal(row.average_seconds, 5400 / 6)
   // Four unrecorded weekdays remain in the divisor. No attendance filter exists.
@@ -61,21 +67,21 @@ test('active calendar holidays of every type are excluded from both total and di
   await db.exec('truncate public.user_daily_activity, public.company_holidays')
   try {
     await db.query(`insert into public.user_daily_activity(user_id,activity_date,active_periods) values
-      ($1,'2026-04-01',tstzmultirange(tstzrange('2026-04-01T04:00Z','2026-04-01T05:00Z','[)'))),
-      ($1,'2026-04-03',tstzmultirange(tstzrange('2026-04-03T04:00Z','2026-04-03T04:30Z','[)'))),
-      ($1,'2026-04-05',tstzmultirange(tstzrange('2026-04-05T04:00Z','2026-04-05T12:00Z','[)')))
+      ($1,'2026-11-23',tstzmultirange(tstzrange('2026-11-23T04:00Z','2026-11-23T05:00Z','[)'))),
+      ($1,'2026-11-25',tstzmultirange(tstzrange('2026-11-25T04:00Z','2026-11-25T04:30Z','[)'))),
+      ($1,'2026-11-29',tstzmultirange(tstzrange('2026-11-29T04:00Z','2026-11-29T12:00Z','[)')))
     `, [USER])
     await db.exec(`insert into public.company_holidays(holiday_date,holiday_type,is_active) values
-      ('2026-04-01','national',true), ('2026-04-02','company',true),
-      ('2026-04-04','optional',true), ('2026-04-05','national',true),
-      ('2026-04-06','company',false), ('2025-04-07','national',true),
-      ('2027-04-07','national',true), ('2026-07-01','national',true)`)
-    const row = await summary('2026-04-01','2026-04-07')
+      ('2026-11-23','national',true), ('2026-11-24','company',true),
+      ('2026-11-26','optional',true), ('2026-11-29','national',true),
+      ('2026-11-27','company',false), ('2025-11-28','national',true),
+      ('2027-11-28','national',true), ('2026-07-01','national',true)`)
+    const row = await summary('2026-11-23','2026-11-29', '2026-11-30T12:00:00Z')
     assert.equal(row.average_days, 3)
     assert.equal(row.average_seconds, 1800 / 3)
     // Removing a calendar holiday restores its recorded time and its date.
-    await db.exec("update public.company_holidays set is_active=false where holiday_date='2026-04-01'")
-    const revised = await summary('2026-04-01','2026-04-07')
+    await db.exec("update public.company_holidays set is_active=false where holiday_date='2026-11-23'")
+    const revised = await summary('2026-11-23','2026-11-29', '2026-11-30T12:00:00Z')
     assert.equal(revised.average_days, 4)
     assert.equal(revised.average_seconds, 5400 / 4)
   } finally { await db.exec('truncate public.company_holidays') }
@@ -85,8 +91,8 @@ test('a period with only holidays and Sundays has a zero average without divisio
   await db.exec('truncate public.user_daily_activity, public.company_holidays')
   try {
     await db.exec(`insert into public.company_holidays(holiday_date,holiday_type)
-      select d::date,'national' from generate_series('2026-04-01'::date,'2026-04-07'::date,interval '1 day') d`)
-    const row = await summary('2026-04-01','2026-04-07')
+      select d::date,'national' from generate_series('2026-11-23'::date,'2026-11-29'::date,interval '1 day') d`)
+    const row = await summary('2026-11-23','2026-11-29', '2026-11-30T12:00:00Z')
     assert.equal(row.average_days, 0)
     assert.equal(row.average_seconds, 0)
   } finally { await db.exec('truncate public.company_holidays') }
@@ -107,16 +113,65 @@ test('Today retains recorded time on a holiday while Average excludes that date'
   } finally { await db.exec('truncate public.company_holidays') }
 })
 
+test('launch-quarter average starts on November 21 and excludes earlier days and activity', async () => {
+  await db.exec('truncate public.user_daily_activity, public.company_holidays')
+  await db.query(`insert into public.user_daily_activity(user_id,activity_date,active_periods) values
+    ($1,'2026-10-01',tstzmultirange(tstzrange('2026-10-01T04:00Z','2026-10-01T12:00Z','[)'))),
+    ($1,'2026-11-21',tstzmultirange(tstzrange('2026-11-21T04:00Z','2026-11-21T05:00Z','[)')))
+  `, [USER])
+  const row = await summary('2026-10-01', '2026-12-31', '2026-11-21T12:00:00Z')
+  assert.equal(row.average_days, 1)
+  assert.equal(row.average_seconds, 3600)
+  assert.equal(row.today_seconds, 3600)
+  const earlierQuarter = await summary('2026-07-01', '2026-09-30', '2026-11-21T12:00:00Z')
+  assert.equal(earlierQuarter.average_days, 0)
+  assert.equal(earlierQuarter.average_seconds, 0)
+})
+
+test('days after launch still count absent dates as zero and skip Sundays and holidays', async () => {
+  await db.exec('truncate public.user_daily_activity, public.company_holidays')
+  try {
+    await db.query(`insert into public.user_daily_activity(user_id,activity_date,active_periods)
+      values ($1,'2026-11-21',tstzmultirange(tstzrange('2026-11-21T04:00Z','2026-11-21T05:00Z','[)')))`, [USER])
+    // Saturday, Monday and Tuesday count even though only Saturday has activity.
+    const row = await summary('2026-10-01', '2026-12-31', '2026-11-24T12:00:00Z')
+    assert.equal(row.average_days, 3)
+    assert.equal(row.average_seconds, 1200)
+    await db.exec("insert into public.company_holidays(holiday_date,holiday_type) values ('2026-11-23','national')")
+    const holidayAdjusted = await summary('2026-10-01', '2026-12-31', '2026-11-24T12:00:00Z')
+    assert.equal(holidayAdjusted.average_days, 2)
+    assert.equal(holidayAdjusted.average_seconds, 1800)
+  } finally { await db.exec('truncate public.company_holidays') }
+})
+
+test('the next quarter starts January 1 even if the first activity is January 4', async () => {
+  await db.exec('truncate public.user_daily_activity, public.company_holidays')
+  try {
+    await db.query(`insert into public.user_daily_activity(user_id,activity_date,active_periods) values
+      ($1,'2026-11-21',tstzmultirange(tstzrange('2026-11-21T04:00Z','2026-11-21T05:00Z','[)'))),
+      ($1,'2027-01-04',tstzmultirange(tstzrange('2027-01-04T04:00Z','2027-01-04T04:30Z','[)')))
+    `, [USER])
+    const row = await summary('2027-01-01', '2027-03-31', '2027-01-04T12:00:00Z')
+    assert.equal(row.average_days, 3) // Fri 1, Sat 2 and Mon 4; Sunday 3 excluded.
+    assert.equal(row.average_seconds, 600)
+    assert.equal(row.today_seconds, 1800)
+    await db.exec("insert into public.company_holidays(holiday_date,holiday_type) values ('2027-01-02','company')")
+    const holidayAdjusted = await summary('2027-01-01', '2027-03-31', '2027-01-04T12:00:00Z')
+    assert.equal(holidayAdjusted.average_days, 2)
+    assert.equal(holidayAdjusted.average_seconds, 900)
+  } finally { await db.exec('truncate public.company_holidays') }
+})
+
 test('IST midnight splits a range into separate days; today resets without deleting history', async () => {
   await db.exec('truncate public.user_daily_activity')
   // Freeze only the recorder's clock to exercise its real midnight split loop.
   const original = (await db.query("select pg_get_functiondef('public.record_user_activity(uuid,jsonb)'::regprocedure) as sql")).rows[0].sql
-  await db.exec(original.replace('clock_timestamp()', "'2026-04-01T18:30:30Z'::timestamptz"))
-  try { await record([{ start: '2026-04-01T18:29:30Z', end: '2026-04-01T18:30:30Z' }]) }
+  await db.exec(original.replace('clock_timestamp()', "'2026-11-23T18:30:30Z'::timestamptz"))
+  try { await record([{ start: '2026-11-23T18:29:30Z', end: '2026-11-23T18:30:30Z' }]) }
   finally { await db.exec(original) }
   assert.deepEqual((await db.query('select activity_date::text as day,active_seconds from public.user_daily_activity order by activity_date')).rows,
-    [{ day: '2026-04-01', active_seconds: 30 }, { day: '2026-04-02', active_seconds: 30 }])
-  assert.equal((await summary('2026-04-01','2026-06-30')).today_seconds, 0)
+    [{ day: '2026-11-23', active_seconds: 30 }, { day: '2026-11-24', active_seconds: 30 }])
+  assert.equal((await summary('2026-11-23','2026-12-31')).today_seconds, 0)
 })
 
 test('daily history and RPCs are inaccessible to anon/authenticated clients', async () => {
@@ -126,7 +181,7 @@ test('daily history and RPCs are inaccessible to anon/authenticated clients', as
     await db.exec(`set role ${role}`)
     await assert.rejects(db.query('select * from public.user_daily_activity'), /permission denied/)
     await assert.rejects(record([]), /permission denied/)
-    await assert.rejects(summary('2026-04-01', '2026-06-30'), /permission denied/)
+    await assert.rejects(summary('2026-11-23', '2026-12-31'), /permission denied/)
     await db.exec('reset role')
   }
 })

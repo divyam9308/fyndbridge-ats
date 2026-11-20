@@ -74,15 +74,15 @@ test('tooltip shows Today and quarter Average; quarter switching and mobile plac
 })
 
 test('calendar holidays change the displayed quarter average and preserve Today',async({page,activity})=>{
-  // Excluding October 1 removes the seeded 2h from the quarter's total.
-  await activity.db.sql.exec("insert into public.company_holidays(holiday_date,holiday_type) values ('2026-10-01','national')")
+  // A holiday today removes its time from Average while retaining Today.
+  await activity.db.sql.exec("insert into public.company_holidays(holiday_date,holiday_type) values ((now() at time zone 'Asia/Kolkata')::date,'national')")
   await page.goto('/server/browser-tests/presence-harness.html')
   await page.getByRole('button',{name:'Test User is online'}).hover()
   const tip=page.getByRole('tooltip')
   await expect(tip).toContainText('Today: 10m')
-  await expect(tip).toContainText('Average: <1m')
+  await expect(tip).toContainText('Average: 0m')
   // Selecting the quarter again reloads the updated calendar through the API.
-  await activity.db.sql.exec("update public.company_holidays set is_active=false where holiday_date='2026-10-01'")
+  await activity.db.sql.exec("update public.company_holidays set is_active=false where holiday_date=(now() at time zone 'Asia/Kolkata')::date")
   await page.getByRole('button',{name:'Q4',exact:true}).click()
   await page.getByRole('button',{name:'Q3',exact:true}).click()
   await page.getByRole('button',{name:'Test User is online'}).hover()

@@ -8,6 +8,7 @@ async function presenceDatabase() {
   await sql.exec(`create schema auth; create table auth.users(id uuid primary key); create role anon; create role authenticated; create role service_role bypassrls; insert into auth.users values ('${USER}');`)
   await sql.exec(`create table public.company_holidays (holiday_date date not null, holiday_type text not null, is_active boolean not null default true); grant select on public.company_holidays to service_role;`)
   await sql.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261120222043_user_daily_activity.sql'), 'utf8'))
+  await sql.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261120223343_presence_average_tracking_start.sql'), 'utf8'))
   const tables = { user_presence: [], employee_statuses: [] }
   return {
     sql, tables,

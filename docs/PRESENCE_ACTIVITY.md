@@ -8,7 +8,11 @@ shown beneath Average so its scope is visible.
 - Average follows the selected fiscal quarter (Q1 Apr–Jun, Q2 Jul–Sep,
   Q3 Oct–Dec, Q4 Jan–Mar). With the FY view, it uses the current fiscal-quarter
   number in the selected FY. With a month view, it uses that month's quarter.
-- The denominator is every elapsed Monday–Saturday date in the quarter, including
+- Average starts at the later of the quarter start and **21 November 2026**
+  (the fixed tracking launch date, in IST). For Q3 FY 2026–27 it starts on
+  21 November; Q4 starts on 1 January 2027, and subsequent quarters start normally.
+  It never restarts at a user's first login or first recorded activity.
+- The denominator is every elapsed Monday–Saturday date from that start, including
   today, except active holidays in the Attendance Holiday Calendar. This includes
   national, company, and optional holidays configured for those exact dates/years.
   Completed quarters use all their eligible dates; future quarters show 0.
@@ -20,8 +24,8 @@ shown beneath Average so its scope is visible.
   An absent date contributes its actual recorded time, or zero. Today and stored
   activity history still include time spent on Sundays and holidays.
 - Tracking starts when the migration and application changes are released.
-  Earlier activity cannot be reconstructed. Dates with no recorded activity count
-  as zero, including earlier dates in the selected quarter.
+  Earlier activity cannot be reconstructed and is excluded from Average. Eligible
+  dates after launch with no activity count as zero, including absent days.
 
 ## Tracking and persistence
 
@@ -50,7 +54,9 @@ inactive-employee filtering applies to the displayed presence list.
 ## Release and verification
 
 Apply `supabase/migrations/20261120222043_user_daily_activity.sql` before deploying
-the new server/client. Existing clients remain compatible; they simply do not
+the new server/client. Also apply
+`supabase/migrations/20261120223343_presence_average_tracking_start.sql` to set the
+average baseline. Existing clients remain compatible; they simply do not
 supply activity intervals. New API code requires the migration.
 
 Focused checks:
