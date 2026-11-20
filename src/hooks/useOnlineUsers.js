@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { apiFetch } from '../services/apiClient'
-import { PRESENCE_LOGOUT_EVENT, PRESENCE_LOGOUT_STORAGE_KEY } from '../services/presenceSession'
+import { PRESENCE_FLUSH_EVENT, PRESENCE_LOGOUT_EVENT, PRESENCE_LOGOUT_STORAGE_KEY } from '../services/presenceSession'
+import { createActivityTracker, activityDate } from '../services/presenceActivity'
 import { supabase } from '../services/supabaseClient'
 import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
 
@@ -36,10 +37,6 @@ function initials(name, email) {
   const source = value.includes('@') ? value.split('@')[0].replace(/[._-]+/g, ' ') : value
   const parts = source.split(/\s+/).filter(Boolean)
   return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)[0]}` : parts[0]?.slice(0, 2) || 'U').toUpperCase()
-}
-
-function activeStatus() {
-  return document.visibilityState === 'visible' && document.hasFocus() ? 'online' : 'away'
 }
 
 function parseStoredJson(value) {
@@ -111,7 +108,10 @@ function usersSignature(users) {
     user.last_seen_at,
     user.current_path,
     user.name,
-    user.email
+    user.email,
+    user.today_seconds,
+    user.average_seconds,
+    user.activity_period
   ]))
 }
 
@@ -163,6 +163,7 @@ function usePresenceHeartbeatLeader() {
     let acquisitionTimer = null
     let initialHeartbeatTimer = null
     let storageAvailable = true
+    const activityTracker = createActivityTracker()
 
     const safeGet = (key) => {
       try { return window.localStorage.getItem(key) } catch {
@@ -189,7 +190,7 @@ function usePresenceHeartbeatLeader() {
     }
     const localState = () => ({
       tab_id: tabId,
-      status: activeStatus(),
+      ...activityTracker.sample(),
       path: pathRef.current,
       changed_at: Date.now(),
       seen_at: Date.now()
@@ -201,7 +202,8 @@ function usePresenceHeartbeatLeader() {
     }
 
     const writeLocalState = ({ forceHeartbeat = false, refreshOnly = false } = {}) => {
-      const status = activeStatus()
+      const activity = activityTracker.sample()
+      const { status } = activity
       const currentPath = pathRef.current
       const changed = status !== lastLocalState.status || currentPath !== lastLocalState.path
       if (changed) {
@@ -209,6 +211,7 @@ function usePresenceHeartbeatLeader() {
       }
       lastLocalState = {
         ...lastLocalState,
+        intervals: activity.intervals,
         seen_at: Date.now(),
         force_heartbeat: forceHeartbeat ? createPresenceTabId() : ''
       }
@@ -238,7 +241,8 @@ function usePresenceHeartbeatLeader() {
       const preferred = [...states]
         .filter(state => !online || state.status === 'online')
         .sort((a, b) => Number(b.changed_at || 0) - Number(a.changed_at || 0))[0] || lastLocalState
-      return { status: online ? 'online' : 'away', path: preferred.path || pathRef.current }
+      return { status: online ? 'online' : 'away', path: preferred.path || pathRef.current,
+        intervals: states.flatMap(state => state.intervals || []).filter(item => Date.parse(item.end) > Date.now() - OFFLINE_CUTOFF_MS).slice(-500) }
     }
 
     const ensureMetadata = async () => {
@@ -266,6 +270,7 @@ function usePresenceHeartbeatLeader() {
         scheduleFailover(readLeader())
         return
       }
+      writeLocalState({ refreshOnly: true })
       const browserState = readBrowserState()
       const signature = `${browserState.status}|${browserState.path}`
       if (!scheduled && !force && signature === lastSuccessfulSignature) return
@@ -284,7 +289,8 @@ function usePresenceHeartbeatLeader() {
             ...metadata,
             tab_id: tabId,
             status: browserState.status,
-            current_path: browserState.path
+            current_path: browserState.path,
+            active_intervals: browserState.intervals
           })
         })
         if (response.ok) {
@@ -302,7 +308,7 @@ function usePresenceHeartbeatLeader() {
       }
     }
 
-    const markTabOffline = (targetTabId) => {
+    const markTabOffline = (targetTabId, intervals = []) => {
       if (!targetTabId || !accessToken) return
       window.fetch('/api/presence/offline', {
         method: 'POST',
@@ -311,7 +317,7 @@ function usePresenceHeartbeatLeader() {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ tab_id: targetTabId })
+        body: JSON.stringify({ tab_id: targetTabId, active_intervals: intervals })
       }).catch(() => {})
     }
 
@@ -419,16 +425,29 @@ function usePresenceHeartbeatLeader() {
       }
     }
 
-    const handleVisibilityOrFocus = () => publishLocalState()
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible' && document.hasFocus()) activityTracker.sample(true)
+      publishLocalState()
+    }
+    const handleInteraction = () => {
+      const previousStatus = lastLocalState.status
+      const next = activityTracker.sample(true)
+      if (previousStatus !== next.status) publishLocalState()
+    }
+    const handleFlush = (event) => {
+      writeLocalState({ refreshOnly: true })
+      event.detail.active_intervals = readBrowserState().intervals
+    }
     const handleOnline = () => publishLocalState()
     const handlePageHide = () => {
       if (destroyed || suspended) return
+      writeLocalState({ refreshOnly: true })
+      const finalIntervals = readBrowserState().intervals
       suspended = true
-      const wasLeader = isLeader
       stopLeader({ release: true })
       safeRemove(ownStateKey)
       writeSignal('state-removed')
-      if (wasLeader) markTabOffline(tabId)
+      markTabOffline(tabId, finalIntervals)
     }
     const handlePageShow = () => {
       if (destroyed || !suspended) return
@@ -449,6 +468,8 @@ function usePresenceHeartbeatLeader() {
     window.addEventListener('online', handleOnline)
     window.addEventListener('pagehide', handlePageHide)
     window.addEventListener('pageshow', handlePageShow)
+    window.addEventListener(PRESENCE_FLUSH_EVENT, handleFlush)
+    for (const event of ['pointerdown', 'pointermove', 'keydown', 'scroll', 'touchstart']) window.addEventListener(event, handleInteraction, { passive: true })
     window.addEventListener(PRESENCE_LOGOUT_EVENT, handleLogout)
     document.addEventListener('visibilitychange', handleVisibilityOrFocus)
     attemptLeadership()
@@ -461,16 +482,21 @@ function usePresenceHeartbeatLeader() {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('pagehide', handlePageHide)
       window.removeEventListener('pageshow', handlePageShow)
+      window.removeEventListener(PRESENCE_FLUSH_EVENT, handleFlush)
+      for (const event of ['pointerdown', 'pointermove', 'keydown', 'scroll', 'touchstart']) window.removeEventListener(event, handleInteraction)
       window.removeEventListener(PRESENCE_LOGOUT_EVENT, handleLogout)
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
     }
   }, [accessToken, enabled, tabId, userId])
 }
 
-function useDashboardPresenceUsers() {
+function useDashboardPresenceUsers(activityPeriod) {
   const { session } = useAuth()
   const [users, setUsers] = useState([])
   const rowsRef = useRef(new Map())
+  const activityRef = useRef(new Map())
+  const activityPeriodRef = useRef(activityPeriod)
+  useEffect(() => { activityPeriodRef.current = activityPeriod }, [activityPeriod])
   const rawRowsReadyRef = useRef(false)
   const usersSignatureRef = useRef('[]')
   const loadInFlightRef = useRef(null)
@@ -485,7 +511,13 @@ function useDashboardPresenceUsers() {
   }, [sessionUserId])
 
   const publishRows = useCallback(() => {
-    const nextUsers = aggregatePresenceTabs([...rowsRef.current.values()])
+    const today = activityDate()
+    const nextUsers = aggregatePresenceTabs([...rowsRef.current.values()]).map(user => {
+      const summary = activityRef.current.get(user.id)
+      return { ...user, today_seconds: summary?.activity_date === today ? summary.today_seconds : summary ? 0 : null,
+        average_seconds: summary?.period === activityPeriodRef.current ? summary.average_seconds : null,
+        average_days: summary?.average_days, activity_period: summary?.period }
+    })
     const signature = usersSignature(nextUsers)
     if (signature === usersSignatureRef.current) return
     usersSignatureRef.current = signature
@@ -507,13 +539,14 @@ function useDashboardPresenceUsers() {
 
   const loadPresence = useCallback(() => {
     if (!enabled) return Promise.resolve()
-    if (loadInFlightRef.current) return loadInFlightRef.current
+    if (loadInFlightRef.current?.period === activityPeriod) return loadInFlightRef.current.request
     const startedAt = Date.now()
     const request = (async () => {
       try {
-        const response = await apiFetch('/api/presence', { cache: 'no-store' })
+        const response = await apiFetch('/api/presence' + `?activity_period=${encodeURIComponent(activityPeriod)}`, { cache: 'no-store' })
         const payload = await response.json().catch(() => ({}))
-        if (!response.ok || !activeRef.current || sessionUserIdRef.current !== sessionUserId) return
+        if (!response.ok || !activeRef.current || sessionUserIdRef.current !== sessionUserId || activityPeriodRef.current !== activityPeriod) return
+        activityRef.current = new Map((payload.activity || []).map(row => [row.user_id, { ...row, period: payload.activity_period }]))
         if (Array.isArray(payload.tabs)) {
           rowsRef.current = new Map(payload.tabs.map(row => [tabRowKey(row), normalizePresenceTab(row)]).filter(([key, row]) => key && row))
           rawRowsReadyRef.current = true
@@ -532,18 +565,19 @@ function useDashboardPresenceUsers() {
         // The dashboard keeps its last known presence state on transient failures.
       }
     })().finally(() => {
-      loadInFlightRef.current = null
+      if (loadInFlightRef.current?.request === request) loadInFlightRef.current = null
       eventBufferRef.current = eventBufferRef.current.filter(event => event.at >= Date.now() - OFFLINE_CUTOFF_MS)
     })
-    loadInFlightRef.current = request
+    loadInFlightRef.current = { period: activityPeriod, request }
     return request
-  }, [applyRealtimeEvent, enabled, publishRows, sessionUserId])
+  }, [activityPeriod, applyRealtimeEvent, enabled, publishRows, sessionUserId])
 
   useEffect(() => {
     if (!enabled || !supabase) {
       activeRef.current = false
       const timer = window.setTimeout(() => {
         rowsRef.current.clear()
+        activityRef.current.clear()
         rawRowsReadyRef.current = false
         usersSignatureRef.current = '[]'
         setUsers([])
@@ -575,6 +609,8 @@ function useDashboardPresenceUsers() {
     }
 
     loadPresence()
+    // Summaries need a bounded refresh even when presence Realtime is healthy.
+    startFallback()
     logRealtimeSubscribe({ name: channelName, scope: 'page', tables: ['user_presence'] })
     const channel = supabase
       .channel(channelName)
@@ -582,7 +618,6 @@ function useDashboardPresenceUsers() {
       .subscribe((status) => {
         if (!active) return
         if (status === 'SUBSCRIBED') {
-          stopFallback()
           if (subscribedOnce) loadPresence()
           subscribedOnce = true
           return
@@ -604,7 +639,7 @@ function useDashboardPresenceUsers() {
     }
   }, [applyRealtimeEvent, enabled, loadPresence, publishRows, sessionUserId])
 
-  return enabled ? users : []
+  return enabled ? users.map(user => user.activity_period === activityPeriod ? user : { ...user, average_seconds: null }) : []
 }
 
 export function OnlineUsersProvider({ children }) {
@@ -612,6 +647,6 @@ export function OnlineUsersProvider({ children }) {
   return children
 }
 
-export function useOnlineUsers() {
-  return useDashboardPresenceUsers()
+export function useOnlineUsers(activityPeriod) {
+  return useDashboardPresenceUsers(activityPeriod)
 }

@@ -1,5 +1,6 @@
 import { apiFetch } from './apiClient'
 
+export const PRESENCE_FLUSH_EVENT = 'fb:presence-flush'
 export const PRESENCE_LOGOUT_EVENT = 'fb:presence-logout'
 export const PRESENCE_LOGOUT_STORAGE_KEY = 'fb_presence_logout'
 
@@ -13,13 +14,15 @@ function announcePresenceLogout(userId) {
 
 export async function clearPresenceBeforeLogout(userId = '') {
   if (!userId) return
+  const activity = { active_intervals: [] }
+  window.dispatchEvent(new CustomEvent(PRESENCE_FLUSH_EVENT, { detail: activity }))
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 2500)
   try {
     await apiFetch('/api/presence/offline', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ all_tabs: true }),
+      body: JSON.stringify({ all_tabs: true, active_intervals: activity.active_intervals }),
       signal: controller.signal
     })
   } catch {

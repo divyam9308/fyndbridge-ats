@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Presence activity verification</title><style>body{font-family:Arial,sans-serif;margin:24px;background:#f7f8fa}nav{display:flex;gap:8px;margin-bottom:24px}.ats-online-users-strip{--modern-border:#dbe3f1;--modern-shadow-soft:0 3px 12px #00126410;--navy-darkest:#001264;max-width:600px}</style></head><body><div id="probe"></div><script type="module">
+import { createElement as h, useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
+import { AuthContext } from '../../src/context/authStore.js'
+import { OnlineUsersProvider, useOnlineUsers } from '../../src/hooks/useOnlineUsers.js'
+import OnlineUsersStrip from '../../src/components/dashboard/OnlineUsersStrip.jsx'
+import { clearPresenceBeforeLogout } from '../../src/services/presenceSession.js'
+const user = { id:'00000000-0000-4000-8000-000000000001', email:'tester@fyndbridge.in', name:'Test User' }
+const session = JSON.parse(localStorage.getItem('sb-127-auth-token'))
+const auth = { user, session, profile:{ name:'Test User' }, loadProfile: async()=>({name:'Test User'}) }
+function Probe(){
+  const [period,setPeriod] = useState('FY 2026-27 Q3')
+  const users = useOnlineUsers(period)
+  return h('main',null,h('nav',null,...['Q1','Q3','Q4'].map(q=>h('button',{key:q,onClick:()=>setPeriod(`FY 2026-27 ${q}`)},q))),h(OnlineUsersStrip,{users,activityPeriod:period}),h('button',{onClick:()=>clearPresenceBeforeLogout(user.id)},'Sign out'))
+}
+createRoot(document.getElementById('probe')).render(h(AuthContext.Provider,{value:auth},h(MemoryRouter,null,h(OnlineUsersProvider,null,h(Probe)))))
+</script></body></html>

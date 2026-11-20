@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { formatActiveTime } from '../../services/presenceActivity'
 import DashboardAttendanceButton from './DashboardAttendanceButton'
 import './OnlineUsersStrip.css'
 
@@ -25,7 +26,7 @@ function userInitials(user) {
 
 function tooltipPosition(rect, itemCount = 1) {
   const width = itemCount > 1 ? 288 : 250
-  const height = itemCount > 1 ? Math.min(280, 56 + itemCount * 52) : 118
+  const height = itemCount > 1 ? Math.min(280, 56 + itemCount * 52) : 170
   const gap = 10
   const padding = 12
   const left = Math.min(Math.max(padding, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - padding)
@@ -50,8 +51,8 @@ function relativeTime(value) {
   return `${hours} hr ago`
 }
 
-function UserDetails({ user }) {
-  return <><div className={`online-users-tooltip-status is-${user.status || 'online'}`}><i />{statusLabel(user.status)}</div><strong>{user.name || user.email || 'User'}</strong><span>Last active: {relativeTime(user.last_seen_at)}</span>{user.current_path ? <span>Page: {user.current_path}</span> : null}{user.email ? <small>{user.email}</small> : null}</>
+function UserDetails({ user, activityPeriod }) {
+  return <><div className={`online-users-tooltip-status is-${user.status || 'online'}`}><i />{statusLabel(user.status)}</div><strong>{user.name || user.email || 'User'}</strong><span>Last active: {relativeTime(user.last_seen_at)}</span><span>Today: {formatActiveTime(user.today_seconds)}</span><span>Average: {formatActiveTime(user.average_seconds)}</span><small>{activityPeriod?.replace(/^(FY \d{4}-\d{2}) (Q[1-4])$/, '$2 · $1')} · Mon–Sat</small>{user.email ? <small>{user.email}</small> : null}</>
 }
 
 function OnlineUserAvatar({ user, index, onShow, onHide, firstAway }) {
@@ -59,12 +60,13 @@ function OnlineUserAvatar({ user, index, onShow, onHide, firstAway }) {
   return <button type="button" className={`online-users-avatar is-${user.status || 'online'}${firstAway ? ' is-first-away' : ''}`} style={{ '--avatar-gradient': user.avatar_color || AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }} aria-label={`${user.name || user.email || 'User'} is ${statusLabel(user.status).toLowerCase()}`} onMouseEnter={show} onMouseLeave={onHide} onFocus={show} onBlur={onHide}>{userInitials(user)}</button>
 }
 
-export default function OnlineUsersStrip({ users = [], showAttendance = false }) {
+export default function OnlineUsersStrip({ users = [], showAttendance = false, activityPeriod }) {
   const visibleUsers = users.filter(user => user.status === 'online' || user.status === 'away')
   const onlineUsers = visibleUsers.filter(user => user.status === 'online')
   const awayUsers = visibleUsers.filter(user => user.status === 'away')
   const orderedUsers = [...onlineUsers, ...awayUsers]
   const [active, setActive] = useState(null)
+  const activeUser = active && visibleUsers.find(user => user.id === active.user.id)
 
   useEffect(() => {
     if (!active) return undefined
@@ -86,6 +88,6 @@ export default function OnlineUsersStrip({ users = [], showAttendance = false })
       {orderedUsers.map((user, index) => <OnlineUserAvatar key={user.id || user.email} user={user} index={index} firstAway={onlineUsers.length > 0 && user.status === 'away' && index === onlineUsers.length} onShow={setActive} onHide={() => setActive(null)} />)}
     </div>
     {showAttendance ? <DashboardAttendanceButton /> : null}
-    {active ? createPortal(<div className="online-users-tooltip" style={tooltipPosition(active.rect)} role="tooltip"><UserDetails user={active.user} /></div>, document.body) : null}
+    {active && activeUser ? createPortal(<div className="online-users-tooltip" style={tooltipPosition(active.rect)} role="tooltip"><UserDetails user={activeUser} activityPeriod={activityPeriod} /></div>, document.body) : null}
   </section>
 }

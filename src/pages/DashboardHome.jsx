@@ -42,6 +42,7 @@ import {
 } from '../hooks/useDashboardStats'
 import { useOnlineUsers } from '../hooks/useOnlineUsers'
 import { useAdminAccess } from '../hooks/useAdminAccess'
+import { presenceQuarterPeriod } from '../services/presenceActivity'
 import OnlineUsersStrip from '../components/dashboard/OnlineUsersStrip'
 import {
   getStatusColor,
@@ -613,7 +614,8 @@ export default function DashboardHome() {
   const consultantSelectRef = useRef(null)
   const { loading, error, data } = useDashboardStats({ consultant, period })
   const { isSuperAdmin } = useAdminAccess({ loadPermissions: false })
-  const onlineUsers = useOnlineUsers()
+  const activityPeriod = presenceQuarterPeriod(period, financialYear)
+  const onlineUsers = useOnlineUsers(activityPeriod)
   const financialYearMonths = useMemo(() => dashboardFinancialYearMonths(financialYear), [financialYear])
   const financialYearPeriodSelected = period === financialYear
   const monthPeriodSelected = period === dashboardMonthPeriod(selectedMonth)
@@ -858,7 +860,7 @@ export default function DashboardHome() {
         )}
       </div>
 
-      <OnlineUsersStrip users={onlineUsers} showAttendance={!isSuperAdmin} />
+      <OnlineUsersStrip users={onlineUsers} activityPeriod={activityPeriod} showAttendance={!isSuperAdmin} />
 
       <section className="ats-dashboard-module ats-dashboard-module-mandates" aria-label="Mandates analytics">
       <div className="ats-dashboard-entity-layout">

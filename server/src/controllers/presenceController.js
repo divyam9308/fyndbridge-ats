@@ -1,4 +1,5 @@
 const supabase = require('../services/supabaseAdmin')
+const { quarterRange, recordActivity } = require('../services/presenceActivity')
 
 const OFFLINE_CUTOFF_MS = 120 * 1000
 
@@ -67,6 +68,7 @@ function aggregatePresence(rows) {
 
 async function listPresence(req, res) {
   try {
+    const range = quarterRange(req.query?.activity_period)
     const cutoff = new Date(Date.now() - OFFLINE_CUTOFF_MS).toISOString()
     const { data, error } = await supabase
       .from('user_presence')
@@ -88,10 +90,19 @@ async function listPresence(req, res) {
       inactiveIds = new Set((inactive || []).map((row) => row.user_id))
     }
     const visibleRows = (data || []).filter((row) => !inactiveIds.has(row.user_id))
-    return res.json({ data: aggregatePresence(visibleRows), tabs: visibleRows.map(serializeTab), cutoff })
+    const visibleIds = [...new Set(visibleRows.map(row => row.user_id))]
+    let activity = []
+    if (visibleIds.length) {
+      const { data: summaries, error: activityError } = await supabase.rpc('user_activity_summary', {
+        p_user_ids: visibleIds, p_start: range.start, p_end: range.end
+      })
+      if (activityError) throw activityError
+      activity = summaries || []
+    }
+    return res.json({ data: aggregatePresence(visibleRows), tabs: visibleRows.map(serializeTab), activity, activity_period: range.period, cutoff })
   } catch (err) {
     console.error('listPresence:', err.message || err)
-    return res.status(500).json({ error: 'Unable to load presence.' })
+    return res.status(err.statusCode || 500).json({ error: err.statusCode === 400 ? err.message : 'Unable to load presence.' })
   }
 }
 
@@ -118,6 +129,8 @@ async function heartbeat(req, res) {
       updated_at: new Date().toISOString()
     }
 
+    await recordActivity(supabase, userId, req.body.active_intervals)
+
     const { error } = await supabase
       .from('user_presence')
       .upsert(payload, { onConflict: 'user_id,tab_id' })
@@ -127,7 +140,7 @@ async function heartbeat(req, res) {
     return res.json({ ok: true, last_seen_at: payload.last_seen_at })
   } catch (err) {
     console.error('presenceHeartbeat:', err.message || err)
-    return res.status(500).json({ error: 'Unable to update presence.' })
+    return res.status(err.statusCode || 500).json({ error: err.statusCode === 400 ? err.message : 'Unable to update presence.' })
   }
 }
 
@@ -139,6 +152,8 @@ async function offline(req, res) {
     const tabId = clean(req.body.tab_id)
     if (!clearAllTabs && !tabId) return res.status(400).json({ error: 'Missing tab id.' })
 
+    await recordActivity(supabase, userId, req.body.active_intervals)
+
     let query = supabase
       .from('user_presence')
       .delete()
@@ -149,7 +164,7 @@ async function offline(req, res) {
     return res.json({ ok: true })
   } catch (err) {
     console.error('presenceOffline:', err.message || err)
-    return res.status(500).json({ error: 'Unable to clear presence.' })
+    return res.status(err.statusCode || 500).json({ error: err.statusCode === 400 ? err.message : 'Unable to clear presence.' })
   }
 }
 
