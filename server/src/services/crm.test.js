@@ -6,7 +6,7 @@ const { createDatabase, CONSULTANT, OTHER, INACTIVE, CLIENT } = require('../../t
 const { normalizeClientName } = require('../../../shared/clientNames.cjs')
 const MIGRATION = path.resolve(__dirname, '../../../supabase/migrations/20261019105523_business_development_crm.sql')
 const contact = { name: 'HR Contact', mobile: '+91 98765 43210', email: 'hr@example.test', designation: '', linkedin: '' }
-async function createCrmDatabase() { const db = await createDatabase(); await db.exec(await fs.readFile(MIGRATION, 'utf8')); await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261019110948_crm_probability_sorting.sql'), 'utf8')); await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261020042221_crm_optional_contact_details.sql'), 'utf8')); return db }
+async function createCrmDatabase() { const db = await createDatabase(); await db.exec(await fs.readFile(MIGRATION, 'utf8')); await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261019110948_crm_probability_sorting.sql'), 'utf8')); await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261020042221_crm_optional_contact_details.sql'), 'utf8')); await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261120204725_stop_business_conflict_retries.sql'), 'utf8')); return db }
 async function save(db, data, record = null, actor = CONSULTANT) { return (await db.query('select crm_save($1,$2,$3,$4) as data', [actor, record?.id || null, record?.version || null, JSON.stringify(data)])).rows[0].data }
 const scalar = async (db, sql, args = []) => Object.values((await db.query(sql, args)).rows[0])[0]
 test('CRM migration: transactions, persistence, duplicates, audit, concurrency and access control', async t => {
@@ -51,7 +51,7 @@ test('CRM migration: transactions, persistence, duplicates, audit, concurrency a
     const count = events.length
     multiple = await save(db, { status: 'Proposal Sent' }, multiple)
     assert.equal(await scalar(db, 'select count(*)::int from crm_activities where crm_client_id=$1', [multiple.id]), count)
-    await assert.rejects(save(db, { status: 'Won' }, original), error => error.code === '40001')
+    await assert.rejects(save(db, { status: 'Won' }, original), error => error.code === 'PT409')
   })
   await t.test('invalid contacts, missing mandatory data, unsafe URLs and invalid enums roll back atomically', async () => {
     for (const bad of [{ contacts: [] }, { organisation_name: '\u200b' }, { contacts: [contact, contact] }, { contacts: [{ ...contact, name: '' }] }, { contacts: [{ ...contact, mobile: '1'.repeat(101) }] }, { contacts: [{ ...contact, email: 'invalid' }] }, { contacts: [{ ...contact, linkedin: 'javascript:alert(1)' }] }, { status: 'Invalid' }, { conversion_probability: '100%' }]) {

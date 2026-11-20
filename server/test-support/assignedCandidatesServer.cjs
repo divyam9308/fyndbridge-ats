@@ -4,8 +4,7 @@ async function start(){
   // Synthetic local fixture. Never loads repository secrets or contacts production.
   for(const key of Object.keys(process.env)) if(/GEMINI.*KEY|SUPABASE.*KEY/.test(key)) delete process.env[key]
   const db=await createDatabase();const adapter=databaseAdapter(db)
-  const fs=require('node:fs/promises'),path=require('node:path')
-  await db.exec(await fs.readFile(path.resolve(__dirname,'../../supabase/migrations/20261019105523_business_development_crm.sql'),'utf8'))
+  await require('./crmSchema.cjs').installCrmSchema(db)
   const target=require.resolve('../src/services/supabaseAdmin');require.cache[target]={id:target,filename:target,loaded:true,exports:adapter}
   const PDFDocument=require('pdfkit');const chunks=[];const pdf=new PDFDocument();pdf.on('data',x=>chunks.push(x));const completed=new Promise(resolve=>pdf.on('end',resolve))
   pdf.text('Alex Example\nMobile: 9876543210\nEmail: alex@example.test\nExperience\nFinance Manager at Example Limited\nJanuary 2020 to Present\nSkills: Accounting, Budgeting, Reporting\nEducation\nBachelor of Commerce\nMumbai Maharashtra\n'+('Professional financial reporting and management experience. '.repeat(20)));pdf.end();await completed

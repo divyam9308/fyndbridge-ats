@@ -11,6 +11,16 @@ import { formatDateDDMMYYYY } from '../utils/dateFormat'
 import FormattedDateInput from './FormattedDateInput'
 import { crmRequest } from '../services/crmApi'
 import CrmOrganisationSummary from './CrmOrganisationSummary'
+import RecordConflictReview from './RecordConflictReview'
+
+const CRM_CONFLICT_FIELDS = [
+  { key: 'organisation_name', label: 'Organisation Name' }, { key: 'organisation_summary', label: 'Organisation Summary' },
+  { key: 'contacts', label: 'Contacts' }, { key: 'sector', label: 'Sector' }, { key: 'connected_through', label: 'Connected Through' },
+  { key: 'conversion_probability', label: 'Conversion Probability' }, { key: 'status', label: 'Status' },
+  { key: 'assigned_consultant_id', label: 'Assigned Consultant' }, { key: 'ats_client_id', label: 'Linked ATS client' },
+  { key: 'next_follow_up_date', label: 'Next Follow-up Date' }, { key: 'comment', label: 'Comments' }
+]
+const crmConflictValues = value => Object.fromEntries(CRM_CONFLICT_FIELDS.map(({ key }) => [key, key === 'comment' ? value?.comment ?? value?.latest_comment?.body ?? '' : value?.[key] ?? (key === 'organisation_summary' ? null : key === 'contacts' ? [] : '')]))
 
 export function CrmDialog({ title, onClose, busy = false, large = false, children, footer }) {
   const ref = useDialogFocus(onClose, { closeDisabled: busy })
@@ -26,6 +36,8 @@ export function CrmClientForm({ record, refreshLatest = false, onClose, onSaved 
   const { staff, selectableStaff, loading: staffLoading } = useStaffDirectory()
   const [form, setForm] = useState(() => ({ organisation_name: '', organisation_summary: null, contacts: [emptyContact()], sector: '', connected_through: '', conversion_probability: '', status: '', assigned_consultant_id: user?.id || session?.user?.id || '', next_follow_up_date: '', ...record, comment: record?.latest_comment?.body || '' }))
   const [target, setTarget] = useState(record)
+  const [original, setOriginal] = useState(() => crmConflictValues(record))
+  const [latest, setLatest] = useState(null)
   const [errors, setErrors] = useState({})
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -51,6 +63,7 @@ export function CrmClientForm({ record, refreshLatest = false, onClose, onSaved 
       if (edited.current || saving.current) return
       setTarget(data)
       setForm({ ...data, comment: data.latest_comment?.body || '' })
+      setOriginal(crmConflictValues(data))
     }).catch(failure => {
       if (!controller.signal.aborted) setRefreshError(failure.status === 404 ? 'This client is no longer available. Save will check the record again.' : 'Could not refresh the latest details. You can continue editing; Save will check for changes.')
     })
@@ -64,7 +77,7 @@ export function CrmClientForm({ record, refreshLatest = false, onClose, onSaved 
   const contactSet = (index, key, value) => set('contacts', form.contacts.map((contact, i) => i === index ? { ...contact, [key]: value } : contact))
   const save = async event => {
     event.preventDefault()
-    if (saving.current || summaryBusy) return
+    if (saving.current || summaryBusy || conflict) return
     const nextErrors = validateCrm(form)
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) { inputRefs.current[Object.keys(nextErrors)[0]]?.focus(); return }
@@ -76,7 +89,7 @@ export function CrmClientForm({ record, refreshLatest = false, onClose, onSaved 
       onSaved(data); onClose()
     } catch (failure) {
       if (failure.duplicate && failure.existing) setDuplicate(failure.existing)
-      else { setError(failure.message); setConflict(failure.status === 409) }
+      else { setError(failure.message); setLatest(null); setConflict(failure.code === 'RECORD_CONFLICT') }
     } finally { saving.current = false; setBusy(false) }
   }
   const selectDuplicate = async () => {
@@ -87,6 +100,7 @@ export function CrmClientForm({ record, refreshLatest = false, onClose, onSaved 
       if (duplicate.source === 'crm') {
         const { data } = await crmRequest(`/${duplicate.id}`)
         setTarget(data)
+        setOriginal(crmConflictValues(data))
         setForm({ ...data, contacts: [...data.contacts, ...form.contacts.filter(contact => (contact.name || contact.mobile || contact.email) && !data.contacts.some(existing => (contact.email?.trim() && existing.email?.trim().toLowerCase() === contact.email.trim().toLowerCase()) || (contact.mobile?.trim() && existing.mobile?.replace(/\s+/g, '') === contact.mobile.replace(/\s+/g, ''))))], comment: form.comment })
       } else {
         // Select the existing ATS identity, but save only in CRM.
@@ -97,9 +111,10 @@ export function CrmClientForm({ record, refreshLatest = false, onClose, onSaved 
     finally { saving.current = false; setBusy(false) }
   }
   const reload = async () => {
+    if (saving.current) return
     refreshController.current?.abort()
-    setBusy(true)
-    try { const { data } = await crmRequest(`/${target.id}`); setTarget(data); setForm({ ...data, comment: data.latest_comment?.body || '' }); edited.current = false; setError(''); setRefreshError(''); setConflict(false) } catch (failure) { setError(failure.message) } finally { setBusy(false) }
+    saving.current = true; setBusy(true)
+    try { const { data } = await crmRequest(`/${target.id}`); setLatest(data) } catch (failure) { setError(failure.message) } finally { saving.current = false; setBusy(false) }
   }
   const field = (key, label, { required = false, type = 'text', value = form[key] || '', onChange = value => set(key, value), options, maxLength } = {}) => <div className="form-group" key={key}>
     <label className="form-label" htmlFor={`crm-${key}`}>{label}{required && <span className="required"> *</span>}</label>
@@ -109,11 +124,17 @@ export function CrmClientForm({ record, refreshLatest = false, onClose, onSaved 
   </div>
   const assigned = form.assigned_consultant_id || ''
   const historical = assigned && !selectableStaff.some(person => person.user_id === assigned)
+  const conflictValue = (value, key) => {
+    if (key === 'assigned_consultant_id') return staff.find(person => person.user_id === value)?.name || (value ? 'Unavailable consultant' : 'Unassigned')
+    if (key === 'organisation_summary') return value?.text || '—'
+    if (key === 'contacts') return value.map(contact => Object.values(contact).filter(Boolean).join(' · ')).join('\n') || '—'
+    return String(value ?? '') || '—'
+  }
   return <CrmDialog key={duplicate ? 'duplicate' : 'form'} title={duplicate ? 'Duplicate Client' : target ? 'Edit Client' : 'Add Client'} onClose={duplicate ? () => { setDuplicate(null); setDetails(false) } : onClose} busy={busy} large={!duplicate} footer={duplicate ? <>
     <button className="btn-secondary" onClick={() => setDetails(value => !value)} disabled={busy}>View More</button>
     <button className="btn-secondary" onClick={() => { setDuplicate(null); setDetails(false) }} disabled={busy}>Cancel</button>
     <button className="btn-primary" onClick={selectDuplicate} disabled={busy}>{duplicate.source === 'crm' ? 'Update Client' : 'Select Existing Client'}</button>
-  </> : <><button type="button" className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="crm-client-form" className="btn-primary" disabled={busy || summaryBusy}>{busy ? 'Saving...' : summaryBusy ? 'Generating summary...' : 'Save'}</button></>}>
+  </> : <><button type="button" className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="crm-client-form" className="btn-primary" disabled={busy || summaryBusy || conflict}>{busy ? 'Saving...' : summaryBusy ? 'Generating summary...' : 'Save'}</button></>}>
     {duplicate ? <div className="modal-body">
       <p className="form-error">Client already exists. Select the existing client or add a contact person under that client.</p>
       <div className="duplicate-compare-grid"><div className="duplicate-compare-card"><div className="section-label">Existing Client · {duplicate.source === 'crm' ? 'CRM' : 'ATS Clients'}</div><div className="name-text">{duplicate.organisation_name}</div></div><div className="duplicate-compare-card"><div className="section-label">New Client</div><div className="name-text">{form.organisation_name}</div></div></div>
@@ -121,7 +142,7 @@ export function CrmClientForm({ record, refreshLatest = false, onClose, onSaved 
       {error && <p className="form-error" role="alert">{error}</p>}
     </div> : <form id="crm-client-form" className="modal-body" onSubmit={save} noValidate>
       {refreshError && <p className="sub-text" role="status">{refreshError}</p>}
-      {error && <div className="crm-error" role="alert">{error}{conflict && <button type="button" className="btn-secondary" onClick={reload} disabled={busy}>Reload latest (discard these edits)</button>}</div>}
+      {error && <div className="crm-error" role="alert">{error}{conflict && <RecordConflictReview key={latest?.version || 'unloaded'} fields={CRM_CONFLICT_FIELDS} original={original} draft={crmConflictValues(form)} latest={latest ? crmConflictValues(latest) : null} busy={busy} onLoadLatest={reload} formatValue={conflictValue} onResolved={merged => { setTarget(latest); setOriginal(crmConflictValues(latest)); setForm({ ...latest, ...merged }); edited.current = true; setLatest(null); setError(''); setRefreshError(''); setConflict(false) }} />}</div>}
       <fieldset disabled={busy} className="crm-form-fields"><div className="form-grid-2">
         {field('organisation_name', 'Organisation Name', { required: true, maxLength: 200 })}
         <div className="form-group"><label className="form-label" htmlFor="crm-created">Date</label><input id="crm-created" className="form-control" value={target ? formatDateDDMMYYYY(target.created_at) : 'Automatically set on save'} readOnly /></div>

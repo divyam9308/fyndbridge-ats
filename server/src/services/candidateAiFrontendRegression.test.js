@@ -18,7 +18,10 @@ test('pagination retention: page and page-size requests keep the applied validat
   assert.match(load, /limit:\s*String\(pageSize\)/)
   assert.match(load, /if \(aiFilters\)\s*\{[\s\S]*params\.set\('ai_filters', JSON\.stringify\(aiFilters\)\)/)
   assert.doesNotMatch(load, /ai_prompt/)
-  assert.match(load, /\[aiFilters, dashboardFilters, filterJob, page, pageSize, sortDirection, sortField\]/)
+  const dependencies = load.match(/\},\s*\[([^\]]+)\]\)/)?.[1].split(',').map(value => value.trim()) || []
+  for (const dependency of ['aiFilters', 'dashboardFilters', 'filterJob', 'page', 'pageSize', 'sortDirection', 'sortField', 'statusMutations']) {
+    assert.ok(dependencies.includes(dependency), `missing pagination dependency: ${dependency}`)
+  }
   assert.match(source, /onPageChange=\{setPage\}/)
   assert.match(source, /onPageSizeChange=\{\(value\) => \{ setPageSize\(value\); setPage\(1\) \}\}/)
 })

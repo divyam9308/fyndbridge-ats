@@ -7,11 +7,15 @@ import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { lockBodyScroll } from '../../utils/lockBodyScroll'
 import AssignmentSelect from './AssignmentSelect'
 import { ASSIGNMENT_STATUSES } from './assignmentStatuses'
+import RecordConflictReview from '../../components/RecordConflictReview'
 
 const editableValues = row => Object.fromEntries(['full_name', 'mobile_number', 'client_id', 'job_id', 'status', 'assigned_consultant_id'].map(key => [key, row[key]]))
+const CONFLICT_FIELDS = [{ key: 'full_name', label: 'Name' }, { key: 'mobile_number', label: 'Mobile' }, { key: 'client_id', label: 'Client' }, { key: 'job_id', label: 'Mandate' }, { key: 'status', label: 'Status' }, { key: 'assigned_consultant_id', label: 'Consultant' }]
 export default function AssignmentEditor({ row, consultants, onClose, onSaved }) {
   const [form, setForm] = useState(() => editableValues(row))
   const [version, setVersion] = useState(row.version)
+  const [original, setOriginal] = useState(() => editableValues(row))
+  const [latest, setLatest] = useState(null)
   const [options, setOptions] = useState({ clients: [], jobs: [] })
   const [loading, setLoading] = useState(true)
   const [attempt, setAttempt] = useState(0)
@@ -34,22 +38,28 @@ export default function AssignmentEditor({ row, consultants, onClose, onSaved })
   }, [attempt])
   const save = async event => {
     event.preventDefault()
-    if (lock.current) return
+    if (lock.current || failureKind === 'conflict') return
     lock.current = true; setPending(true); setError('')
     try { await assignedRequest(`/${row.id}`, { method: 'PATCH', body: JSON.stringify({ ...form, expected_version: version }) }); onSaved() }
-    catch (failure) { setError(failure.message); setFailureKind(failure.status === 409 ? 'conflict' : 'save') }
+    catch (failure) { setError(failure.message); setLatest(null); setFailureKind(failure.code === 'RECORD_CONFLICT' ? 'conflict' : 'save') }
     finally { lock.current = false; setPending(false) }
   }
   const reload = async () => {
     if (lock.current) return
     lock.current = true; setPending(true)
-    try { const { data } = await assignedRequest(`/${row.id}`); setForm(editableValues(data)); setVersion(data.version); setError(''); setFailureKind('') }
+    try { const { data } = await assignedRequest(`/${row.id}`); setLatest(data) }
     catch (failure) { setError(failure.message) }
     finally { lock.current = false; setPending(false) }
   }
   const uniqueClients = new Map(options.clients.map(client => [client.client_group_id || client.id, { id: client.client_group_id || client.id, name: client.name || client.client_name, displayId: client.client_display_id }]))
   const employees = consultants.some(person => person.id === row.assigned_consultant_id) ? consultants : [...consultants, { id: row.assigned_consultant_id, name: row.assigned_consultant_name || 'Current consultant (inactive)' }]
   const disabled = loading || pending
+  const conflictValue = (value, key) => {
+    if (key === 'client_id') return options.clients.find(item => (item.client_group_id || item.id) === value)?.name || options.clients.find(item => item.id === value)?.client_name || value
+    if (key === 'job_id') return options.jobs.find(item => item.id === value)?.title || value
+    if (key === 'assigned_consultant_id') return employees.find(item => item.id === value)?.name || value
+    return String(value ?? '') || '—'
+  }
   return createPortal(<div className="modal-overlay"><form className="modal-card modal-card-lg assigned-wizard assigned-edit-dialog" ref={dialog} role="dialog" aria-modal="true" aria-label="Edit assigned candidate" tabIndex={-1} onSubmit={save}>
     <div className="modal-header"><span className="modal-title">Edit assigned candidate</span><button type="button" className="modal-close" aria-label="Close edit" disabled={pending} onClick={onClose}><X size={16} /></button></div>
     <div className="modal-body"><div className="form-grid-2">
@@ -59,7 +69,7 @@ export default function AssignmentEditor({ row, consultants, onClose, onSaved })
       <AssignmentSelect label="Mandate" value={form.job_id} options={options.jobs.filter(job => job.client_id === form.client_id).map(job => ({ id: job.id, name: job.title || job.role, displayId: job.job_display_id }))} disabled={disabled} onChange={job_id => setForm(current => ({ ...current, job_id }))} />
       <AssignmentSelect label="Status" value={form.status} options={ASSIGNMENT_STATUSES.map(value => ({ id: value, name: value }))} disabled={disabled} onChange={status => setForm(current => ({ ...current, status }))} />
       <AssignmentSelect label="Consultant" value={form.assigned_consultant_id} options={employees} disabled={disabled} onChange={assigned_consultant_id => setForm(current => ({ ...current, assigned_consultant_id }))} />
-    </div>{loading && <p role="status">Loading clients and mandates…</p>}{error && <div className="form-error" role="alert">{error}{failureKind === 'conflict' && <button type="button" className="btn-secondary" disabled={pending} onClick={reload}>Reload latest (discard edits)</button>}{failureKind === 'options' && <button type="button" className="btn-secondary" disabled={pending} onClick={() => { setLoading(true); setAttempt(value => value + 1) }}>Reload options</button>}</div>}</div>
-    <div className="modal-footer"><button type="button" className="btn-secondary" disabled={pending} onClick={onClose}>Cancel</button><button type="submit" className="btn-primary" disabled={disabled || !form.client_id || !form.job_id || !form.assigned_consultant_id}>{pending ? 'Saving…' : 'Save changes'}</button></div>
+    </div>{loading && <p role="status">Loading clients and mandates…</p>}{error && <div className="form-error" role="alert">{error}{failureKind === 'conflict' && <RecordConflictReview key={latest?.version || 'unloaded'} fields={CONFLICT_FIELDS} original={original} draft={form} latest={latest} busy={pending} onLoadLatest={reload} formatValue={conflictValue} onResolved={merged => { setForm(editableValues(merged)); setOriginal(editableValues(latest)); setVersion(latest.version); setLatest(null); setError(''); setFailureKind('') }} />}{failureKind === 'options' && <button type="button" className="btn-secondary" disabled={pending} onClick={() => { setLoading(true); setAttempt(value => value + 1) }}>Reload options</button>}</div>}</div>
+    <div className="modal-footer"><button type="button" className="btn-secondary" disabled={pending} onClick={onClose}>Cancel</button><button type="submit" className="btn-primary" disabled={disabled || failureKind === 'conflict' || !form.client_id || !form.job_id || !form.assigned_consultant_id}>{pending ? 'Saving…' : 'Save changes'}</button></div>
   </form></div>, document.body)
 }

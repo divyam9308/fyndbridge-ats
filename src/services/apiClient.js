@@ -1,8 +1,11 @@
+import { createAuthRecovery } from './authRecovery'
+
 const API_UNAUTHORIZED_EVENT = 'fb:api-unauthorized'
 const API_INACTIVE_EVENT = 'fb:account-inactive'
 const documentOpenLocks = new Map()
 const debugCallCounts = {}
 const apiJsonCache = new Map()
+let nativeApiFetch
 const DOCUMENT_OPEN_TYPES = {
   cv: { bucket: 'resumes', endpoint: '/api/resumes/open' },
   resume: { bucket: 'resumes', endpoint: '/api/resumes/open' },
@@ -14,10 +17,28 @@ const DOCUMENT_OPEN_TYPES = {
 }
 
 const isPrivateApiUrl = (value) => {
-  const text = String(value || '')
+  const parsed = new URL(String(value || ''), window.location.origin)
+  if (parsed.origin !== window.location.origin) return false
+  const text = parsed.pathname
   const isPublicApi = text === '/api/public' || text.startsWith('/api/public/')
-  return text.startsWith('/api/') && !text.startsWith('/api/health') && !text.startsWith('/api/auth') && !isPublicApi
+  return text.startsWith('/api/') && !text.startsWith('/api/health') && !isPublicApi
 }
+
+const getSession = async () => {
+  const { supabase } = await import('./supabaseClient')
+  if (!supabase) return null
+  const { data } = await supabase.auth.getSession()
+  return data.session
+}
+const authenticatedRequest = createAuthRecovery({
+  getSession,
+  refreshSession: async () => {
+    const { supabase } = await import('./supabaseClient')
+    return supabase.auth.refreshSession()
+  },
+  fetch: request => (nativeApiFetch || window.fetch.bind(window))(request),
+  onFailure: detail => window.dispatchEvent(new CustomEvent(API_UNAUTHORIZED_EVENT, { detail }))
+})
 
 export async function getAccessToken() {
   const { supabase } = await import('./supabaseClient')
@@ -26,7 +47,6 @@ export async function getAccessToken() {
 
 export async function authHeaders(existing = undefined) {
   const headers = new Headers(existing || {})
-  if (headers.has('Authorization')) return headers
   const token = await getAccessToken()
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
@@ -35,17 +55,11 @@ export async function authHeaders(existing = undefined) {
 }
 
 export async function apiFetch(input, init = {}) {
-  const url = typeof input === 'string' ? input : input?.url || ''
+  const url = typeof input === 'string' ? input : input?.url || input?.href || ''
   const needsAuth = isPrivateApiUrl(url)
-  const headers = needsAuth
-    ? await authHeaders(init.headers || (typeof input !== 'string' ? input.headers : undefined))
-    : new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined) || {})
-
-  const response = await window.fetch(input, { ...init, headers })
-
-  if (needsAuth && response.status === 401) {
-    window.dispatchEvent(new CustomEvent(API_UNAUTHORIZED_EVENT, { detail: { url } }))
-  }
+  const response = needsAuth
+    ? await authenticatedRequest(typeof input === 'string' ? new URL(input, window.location.origin) : input, init)
+    : await (nativeApiFetch || window.fetch.bind(window))(input, init)
   if (needsAuth && response.status === 403) {
     const payload = await response.clone().json().catch(() => ({}))
     if (payload.code === 'ACCOUNT_INACTIVE') {
@@ -92,20 +106,16 @@ export function invalidateApiJsonCache(prefix = '') {
 export function installApiFetchInterceptor() {
   if (typeof window === 'undefined' || window.__fbApiFetchInstalled) return
 
-  const nativeFetch = window.fetch.bind(window)
+  nativeApiFetch = window.fetch.bind(window)
 
   window.fetch = async (input, init = {}) => {
-    const url = typeof input === 'string' ? input : input?.url || ''
-    const needsAuth = isPrivateApiUrl(url)
+    const url = typeof input === 'string' ? input : input?.url || input?.href || ''
     const trace = import.meta.env.VITE_DEBUG_PERF === 'true'
     const startedAt = trace ? performance.now() : 0
-    const headers = needsAuth
-      ? await authHeaders(init.headers || (typeof input !== 'string' ? input.headers : undefined))
-      : init.headers
 
     let response
     try {
-      response = await nativeFetch(input, needsAuth ? { ...init, headers } : init)
+      response = await apiFetch(input, init)
     } finally {
       if (trace || import.meta.env.DEV) {
         const parsedUrl = new URL(url || window.location.href, window.location.origin)
@@ -120,16 +130,6 @@ export function installApiFetchInterceptor() {
         if (trace) {
         console.debug('[perf]', { request: path, method: init.method || 'GET', timestamp: new Date().toISOString(), durationMs: Number((performance.now() - startedAt).toFixed(1)) })
         }
-      }
-    }
-
-    if (needsAuth && response.status === 401) {
-      window.dispatchEvent(new CustomEvent(API_UNAUTHORIZED_EVENT, { detail: { url } }))
-    }
-    if (needsAuth && response.status === 403) {
-      const payload = await response.clone().json().catch(() => ({}))
-      if (payload.code === 'ACCOUNT_INACTIVE') {
-        window.dispatchEvent(new CustomEvent(API_INACTIVE_EVENT, { detail: payload }))
       }
     }
 

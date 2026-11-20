@@ -1,12 +1,10 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs/promises')
-const path = require('node:path')
 const {createDatabase,assign,upload,id,ADMIN,SUPER,CONSULTANT,OTHER,INACTIVE,CLIENT,JOB}=require('../../test-support/assignedCandidatesSchema.cjs')
 const {databaseAdapter}=require('../../test-support/assignedCandidatesAdapter.cjs')
 test('selected-consultant permissions persist and enforce separate CRM, New/Delete All and Overall access',async t=>{
   const db=await createDatabase();t.after(()=>db.close())
-  await db.exec(await fs.readFile(path.resolve(__dirname,'../../../supabase/migrations/20261019105523_business_development_crm.sql'),'utf8'))
+  await require('../../test-support/crmSchema.cjs').installCrmSchema(db)
   const adapter=databaseAdapter(db),target=require.resolve('./supabaseAdmin')
   require.cache[target]={id:target,filename:target,loaded:true,exports:adapter}
   const express=require('express'),app=express();app.use(express.json())
@@ -17,7 +15,7 @@ test('selected-consultant permissions persist and enforce separate CRM, New/Dele
   app.use('/api/assigned-candidates',require('../middleware/requireAuth'),require('../routes/assignedCandidates'))
   const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)))
   const base=`http://127.0.0.1:${server.address().port}`
-  const request=async(route,method='GET',body)=>{const response=await fetch(base+route,{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {status:response.status,...await response.json()}}
+  const request=async(route,method='GET',body)=>{const response=await fetch(base+route,{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {...await response.json(),status:response.status}}
   const set=async(key,ids,role='admin_only')=>{current=SUPER;const result=await request('/api/admin/page-view-permissions','PATCH',{pageKey:key,viewPermission:role,allowedUserIds:ids});assert.equal(result.status,200,JSON.stringify(result));return result}
   const own=await assign(db,801,{status:'Interested'}),other=await assign(db,802,{consultant:OTHER,status:'Interested'})
   await assign(db,803);await assign(db,804,{status:'Didn’t Pick Up'});await assign(db,805,{consultant:OTHER})
@@ -31,7 +29,9 @@ test('selected-consultant permissions persist and enforce separate CRM, New/Dele
   await t.test('CRM visibility supports role plus exact selected consultants and rejects other users',async()=>{
     const result=await set('crm',[CONSULTANT])
     assert.deepEqual(result.consultantAccess.crm,[CONSULTANT])
-    current=CONSULTANT;assert.equal((await request('/api/crm')).status,200)
+    await db.query('select crm_save($1,null,null,$2)',[CONSULTANT,{organisation_name:'Accessible CRM Client',contacts:[{name:'CRM HR'}]}])
+    current=CONSULTANT;const list=await request('/api/crm');assert.equal(list.status,200)
+    assert.equal(list.data[0].organisation_name,'Accessible CRM Client')
     current=OTHER;assert.equal((await request('/api/crm')).status,403)
     current=ADMIN;assert.equal((await request('/api/crm')).status,200)
   })
@@ -65,7 +65,7 @@ test('selected-consultant permissions persist and enforce separate CRM, New/Dele
     assert.equal((await db.query('select count(*)::int as n from assigned_candidates where id=$1',[other.id])).rows[0].n,1)
     assert.equal((await db.query("select count(*)::int as n from assigned_candidates where assigned_consultant_id=$1 and status in ('Not Contacted','Didn’t Pick Up')",[CONSULTANT])).rows[0].n,2)
   })
-  await t.test('Overall grants read scope and aggregate badge metadata without New, deletion, reassignment or colleague writes',async()=>{
+  await t.test('Overall grants visible-row editing and transfer without New or deletion rights',async()=>{
     await set('assigned_candidates_overall',[OTHER]);current=OTHER
     const result=await request('/api/assigned-candidates')
     assert.equal(result.can_view_overall,true);assert.equal(result.can_create,false);assert.equal(result.can_manage,false)
@@ -73,12 +73,21 @@ test('selected-consultant permissions persist and enforce separate CRM, New/Dele
     const count=await request('/api/assigned-candidates/count');assert.equal(count.threshold,50);assert.equal(count.can_view_overall,true)
     const colleague=result.data.find(row=>row.assigned_consultant_id===CONSULTANT)
     assert.equal((await request(`/api/assigned-candidates/${colleague.id}/cv`)).status,200)
-    assert.equal((await request(`/api/assigned-candidates/${colleague.id}/status`,'PATCH',{status:'Interested'})).status,403)
-    assert.equal((await request(`/api/assigned-candidates/${colleague.id}/transfer`,'POST',{})).status,403)
+    assert.equal((await request(`/api/assigned-candidates/${colleague.id}/status`,'PATCH',{status:'Interested'})).status,200)
+    const detail=await request(`/api/assigned-candidates/${colleague.id}`)
+    assert.equal(detail.status,200)
+    const updated=await request(`/api/assigned-candidates/${colleague.id}`,'PATCH',{full_name:'Overall edited colleague',expected_version:Number(detail.data.version)})
+    assert.equal(updated.status,200,JSON.stringify(updated))
+    assert.equal((await request(`/api/assigned-candidates/${colleague.id}/consultant`,'PATCH',{assigned_consultant_id:OTHER})).status,200)
+    assert.equal((await request(`/api/assigned-candidates/${colleague.id}/consultant`,'PATCH',{assigned_consultant_id:CONSULTANT})).status,200)
+    assert.equal((await request(`/api/assigned-candidates/${colleague.id}`,'DELETE',{})).status,403)
+    const transferable=await assign(db,809,{status:'Interested',consultant:CONSULTANT})
+    const transferred=await request(`/api/assigned-candidates/${transferable.id}/transfer`,'POST',{full_name:'Overall transfer',mobile_number:'9898989898',email:'overall-transfer@example.test',client_id:CLIENT,job_id:JOB,status:'Interested',current_salary:'10',expected_salary:'15',experience_years:'5',notice_period:'30'})
+    assert.equal(transferred.status,201,JSON.stringify(transferred))
     assert.equal((await request('/api/assigned-candidates/delete','POST',{contacted_only:true})).status,403)
     current=CONSULTANT;const individual=await request('/api/assigned-candidates/count');assert.equal(individual.threshold,10);assert.equal(individual.can_view_overall,false)
   })
-  await t.test('RLS permits cross-consultant reads only for the selected Overall reader, with no direct mutation grants',async()=>{
+  await t.test('RLS permits cross-consultant reads only for the selected Overall user, with no direct mutation grants',async()=>{
     await db.exec(`set role authenticated;select set_config('request.jwt.claim.sub','${OTHER}',false)`)
     assert.ok((await db.query('select * from assigned_candidates')).rows.some(row=>row.assigned_consultant_id===CONSULTANT))
     await assert.rejects(db.query('delete from assigned_candidates'),/permission denied/)

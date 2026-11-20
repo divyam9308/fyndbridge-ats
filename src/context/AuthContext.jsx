@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
-import { API_INACTIVE_EVENT, API_UNAUTHORIZED_EVENT, apiFetch } from '../services/apiClient'
+import { API_INACTIVE_EVENT, API_UNAUTHORIZED_EVENT, apiFetch, invalidateApiJsonCache } from '../services/apiClient'
 import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
 import { AuthContext } from './authStore'
 import { useAuth } from './useAuth'
@@ -10,6 +10,7 @@ import { usePageViewPermissions } from '../hooks/usePageViewPermissions'
 import AuthenticatedShellSkeleton from '../components/AuthenticatedShellSkeleton'
 import { preloadAuthenticatedRoute } from '../utils/routePreload'
 import { clearPresenceBeforeLogout } from '../services/presenceSession'
+import { createSessionFailureHandler } from '../services/authRecovery'
 
 const DEACTIVATION_MESSAGE = 'Your account has been deactivated. Please contact an administrator.'
 const STATUS_EVENT = 'fb:employee-status-changed'
@@ -44,9 +45,11 @@ export function AuthProvider({ children }) {
   const [employmentStatusError, setEmploymentStatusError] = useState('')
   const [employmentStatusByUserId, setEmploymentStatusByUserId] = useState({})
   const [accountNotice, setAccountNotice] = useState('')
+  const [loginRedirect, setLoginRedirect] = useState('/login')
   const profileRequestRef = useRef(null)
   const statusCheckedUserRef = useRef('')
   const inactiveLogoutRef = useRef(false)
+  const currentSessionRef = useRef(null)
   const navigate = useNavigate()
 
   const registerEmploymentStatuses = useCallback((rows) => {
@@ -66,6 +69,8 @@ export function AuthProvider({ children }) {
   }, [])
 
   const clearAuthState = useCallback(() => {
+    currentSessionRef.current = null
+    invalidateApiJsonCache()
     setSession(null)
     setUser(null)
     setProfile(null)
@@ -79,12 +84,13 @@ export function AuthProvider({ children }) {
     inactiveLogoutRef.current = true
     const changed = { user_id: userId, status: 'inactive' }
     setAccountNotice(DEACTIVATION_MESSAGE)
+    setLoginRedirect('/login?error=inactive')
     setEmploymentStatus('inactive')
     registerEmploymentStatuses(changed)
     window.sessionStorage.setItem('fb_login_message', DEACTIVATION_MESSAGE)
     window.dispatchEvent(new CustomEvent(STATUS_EVENT, { detail: changed }))
     await clearPresenceBeforeLogout(userId)
-    if (supabase) await supabase.auth.signOut().catch(() => null)
+    if (supabase) await supabase.auth.signOut({ scope: 'local' }).catch(() => null)
     clearAuthState()
     navigate('/login?error=inactive', { replace: true })
   }, [clearAuthState, navigate, registerEmploymentStatuses])
@@ -153,6 +159,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let mounted = true
+    const authTasks = new Set()
 
     async function acceptSession(nextSession) {
       const email = nextSession?.user?.email || ''
@@ -162,12 +169,14 @@ export function AuthProvider({ children }) {
         return false
       }
       if (!email.endsWith('@fyndbridge.in')) {
-        await supabase.auth.signOut()
+        await supabase.auth.signOut({ scope: 'local' })
         clearAuthState()
         navigate('/login?error=domain', { replace: true })
         return false
       }
       inactiveLogoutRef.current = false
+      setLoginRedirect('/login')
+      currentSessionRef.current = nextSession
       setSession(nextSession)
       setUser(nextSession.user)
       syncSessionStorage(nextSession.user)
@@ -194,22 +203,30 @@ export function AuthProvider({ children }) {
     initAuth()
     if (!supabase) return () => { mounted = false }
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mounted) return
       if (event === 'SIGNED_OUT') {
-        const inactive = inactiveLogoutRef.current
         statusCheckedUserRef.current = ''
         clearAuthState()
-        navigate(inactive ? '/login?error=inactive' : '/login', { replace: true })
         return
       }
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-        await acceptSession(nextSession)
+        currentSessionRef.current = nextSession
+        // API recovery may refresh again. Run it outside the SDK's auth-event
+        // callback so a TOKEN_REFRESHED notification cannot wait on itself.
+        const task = window.setTimeout(() => {
+          authTasks.delete(task)
+          if (mounted && currentSessionRef.current?.access_token === nextSession?.access_token) {
+            acceptSession(nextSession).catch(() => { if (mounted) setLoading(false) })
+          }
+        }, 0)
+        authTasks.add(task)
       }
     })
 
     return () => {
       mounted = false
+      authTasks.forEach(task => window.clearTimeout(task))
       listener.subscription.unsubscribe()
     }
   }, [checkEmploymentStatus, clearAuthState, navigate])
@@ -255,11 +272,18 @@ export function AuthProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    const handleUnauthorized = async () => {
-      if (inactiveLogoutRef.current) return
-      if (supabase) await supabase.auth.signOut()
-      clearAuthState()
-      navigate('/login?error=session', { replace: true })
+    const failSession = createSessionFailureHandler({
+      getSession: async () => supabase ? (await supabase.auth.getSession()).data.session : null,
+      getObservedSession: () => currentSessionRef.current,
+      signOut: options => supabase.auth.signOut(options),
+      onFailure: () => {
+        setLoginRedirect('/login?error=session')
+        clearAuthState()
+        navigate('/login?error=session', { replace: true })
+      }
+    })
+    const handleUnauthorized = event => {
+      if (!inactiveLogoutRef.current) failSession(event.detail).catch(() => null)
     }
     const handleInactive = () => deactivateAccount(session?.user?.id)
     window.addEventListener(API_UNAUTHORIZED_EVENT, handleUnauthorized)
@@ -272,6 +296,7 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => ({
     session,
+    loginRedirect,
     user,
     profile,
     profileLoading,
@@ -286,14 +311,15 @@ export function AuthProvider({ children }) {
     setProfile,
     signOut: async () => {
       inactiveLogoutRef.current = false
+      setLoginRedirect('/login')
       await clearPresenceBeforeLogout(session?.user?.id || user?.id || '')
-      if (supabase) await supabase.auth.signOut()
+      if (supabase) await supabase.auth.signOut({ scope: 'local' })
       else {
         clearAuthState()
         navigate('/login', { replace: true })
       }
     }
-  }), [clearAuthState, employmentStatus, employmentStatusByUserId, employmentStatusError, employmentStatusLoading, loadProfile, loading, navigate, profile, profileLoading, registerEmploymentStatuses, retryEmploymentStatus, session, user])
+  }), [clearAuthState, employmentStatus, employmentStatusByUserId, employmentStatusError, employmentStatusLoading, loadProfile, loading, loginRedirect, navigate, profile, profileLoading, registerEmploymentStatuses, retryEmploymentStatus, session, user])
 
   return (
     <AuthContext.Provider value={value}>
@@ -304,7 +330,7 @@ export function AuthProvider({ children }) {
 }
 
 export function RequireAuth({ children }) {
-  const { loading, isAuthenticated, employmentStatusError, retryEmploymentStatus, profile, profileLoading, loadProfile, session } = useAuth()
+  const { loading, isAuthenticated, employmentStatusError, retryEmploymentStatus, profile, profileLoading, loadProfile, session, loginRedirect } = useAuth()
   const adminAccess = useAdminAccess({ loadPermissions: false })
   const pageViews = usePageViewPermissions({ isAdmin: adminAccess.isAdmin, isSuperAdmin: adminAccess.isSuperAdmin })
   const location = useLocation()
@@ -346,7 +372,7 @@ export function RequireAuth({ children }) {
   }
 
   if (loading) return <AuthenticatedShellSkeleton />
-  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />
+  if (!isAuthenticated) return <Navigate to={loginRedirect || '/login'} replace state={{ from: location }} />
   if (employmentStatusError) {
     return (
       <div className="route-loading employment-status-error" role="alert">

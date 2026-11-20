@@ -31,17 +31,19 @@ async function context(req) {
   req.assignedAccess={ admin, canCreate, canViewOverall, scope: assignmentScope(req.user, canViewOverall, req.query.consultant_id || req.body?.consultant_id) }
   return req.assignedAccess
 }
-async function getRow(req, { write = true } = {}) {
+async function getRow(req) {
   const { admin, canViewOverall } = await context(req)
   let query = supabase.from('assigned_candidates').select('*,assigned_candidate_uploads(*)').eq('id', req.params.id)
-  if (!admin && (write || !canViewOverall)) query = query.eq('assigned_consultant_id', req.user.id)
+  if (!admin && !canViewOverall) query = query.eq('assigned_consultant_id', req.user.id)
   const row = unwrap(await query.maybeSingle())
   if (!row) throw fail('Assignment not found.', 404)
   return row
 }
 async function creationContext(req) { const result = await context(req); if (!result.canCreate) throw fail('New / Delete All access required.',403); return result }
+async function editingContext(req) { const result = await context(req); if (!result.canCreate && !result.canViewOverall) throw fail('Assignment editing access required.',403); return result }
 const handle = fn => async (req, res) => {
   try { await fn(req, res) } catch (error) {
+    if (error.code === 'PT409') return res.status(409).json({ code: 'RECORD_CONFLICT', error: 'This assignment changed since you opened it. Review the latest changes before saving again. Your edits have been kept.' })
     const status = error.statusCode || (error.code === '42501' ? 403 : ['22023','23505','P0001','23514','22P02','40001'].includes(error.code) ? 409 : error.code === 'P0002' ? 404 : 500)
     if (status === 500) console.error('assigned candidates:', error.code || error.message)
     res.status(status).json({ error: status === 500 ? 'Unable to complete this request. Please retry.' : error.message })
@@ -132,12 +134,12 @@ exports.status = handle(async(req,res)=>{
   res.json({success:true})
 })
 exports.detail = handle(async(req,res)=>{
-  await creationContext(req)
+  await editingContext(req)
   const row=await getRow(req)
   res.json({data:Object.fromEntries(['full_name','mobile_number','client_id','job_id','assigned_consultant_id','status','version'].map(key=>[key,row[key]]))})
 })
 exports.update = handle(async(req,res)=>{
-  await creationContext(req)
+  await editingContext(req)
   const row=await getRow(req)
   const allowed=new Set(['full_name','mobile_number','client_id','job_id','assigned_consultant_id','status','expected_version'])
   if (!req.body || Object.keys(req.body).some(key=>!allowed.has(key)) || !Number.isSafeInteger(req.body.expected_version) || req.body.expected_version<1) throw fail('Send valid assignment fields and the original record version.')
@@ -148,7 +150,7 @@ exports.update = handle(async(req,res)=>{
   res.json({data})
 })
 exports.reassign = handle(async(req,res)=>{
-  await creationContext(req)
+  await editingContext(req)
   const row=await getRow(req); const id=req.body.assigned_consultant_id
   const employees=await listEmployeeDirectory()
   if(!employees.some(e=>e.user_id===id&&e.status==='active')) throw fail('Select an Active consultant.')
@@ -156,7 +158,7 @@ exports.reassign = handle(async(req,res)=>{
   res.json({success:true})
 })
 exports.cv = handle(async(req,res)=>{
-  const row=await getRow(req,{write:false}); const cv=row.assigned_candidate_uploads
+  const row=await getRow(req); const cv=row.assigned_candidate_uploads
   const data=unwrap(await supabase.storage.from('resumes').createSignedUrl(cv.cv_storage_path,300))
   res.json({url:data.signedUrl,fileName:cv.cv_original_name,contentType:cv.cv_mimetype})
 })

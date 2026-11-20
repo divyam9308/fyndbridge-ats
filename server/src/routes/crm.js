@@ -109,6 +109,7 @@ router.delete('/:id', safe(async (req, res) => {
 }))
 router.use((error, req, res, next) => {
   if (res.headersSent) return next(error)
+  if (error.code === 'PT409') return res.status(409).json({ code: 'RECORD_CONFLICT', error: 'This record changed since you opened it. Review the latest changes before saving again. Your edits have been kept.' })
   if (error.code?.startsWith('SUMMARY_')) {
     if (req.path === '/organisation-summary') console.warn('crm_organisation_summary_failed', {
       code: error.code, userId: req.user?.id,

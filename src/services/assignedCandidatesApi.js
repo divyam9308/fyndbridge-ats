@@ -6,7 +6,7 @@ export async function assignedRequest(path = '', init = {}) {
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
     const error = new Error((response.status === 413 ? 'This CV exceeds the deployment upload limit. Choose a smaller file.' : payload.error) || Object.values(payload.errors || {})[0] || 'Unable to complete this request.')
-    Object.assign(error, { status: response.status, duplicate: payload.duplicate ? payload : null, exactAssociation: payload.exactAssociation })
+    Object.assign(error, { status: response.status, code: payload.code, duplicate: payload.duplicate ? payload : null, exactAssociation: payload.exactAssociation })
     throw error
   }
   return payload
