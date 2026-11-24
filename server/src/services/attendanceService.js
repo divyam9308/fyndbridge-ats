@@ -5,6 +5,7 @@ const {buildAttendancePeriodSummary}=require('./attendancePeriodSummary')
 const {excludeSuperAdminProfiles,isSuperAdminProfile}=require('./attendanceLeaveEligibility')
 const {getEmployeeStatus}=require('./employeeStatus')
 const {inactiveFrom,employmentAsOf,periodEmployeeProfiles}=require('./employmentRoster')
+const {quarterRange}=require('./presenceActivity')
 const KEYS=['attendance_approve_corrections','attendance_approve_leave','attendance_view_all','attendance_manage_holidays','attendance_manage_leave_balances','attendance_receive_correction_notifications','attendance_receive_leave_notifications']
 const clean=v=>String(v||'').trim()
 let openClockInsExpiredBefore=''
@@ -123,18 +124,22 @@ async function team(user,year,month,financialYear,includeInactive=false){
  const todayProfiles=buildActiveProfiles(profilesResult.data,statusesResult.data,adminsResult.data)
  const start=`${year}-${String(month).padStart(2,'0')}-01`,end=new Date(Date.UTC(+year,+month,0)).toISOString().slice(0,10)
  const profiles=periodEmployeeProfiles(profilesResult.data,statusesResult.data,adminsResult.data,{start,end,today:date,includeInactive})
+ const activityRange=quarterRange(undefined,new Date(`${start}T12:00:00Z`))
  if(!profiles.length&&!todayProfiles.length)return {rows:[],today:{date,present:[],leave:[],unmarked:[]}}
  const userIds=todayProfiles.map(profile=>profile.user_id)
- const [attendanceResult,leaveResult,correctionResult,holidayRows,rows]=await Promise.all([
+ const [attendanceResult,leaveResult,correctionResult,holidayRows,rows,activityResult]=await Promise.all([
   supabase.from('attendance_records').select('user_id,status,clock_in_at,clock_out_at,updated_at').eq('attendance_date',date).in('user_id',userIds),
   supabase.from('leave_requests').select('user_id,duration_type,start_date,end_date,status,reviewed_at').eq('status','approved').lte('start_date',date).gte('end_date',date).in('user_id',userIds),
   supabase.from('attendance_correction_requests').select('user_id,existing_clock_in_at,existing_clock_out_at,status').eq('status','pending').eq('attendance_date',date).in('user_id',userIds),
   holidays(date,date),
-  Promise.all(profiles.map(async profile=>{const [monthData,leaveBalance]=await Promise.all([monthly(user,profile.user_id,year,month),leaveBalanceSummary(profile.user_id,financialYear)]);return {user:profile,summary:monthData.kpis,leave_balance:leaveBalance}}))
+  Promise.all(profiles.map(async profile=>{const [monthData,leaveBalance]=await Promise.all([monthly(user,profile.user_id,year,month),leaveBalanceSummary(profile.user_id,financialYear)]);return {user:profile,summary:monthData.kpis,leave_balance:leaveBalance}})),
+  profiles.length?supabase.rpc('user_activity_summary',{p_user_ids:profiles.map(profile=>profile.user_id),p_start:activityRange.start,p_end:activityRange.end}):{data:[]}
  ])
- for(const result of [attendanceResult,leaveResult,correctionResult])if(result.error)throw result.error
+ for(const result of [attendanceResult,leaveResult,correctionResult,activityResult])if(result.error)throw result.error
+ const activityByUser=new Map((activityResult.data||[]).map(row=>[row.user_id,row]))
  return {
-  rows,
+  rows:rows.map(row=>({...row,activity_summary:activityByUser.get(row.user.user_id)||null})),
+  activity_period:activityRange.period,
   today:buildTodayAttendanceSummary({date,profiles:todayProfiles,attendanceRecords:attendanceResult.data||[],approvedLeaves:leaveResult.data||[],pendingCorrections:correctionResult.data||[],holidays:holidayRows})
  }
 }

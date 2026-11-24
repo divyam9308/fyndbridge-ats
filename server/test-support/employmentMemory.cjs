@@ -36,6 +36,12 @@ function employmentDatabase(today = localDate()) {
   const keysFor = table => ({ employee_statuses: ['user_id'], performance_reviews: ['employee_user_id', 'review_period'], performance_review_rows: ['review_id', 'row_order'], attendance_records: ['user_id', 'attendance_date'] }[table] || ['id'])
   const database = {
     tables, operations, departure, oldDate,
+    activitySummaries: new Map(),
+    async rpc(name, args) {
+      assert.equal(name, 'user_activity_summary')
+      operations.push({ kind: 'rpc', name, args: structuredClone(args) })
+      return { data: args.p_user_ids.map(user_id => ({ user_id, average_seconds: 0, average_days: 0, ...database.activitySummaries.get(user_id) })), error: null }
+    },
     auth: { admin: { getUserById: async id => ({ data: { user: { id, email: profiles.find(p => p.user_id === id)?.email, created_at: '2026-04-01T00:00:00Z' } }, error: null }) } },
     from(table) {
       assert.ok(Object.hasOwn(tables, table), `Unexpected employment table: ${table}`)
