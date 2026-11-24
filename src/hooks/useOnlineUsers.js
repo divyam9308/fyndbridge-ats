@@ -4,6 +4,7 @@ import { useAuth } from '../context/useAuth'
 import { apiFetch } from '../services/apiClient'
 import { PRESENCE_FLUSH_EVENT, PRESENCE_LOGOUT_EVENT, PRESENCE_LOGOUT_STORAGE_KEY } from '../services/presenceSession'
 import { createActivityTracker, activityDate } from '../services/presenceActivity'
+import { createActivityOutbox } from '../services/activityOutbox'
 import { supabase } from '../services/supabaseClient'
 import { logRealtimeRemove, logRealtimeSubscribe } from '../utils/supabaseRealtimeDebug'
 
@@ -164,6 +165,11 @@ function usePresenceHeartbeatLeader() {
     let initialHeartbeatTimer = null
     let storageAvailable = true
     const activityTracker = createActivityTracker()
+    const activityOutbox = createActivityOutbox(userId)
+    const persistActivity = () => {
+      activityTracker.sample()
+      activityOutbox.enqueue(activityTracker.takeIntervals())
+    }
 
     const safeGet = (key) => {
       try { return window.localStorage.getItem(key) } catch {
@@ -203,6 +209,7 @@ function usePresenceHeartbeatLeader() {
 
     const writeLocalState = ({ forceHeartbeat = false, refreshOnly = false } = {}) => {
       const activity = activityTracker.sample()
+      activityOutbox.enqueue(activityTracker.takeIntervals())
       const { status } = activity
       const currentPath = pathRef.current
       const changed = status !== lastLocalState.status || currentPath !== lastLocalState.path
@@ -211,7 +218,6 @@ function usePresenceHeartbeatLeader() {
       }
       lastLocalState = {
         ...lastLocalState,
-        intervals: activity.intervals,
         seen_at: Date.now(),
         force_heartbeat: forceHeartbeat ? createPresenceTabId() : ''
       }
@@ -241,8 +247,7 @@ function usePresenceHeartbeatLeader() {
       const preferred = [...states]
         .filter(state => !online || state.status === 'online')
         .sort((a, b) => Number(b.changed_at || 0) - Number(a.changed_at || 0))[0] || lastLocalState
-      return { status: online ? 'online' : 'away', path: preferred.path || pathRef.current,
-        intervals: states.flatMap(state => state.intervals || []).filter(item => Date.parse(item.end) > Date.now() - OFFLINE_CUTOFF_MS).slice(-500) }
+      return { status: online ? 'online' : 'away', path: preferred.path || pathRef.current }
     }
 
     const ensureMetadata = async () => {
@@ -280,6 +285,7 @@ function usePresenceHeartbeatLeader() {
       }
 
       heartbeatInFlight = true
+      const activityBatch = activityOutbox.snapshot()
       try {
         const metadata = await ensureMetadata()
         const response = await apiFetch('/api/presence/heartbeat', {
@@ -290,10 +296,16 @@ function usePresenceHeartbeatLeader() {
             tab_id: tabId,
             status: browserState.status,
             current_path: browserState.path,
-            active_intervals: browserState.intervals
+            active_intervals: activityBatch.intervals,
+            activity_queue_version: 1
           })
         })
         if (response.ok) {
+          const receipt = await response.json()
+          if (receipt.activity_queue_version === 1) {
+            activityBatch.acknowledge()
+            if (activityOutbox.snapshot().intervals.length) pendingHeartbeat = true
+          }
           lastSuccessfulSignature = signature
           if (destroyed || suspended || !isLeader) markTabOffline(tabId)
         }
@@ -303,12 +315,12 @@ function usePresenceHeartbeatLeader() {
         heartbeatInFlight = false
         if (pendingHeartbeat) {
           pendingHeartbeat = false
-          heartbeat()
+          heartbeat({ force: true })
         }
       }
     }
 
-    const markTabOffline = (targetTabId, intervals = []) => {
+    const markTabOffline = (targetTabId, batch = null) => {
       if (!targetTabId || !accessToken) return
       window.fetch('/api/presence/offline', {
         method: 'POST',
@@ -317,8 +329,8 @@ function usePresenceHeartbeatLeader() {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ tab_id: targetTabId, active_intervals: intervals })
-      }).catch(() => {})
+        body: JSON.stringify({ tab_id: targetTabId, active_intervals: batch?.intervals || [], activity_queue_version: 1 })
+      }).then(async response => { if (response.ok && (await response.json()).activity_queue_version === 1) batch?.acknowledge() }).catch(() => {})
     }
 
     const releaseLeadership = () => {
@@ -387,6 +399,7 @@ function usePresenceHeartbeatLeader() {
 
     const stopAll = ({ logout = false } = {}) => {
       if (destroyed) return
+      persistActivity()
       destroyed = true
       stopLeader({ release: true })
       if (failoverTimer) window.clearTimeout(failoverTimer)
@@ -436,18 +449,20 @@ function usePresenceHeartbeatLeader() {
     }
     const handleFlush = (event) => {
       writeLocalState({ refreshOnly: true })
-      event.detail.active_intervals = readBrowserState().intervals
+      const batch = activityOutbox.snapshot()
+      event.detail.active_intervals = batch.intervals
+      event.detail.acknowledge = batch.acknowledge
     }
-    const handleOnline = () => publishLocalState()
+    const handleOnline = () => publishLocalState({ forceHeartbeat: true })
     const handlePageHide = () => {
       if (destroyed || suspended) return
       writeLocalState({ refreshOnly: true })
-      const finalIntervals = readBrowserState().intervals
+      const finalBatch = activityOutbox.snapshot()
       suspended = true
       stopLeader({ release: true })
       safeRemove(ownStateKey)
       writeSignal('state-removed')
-      markTabOffline(tabId, finalIntervals)
+      markTabOffline(tabId, finalBatch)
     }
     const handlePageShow = () => {
       if (destroyed || !suspended) return

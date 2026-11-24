@@ -129,7 +129,7 @@ async function heartbeat(req, res) {
       updated_at: new Date().toISOString()
     }
 
-    await recordActivity(supabase, userId, req.body.active_intervals)
+    await recordActivity(supabase, userId, req.body.active_intervals, req.body.activity_queue_version === 1)
 
     const { error } = await supabase
       .from('user_presence')
@@ -137,6 +137,7 @@ async function heartbeat(req, res) {
 
     if (error) throw error
 
+    if (req.body.activity_queue_version === 1) return res.json({ ok: true, last_seen_at: payload.last_seen_at, activity_queue_version: 1 })
     return res.json({ ok: true, last_seen_at: payload.last_seen_at })
   } catch (err) {
     console.error('presenceHeartbeat:', err.message || err)
@@ -152,7 +153,7 @@ async function offline(req, res) {
     const tabId = clean(req.body.tab_id)
     if (!clearAllTabs && !tabId) return res.status(400).json({ error: 'Missing tab id.' })
 
-    await recordActivity(supabase, userId, req.body.active_intervals)
+    await recordActivity(supabase, userId, req.body.active_intervals, req.body.activity_queue_version === 1)
 
     let query = supabase
       .from('user_presence')
@@ -161,6 +162,7 @@ async function offline(req, res) {
     if (!clearAllTabs) query = query.eq('tab_id', tabId)
     const { error } = await query
     if (error) throw error
+    if (req.body.activity_queue_version === 1) return res.json({ ok: true, activity_queue_version: 1 })
     return res.json({ ok: true })
   } catch (err) {
     console.error('presenceOffline:', err.message || err)

@@ -8,7 +8,7 @@ const presenceRouter = require('../src/routes/presence')
 const test = base.extend({ activity: [async ({ page }, use) => {
   database = await presenceDatabase()
   const db = database
-  const errors = [], requests = []
+  const errors = [], requests = [], transport = { failWrites: false, loseNextReceipt: false }
   const app = express()
   app.use(express.json())
   app.use((req,res,next) => { req.user = { id:USER,email:'tester@fyndbridge.in',name:'Test User' }; next() })
@@ -31,13 +31,16 @@ const test = base.extend({ activity: [async ({ page }, use) => {
   await page.route('**/api/presence**',async route=>{
     const request=route.request(), url=new URL(request.url())
     requests.push({path:url.pathname,query:url.search,body:request.postDataJSON()})
-    await route.fulfill({response:await route.fetch({url:api+url.pathname+url.search})})
+    if (transport.failWrites && request.method() === 'POST') { await route.fulfill({status:503,json:{error:'Simulated outage'}}); return }
+    const response = await route.fetch({url:api+url.pathname+url.search})
+    if (transport.loseNextReceipt && request.method() === 'POST') { transport.loseNextReceipt = false; await route.fulfill({status:503,json:{error:'Simulated lost receipt'}}); return }
+    await route.fulfill({response})
   })
   db.tables.user_presence.push({user_id:USER,tab_id:'seed',email:'tester@fyndbridge.in',display_name:'Test User',status:'online',current_path:'/dashboard/candidates',last_seen_at:new Date().toISOString()})
   await db.sql.query(`insert into public.user_daily_activity(user_id,activity_date,active_periods) values
     ($1,'2026-10-01',tstzmultirange(tstzrange('2026-10-01T04:00Z','2026-10-01T06:00Z','[)'))),
     ($1,(now() at time zone 'Asia/Kolkata')::date,tstzmultirange(tstzrange(now()-interval '15 minutes',now()-interval '5 minutes','[)')))` ,[USER])
-  try { await use({db,requests,errors}) } finally { await page.close(); await new Promise(resolve=>server.close(resolve)); await db.sql.close() }
+  try { await use({db,requests,errors,transport}) } finally { await page.close(); await new Promise(resolve=>server.close(resolve)); await db.sql.close() }
 },{auto:true}] })
 
 test('tooltip shows Today and quarter Average; quarter switching and mobile placement work',async({page,activity},info)=>{
@@ -105,5 +108,46 @@ test('heartbeat, logout flush, and persisted activity work through the real API 
   expect(flushed.length).toBeGreaterThan(0)
   await expect.poll(async()=>Number((await activity.db.sql.query('select sum(active_seconds) as seconds from public.user_daily_activity where activity_date=(now() at time zone \'Asia/Kolkata\')::date')).rows[0].seconds)).toBeGreaterThan(600)
   await expect.poll(()=>activity.db.tables.user_presence.length).toBe(0)
+  expect(activity.errors).toEqual([])
+})
+
+test('an outage preserves older unsent activity across reload and acknowledges it after reconnection',async({page,activity})=>{
+  await activity.db.sql.exec('truncate public.user_daily_activity')
+  activity.transport.failWrites = true
+  const start = Date.now() - 40 * 60000, end = start + 60000
+  const key = `fb_activity_outbox:${USER}:offline-test`
+  await page.addInitScript(({key,start,end})=>{
+    if (!localStorage.getItem('seeded-activity')) {
+      localStorage.setItem(key,JSON.stringify([{start:new Date(start).toISOString(),end:new Date(end).toISOString()}]))
+      localStorage.setItem('seeded-activity','true')
+    }
+  },{key,start,end})
+  await page.goto('/server/browser-tests/presence-harness.html')
+  await expect.poll(()=>activity.requests.some(r=>r.path.endsWith('/heartbeat'))).toBe(true)
+  expect(await page.evaluate(key=>Boolean(localStorage.getItem(key)),key)).toBe(true)
+  await page.reload()
+  expect(await page.evaluate(key=>Boolean(localStorage.getItem(key)),key)).toBe(true)
+  activity.transport.failWrites = false
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')))
+  await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key),key)).toBeNull()
+  const saved = await activity.db.sql.query('select public.activity_range_seconds(active_periods * tstzmultirange(tstzrange($2::timestamptz,$3::timestamptz,\'[)\'))) as seconds from public.user_daily_activity where user_id=$1 and active_periods && tstzmultirange(tstzrange($2::timestamptz,$3::timestamptz,\'[)\'))',[USER,new Date(start).toISOString(),new Date(end).toISOString()])
+  expect(saved.rows.reduce((n,r)=>n+Number(r.seconds),0)).toBe(60)
+  expect(activity.errors).toEqual([])
+})
+
+test('a saved request with a lost receipt is retried without double counting',async({page,activity})=>{
+  await activity.db.sql.exec('truncate public.user_daily_activity')
+  activity.transport.loseNextReceipt = true
+  const start = Date.now() - 30 * 60000, end = start + 60000
+  const key = `fb_activity_outbox:${USER}:lost-receipt-test`
+  await page.addInitScript(({key,start,end})=>localStorage.setItem(key,JSON.stringify([{start:new Date(start).toISOString(),end:new Date(end).toISOString()}])),{key,start,end})
+  await page.goto('/server/browser-tests/presence-harness.html')
+  await expect.poll(()=>activity.requests.some(r=>r.path.endsWith('/heartbeat'))).toBe(true)
+  await expect.poll(async()=>Number((await activity.db.sql.query('select sum(active_seconds) as seconds from public.user_daily_activity')).rows[0].seconds)).toBeGreaterThanOrEqual(60)
+  expect(await page.evaluate(key=>Boolean(localStorage.getItem(key)),key)).toBe(true)
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')))
+  await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key),key)).toBeNull()
+  const saved = await activity.db.sql.query('select public.activity_range_seconds(active_periods * tstzmultirange(tstzrange($2::timestamptz,$3::timestamptz,\'[)\'))) as seconds from public.user_daily_activity where user_id=$1 and active_periods && tstzmultirange(tstzrange($2::timestamptz,$3::timestamptz,\'[)\'))',[USER,new Date(start).toISOString(),new Date(end).toISOString()])
+  expect(saved.rows.reduce((n,r)=>n+Number(r.seconds),0)).toBe(60)
   expect(activity.errors).toEqual([])
 })

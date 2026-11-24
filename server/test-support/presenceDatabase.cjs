@@ -9,13 +9,14 @@ async function presenceDatabase() {
   await sql.exec(`create table public.company_holidays (holiday_date date not null, holiday_type text not null, is_active boolean not null default true); grant select on public.company_holidays to service_role;`)
   await sql.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261120222043_user_daily_activity.sql'), 'utf8'))
   await sql.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261120223343_presence_average_tracking_start.sql'), 'utf8'))
+  await sql.exec(await fs.readFile(path.resolve(__dirname, '../../supabase/migrations/20261124200225_activity_backlog_recovery.sql'), 'utf8'))
   const tables = { user_presence: [], employee_statuses: [] }
   return {
     sql, tables,
     async rpc(name, args) {
       try {
-        if (name === 'record_user_activity') {
-          await sql.query('select public.record_user_activity($1::uuid,$2::jsonb)', [args.p_user_id, JSON.stringify(args.p_intervals)])
+        if (['record_user_activity', 'record_user_activity_backlog'].includes(name)) {
+          await sql.query(`select public.${name}($1::uuid,$2::jsonb)`, [args.p_user_id, JSON.stringify(args.p_intervals)])
           return { data: null, error: null }
         }
         const result = await sql.query('select * from public.user_activity_summary($1::uuid[],$2::date,$3::date)', [args.p_user_ids, args.p_start, args.p_end])

@@ -17,17 +17,18 @@ function quarterRange(period, now = new Date()) {
   return { period: value, start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }
 }
 
-async function recordActivity(supabase, userId, intervals) {
+async function recordActivity(supabase, userId, intervals, backlog = false) {
   if (intervals == null) return // Older clients can keep sending presence.
   if (!Array.isArray(intervals) || intervals.length > 500 || intervals.some(item =>
     !item || typeof item.start !== 'string' || typeof item.end !== 'string' ||
-    !Number.isFinite(Date.parse(item.start)) || !Number.isFinite(Date.parse(item.end)) || Date.parse(item.end) < Date.parse(item.start))) {
+    !Number.isFinite(Date.parse(item.start)) || !Number.isFinite(Date.parse(item.end)) || Date.parse(item.end) < Date.parse(item.start) ||
+    (backlog && Date.parse(item.end) - Date.parse(item.start) > 120000))) {
     const error = new Error('Invalid activity intervals.')
     error.statusCode = 400
     throw error
   }
   if (!intervals.length) return
-  const { error } = await supabase.rpc('record_user_activity', { p_user_id: userId, p_intervals: intervals })
+  const { error } = await supabase.rpc(backlog ? 'record_user_activity_backlog' : 'record_user_activity', { p_user_id: userId, p_intervals: intervals })
   if (error) throw error
 }
 

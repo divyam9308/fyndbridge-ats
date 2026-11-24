@@ -19,7 +19,36 @@ test('active time pauses on blur, continues on return, and ignores suspension', 
   t.advance(10000)
   assert.equal(seconds(t.sample()), 40)
   t.advance(10 * 60000)
-  assert.equal(seconds(t.sample()), 0)
+  assert.equal(seconds(t.sample()), 40) // Unsent activity is retained; suspension adds nothing.
+})
+
+test('sleep with either a paused or advancing monotonic clock resumes fresh activity without crediting sleep', () => {
+  for (const tickDuringSleep of [false, true]) {
+    let tick = 0, wall = Date.parse('2026-11-25T04:00:00Z')
+    const t = createActivityTracker({ now: () => wall, monotonic: () => tick, foreground: () => true })
+    tick += 30000; wall += 30000; t.sample(true)
+    assert.equal(seconds({ intervals: t.takeIntervals() }), 30)
+    wall += 600000; tick += tickDuringSleep ? 600000 : 1000
+    assert.equal(t.sample().status, 'away')
+    assert.equal(seconds({ intervals: t.takeIntervals() }), 0)
+    t.sample(true)
+    tick += 30000; wall += 30000
+    assert.equal(seconds(t.sample()), 30)
+    assert.equal(t.takeIntervals()[0].end, new Date(wall).toISOString())
+  }
+})
+
+test('forward and backward clock changes discard their gap and reanchor subsequent intervals', () => {
+  for (const jump of [-600000, 600000]) {
+    let tick = 0, wall = Date.parse('2026-11-25T04:00:00Z')
+    const t = createActivityTracker({ now: () => wall, monotonic: () => tick, foreground: () => true })
+    tick += 15000; wall += 15000; t.sample(true); t.takeIntervals()
+    tick += 15000; wall += 15000 + jump
+    t.sample(true)
+    assert.deepEqual(t.takeIntervals(), [])
+    tick += 15000; wall += 15000
+    assert.deepEqual(t.sample().intervals, [{ start: new Date(wall - 15000).toISOString(), end: new Date(wall).toISOString() }])
+  }
 })
 
 test('idle cutoff does not credit the gap when interaction resumes', () => {

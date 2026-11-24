@@ -13,10 +13,12 @@ test.before(async () => {
   await db.exec(`create table public.company_holidays (holiday_date date not null, holiday_type text not null, is_active boolean not null default true); grant select on public.company_holidays to service_role;`)
   await db.exec(await fs.readFile(path.join(__dirname, '../../../supabase/migrations/20261120222043_user_daily_activity.sql'), 'utf8'))
   await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261120223343_presence_average_tracking_start.sql'), 'utf8'))
+  await db.exec(await fs.readFile(path.resolve(__dirname, '../../../supabase/migrations/20261124200225_activity_backlog_recovery.sql'), 'utf8'))
 })
 test.after(async () => { await db?.close() })
 
 const record = intervals => db.query('select public.record_user_activity($1::uuid, $2::jsonb)', [USER, JSON.stringify(intervals)])
+const recordBacklog = intervals => db.query('select public.record_user_activity_backlog($1::uuid, $2::jsonb)', [USER, JSON.stringify(intervals)])
 const interval = (start, end) => ({ start: new Date(start).toISOString(), end: new Date(end).toISOString() })
 const summary = async (start, end, asOf) => {
   const original = asOf && (await db.query("select pg_get_functiondef('public.user_activity_summary(uuid[],date,date)'::regprocedure) as sql")).rows[0].sql
@@ -44,6 +46,17 @@ test('server bounds reject offline gaps and future credit', async () => {
   await record([interval(Date.now() - 24 * 3600000, Date.now() + 3600000)])
   const row = (await db.query('select sum(active_seconds) as seconds from public.user_daily_activity')).rows[0]
   assert.equal(Number(row.seconds), 120)
+})
+
+test('delayed sampled activity is recovered once across retries, while expired and future time receive no credit', async () => {
+  await db.exec('truncate public.user_daily_activity')
+  const now = Date.now(), valid = interval(now - 600000, now - 540000)
+  const batch = [valid, interval(now - 26 * 3600000, now - 26 * 3600000 + 60000), interval(now + 60000, now + 120000)]
+  await recordBacklog(batch); await recordBacklog(batch)
+  const result = (await db.query('select sum(active_seconds) as seconds from public.user_daily_activity')).rows[0]
+  assert.equal(Number(result.seconds), 60)
+  await assert.rejects(recordBacklog([interval(now - 600000, now)]), /Invalid activity/)
+  await assert.rejects(recordActivity({}, USER, [interval(now - 600000, now)], true), /Invalid activity/)
 })
 
 test('average includes missing/absent Mon-Sat days and excludes Sunday time', async () => {
@@ -181,6 +194,7 @@ test('daily history and RPCs are inaccessible to anon/authenticated clients', as
     await db.exec(`set role ${role}`)
     await assert.rejects(db.query('select * from public.user_daily_activity'), /permission denied/)
     await assert.rejects(record([]), /permission denied/)
+    await assert.rejects(recordBacklog([]), /permission denied/)
     await assert.rejects(summary('2026-11-23', '2026-12-31'), /permission denied/)
     await db.exec('reset role')
   }

@@ -19,12 +19,13 @@ export async function clearPresenceBeforeLogout(userId = '') {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 2500)
   try {
-    await apiFetch('/api/presence/offline', {
+    const response = await apiFetch('/api/presence/offline', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ all_tabs: true, active_intervals: activity.active_intervals }),
+      body: JSON.stringify({ all_tabs: true, active_intervals: activity.active_intervals, activity_queue_version: 1 }),
       signal: controller.signal
     })
+    if (response.ok && (await response.json()).activity_queue_version === 1) activity.acknowledge?.()
   } catch {
     // Logout must continue even if the best-effort presence cleanup fails.
   } finally {

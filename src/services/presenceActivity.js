@@ -4,30 +4,32 @@ const ACTIVITY_WINDOW_MS = 120 * 1000
 // Sampling uses elapsed monotonic time; wall-clock jumps cannot create work time.
 export function createActivityTracker({ now = Date.now, monotonic = () => performance.now(), foreground = () => document.visibilityState === 'visible' && document.hasFocus() } = {}) {
   let sampledAt = monotonic()
-  const wallOrigin = now() - sampledAt
+  let sampledWall = now()
   let lastInteraction = sampledAt
   let wasForeground = foreground()
   let intervals = []
   function sample(interaction = false) {
     const tick = monotonic()
     const wall = now()
-    const elapsed = Math.max(0, tick - sampledAt)
+    const elapsed = tick - sampledAt
+    const discontinuity = elapsed < 0 || elapsed > ACTIVITY_WINDOW_MS || Math.abs(wall - sampledWall - elapsed) > 5000
     const activeElapsed = wasForeground ? Math.max(0, Math.min(tick, lastInteraction + ACTIVITY_IDLE_MS) - sampledAt) : 0
     // Ignore a suspended computer/tab gap, rather than crediting sleep time.
-    if (activeElapsed > 0 && elapsed <= ACTIVITY_WINDOW_MS) {
-      const start = new Date(wallOrigin + sampledAt).toISOString()
-      const end = new Date(wallOrigin + sampledAt + activeElapsed).toISOString()
+    if (activeElapsed > 0 && !discontinuity) {
+      const start = new Date(sampledWall).toISOString()
+      const end = new Date(sampledWall + activeElapsed).toISOString()
       const last = intervals.at(-1)
       if (last && last.end >= start) last.end = end
       else intervals.push({ start, end })
     }
+    if (discontinuity) lastInteraction = -Infinity
     if (interaction) lastInteraction = tick
     wasForeground = foreground()
     sampledAt = tick
-    intervals = intervals.filter(item => Date.parse(item.end) > wall - ACTIVITY_WINDOW_MS).slice(-500)
+    sampledWall = wall
     return { status: wasForeground && tick - lastInteraction < ACTIVITY_IDLE_MS ? 'online' : 'away', intervals }
   }
-  return { sample }
+  return { sample, takeIntervals() { const pending = intervals; intervals = []; return pending } }
 }
 
 export function activityDate(now = new Date()) {
