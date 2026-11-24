@@ -1,5 +1,7 @@
 import { FileText, Link2, Loader2, Trash2 } from 'lucide-react'
 import { formatFileSize, isExternalAttachment, pendingFileKey } from '../utils/documentAttachments'
+import { useCvBranding } from '../hooks/useCvBranding'
+import CvBrandingGlyph from './CvBrandingGlyph'
 
 export function AttachmentList({
   saved = [],
@@ -71,32 +73,40 @@ export function AttachmentList({
   )
 }
 
-export function DocumentIconGroup({ attachments = [], onOpen, openingKey = '', keyPrefix = 'document', empty = '-', showExternalLinkIcon = false }) {
+function DocumentIcon({ attachment, index, onOpen, openingKey, keyPrefix, showExternalLinkIcon, brandingContext }) {
+  const itemKey = `${keyPrefix}-${attachment.path}`
+  const isExternal = showExternalLinkIcon && isExternalAttachment(attachment)
+  const branding = useCvBranding(brandingContext, attachment.path)
+  const name = attachment.name || `document ${index + 1}`
+  const label = branding.failed ? `Retry CV branding for ${name}` : branding.blocked ? `Branding ${name}` : `Open ${name}`
+  return <a
+    href={branding.failed ? '#' : branding.blocked ? undefined : isExternal ? attachment.path : '#'}
+    target={!branding.blocked && isExternal ? '_blank' : undefined}
+    rel={isExternal ? 'noopener noreferrer' : undefined}
+    role="link"
+    className={`cv-table-link document-icon-link${branding.failed ? ' cv-branding-retry' : ''}`}
+    title={branding.failed ? 'CV branding could not finish. Click to retry.' : branding.blocked ? 'Branding CV. Opening is unavailable until it finishes.' : name}
+    aria-label={label}
+    aria-disabled={branding.blocked && !branding.failed ? true : undefined}
+    aria-busy={branding.blocked && !branding.failed ? true : undefined}
+    data-cv-branding-status={branding.status}
+    onClick={event => {
+      event.preventDefault(); event.stopPropagation()
+      if (branding.failed) { branding.retry(); return }
+      if (branding.blocked) return
+      onOpen?.(itemKey, attachment)
+    }}
+  >
+    {brandingContext ? <CvBrandingGlyph pending={branding.blocked && !branding.failed} failed={branding.failed} opening={openingKey === itemKey} external={isExternal ? <Link2 size={15} /> : null} />
+      : openingKey === itemKey ? <Loader2 size={15} className="spin" /> : isExternal ? <Link2 size={15} /> : <FileText size={15} />}
+  </a>
+}
+
+export function DocumentIconGroup({ attachments = [], onOpen, openingKey = '', keyPrefix = 'document', empty = '-', showExternalLinkIcon = false, brandingContext }) {
   if (!attachments.length) return empty
   return (
     <span className="document-icon-group">
-      {attachments.map((attachment, index) => {
-        const itemKey = `${keyPrefix}-${attachment.path}`
-        const isExternal = showExternalLinkIcon && isExternalAttachment(attachment)
-        return (
-          <a
-            href={isExternal ? attachment.path : '#'}
-            target={isExternal ? '_blank' : undefined}
-            rel={isExternal ? 'noopener noreferrer' : undefined}
-            className="cv-table-link document-icon-link"
-            title={attachment.name || `Document ${index + 1}`}
-            aria-label={`Open ${attachment.name || `document ${index + 1}`}`}
-            key={attachment.path}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              onOpen?.(itemKey, attachment)
-            }}
-          >
-            {openingKey === itemKey ? <Loader2 size={15} className="spin" /> : isExternal ? <Link2 size={15} /> : <FileText size={15} />}
-          </a>
-        )
-      })}
+      {attachments.map((attachment, index) => <DocumentIcon key={attachment.path} {...{ attachment, index, onOpen, openingKey, keyPrefix, showExternalLinkIcon, brandingContext }} />)}
     </span>
   )
 }

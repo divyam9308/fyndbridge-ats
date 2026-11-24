@@ -96,4 +96,4 @@ async function assertDocumentAccess(user, type, recordId, requestedPath) {
   }
 }
 
-module.exports = { assertDocumentAccess, DOCUMENT_SCOPES }
+module.exports = { assertDocumentAccess, assertPageAccess, DOCUMENT_SCOPES }

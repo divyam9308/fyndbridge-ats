@@ -29,6 +29,7 @@ async function openDocument(req, res) {
     debugDocumentOpen('storage path', { type: req.params.type, bucket, path })
     if (!bucket || !isValidStoragePath(path)) return res.status(400).json({ error: 'Document path is required' })
     await assertDocumentAccess(req.user, req.params.type, req.query.record_id, path)
+    if (bucket === 'resumes') await require('../services/cvBranding').cvBranding().assertReady(path)
 
     const extension = pathExtension(path)
     const fileName = path.split('/').pop() || `document.${extension || 'pdf'}`

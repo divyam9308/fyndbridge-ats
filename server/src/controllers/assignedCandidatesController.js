@@ -9,9 +9,10 @@ const { validateMandateReference } = require('../services/candidateCreation')
 const { withAssignedCvParsing } = require('../services/assignedCvParsing')
 const { parseBulkResume } = require('../services/bulkResumeParser')
 const { prepareAssignedCv, cleanupAssignedCvs } = require('../services/assignedCandidateCv')
+const { cvBranding } = require('../services/cvBranding')
 const { ASSIGNED_STATUSES, NOT_CONTACTED, DID_NOT_PICK_UP, assignmentScope, validateAssignment, isUuid, fail } = require('../services/assignedCandidates')
 
-const SELECT = '*,clients(name,client_name,client_display_id),jobs(title,job_display_id),assigned_candidate_uploads(cv_original_name)'
+const SELECT = '*,clients(name,client_name,client_display_id),jobs(title,job_display_id),assigned_candidate_uploads(cv_original_name,cv_storage_path)'
 const STATUS_FILTERS = Object.freeze({
   not_contacted: NOT_CONTACTED,
   did_not_pick_up: DID_NOT_PICK_UP,
@@ -105,8 +106,7 @@ exports.upload = handle(async(req,res)=>{
     }
     if (!row.storage_ready) {
       if (row.cv_file_hash!==prepared.metadata.cv_file_hash) throw fail('This upload belongs to a different CV. Select the file again.',409)
-      const stored=await supabase.storage.from('resumes').upload(row.cv_storage_path,prepared.buffer,{contentType:row.cv_mimetype,upsert:false})
-      if (stored.error&&!/already exists|duplicate/i.test(stored.error.message||'')) throw stored.error
+      await cvBranding().stage(req.file, { buffer: prepared.buffer, targetPath: row.cv_storage_path })
       unwrap(await supabase.from('assigned_candidate_uploads').update({storage_ready:true}).eq('id',id))
     }
     res.json({upload_id:row.id,full_name:row.parsed_name,mobile_number:row.parsed_mobile,parse_error:row.parse_error})
@@ -159,6 +159,7 @@ exports.reassign = handle(async(req,res)=>{
 })
 exports.cv = handle(async(req,res)=>{
   const row=await getRow(req); const cv=row.assigned_candidate_uploads
+  await cvBranding().assertReady(cv.cv_storage_path)
   const data=unwrap(await supabase.storage.from('resumes').createSignedUrl(cv.cv_storage_path,300))
   res.json({url:data.signedUrl,fileName:cv.cv_original_name,contentType:cv.cv_mimetype})
 })
@@ -168,12 +169,14 @@ exports.parse = handle(async(req,res)=>{
   const file=path.join(os.tmpdir(),`${randomUUID()}.pdf`)
   try {
     const cv=row.assigned_candidate_uploads
+    await cvBranding().assertReady(cv.cv_storage_path)
     const blob=unwrap(await supabase.storage.from('resumes').download(cv.cv_storage_path))
     await fs.writeFile(file,Buffer.from(await blob.arrayBuffer()))
     const parsed=await withAssignedCvParsing(() => parseBulkResume({path:file,originalname:cv.cv_original_name,mimetype:cv.cv_mimetype}))
     res.json({data:require('./resumeController').rowFromParsed({originalname:cv.cv_original_name,mimetype:cv.cv_mimetype},parsed)})
   } finally {await fs.unlink(file).catch(()=>{})}
 })
+exports.authorizeCv = getRow
 async function transfer(req,res) {
   await context(req)
   const row=await getRow(req)

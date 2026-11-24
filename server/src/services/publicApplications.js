@@ -354,14 +354,13 @@ function validateStagedResumePath(application) {
 
 async function adoptStagedResume(supabase, application) {
   const sourcePath = validateStagedResumePath(application)
-  const destinationPath = `${application.cv_file_hash}.pdf`
-  const target = supabase.storage.from(STORAGE_BUCKETS.CV)
-  let created = false
-  const { error } = await supabase.storage.from(PUBLIC_APPLICATION_BUCKET).copy(sourcePath, destinationPath, {
-    destinationBucket: STORAGE_BUCKETS.CV
+  const { data: blob, error: sourceError } = await supabase.storage.from(PUBLIC_APPLICATION_BUCKET).download(sourcePath)
+  if (sourceError) throw sourceError
+  const queued = await require('./cvBranding').createCvBrandingService({ supabase }).stage({
+    originalname: application.cv_original_name, mimetype: 'application/pdf', buffer: Buffer.from(await blob.arrayBuffer())
   })
-  if (error && !/already exists|duplicate/i.test(error.message || '')) throw error
-  created = !error
+  const destinationPath = queued.path
+  const target = supabase.storage.from(STORAGE_BUCKETS.CV)
   const { data: publicData } = target.getPublicUrl(destinationPath)
   return {
     cv_link: publicData?.publicUrl || null,
@@ -370,7 +369,7 @@ async function adoptStagedResume(supabase, application) {
     cv_storage_path: destinationPath,
     cv_original_name: application.cv_original_name,
     cv_mimetype: 'application/pdf',
-    created
+    created: true
   }
 }
 
@@ -380,7 +379,10 @@ async function removeAdoptedResumeIfUnreferenced(supabase, adopted) {
     .from('candidates')
     .select('id', { count: 'exact', head: true })
     .eq('cv_storage_path', adopted.cv_storage_path)
-  if (!error && !count) await supabase.storage.from(STORAGE_BUCKETS.CV).remove([adopted.cv_storage_path])
+  if (!error && !count) {
+    if (require('./cvBranding').isBrandedCvPath(adopted.cv_storage_path)) await require('./cvBranding').createCvBrandingService({ supabase }).cancel([adopted.cv_storage_path])
+    await supabase.storage.from(STORAGE_BUCKETS.CV).remove([adopted.cv_storage_path])
+  }
 }
 
 function parsedResumeDto(result) {

@@ -136,6 +136,7 @@ function uploadedAttachment(upload) {
     path: upload?.path,
     name: upload?.fileName || upload?.name,
     mime_type: upload?.contentType || upload?.mime_type,
+    file_hash: upload?.fileHash || upload?.file_hash,
     size: upload?.size,
     uploaded_at: upload?.uploadedAt || upload?.uploaded_at || new Date().toISOString()
   }, upload?.bucket)

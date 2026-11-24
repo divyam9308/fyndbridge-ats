@@ -3,6 +3,7 @@ const crypto = require('crypto')
 const supabase = require('./supabaseAdmin')
 const { STORAGE_BUCKETS, normalizeStoragePath } = require('./storageBuckets')
 const { getDocumentFileMeta, extensionMatchesPath } = require('./documentFile')
+const { cvBranding, isBrandedCvPath } = require('./cvBranding')
 
 const RESUME_BUCKET = STORAGE_BUCKETS.CV
 
@@ -74,6 +75,10 @@ function publicUrl(objectPath) {
 async function storageObjectExists(bucket, objectPath) {
   const cleanPath = normalizeStoragePath(objectPath, bucket)
   if (!cleanPath) return false
+  if (bucket === RESUME_BUCKET && isBrandedCvPath(cleanPath)) {
+    const job = await cvBranding().getJob(cleanPath)
+    if (job && job.status !== 'cancelled') return true
+  }
   const slash = cleanPath.lastIndexOf('/')
   const folder = slash === -1 ? '' : cleanPath.slice(0, slash)
   const name = slash === -1 ? cleanPath : cleanPath.slice(slash + 1)
@@ -89,8 +94,8 @@ async function prepareUploadedCv(file) {
   const hash = sha256(buffer)
   const existing = await findByHash(hash)
   const existingPath = normalizeResumeStoragePath(existing?.cv_storage_path || existing?.resume_url || existing?.cv_link || '')
-  const canReuseExisting = existingPath &&
-    extensionMatchesPath(existingPath, meta.extension) &&
+  const canReuseExisting = isBrandedCvPath(existingPath) &&
+    extensionMatchesPath(existingPath, 'pdf') &&
     await storageObjectExists(RESUME_BUCKET, existingPath)
   if (canReuseExisting) {
     return {
@@ -98,28 +103,23 @@ async function prepareUploadedCv(file) {
       resume_url: existing.resume_url || existing.cv_link || '',
       cv_file_hash: hash,
       cv_storage_path: existingPath,
-      cv_original_name: meta.originalName,
-      cv_mimetype: meta.contentType,
+      cv_original_name: meta.originalName.replace(/\.(pdf|docx?)$/i, '') + '.pdf',
+      cv_mimetype: 'application/pdf',
       duplicate: true
     }
   }
 
-  const objectPath = `${hash}.${meta.extension}`
-  const { error } = await supabase.storage.from(RESUME_BUCKET).upload(objectPath, buffer, {
-    contentType: meta.contentType,
-    upsert: false
-  })
-  const storageDuplicate = Boolean(error && /already exists|duplicate/i.test(error.message || ''))
-  if (error && !storageDuplicate) throw error
+  const queued = await cvBranding().stage(file, { buffer })
+  const objectPath = queued.path
   const url = publicUrl(objectPath)
   return {
     cv_link: url,
     resume_url: url,
     cv_file_hash: hash,
     cv_storage_path: normalizeResumeStoragePath(objectPath),
-    cv_original_name: meta.originalName,
-    cv_mimetype: meta.contentType,
-    duplicate: storageDuplicate,
+    cv_original_name: queued.fileName,
+    cv_mimetype: queued.contentType,
+    duplicate: false,
     resume_path: normalizeResumeStoragePath(objectPath)
   }
 }
@@ -172,4 +172,3 @@ module.exports = {
   checkLinkedCvDuplicate,
   storageObjectExists
 }
-

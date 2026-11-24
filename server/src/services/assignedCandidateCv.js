@@ -4,6 +4,7 @@ const { createBulkResumeParser } = require('./bulkResumeParser')
 const { extractName, extractPhone } = require('./extractorUtils')
 const { withAssignedCvParsing } = require('./assignedCvParsing')
 const { STORAGE_BUCKETS } = require('./storageBuckets')
+const { cvBranding, isBrandedCvPath, pdfName } = require('./cvBranding')
 
 // Reuses PDF text-first/OCR extraction without full AI parsing or enrichment.
 const parseIdentity = createBulkResumeParser({
@@ -19,12 +20,12 @@ async function prepareAssignedCv(file, id, userId) {
   const buffer = await fs.readFile(file.path)
   if (!buffer.length) throw Object.assign(new Error('The selected CV is empty. Select a valid file.'), { statusCode: 400 })
   const hash = createHash('sha256').update(buffer).digest('hex')
-  const path = `assigned/${userId}/${id}-${hash}.${meta.extension}`
+  const path = `assigned/${userId}/${id}-${hash}-fb1.pdf`
   let parsed = {}; let parseError = ''
   try { parsed = await withAssignedCvParsing(() => parseIdentity(file)) } catch { parseError = 'Could not parse this CV. Enter the details manually.' }
   if (!parsed.full_name || !parsed.mobile_number) parseError = parseError || 'Enter missing candidate details manually.'
-  return { buffer, metadata: { id, uploaded_by: userId, cv_storage_path: path, cv_original_name: meta.originalName,
-    cv_mimetype: meta.contentType, cv_file_hash: hash, file_size: buffer.length,
+  return { buffer, metadata: { id, uploaded_by: userId, cv_storage_path: path, cv_original_name: pdfName(meta.originalName),
+    cv_mimetype: 'application/pdf', cv_file_hash: hash, file_size: buffer.length,
     parsed_name: parsed.full_name || '', parsed_mobile: parsed.mobile_number || '', parse_error: parseError } }
 }
 
@@ -51,6 +52,7 @@ async function cleanupAssignedCvs(supabase) {
         if (kept.error) throw kept.error
         continue
       }
+      if (isBrandedCvPath(path)) await cvBranding().cancel([path])
       const removed = await supabase.storage.from(STORAGE_BUCKETS.CV).remove([path])
       if (removed.error) throw removed.error
       const deleted = await supabase.from('assigned_candidate_uploads').delete().eq('id', row.id)

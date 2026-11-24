@@ -3,6 +3,9 @@ const {databaseAdapter}=require('./assignedCandidatesAdapter.cjs')
 async function start(){
   // Synthetic local fixture. Never loads repository secrets or contacts production.
   for(const key of Object.keys(process.env)) if(/GEMINI.*KEY|SUPABASE.*KEY/.test(key)) delete process.env[key]
+  // Conversion is exercised with synthetic Word data by legacy upload tests;
+  // the loopback-only address can never reach an external converter.
+  process.env.CV_WORD_CONVERTER_URL='http://127.0.0.1:9'
   const db=await createDatabase();const adapter=databaseAdapter(db)
   await require('./crmSchema.cjs').installCrmSchema(db)
   const target=require.resolve('../src/services/supabaseAdmin');require.cache[target]={id:target,filename:target,loaded:true,exports:adapter}
@@ -17,6 +20,8 @@ async function start(){
   const express=require('express');const app=express();app.use(require('cors')());app.use(express.json())
   app.use((req,res,next)=>{req.user={id:req.get('x-test-user')||CONSULTANT,email:'synthetic@example.test',name:'Test Consultant'};next()})
   app.use('/api/assigned-candidates',require('../src/middleware/requireAuth'),require('../src/routes/assignedCandidates'))
+  app.use('/api/resumes',require('../src/middleware/requireAuth'),require('../src/routes/resumes'))
+  app.use('/api/documents',require('../src/middleware/requireAuth'),require('../src/routes/documents'))
   app.use('/api/admin',require('../src/middleware/requireAuth'),require('../src/routes/admin'))
   app.use('/api/crm',require('../src/middleware/requireAuth'),require('../src/routes/crm'))
   app.get('/test/permissions',async(req,res)=>res.json((await db.query('select * from page_view_permissions')).rows))
@@ -37,7 +42,15 @@ async function start(){
   app.get('/api/clients',(req,res)=>db.query('select * from clients').then(result=>res.json({data:result.rows})))
   app.get('/api/jobs',(req,res)=>db.query('select * from jobs').then(result=>res.json({data:result.rows})))
   app.get('/api/candidates/next-display-id',(req,res)=>res.json({candidate_display_id:'CA1'}))
+  app.use('/api/candidates',require('../src/middleware/requireAuth'),require('../src/routes/candidates'))
   app.get('/test/pdf',(req,res)=>res.type('application/pdf').send(pdfBytes))
+  app.get('/test/cv-object',(req,res)=>{
+    const bytes=adapter.objects.get(req.query.path)
+    if(!bytes)return res.status(404).json({error:'Test CV not found.'})
+    res.type('application/pdf').send(bytes)
+  })
+  app.get('/test/branding-state',async(req,res)=>res.json({jobs:(await db.query('select target_path,status,source_path from cv_branding_jobs')).rows,
+    originals:[...(adapter.buckets.get('cv-branding-staging')||new Map()).keys()],branded:[...adapter.objects.keys()].filter(p=>p.includes('fb1'))}))
   app.get('/test/state',async(req,res)=>res.json({assignments:(await db.query('select * from assigned_candidates')).rows,candidates:(await db.query('select * from candidates')).rows,associations:(await db.query('select * from candidate_associations')).rows,uploads:(await db.query('select id,cv_original_name,retired_at,storage_ready from assigned_candidate_uploads')).rows,removed:adapter.removedPaths}))
   const server=app.listen(0,'127.0.0.1',()=>process.send({port:server.address().port,ADMIN,CONSULTANT,OTHER,SUPER}))
   process.on('message',async message=>{if(message==='close'){server.close();await db.close();process.exit(0)}})

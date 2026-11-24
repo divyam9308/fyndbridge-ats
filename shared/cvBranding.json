@@ -1,0 +1,7 @@
+{
+  "version": "fb1",
+  "widthMm": 45,
+  "insetPt": 7.5,
+  "opacity": 0.6,
+  "pathPatterns": ["^branded/fb1/[a-zA-Z0-9._-]+\\.pdf$", "^assigned/[a-f0-9-]+/[a-f0-9-]+-fb1\\.pdf$"]
+}

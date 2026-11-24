@@ -2235,6 +2235,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
           <td key={key} style={{ textAlign: 'center' }}>
             <DocumentIconGroup
               attachments={attachments}
+              brandingContext={{ type: 'cv', recordId: c.candidateId }}
               keyPrefix={`cv-${c.associationId || c.id}`}
               openingKey={openingDocument}
               empty={<span className="candidate-empty-value">-</span>}
@@ -2512,6 +2513,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
               {!isCandidateFieldHidden('cvLink') && candidateCvAttachments(selectedCandidate).length > 0 && (
                 <DocumentIconGroup
                   attachments={candidateCvAttachments(selectedCandidate)}
+                  brandingContext={{ type: 'cv', recordId: selectedCandidate.candidateId }}
                   keyPrefix={`cv-detail-${selectedCandidate.associationId || selectedCandidate.id}`}
                   openingKey={openingDocument}
                   onOpen={(docKey, attachment) => { logCandidateCvOpen(selectedCandidate); openDocument(docKey, attachment.path, selectedCandidate.candidateId) }}

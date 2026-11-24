@@ -101,11 +101,14 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     assert.ok(master.cv_storage_path.endsWith('000000000201.pdf'))
   })
   await t.test('upload failure keeps a durable manifest; retry and manual correction save one assignment',async()=>{
+    const previousConverter=process.env.CV_WORD_CONVERTER_URL
+    process.env.CV_WORD_CONVERTER_URL='https://converter.example.test'
+    t.after(()=>{if(previousConverter)process.env.CV_WORD_CONVERTER_URL=previousConverter;else delete process.env.CV_WORD_CONVERTER_URL})
     current=ADMIN
     const uploadId=require('node:crypto').randomUUID()
     const files=adapter.storage.from
     let failUpload=true
-    adapter.storage.from=()=>({...files(),upload:async(...args)=>{if(failUpload){failUpload=false;return {error:new Error('Synthetic network interruption')}}return files().upload(...args)}})
+    adapter.storage.from=bucket=>({...files(bucket),upload:async(...args)=>{if(failUpload){failUpload=false;return {error:new Error('Synthetic network interruption')}}return files(bucket).upload(...args)}})
     const upload=async()=>{const body=new FormData();body.append('upload_id',uploadId);body.append('cv_file',new Blob(['synthetic Word data'],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}),'Manual.docx');const response=await fetch(base+'/uploads',{method:'POST',body});return {httpStatus:response.status,...await response.json()}}
     assert.equal((await upload()).httpStatus,500)
     assert.equal((await db.query('select storage_ready from assigned_candidate_uploads where id=$1',[uploadId])).rows[0].storage_ready,false)

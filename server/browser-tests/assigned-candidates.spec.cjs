@@ -10,7 +10,7 @@ const test=base.extend({assigned:[async({page,app},use)=>{
   app.staff=[{id:ready.ADMIN,name:'Test Admin',status:'active'},{id:ready.CONSULTANT,name:'Test Consultant',status:'active'},{id:ready.OTHER,name:'Other Consultant',status:'active'}]
   await page.route('**/api/**',async route=>{
     const request=route.request(),u=new URL(request.url())
-    if(u.pathname.startsWith('/api/assigned-candidates')||['/api/clients','/api/jobs','/api/candidates/next-display-id'].includes(u.pathname)){
+    if(u.pathname.startsWith('/api/assigned-candidates')||u.pathname.startsWith('/api/resumes')||['/api/clients','/api/jobs','/api/candidates/next-display-id'].includes(u.pathname)){
       return route.continue({url:url+u.pathname+u.search,headers:{...request.headers(),'x-test-user':state.admin?ready.ADMIN:ready.CONSULTANT}})
     }
     return route.fallback()
@@ -340,7 +340,9 @@ test('removing active and queued CVs during processing skips queued work and dis
     expect(state.assignments).toHaveLength(35)
     expect(state.uploads).toHaveLength(35)
     expect(state.uploads.some(upload=>/^Remove/.test(upload.cv_original_name))).toBe(false)
-    expect(state.removed).toHaveLength(1)
+    expect([...new Set(state.removed.filter(path=>path.startsWith('assigned/')))]).toHaveLength(1)
+    const branding=await (await fetch(assigned.url+'/test/branding-state')).json()
+    expect(branding.jobs.filter(job=>job.status==='cancelled').every(job=>job.source_path===null)).toBe(true)
   }finally{release()}
 })
 
@@ -364,9 +366,9 @@ test('Remove, Cancel and Close delete already-uploaded CVs during processing and
       await details(page).getByRole('button',{name:name==='Cancel'?'Save':'Next',exact:true}).click()
       await expect.poll(()=>received).toBe(true)
       await expect(details(page).getByText('Enter details manually',{exact:false})).toHaveCount(2)
-      const uploaded=(await (await fetch(assigned.url+'/test/state')).json()).uploads.filter(upload=>names.includes(upload.cv_original_name))
+      const uploaded=(await (await fetch(assigned.url+'/test/state')).json()).uploads.filter(upload=>names.map(name=>name.replace(/\.docx$/,'.pdf')).includes(upload.cv_original_name))
       expect(uploaded).toHaveLength(2);expect(uploaded.every(upload=>upload.storage_ready)).toBe(true)
-      const removed=uploaded.find(upload=>upload.cv_original_name==='RemoveReady.docx')
+      const removed=uploaded.find(upload=>upload.cv_original_name==='RemoveReady.pdf')
       await details(page).getByRole('button',{name:'Remove RemoveReady.docx',exact:true}).click()
       await expect.poll(async()=>{
         const state=await (await fetch(assigned.url+'/test/state')).json()
@@ -375,7 +377,7 @@ test('Remove, Cancel and Close delete already-uploaded CVs during processing and
       const completion=page.waitForResponse(response=>response.url().endsWith('/api/assigned-candidates/uploads')&&response.status()===200)
       const button=details(page).getByRole('button',{name,exact:true});await expect(button).toBeEnabled();await button.click()
       await expect(details(page)).toHaveCount(0)
-      const ready=uploaded.find(upload=>upload.cv_original_name==='ReadyToCancel.docx')
+      const ready=uploaded.find(upload=>upload.cv_original_name==='ReadyToCancel.pdf')
       await expect.poll(async()=>{
         const state=await (await fetch(assigned.url+'/test/state')).json()
         return !state.uploads.some(upload=>upload.id===ready.id)&&state.removed.some(path=>path.includes(ready.id))
@@ -383,12 +385,13 @@ test('Remove, Cancel and Close delete already-uploaded CVs during processing and
       release();await completion
       await expect.poll(async()=>{
         const state=await (await fetch(assigned.url+'/test/state')).json()
-        return state.uploads.filter(upload=>upload.cv_original_name==='Cancelled.docx').length
+        return state.uploads.filter(upload=>upload.cv_original_name==='Cancelled.pdf').length
       }).toBe(0)
     }finally{release();await page.unroute('**/api/assigned-candidates/uploads',intercept)}
   }
   const state=await (await fetch(assigned.url+'/test/state')).json()
-  expect(state.assignments).toHaveLength(32);expect(state.uploads).toHaveLength(32);expect(state.removed).toHaveLength(6)
+  expect(state.assignments).toHaveLength(32);expect(state.uploads).toHaveLength(32);expect([...new Set(state.removed.filter(path=>path.startsWith('assigned/')))]).toHaveLength(6)
+  expect((await (await fetch(assigned.url+'/test/branding-state')).json()).originals).toHaveLength(0)
 })
 
 test('status pills support mouse and keyboard editing, pending guards, saved contact date and viewport-safe menus',async({page})=>{

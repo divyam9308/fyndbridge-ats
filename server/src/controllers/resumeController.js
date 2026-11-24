@@ -133,6 +133,7 @@ async function openResume(req, res) {
       return res.status(400).json({ error: 'Resume path is required' })
     }
     await assertDocumentAccess(req.user, 'cv', req.query.record_id, storagePath)
+    await require('../services/cvBranding').cvBranding().assertReady(storagePath)
 
     const extension = pathExtension(storagePath)
     const fileName = storagePath.split('/').pop() || `resume.${extension || 'pdf'}`

@@ -48,6 +48,7 @@ const gmail = require('./routes/crmGmail').createHandlers()
 app.get('/api/crm/gmail/callback', gmail.callback)
 app.get('/api/cron/crm-gmail-sync', gmail.syncCron)
 app.get('/api/cron/crm-gmail-worker', gmail.workerCron)
+app.get('/api/cron/cv-branding', require('./controllers/cvBrandingController').workerCron)
 app.use(attachUser)
 
 app.use('/api/candidates', requireAuth, require('./routes/candidates'))

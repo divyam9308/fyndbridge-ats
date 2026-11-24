@@ -826,6 +826,7 @@ async function updateCandidateRow(candidateId, payload) {
 async function deleteUploadedCvResult(cv) {
   const objectPath = normalizeResumeStoragePath(cv?.cv_storage_path || cv?.resume_path || '')
   if (!objectPath || cv?.duplicate) return
+  if (require('../services/cvBranding').isBrandedCvPath(objectPath)) await require('../services/cvBranding').cvBranding().cancel([objectPath])
   const { error } = await supabase.storage.from(RESUME_BUCKET).remove([objectPath])
   if (error) console.error('deleteUploadedCvResult:', error.message)
 }
@@ -878,7 +879,7 @@ async function applyCvInput(req, candidatePayload) {
             : 'application/msword')
       }
       const duplicateCv = await checkUploadedCvDuplicate(tempFile)
-      if (duplicateCv?.duplicate) {
+      if (duplicateCv?.duplicate && require('../services/cvBranding').isBrandedCvPath(duplicateCv.cv_storage_path)) {
         if (!duplicateCv.cv_storage_path) {
           const duplicateError = new Error('Resume already exists, but its stored CV file could not be reused. Please re-upload the CV from the saved candidate if needed.')
           duplicateError.statusCode = 409
@@ -888,8 +889,8 @@ async function applyCvInput(req, candidatePayload) {
         candidatePayload.resume_url = duplicateCv.resume_url || duplicateCv.cv_link || candidatePayload.resume_url
         candidatePayload.cv_file_hash = duplicateCv.cv_file_hash
         candidatePayload.cv_storage_path = duplicateCv.cv_storage_path
-        candidatePayload.cv_original_name = req.body.cv_original_name || candidatePayload.cv_original_name
-        candidatePayload.cv_mimetype = req.body.cv_mimetype || candidatePayload.cv_mimetype
+        candidatePayload.cv_original_name = require('../services/cvBranding').pdfName(req.body.cv_original_name)
+        candidatePayload.cv_mimetype = 'application/pdf'
         return { ...duplicateCv, duplicate: true }
       }
       const cv = await prepareUploadedCv(tempFile)
@@ -1911,7 +1912,7 @@ async function deleteCandidate(req, res) {
 
     const { data: existingAssoc, error: lookupError } = await supabase
       .from('candidate_associations')
-      .select('id, candidate_id, candidates(resume_url)')
+      .select('id, candidate_id, candidates(resume_url,cv_storage_path,cv_link,cv_original_name,cv_mimetype,cv_attachments)')
       .eq('id', associationId)
       .maybeSingle()
 
@@ -1939,14 +1940,15 @@ async function deleteCandidate(req, res) {
       if (!count) {
         const { error: deleteError } = await supabase.from('candidates').delete().eq('id', existingAssoc.candidate_id)
         if (deleteError) throw deleteError
-        await deleteResumeFromStorage(existingAssoc.candidates?.resume_url)
+        await removeCandidateCvFiles(candidateCvAttachments(existingAssoc.candidates).filter(attachment => require('../services/cvBranding').isBrandedCvPath(attachment.path)))
+        if (!require('../services/cvBranding').isBrandedCvPath(normalizeResumeStoragePath(existingAssoc.candidates?.resume_url))) await deleteResumeFromStorage(existingAssoc.candidates?.resume_url)
       }
 
       return res.json({ message: 'Candidate association deleted' })
     } else {
       const { data: existingCand, error: candLookupError } = await supabase
         .from('candidates')
-        .select('id, resume_url')
+        .select('id,resume_url,cv_storage_path,cv_link,cv_original_name,cv_mimetype,cv_attachments')
         .eq('id', associationId)
         .maybeSingle()
 
@@ -1961,7 +1963,8 @@ async function deleteCandidate(req, res) {
 
       const { error: deleteError } = await supabase.from('candidates').delete().eq('id', existingCand.id)
       if (deleteError) throw deleteError
-      await deleteResumeFromStorage(existingCand.resume_url)
+      await removeCandidateCvFiles(candidateCvAttachments(existingCand).filter(attachment => require('../services/cvBranding').isBrandedCvPath(attachment.path)))
+      if (!require('../services/cvBranding').isBrandedCvPath(normalizeResumeStoragePath(existingCand.resume_url))) await deleteResumeFromStorage(existingCand.resume_url)
 
       return res.json({ message: 'Candidate deleted' })
     }

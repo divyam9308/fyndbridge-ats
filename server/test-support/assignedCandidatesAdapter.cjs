@@ -1,13 +1,18 @@
 // Supabase query interface backed by the isolated PostgreSQL test database.
 function databaseAdapter(db) {
-  const objects=new Map(),removedPaths=[]
-  const storage={from:()=>({
-    upload:async(path,bytes)=>{if(objects.has(path))return {error:new Error('already exists')};objects.set(path,bytes);return {data:{path}}},
-    remove:async paths=>{for(const path of paths){objects.delete(path);removedPaths.push(path)}return {data:[]}},
-    download:async path=>objects.has(path)?{data:new Blob([objects.get(path)])}:{error:new Error('Missing CV')},
+  const objects=new Map(),removedPaths=[],buckets=new Map([['resumes',objects]])
+  const storage={createBucket:async()=>({data:{}}),from:(bucket='resumes')=>{
+    if(!buckets.has(bucket))buckets.set(bucket,new Map())
+    const files=buckets.get(bucket)
+    return {
+    upload:async(path,bytes,options={})=>{if(files.has(path)&&!options.upsert)return {error:new Error('already exists')};files.set(path,bytes);return {data:{path}}},
+    remove:async paths=>{for(const path of paths){files.delete(path);removedPaths.push(path)}return {data:[]}},
+    download:async path=>files.has(path)?{data:new Blob([files.get(path)])}:{error:new Error('Missing CV')},
+    list:async(folder,{search}={})=>({data:[...files.keys()].filter(path=>path===[folder,search].filter(Boolean).join('/')).map(path=>({name:path.split('/').pop()}))}),
+    getPublicUrl:path=>({data:{publicUrl:`https://example.test/storage/v1/object/public/${bucket}/${path}`}}),
     createSignedUrl:async path=>({data:{signedUrl:`https://example.test/protected/${encodeURIComponent(path)}`}})
-  })}
-  return {storage,objects,removedPaths,
+  }}}
+  return {storage,objects,removedPaths,buckets,
     async rpc(name,args={}) {try {const entries=Object.entries(args);if(name==='assigned_candidates_consultant_counts')return {data:(await db.query('select * from assigned_candidates_consultant_counts()')).rows};const q=await db.query(`select public.${name}(${entries.map(([k],i)=>`${k} => $${i+1}`).join(',')}) as result`,entries.map(([,value])=>value&&typeof value==='object'&&!Array.isArray(value)?JSON.stringify(value):value));return {data:q.rows[0]?.result}}catch(error){return {error}}},
     from(table) {
       const filters=[],params=[],orders=[];let kind='select',values,conflict,selection='*',head=false,count=false,take,offset=0,returnRows=true
@@ -18,6 +23,8 @@ function databaseAdapter(db) {
         select(s='*',options={}){selection=s;head=options.head;count=options.count;returnRows=true;return b},
         eq(f,x){filters.push(condition(f,'=',x));return b},
         neq(f,x){filters.push(condition(f,'<>',x));return b},
+        lt(f,x){filters.push(condition(f,'<',x));return b},
+        lte(f,x){filters.push(condition(f,'<=',x));return b},
         ilike(f,x){filters.push(condition(f,'ilike',x));return b},
         in(f,x){filters.push(`${key(f)}=any(${value(x)})`);return b},
         is(f,x){filters.push(x===null?`${key(f)} is null`:condition(f,'=',x));return b},
@@ -43,11 +50,11 @@ function databaseAdapter(db) {
               if(table==='candidate_associations'&&selection.includes('candidates')) extra=`,(select to_jsonb(c) from candidates c where c.id=t.candidate_id) as candidates`
               rows=(await db.query(`select t.*${extra} from public.${table} t${where}${orders.length?' order by '+orders.join(','):''}${take!==undefined?' limit '+Number(take):''} offset ${offset}`,params)).rows
             } else if(kind==='insert') {
-              const columns=Object.keys(values);const args=columns.map(k=>k==='allowed_user_ids'?values[k]:typeof values[k]==='object'?JSON.stringify(values[k]):values[k])
+              const columns=Object.keys(values);const args=columns.map(k=>['allowed_user_ids','skills','consultants'].includes(k)?values[k]:typeof values[k]==='object'?JSON.stringify(values[k]):values[k])
               const conflictSql=conflict?` on conflict (${conflict.split(',').map(k=>`"${k}"`).join(',')}) do update set ${columns.filter(k=>!conflict.split(',').includes(k)).map(k=>`"${k}"=excluded."${k}"`).join(',')}`:''
               rows=(await db.query(`insert into public.${table}(${columns.map(k=>`"${k}"`).join(',')}) values(${columns.map((_,i)=>`$${i+1}`).join(',')})${conflictSql} returning *`,args)).rows
             } else if(kind==='update') {
-              const updates=Object.entries(values).map(([k,x])=>`"${k}"=${value(typeof x==='object'&&x!==null?JSON.stringify(x):x)}`)
+              const updates=Object.entries(values).map(([k,x])=>`"${k}"=${value(typeof x==='object'&&x!==null&&!['allowed_user_ids','skills','consultants'].includes(k)?JSON.stringify(x):x)}`)
               rows=(await db.query(`update public.${table} t set ${updates.join(',')}${where} returning *`,params)).rows
             } else rows=(await db.query(`delete from public.${table} t${where} returning *`,params)).rows
             return {data:head?null:single?rows[0]||null:returnRows?rows:null,count:total,error:null}

@@ -1,0 +1,6 @@
+.cv-branding-glyph { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; vertical-align: middle; }
+.cv-branding-glyph.is-pending > .cv-branding-document { opacity: .3; }
+.cv-branding-glyph > .cv-branding-spinner { position: absolute; inset: -1px; width: 24px; height: 24px; color: var(--primary); pointer-events: none; }
+.cv-branding-glyph > .cv-branding-error { position: absolute; right: -4px; bottom: -3px; color: var(--danger, #c0392b); background: var(--bg-card, var(--bg-main)); border-radius: 50%; }
+.document-icon-link[aria-disabled="true"] { cursor: wait; }
+.document-icon-link.cv-branding-retry { cursor: pointer; }
