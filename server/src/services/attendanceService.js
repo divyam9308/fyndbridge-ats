@@ -29,6 +29,10 @@ async function notify(row){let {error}=await supabase.from('notifications').inse
 async function notifyReviewers(key,entity,message,url,sender){const p=await permissions(),{data:admins}=await supabase.from('admin_users').select('*');const authUsers=await supabase.auth.admin.listUsers({page:1,perPage:1000});if(authUsers.error)throw authUsers.error;const idsByEmail=new Map((authUsers.data.users||[]).map(user=>[String(user.email||'').toLowerCase(),user.id]));const recipients=new Set();for(const a of admins||[]){const recipientId=a.user_id||idsByEmail.get(String(a.email||'').toLowerCase());if(!recipientId||recipients.has(recipientId)||((p[key]==='super_admins')&&!(a.role==='super_admin'||a.is_super_admin)))continue;recipients.add(recipientId);await notify({recipient_user_id:recipientId,sender_user_id:sender,role_type:'system',title:'Attendance approval required',message,status:'pending',action_type:'attendance_request',entity_type:entity.type,entity_id:entity.id,action_url:url,idempotency_key:`${entity.type}-submitted:${entity.id}:${recipientId}`})}}
 async function ledgerTotal(userId,financialYear){const {data,error}=await supabase.from('leave_ledger').select('amount').eq('user_id',userId).eq('financial_year',financialYear);if(error)throw error;return (data||[]).reduce((n,x)=>n+Number(x.amount),0)}
 async function leaveEligibilityAdmins(){const {data,error}=await supabase.from('admin_users').select('user_id,email,role,is_super_admin');if(error)throw error;return data||[]}
+async function insertLeaveCredit(entry){
+ const {error}=await supabase.rpc('insert_leave_ledger_credit',{p_user_id:entry.user_id,p_financial_year:entry.financial_year,p_entry_type:entry.entry_type,p_entry_date:entry.entry_date,p_amount:entry.amount,p_description:entry.description,p_accrual_month:entry.accrual_month||null})
+ if(error)throw error
+}
 async function ensureFinancialYearLedger(userId,financialYear,asOfDate=localDate(),eligibilityAdmins=null,employment=null){
  const employee=employment||await getEmployeeStatus(userId)
  asOfDate=employmentAsOf(employee,localDate(asOfDate))
@@ -42,13 +46,11 @@ async function ensureFinancialYearLedger(userId,financialYear,asOfDate=localDate
   const previous=previousFinancialYear(financialYear),previousRange=getFinancialYearRange(previous)
   await ensureFinancialYearLedger(userId,previous,addDays(previousRange.end,1),admins,employee)
   const carry=calculateCarryForward(await ledgerTotal(userId,previous))
-  const {error}=await supabase.from('leave_ledger').insert({user_id:userId,entry_date:range.start,entry_type:'opening_balance',amount:carry,financial_year:financialYear,description:`Carry-forward from ${previous} (maximum 5 days)`})
-  if(error&&error.code!=='23505')throw error
+  await insertLeaveCredit({user_id:userId,entry_date:range.start,entry_type:'opening_balance',amount:carry,financial_year:financialYear,description:`Carry-forward from ${previous} (maximum 5 days)`})
  }
  const joinMonth=`${joined.slice(0,7)}-01`,eligibleCursor=new Date(`${joinMonth}T12:00:00Z`);eligibleCursor.setUTCMonth(eligibleCursor.getUTCMonth()+1);const eligibleMonth=eligibleCursor.toISOString().slice(0,10)
  for(const {month,entryDate} of getLeaveAccrualSchedule(financialYear,asOfDate,eligibleMonth)){
-  const {error}=await supabase.from('leave_ledger').insert({user_id:userId,entry_date:entryDate,entry_type:'accrual',amount:1.5,accrual_month:month,financial_year:financialYear,description:`Monthly leave accrual for ${month.slice(0,7)}`})
-  if(error&&error.code!=='23505')throw error
+  await insertLeaveCredit({user_id:userId,entry_date:entryDate,entry_type:'accrual',amount:1.5,accrual_month:month,financial_year:financialYear,description:`Monthly leave accrual for ${month.slice(0,7)}`})
  }
 }
 async function leaveBalanceSummary(userId,financialYear=getFinancialYearForDate(localDate()),asOfDate=localDate(),eligibilityAdmins=null){

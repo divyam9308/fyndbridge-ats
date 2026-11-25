@@ -38,8 +38,13 @@ function employmentDatabase(today = localDate()) {
     tables, operations, departure, oldDate,
     activitySummaries: new Map(),
     async rpc(name, args) {
-      assert.equal(name, 'user_activity_summary')
       operations.push({ kind: 'rpc', name, args: structuredClone(args) })
+      if (name === 'insert_leave_ledger_credit') {
+        const entry = Object.fromEntries(Object.entries(args).map(([key, value]) => [key.slice(2), value]))
+        const onConflict = entry.entry_type === 'accrual' ? 'user_id,financial_year,accrual_month' : 'user_id,financial_year'
+        return database.from('leave_ledger').upsert(entry, { onConflict, ignoreDuplicates: true })
+      }
+      assert.equal(name, 'user_activity_summary')
       return { data: args.p_user_ids.map(user_id => ({ user_id, average_seconds: 0, average_days: 0, ...database.activitySummaries.get(user_id) })), error: null }
     },
     auth: { admin: { getUserById: async id => ({ data: { user: { id, email: profiles.find(p => p.user_id === id)?.email, created_at: '2026-04-01T00:00:00Z' } }, error: null }) } },
@@ -56,7 +61,7 @@ function employmentDatabase(today = localDate()) {
           for (const value of [state.values].flat()) {
             const keys = state.conflict?.split(',') || keysFor(table)
             let existing = tables[table].find(row => keys.every(key => value[key] !== undefined && row[key] === value[key]))
-            if (table === 'leave_ledger' && value.entry_type === 'accrual') existing = tables[table].find(row => row.user_id === value.user_id && row.entry_type === 'accrual' && row.accrual_month === value.accrual_month)
+            if (table === 'leave_ledger' && value.entry_type === 'accrual') existing = tables[table].find(row => row.user_id === value.user_id && row.financial_year === value.financial_year && row.entry_type === 'accrual' && row.accrual_month === value.accrual_month)
             if (table === 'leave_ledger' && value.entry_type === 'opening_balance') existing = tables[table].find(row => row.user_id === value.user_id && row.entry_type === 'opening_balance' && row.financial_year === value.financial_year)
             if (existing && state.kind === 'insert') return { data: null, error: { code: '23505' } }
             if (existing && state.ignoreDuplicates) continue

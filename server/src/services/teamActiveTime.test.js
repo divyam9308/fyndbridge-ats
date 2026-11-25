@@ -20,14 +20,16 @@ test.before(async () => {
 test.after(async () => { await presence?.sql.close() })
 test.beforeEach(() => {
   database = employmentDatabase(today)
+  const employmentRpc = database.rpc.bind(database)
   database.rpc = async (name, args) => {
+    if (name !== 'user_activity_summary') return employmentRpc(name, args)
     database.operations.push({ kind: 'rpc', name, args })
     return presence.rpc(name, args)
   }
 })
 test('team uses the dashboard SQL average for every eligible employee, including offline users', async () => {
   const result = await attendance.team(actor, year, month, getFinancialYearForDate(today))
-  const call = database.operations.find(operation => operation.kind === 'rpc')
+  const call = database.operations.find(operation => operation.name === 'user_activity_summary')
   assert.equal(call.name, 'user_activity_summary')
   assert.deepEqual(new Set(call.args.p_user_ids), new Set([STAFF_IDS.active, STAFF_IDS.onLeave]))
   const dashboard = await presence.rpc(call.name, call.args)
@@ -43,7 +45,7 @@ test('selected months use dashboard fiscal-quarter boundaries across financial y
     [2027, 4, 'FY 2027-28', 'FY 2027-28 Q1', '2027-04-01', '2027-06-30']
   ]) {
     const result = await attendance.team(actor, y, m, fy)
-    const call = database.operations.filter(operation => operation.kind === 'rpc').at(-1)
+    const call = database.operations.filter(operation => operation.name === 'user_activity_summary').at(-1)
     assert.equal(result.activity_period, period)
     assert.equal(call.args.p_start, start)
     assert.equal(call.args.p_end, end)
@@ -52,6 +54,7 @@ test('selected months use dashboard fiscal-quarter boundaries across financial y
 test('activity access remains attendance-permission protected and RPC failures are not reported as zero', async () => {
   await assert.rejects(attendance.team({ id: STAFF_IDS.active, email: 'active@example.test' }, year, month, getFinancialYearForDate(today)), error => error.statusCode === 403)
   assert.equal(database.operations.some(operation => operation.kind === 'rpc'), false)
-  database.rpc = async () => ({ data: null, error: new Error('Activity unavailable') })
+  const rpc = database.rpc
+  database.rpc = async (name, args) => name === 'user_activity_summary' ? { data: null, error: new Error('Activity unavailable') } : rpc(name, args)
   await assert.rejects(attendance.team(actor, year, month, getFinancialYearForDate(today)), /Activity unavailable/)
 })
