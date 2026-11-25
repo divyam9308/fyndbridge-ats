@@ -1,18 +1,18 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { PDFDocument, StandardFonts, degrees, PDFName, PDFNumber, rgb } = require('pdf-lib')
+const { PDFDocument, StandardFonts, degrees, PDFName, PDFNumber, PDFString, rgb } = require('pdf-lib')
 const { createDatabase } = require('../../test-support/assignedCandidatesSchema.cjs')
 const { databaseAdapter } = require('../../test-support/assignedCandidatesAdapter.cjs')
-const { createCvBrandingService, STAGING_BUCKET } = require('./cvBranding')
-const { brandCvPdf } = require('./cvBrandingPdf')
+const { createCvBrandingService, STAGING_BUCKET, hash } = require('./cvBranding')
+const { brandCvPdf, inspectBrandedCvPdf } = require('./cvBrandingPdf')
 const { OPACITY, INSET_PT, WIDTH_PT } = require('../../../shared/cvBranding.cjs')
 
-async function fixturePdf(rotations = [0, 0]) {
+async function fixturePdf(rotations = [0, 0], label = 'Fyndbridge Branding Test Candidate') {
   const doc = await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica)
   for (const angle of rotations) {
     const p = doc.addPage([595, 842]); p.setRotation(degrees(angle))
-    p.drawText('Fyndbridge Branding Test Candidate', { x: 40, y: 790, font, size: 18 })
+    p.drawText(label, { x: 40, y: 790, font, size: 18 })
     p.drawText('Original CV content must remain selectable and unchanged.', { x: 40, y: 740, font, size: 11 })
   }
   return Buffer.from(await doc.save({ useObjectStreams: false }))
@@ -40,12 +40,45 @@ test('vector watermark preserves page geometry, rotation, original streams and 6
   }
 })
 
+test('branding idempotency verifies artwork and every page instead of trusting a metadata marker', async () => {
+  const input = await fixturePdf([0, 90, 180, 270])
+  const first = await brandCvPdf(input), repeated = await brandCvPdf(first.bytes)
+  assert.equal((await inspectBrandedCvPdf(input)).branded, false)
+  assert.deepEqual(await inspectBrandedCvPdf(first.bytes), { branded: true, pageCount: 4, version: 'fb1' })
+  assert.equal(repeated.alreadyBranded, true)
+  assert.deepEqual(repeated.bytes, first.bytes)
+  const missingMarker = await PDFDocument.load(first.bytes)
+  missingMarker.catalog.delete(PDFName.of('FyndbridgeCVBranding'))
+  const missingMarkerBytes = Buffer.from(await missingMarker.save())
+  assert.equal((await inspectBrandedCvPdf(missingMarkerBytes)).branded, true)
+  assert.deepEqual((await brandCvPdf(missingMarkerBytes)).bytes, missingMarkerBytes)
+  const forged = await PDFDocument.load(input)
+  forged.catalog.set(PDFName.of('FyndbridgeCVBranding'), PDFString.of('fb1'))
+  assert.equal((await inspectBrandedCvPdf(await forged.save())).branded, false)
+  const partial = await PDFDocument.load(first.bytes)
+  partial.addPage([595, 842])
+  assert.equal((await inspectBrandedCvPdf(await partial.save())).branded, false)
+  const completed = await brandCvPdf(await partial.save())
+  const completedDoc = await PDFDocument.load(completed.bytes)
+  assert.equal((await inspectBrandedCvPdf(completed.bytes)).branded, true)
+  for (let i = 0; i < 4; i++) assert.equal(completedDoc.getPage(i).node.Contents().size(), partial.getPage(i).node.Contents().size())
+  assert.deepEqual((await brandCvPdf(completed.bytes)).bytes, completed.bytes)
+  const wrongOpacity = await PDFDocument.load(first.bytes)
+  const states = wrongOpacity.getPage(0).node.Resources().lookup(PDFName.of('ExtGState'))
+  for (const ref of states.values()) wrongOpacity.context.lookup(ref).set(PDFName.of('ca'), PDFNumber.of(.5))
+  assert.equal((await inspectBrandedCvPdf(await wrongOpacity.save())).branded, false)
+  const obscured = await PDFDocument.load(first.bytes)
+  obscured.getPage(0).drawRectangle({ x: 0, y: 0, width: 595, height: 842, color: rgb(1, 1, 1) })
+  assert.equal((await inspectBrandedCvPdf(await obscured.save())).branded, false)
+})
+
 test('durable branding queue protects originals, retries safely, cleans up and enforces private access', async t => {
   const db = await createDatabase(); t.after(() => db.close())
   const adapter = databaseAdapter(db), logs = []
   const service = createCvBrandingService({ supabase: adapter, logger: { error: (...args) => logs.push(args) } })
   const buffer = await fixturePdf()
-  const upload = () => service.stage({ buffer, originalname: 'Candidate.pdf', mimetype: 'application/pdf' })
+  let uploads = 0
+  const upload = async () => service.stage({ buffer: await fixturePdf([0, 0], `Candidate ${++uploads}`), originalname: 'Candidate.pdf', mimetype: 'application/pdf' })
 
   await t.test('queued originals are private and opening is locked until verified output replaces them', async () => {
     const file = await upload(), queued = await service.getJob(file.path)
@@ -120,6 +153,66 @@ test('durable branding queue protects originals, retries safely, cleans up and e
     fail = false
     await service.stage({ buffer, originalname: 'Retry.pdf' }, { targetPath }); adapter.storage.from = originalFrom
     await service.run({ paths: [targetPath] }); assert.equal((await service.getJob(targetPath)).status, 'ready')
+  })
+  await t.test('original and verified branded derivative reuse one canonical source identity', async () => {
+    const original = await fixturePdf([0, 90], 'Canonical identity fixture')
+    const first = await service.stage({ buffer: original, originalname: 'Original.pdf' })
+    await service.run({ paths: [first.path] })
+    const ready = await service.verifyReady(first.path), derivative = adapter.objects.get(first.path)
+    assert.equal(ready.source_sha256, hash(original))
+    assert.equal((await service.findVerifiedByHash(hash(derivative))).target_path, first.path)
+    const reuse = await service.stage({ buffer: derivative, originalname: 'Renamed.pdf' })
+    assert.equal(reuse.path, first.path); assert.equal(reuse.fileHash, hash(original))
+    const targetPath = 'assigned/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222-fb1.pdf'
+    const copy = await service.stage({ buffer: derivative, originalname: 'Assigned.pdf' }, { targetPath })
+    assert.equal(copy.path, targetPath); assert.equal(copy.fileHash, hash(original))
+    const queued = await service.getJob(targetPath)
+    assert.equal(queued.source_sha256, hash(original)); assert.equal(queued.input_sha256, hash(derivative))
+    await service.run({ paths: [targetPath] })
+    assert.equal((await service.getJob(targetPath)).status, 'ready')
+    assert.deepEqual(adapter.objects.get(targetPath), derivative)
+  })
+  await t.test('ready metadata and a branded path cannot bypass stored PDF verification', async () => {
+    const file = await upload(); await service.run({ paths: [file.path] })
+    const job = await service.getJob(file.path)
+    adapter.objects.set(file.path, buffer)
+    assert.equal(await service.verifyReady(file.path), null)
+    assert.equal(await service.findVerifiedByHash(job.source_sha256), null)
+    await assert.rejects(service.assertReady(file.path), error => error.statusCode === 423)
+    // Even a matching saved hash is insufficient when the PDF lacks the artwork.
+    await db.query('update cv_branding_jobs set result_sha256=$1 where target_path=$2', [hash(buffer), file.path])
+    assert.equal(await service.verifyReady(file.path), null)
+  })
+  await t.test('a corrupt ready reservation requires reupload and the same source safely repairs its target', async () => {
+    const original = await fixturePdf([0], 'Repair fixture')
+    const file = await service.stage({ buffer: original, originalname: 'Repair.pdf' })
+    await service.run({ paths: [file.path] })
+    adapter.objects.delete(file.path)
+    await assert.rejects(service.assertReady(file.path), error => error.code === 'CV_BRANDING_REUPLOAD_REQUIRED')
+    assert.equal((await service.statuses([file.path]))[0].status, 'failed')
+    await service.retry([file.path]); assert.equal((await service.getJob(file.path)).status, 'failed')
+    await service.stage({ buffer: original, originalname: 'Repair.pdf' }, { targetPath: file.path })
+    assert.equal((await service.getJob(file.path)).status, 'queued')
+    await service.run({ paths: [file.path] }); assert.ok(await service.verifyReady(file.path))
+  })
+  await t.test('cancelling a referenced queued CV leaves its job and private source available', async () => {
+    const file = await upload(), job = await service.getJob(file.path)
+    const candidate = await db.query("insert into candidates(full_name,mobile_number,cv_attachments) values('Shared queued fixture','9999999998',$1) returning id", [JSON.stringify([{ path: file.path }])])
+    await service.cancel([file.path])
+    assert.equal((await service.getJob(file.path)).status, 'queued')
+    assert.ok(adapter.buckets.get(STAGING_BUCKET).has(job.source_path))
+    await db.query('delete from candidates where id=$1', [candidate.rows[0].id])
+    await service.cancel([file.path])
+    assert.equal((await service.getJob(file.path)).status, 'cancelled')
+    assert.equal(adapter.buckets.get(STAGING_BUCKET).has(job.source_path), false)
+  })
+  await t.test('invalid worker output never becomes ready and keeps the original for retry', async () => {
+    const processor = createCvBrandingService({ supabase: adapter, logger: { error() {} }, brandPdf: async bytes => ({ bytes, pageCount: 2 }) })
+    const file = await upload(), job = await service.getJob(file.path)
+    await processor.run({ paths: [file.path] })
+    assert.equal((await service.getJob(file.path)).status, 'failed')
+    assert.equal(adapter.objects.has(file.path), false)
+    assert.ok(adapter.buckets.get(STAGING_BUCKET).has(job.source_path))
   })
   await t.test('Word input goes through the converter before vector stamping and is stored only as PDF', async () => {
     let converted = 0

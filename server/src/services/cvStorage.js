@@ -2,7 +2,7 @@ const fs = require('fs/promises')
 const crypto = require('crypto')
 const supabase = require('./supabaseAdmin')
 const { STORAGE_BUCKETS, normalizeStoragePath } = require('./storageBuckets')
-const { getDocumentFileMeta, extensionMatchesPath } = require('./documentFile')
+const { getDocumentFileMeta } = require('./documentFile')
 const { cvBranding, isBrandedCvPath } = require('./cvBranding')
 
 const RESUME_BUCKET = STORAGE_BUCKETS.CV
@@ -89,33 +89,16 @@ async function storageObjectExists(bucket, objectPath) {
 
 async function prepareUploadedCv(file) {
   if (!file) return null
-  const meta = getDocumentFileMeta(file)
+  getDocumentFileMeta(file)
   const buffer = await fileBuffer(file)
   const hash = sha256(buffer)
-  const existing = await findByHash(hash)
-  const existingPath = normalizeResumeStoragePath(existing?.cv_storage_path || existing?.resume_url || existing?.cv_link || '')
-  const canReuseExisting = isBrandedCvPath(existingPath) &&
-    extensionMatchesPath(existingPath, 'pdf') &&
-    await storageObjectExists(RESUME_BUCKET, existingPath)
-  if (canReuseExisting) {
-    return {
-      cv_link: existing.cv_link || existing.resume_url || '',
-      resume_url: existing.resume_url || existing.cv_link || '',
-      cv_file_hash: hash,
-      cv_storage_path: existingPath,
-      cv_original_name: meta.originalName.replace(/\.(pdf|docx?)$/i, '') + '.pdf',
-      cv_mimetype: 'application/pdf',
-      duplicate: true
-    }
-  }
-
   const queued = await cvBranding().stage(file, { buffer })
   const objectPath = queued.path
   const url = publicUrl(objectPath)
   return {
     cv_link: url,
     resume_url: url,
-    cv_file_hash: hash,
+    cv_file_hash: queued.fileHash || hash,
     cv_storage_path: normalizeResumeStoragePath(objectPath),
     cv_original_name: queued.fileName,
     cv_mimetype: queued.contentType,

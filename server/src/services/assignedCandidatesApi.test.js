@@ -1,11 +1,21 @@
 const test=require('node:test')
 const assert=require('node:assert/strict')
-const { createDatabase,assign,ADMIN,CONSULTANT,OTHER,SUPER,INACTIVE,CLIENT,JOB }=require('../../test-support/assignedCandidatesSchema.cjs')
+const { createDatabase,assign:seedAssignment,ADMIN,CONSULTANT,OTHER,SUPER,INACTIVE,CLIENT,JOB }=require('../../test-support/assignedCandidatesSchema.cjs')
 const { databaseAdapter }=require('../../test-support/assignedCandidatesAdapter.cjs')
 
 test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialogs and cleanup against PostgreSQL',async t=>{
   const db=await createDatabase();t.after(()=>db.close())
   const adapter=databaseAdapter(db)
+  const {PDFDocument}=require('pdf-lib')
+  const {inspectBrandedCvPdf}=require('./cvBrandingPdf')
+  const assign=async(db,n,options)=>{
+    const row=await seedAssignment(db,n,options)
+    const pdf=await PDFDocument.create();pdf.addPage().drawText(`Synthetic CV ${n}`)
+    const bytes=Buffer.from(await pdf.save())
+    const upload=(await db.query('select cv_storage_path from assigned_candidate_uploads where id=$1',[row.upload_id])).rows[0]
+    adapter.objects.set(upload.cv_storage_path,bytes)
+    return row
+  }
   const modulePath=require.resolve('./supabaseAdmin');require.cache[modulePath]={id:modulePath,filename:modulePath,loaded:true,exports:adapter}
   const express=require('express');const app=express();app.use(express.json())
   let current=CONSULTANT
@@ -14,6 +24,25 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
   const server=app.listen(0);t.after(()=>server.close())
   const base=`http://127.0.0.1:${server.address().port}/api/assigned-candidates`
   const request=async(route='',method='GET',body)=>{const r=await fetch(base+route,{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {...await r.json(),httpStatus:r.status}}
+  const completeTransfer=async(id,body)=>{
+    const queued=await request(`/${id}/transfer`,'POST',body)
+    assert.equal(queued.httpStatus,202,JSON.stringify(queued));assert.equal(queued.processing,true)
+    for(let attempt=0;attempt<100;attempt++){
+      const state=await request(`/${id}/transfer`)
+      assert.equal(state.httpStatus,200,JSON.stringify(state))
+      assert.notEqual(state.status,'failed',JSON.stringify(state))
+      if(state.status==='complete'){
+        const transfer=(await db.query('select target_path from assigned_cv_transfer_requests where assignment_id=$1',[id])).rows[0]
+        assert.equal((await inspectBrandedCvPdf(adapter.objects.get(transfer.target_path))).branded,true)
+        const result=(await db.query('select c.*,a.consultant_user_id from candidates c join candidate_associations a on a.candidate_id=c.id where a.id=$1',[state.association_id])).rows[0]
+        assert.ok(result,JSON.stringify(state))
+        assert.equal((await inspectBrandedCvPdf(adapter.objects.get(result.cv_storage_path))).branded,true)
+        return result
+      }
+      await new Promise(resolve=>setTimeout(resolve,25))
+    }
+    assert.fail('Durable transfer worker did not complete')
+  }
   const own=await assign(db,201);await assign(db,202,{consultant:OTHER})
   await t.test('consultant lists own records and cannot spoof scope, create, reassign, delete or open another CV',async()=>{
     assert.equal((await request()).data.length,1)
@@ -53,8 +82,8 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     assert.equal((await db.query('select count(*)::int as n from candidates')).rows[0].n,0)
     assert.equal((await db.query('select count(*)::int as n from candidate_associations')).rows[0].n,0)
     assert.equal((await db.query('select added_at from assigned_candidates where id=$1',[own.id])).rows[0].added_at,null)
-    const result=await request(`/${own.id}/transfer`,'POST',body)
-    assert.equal(result.httpStatus,201,JSON.stringify(result));assert.equal(result.consultant_user_id,CONSULTANT)
+    const result=await completeTransfer(own.id,body)
+    assert.equal(result.consultant_user_id,CONSULTANT)
     assert.ok(result.cv_storage_path);assert.match(result.candidate_display_id,/^CA/)
     assert.equal((await request(`/${own.id}/transfer`,'POST',body)).idempotent,true)
     assert.equal((await db.query('select count(*)::int as n from candidates')).rows[0].n,1)
@@ -67,7 +96,7 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     assert.equal((await request(`/${duplicate.id}/review`,'POST',body)).duplicate,true)
     assert.equal((await request(`/${duplicate.id}/review`,'POST',{...body,full_name:'Not Saved By Review',duplicate_action:'update_current'})).valid,true)
     assert.equal((await db.query('select full_name from candidates')).rows[0].full_name,'Test Candidate 201')
-    assert.equal((await request(`/${duplicate.id}/transfer`,'POST',{...body,full_name:'Reviewed Existing Candidate',status:'In Discussion',notes:'Reviewed details',duplicate_action:'update_current'})).httpStatus,201)
+    await completeTransfer(duplicate.id,{...body,full_name:'Reviewed Existing Candidate',status:'In Discussion',notes:'Reviewed details',duplicate_action:'update_current'})
     assert.equal((await db.query('select full_name from candidates')).rows[0].full_name,'Reviewed Existing Candidate')
     assert.equal((await db.query('select status,notes from candidate_associations')).rows[0].status,'In Discussion')
     assert.equal((await db.query('select status,notes from candidate_associations')).rows[0].notes,'Reviewed details')
@@ -92,13 +121,12 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     const body={full_name:'Test Candidate 201',email:'synthetic201@example.test',mobile_number:'9876500201',client_id:CLIENT,job_id:nextJob,status:'Interested',consultant_name:'Test Consultant',consultant_user_id:CONSULTANT}
     const warning=await request(`/${next.id}/transfer`,'POST',body)
     assert.equal(warning.httpStatus,409);assert.equal(warning.allowAddDuplicate,true);assert.equal(warning.exactAssociation,false)
-    const saved=await request(`/${next.id}/transfer`,'POST',{...body,duplicate_action:'add_duplicate'})
-    assert.equal(saved.httpStatus,201,JSON.stringify(saved))
+    await completeTransfer(next.id,{...body,duplicate_action:'add_duplicate'})
     assert.equal((await db.query('select count(*)::int as n from candidates')).rows[0].n,1)
     assert.equal((await db.query('select count(*)::int as n from candidate_associations')).rows[0].n,2)
     const master=(await db.query('select cv_storage_path,cv_attachments from candidates')).rows[0]
-    assert.ok(master.cv_attachments.some(cv=>cv.path.endsWith('000000000206.pdf')))
-    assert.ok(master.cv_storage_path.endsWith('000000000201.pdf'))
+    assert.ok(master.cv_attachments.some(cv=>cv.path.endsWith(`transfer-${next.upload_id}.pdf`)))
+    assert.ok(master.cv_storage_path.endsWith(`transfer-${own.upload_id}.pdf`))
   })
   await t.test('upload failure keeps a durable manifest; retry and manual correction save one assignment',async()=>{
     const previousConverter=process.env.CV_WORD_CONVERTER_URL
@@ -129,7 +157,7 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     assert.equal((await request(`/${reassigned.id}/status`,'PATCH',{status:'Interested'})).httpStatus,404)
   })
   await t.test('main Candidates document cleanup preserves files owned by live assignments',async()=>{
-    const cv=(await db.query('select cv_storage_path from candidates limit 1')).rows[0].cv_storage_path
+    const cv=(await db.query('select cv_storage_path from assigned_candidate_uploads where id=$1',[own.upload_id])).rows[0].cv_storage_path
     await db.exec('begin')
     try{
       await db.exec("update candidates set cv_storage_path=null,cv_link=null,resume_url=null,cv_attachments='[]'")
@@ -141,13 +169,14 @@ test('real Assigned Candidates routes validate roles, lifecycle, duplicate dialo
     current=ADMIN
     const result=await request(`/${own.id}`,'DELETE',{});assert.equal(result.httpStatus,200,JSON.stringify(result));assert.equal(result.deleted,1)
     assert.equal(result.cleanup_pending,0)
-    assert.ok(!adapter.removedPaths.some(path=>path.endsWith('000000000201.pdf')))
+    const master=(await db.query('select cv_storage_path from candidates limit 1')).rows[0]
+    assert.ok(adapter.objects.has(master.cv_storage_path))
     const disposable=await assign(db,204,{status:'Interested'})
     const removed=await request('/delete','POST',{ids:[disposable.id],consultant_id:CONSULTANT})
     assert.equal(removed.deleted,1);assert.equal(removed.cleanup_pending,0)
     assert.ok(adapter.removedPaths.some(path=>path.endsWith('000000000204.pdf')))
     assert.equal((await db.query('select count(*)::int as n from assigned_candidate_uploads where id=$1',[disposable.upload_id])).rows[0].n,0)
-    assert.equal((await db.query('select count(*)::int as n from assigned_candidate_uploads where id=$1',[own.upload_id])).rows[0].n,1)
+    assert.equal((await db.query('select count(*)::int as n from assigned_candidate_uploads where id=$1',[own.upload_id])).rows[0].n,0)
     assert.equal((await request('/delete','POST',{contacted_only:true})).httpStatus,200)
     assert.equal((await db.query('select count(*)::int as n from candidates')).rows[0].n,1)
     const pending=await request();assert.ok(pending.data.every(row=>['Not Contacted','Didn’t Pick Up'].includes(row.status)))

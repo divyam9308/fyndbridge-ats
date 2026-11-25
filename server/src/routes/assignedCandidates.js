@@ -21,6 +21,8 @@ router.get('/:id/cv',controller.cv)
 router.post('/:id/parse',requirePageViewPermission('candidates'),controller.parse)
 router.post('/:id/review',requirePageViewPermission('candidates'),controller.review)
 router.post('/:id/transfer',requirePageViewPermission('candidates'),controller.transfer)
+router.get('/:id/transfer',requirePageViewPermission('candidates'),controller.transferStatus)
+router.post('/:id/transfer/retry',requirePageViewPermission('candidates'),controller.retryTransfer)
 router.delete('/:id',controller.remove)
 router.use((err,req,res,next)=>{if(res.headersSent)return next(err);console.error('assigned candidates route:',err.message);res.status(500).json({error:'Unable to complete this request.'})})
 module.exports=router

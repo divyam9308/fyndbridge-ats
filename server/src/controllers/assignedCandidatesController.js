@@ -62,6 +62,10 @@ exports.list = handle(async (req,res) => {
   if (scope) query = query.eq('assigned_consultant_id',scope)
   const result = await query.order('sort_group').order('assigned_at').order('id').range((page-1)*limit,page*limit-1)
   unwrap(result)
+  const transfers = result.data?.length ? unwrap(await supabase.from('assigned_cv_transfer_requests')
+    .select('assignment_id,status,last_error').in('assignment_id', result.data.map(row => row.id))) || [] : []
+  const transferById = new Map(transfers.map(row => [row.assignment_id, { status: row.status, last_error: row.last_error }]))
+  result.data = (result.data || []).map(row => ({ ...row, cv_transfer: transferById.get(row.id) || null }))
   // The existing RPC supplies Total, Added and the two pending statuses. Count
   // the remaining statuses across the same authorized scope, not this page or
   // the currently selected status. Head requests return no candidate records.
@@ -106,8 +110,8 @@ exports.upload = handle(async(req,res)=>{
     }
     if (!row.storage_ready) {
       if (row.cv_file_hash!==prepared.metadata.cv_file_hash) throw fail('This upload belongs to a different CV. Select the file again.',409)
-      await cvBranding().stage(req.file, { buffer: prepared.buffer, targetPath: row.cv_storage_path })
-      unwrap(await supabase.from('assigned_candidate_uploads').update({storage_ready:true}).eq('id',id))
+      const staged = await cvBranding().stage(req.file, { buffer: prepared.buffer, targetPath: row.cv_storage_path })
+      unwrap(await supabase.from('assigned_candidate_uploads').update({storage_ready:true,cv_file_hash:staged.fileHash}).eq('id',id))
     }
     res.json({upload_id:row.id,full_name:row.parsed_name,mobile_number:row.parsed_mobile,parse_error:row.parse_error})
   } finally { if(req.file?.path) await fs.unlink(req.file.path).catch(()=>{}) }
@@ -185,6 +189,7 @@ async function transfer(req,res) {
   if([NOT_CONTACTED,DID_NOT_PICK_UP].includes(row.status)) throw fail('Contact the candidate and update the assignment status before adding to Candidates.',409)
   // Keep the existing complete validation and duplicate dialog contract.
   req.assignedCandidateId=row.id
+  req.assignedCandidateUpload=row.assigned_candidate_uploads
   const {admin}=await context(req)
   const employee=(await listEmployeeDirectory()).find(e=>e.user_id===row.assigned_consultant_id)
   const body={...req.body}
@@ -193,6 +198,25 @@ async function transfer(req,res) {
   return require('./candidateController').createCandidate(req,res)
 }
 exports.transfer = handle(transfer)
+exports.transferStatus = handle(async(req,res)=>{
+  const row = await getRow(req)
+  const request = await require('../services/assignedCvTransfer').assignedCvTransfer().get(row.id)
+  res.json({ status: row.added_at ? 'complete' : request?.status || 'failed',
+    ...(request?.last_error ? { error: request.last_error } : {}),
+    candidate_id: row.candidate_id, association_id: row.association_id })
+})
+exports.retryTransfer = handle(async(req,res)=>{
+  const row = await getRow(req)
+  const service = require('../services/assignedCvTransfer').assignedCvTransfer()
+  const request = await service.get(row.id)
+  if (!request) throw fail('Transfer not found.',404)
+  // Recheck the original actor at execution; ownership changes cannot grant an
+  // old reviewed request new authority. A fresh transfer may replace a failure.
+  if (request.actor_id !== req.user.id && !(await context(req)).admin) throw fail('Retry this transfer from the original consultant account.',403)
+  const retried = await service.retry(row.id)
+  res.status(202).json({ processing: true, transfer_id: row.id, status: retried.status })
+  cvBranding().schedule()
+})
 exports.review = handle(async(req,res)=>{
   req.assignedReviewOnly=true
   return transfer(req,res)

@@ -82,8 +82,16 @@ test('selected-consultant permissions persist and enforce separate CRM, New/Dele
     assert.equal((await request(`/api/assigned-candidates/${colleague.id}/consultant`,'PATCH',{assigned_consultant_id:CONSULTANT})).status,200)
     assert.equal((await request(`/api/assigned-candidates/${colleague.id}`,'DELETE',{})).status,403)
     const transferable=await assign(db,809,{status:'Interested',consultant:CONSULTANT})
+    const pdf = await require('pdf-lib').PDFDocument.create(); pdf.addPage().drawText('Synthetic Overall transfer CV')
+    const upload = (await db.query('select cv_storage_path from assigned_candidate_uploads where id=$1',[transferable.upload_id])).rows[0]
+    adapter.objects.set(upload.cv_storage_path, Buffer.from(await pdf.save()))
     const transferred=await request(`/api/assigned-candidates/${transferable.id}/transfer`,'POST',{full_name:'Overall transfer',mobile_number:'9898989898',email:'overall-transfer@example.test',client_id:CLIENT,job_id:JOB,status:'Interested',current_salary:'10',expected_salary:'15',experience_years:'5',notice_period:'30'})
-    assert.equal(transferred.status,201,JSON.stringify(transferred))
+    assert.equal(transferred.status,202,JSON.stringify(transferred))
+    for (let attempt=0;attempt<100;attempt++) {
+      if ((await db.query('select added_at from assigned_candidates where id=$1',[transferable.id])).rows[0].added_at) break
+      await new Promise(resolve=>setTimeout(resolve,10))
+    }
+    assert.ok((await db.query('select added_at from assigned_candidates where id=$1',[transferable.id])).rows[0].added_at)
     assert.equal((await request('/api/assigned-candidates/delete','POST',{contacted_only:true})).status,403)
     current=CONSULTANT;const individual=await request('/api/assigned-candidates/count');assert.equal(individual.threshold,10);assert.equal(individual.can_view_overall,false)
   })

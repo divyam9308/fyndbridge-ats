@@ -69,4 +69,36 @@ test('real upload/status/open/delete routes enforce branding completion and remo
     await service.run({ paths: [target] })
     assert.equal((await fetch(base + '/api/assigned-candidates/' + assigned.id + '/cv')).status, 200)
   })
+  await t.test('legacy primary and secondary CVs both authorize without initiating historical branding', async () => {
+    user = ADMIN
+    const record = await db.query("insert into candidates(full_name,mobile_number,cv_storage_path,cv_attachments) values('Synthetic legacy','1234512345','legacy-primary.pdf','[{\"path\":\"legacy-secondary.pdf\"}]') returning id")
+    const id = record.rows[0].id
+    const jobsBefore = (await db.query('select count(*)::int n from cv_branding_jobs')).rows[0].n
+    for (const path of ['legacy-primary.pdf', 'legacy-secondary.pdf']) {
+      adapter.objects.set(path, Buffer.from(bytes))
+      const response = await fetch(base + '/api/resumes/open?' + new URLSearchParams({ path, record_id: id }))
+      assert.equal(response.status, 200)
+    }
+    assert.equal((await fetch(base + '/api/resumes/open?' + new URLSearchParams({ path: 'other.pdf', record_id: id }))).status, 403)
+    assert.equal((await db.query('select count(*)::int n from cv_branding_jobs')).rows[0].n, jobsBefore)
+  })
+  await t.test('concurrent additional CV saves preserve every acknowledged version or return a recoverable conflict', async () => {
+    user = ADMIN
+    const record = (await db.query("insert into candidates(full_name,mobile_number,cv_storage_path,cv_attachments) values('Synthetic concurrent upload','1234561234','concurrent-original.pdf','[{\"path\":\"concurrent-original.pdf\",\"name\":\"CV.pdf\"}]') returning id")).rows[0]
+    adapter.objects.set('concurrent-original.pdf', Buffer.from(bytes))
+    const assoc = (await db.query("insert into candidate_associations(candidate_id,client_id,job_id,status) values($1,$2,$3,'Interested') returning id", [record.id, CLIENT, JOB])).rows[0]
+    const upload = async text => {
+      const doc = await PDFDocument.create(); doc.addPage().drawText(text)
+      const form = new FormData(); form.append('status', 'Interested'); form.append('cv_files', new Blob([await doc.save()], { type: 'application/pdf' }), 'CV.pdf')
+      const response = await fetch(base + '/api/candidates/' + assoc.id, { method: 'PATCH', body: form })
+      return { status: response.status, payload: await response.json() }
+    }
+    const results = await Promise.all([upload('Distinct source A'), upload('Distinct source B')])
+    for (const result of results) assert.ok([200,409].includes(result.status), JSON.stringify(result))
+    const successes = results.filter(result => result.status === 200)
+    assert.ok(successes.length >= 1)
+    const current = (await db.query('select cv_attachments from candidates where id=$1', [record.id])).rows[0].cv_attachments
+    assert.equal(current.length, 1 + successes.length)
+    assert.ok(current.some(doc => doc.path === 'concurrent-original.pdf'))
+  })
 })

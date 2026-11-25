@@ -12,6 +12,22 @@ export async function assignedRequest(path = '', init = {}) {
   return payload
 }
 export const openAssignedCv = id => openProtectedUrl(`/api/assigned-candidates/${id}/cv`)
+export async function transferAssignedCandidate(id, body, { onProgress } = {}) {
+  const result = await assignedRequest(`/${id}/transfer`, { method: 'POST', body: JSON.stringify(body) })
+  if (!result.processing) return result
+  assignmentsChanged()
+  onProgress?.('Processing CV and adding candidate…')
+  try {
+    // The durable worker continues after the modal closes or this bounded wait ends.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      const state = await assignedRequest(`/${id}/transfer`)
+      if (state.status === 'complete') return state
+      if (state.status === 'failed') throw new Error(state.error || 'CV processing failed. Retry this transfer to continue.')
+    }
+    throw new Error('CV processing continues in the background. You can close this form and check the assignment’s transfer status. Saving again safely checks the same transfer.')
+  } finally { assignmentsChanged({ candidates: true }); onProgress?.('') }
+}
 export function assignmentsChanged({ candidates = false } = {}) {
   window.dispatchEvent(new Event('ats:assigned-candidates-updated'))
   if (candidates) {

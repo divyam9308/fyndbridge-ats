@@ -84,7 +84,7 @@ async function assertDocumentAccess(user, type, recordId, requestedPath) {
     throw notFound
   }
 
-  const attachments = normalizeAttachments(data[scope.attachmentField], {
+  const attachments = String(type).toLowerCase() === 'cv' ? require('./cvDocumentIdentity').candidateCvDocuments(data) : normalizeAttachments(data[scope.attachmentField], {
     bucket: scope.bucket,
     legacy: scope.legacy(data)
   })

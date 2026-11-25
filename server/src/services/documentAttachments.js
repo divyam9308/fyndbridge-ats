@@ -99,7 +99,7 @@ function normalizeAttachment(value, bucket) {
     mime_type: clean(value.mime_type || value.mimetype || value.content_type || value.contentType),
     size: normalizedSize(value.size ?? value.file_size ?? value.fileSize),
     uploaded_at: clean(value.uploaded_at || value.uploadedAt || value.created_at || value.createdAt),
-    file_hash: clean(value.file_hash || value.fileHash || value.cv_file_hash)
+    file_hash: clean(value.source_sha256 || value.file_hash || value.fileHash || value.cv_file_hash)
   }
 }
 

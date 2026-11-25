@@ -3,6 +3,17 @@ const assert = require('node:assert/strict')
 const { createDatabase,id,ADMIN,CONSULTANT,OTHER,INACTIVE,SUPER,CLIENT,JOB,upload,assign,payload,association } = require('../../test-support/assignedCandidatesSchema.cjs')
 const { ASSIGNED_STATUSES, assignmentScope, validateAssignment, rowGroup } = require('./assignedCandidates')
 const { CANDIDATE_STATUSES } = require('./candidateStatuses')
+async function prepareTransfer(db, assignmentId) {
+  const { createHash } = require('node:crypto')
+  const sourceHash = createHash('sha256').update(assignmentId).digest('hex')
+  const row = (await db.query('select upload_id,cv_storage_path from assigned_candidates join assigned_candidate_uploads on assigned_candidate_uploads.id=upload_id where assigned_candidates.id=$1', [assignmentId])).rows[0]
+  const target = `branded/fb1/test-${row.upload_id}.pdf`
+  await db.query(`insert into cv_branding_jobs(target_path,source_extension,original_name,source_sha256,result_sha256,page_count,status)
+    values($1,'pdf','CV.pdf',$2,$2,1,'ready')`, [target, sourceHash])
+  await db.query(`insert into assigned_cv_transfer_requests(assignment_id,actor_id,candidate_payload,association_payload,source_path,target_path,source_sha256)
+    values($1,$2,'{}','{}',$3,$4,$5)`, [assignmentId, CONSULTANT, row.cv_storage_path, target, sourceHash])
+  return target
+}
 test('contact-only statuses never enter the main Candidates status contract',()=>{
   assert.deepEqual(ASSIGNED_STATUSES,['Not Contacted', 'Didn’t Pick Up', 'Interested', 'Not Interested', 'In Discussion', 'Rejected by Recruiter', 'Not Relevant'])
   for(const status of ['Not Contacted','Didn’t Pick Up','Not Relevant']) assert.ok(!CANDIDATE_STATUSES.includes(status))
@@ -89,6 +100,7 @@ test('migration, RLS, timestamps, atomic transfers and deletion execute in Postg
     await db.exec('set role service_role')
     assert.equal(await scalar('select create_assigned_candidates($1,$2)',[ADMIN,JSON.stringify([row])]),1)
     const created=(await db.query('select id from assigned_candidates where upload_id=$1',[id(150)])).rows[0]
+    await prepareTransfer(db,created.id)
     const result=await scalar('select transfer_assigned_candidate($1,$2,$3,$4,null)',[created.id,CONSULTANT,JSON.stringify(payload(150)),JSON.stringify(association())])
     assert.ok(result.association.candidate_id)
     await db.exec('reset role')
@@ -122,6 +134,7 @@ test('migration, RLS, timestamps, atomic transfers and deletion execute in Postg
   })
   await t.test('unauthorized transfer and association failure preserve retryable assignments',async()=>{
     const a=await assign(db,114,{status:'Interested'})
+    await prepareTransfer(db,a.id)
     await assert.rejects(db.query('select transfer_assigned_candidate($1,$2,$3,$4,null)',[a.id,OTHER,JSON.stringify(payload(114)),JSON.stringify(association())]),/access denied/)
     await assert.rejects(db.query('select transfer_assigned_candidate($1,$2,$3,$4,null)',[a.id,CONSULTANT,JSON.stringify(payload(114)),JSON.stringify({...association(),current_salary:'invalid'})]))
     assert.equal(await scalar('select count(*)::int from candidates'),0)
@@ -130,6 +143,7 @@ test('migration, RLS, timestamps, atomic transfers and deletion execute in Postg
   let transferred
   await t.test('successful transfer reuses CV; simultaneous retries create one real candidate',async()=>{
     const a=await assign(db,115,{status:'Interested'})
+    const target = await prepareTransfer(db,a.id)
     const args=[a.id,CONSULTANT,JSON.stringify(payload(115)),JSON.stringify(association())]
     const [one,two]=await Promise.all([db.query('select transfer_assigned_candidate($1,$2,$3,$4,null)',args),db.query('select transfer_assigned_candidate($1,$2,$3,$4,null)',args)])
     const first=Object.values(one.rows[0])[0], second=Object.values(two.rows[0])[0]
@@ -138,13 +152,14 @@ test('migration, RLS, timestamps, atomic transfers and deletion execute in Postg
     assert.equal(await scalar('select count(*)::int from candidate_associations'),1)
     const saved=(await db.query('select * from assigned_candidates where id=$1',[a.id])).rows[0]
     assert.equal(saved.sort_group,4);assert.ok(saved.added_at);assert.equal(saved.assigned_at.getTime(),a.assigned_at.getTime())
-    assert.equal(first.association.candidates.cv_storage_path,`assigned/${ADMIN}/${id(115)}.pdf`)
+    assert.equal(first.association.candidates.cv_storage_path,target)
     assert.match(first.association.candidates.candidate_display_id,/^CA\d+$/)
     assert.ok(new Date(first.association.candidates.created_at)>=a.created_at)
     transferred={assignment:a.id,candidate:first.association.candidate_id}
   })
   await t.test('duplicate races roll back and explicit existing association links preserve main totals',async()=>{
     const a=await assign(db,116,{status:'Interested'})
+    await prepareTransfer(db,a.id)
     await assert.rejects(db.query('select transfer_assigned_candidate($1,$2,$3,$4,null)',[a.id,CONSULTANT,JSON.stringify(payload(115)),JSON.stringify(association())]),/identity changed/)
     await db.query('select transfer_assigned_candidate($1,$2,$3,$4,$5)',[a.id,CONSULTANT,JSON.stringify(payload(115)),JSON.stringify(association()),transferred.candidate])
     assert.equal(await scalar('select count(*)::int from candidates'),1)

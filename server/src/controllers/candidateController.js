@@ -21,7 +21,7 @@ const { resolveClientGroupScope } = require('../services/clientGroups')
 const { normalizeMandateStatus } = require('../services/mandateStatuses')
 const { CANDIDATE_STATUSES: VALID_STATUSES, candidateStatusError, cleanStatus: cleanCandidateStatus } = require('../services/candidateStatuses')
 const { removeUnreferencedDocuments, uploadDocuments } = require('../services/documentStorage')
-const { normalizeAttachment, normalizeAttachments, removalPlan } = require('../services/documentAttachments')
+const { normalizeAttachment, removalPlan } = require('../services/documentAttachments')
 const candidateCreation = require('../services/candidateCreation')
 
 const CANDIDATE_FIELDS = [
@@ -518,16 +518,7 @@ async function findCandidateByNameAndMobile(fullName, mobileNumber) {
 }
 
 function candidateCvAttachments(candidate) {
-  return normalizeAttachments(candidate?.cv_attachments, {
-    bucket: RESUME_BUCKET,
-    legacy: {
-      path: candidate?.cv_storage_path || candidate?.resume_url || candidate?.cv_link,
-      name: candidate?.cv_original_name,
-      mimeType: candidate?.cv_mimetype,
-      fileHash: candidate?.cv_file_hash,
-      uploadedAt: candidate?.updated_at || candidate?.created_at
-    }
-  })
+  return require('../services/cvDocumentIdentity').candidateCvDocuments(candidate || {})
 }
 
 function requestCandidateFiles(req) {
@@ -811,11 +802,19 @@ async function insertCandidateWithDisplayId(payload) {
   return candidateCreation.insertCandidateWithDisplayId(supabase, payload)
 }
 
-async function updateCandidateRow(candidateId, payload) {
+async function updateCandidateRow(candidateId, payload, expectedCv = null) {
   let updatePayload = payload
   let result = null
   for (let i = 0; i <= CANDIDATE_FIELDS.length; i++) {
-    result = await supabase.from('candidates').update(updatePayload).eq('id', candidateId)
+    let query = supabase.from('candidates').update(updatePayload).eq('id', candidateId)
+    const guardCv = expectedCv && Object.hasOwn(updatePayload, 'cv_attachments')
+    if (guardCv) {
+      for (const [field, value] of Object.entries(require('../services/cvDocumentIdentity').cvIdentitySnapshot(expectedCv))) {
+        query = value === null ? query.is(field, null) : query.eq(field, field === 'cv_attachments' ? JSON.stringify(value) : value)
+      }
+      result = await query.select('id').maybeSingle()
+      if (!result.error && !result.data) result = { error: Object.assign(new Error('This candidate’s CVs changed while saving. Reload the candidate and review the latest attachments before retrying.'), { statusCode: 409 }) }
+    } else result = await query
     const missingColumn = missingCandidateColumn(result.error)
     if (!missingColumn) break
     updatePayload = withoutColumn(updatePayload, missingColumn)
@@ -826,9 +825,7 @@ async function updateCandidateRow(candidateId, payload) {
 async function deleteUploadedCvResult(cv) {
   const objectPath = normalizeResumeStoragePath(cv?.cv_storage_path || cv?.resume_path || '')
   if (!objectPath || cv?.duplicate) return
-  if (require('../services/cvBranding').isBrandedCvPath(objectPath)) await require('../services/cvBranding').cvBranding().cancel([objectPath])
-  const { error } = await supabase.storage.from(RESUME_BUCKET).remove([objectPath])
-  if (error) console.error('deleteUploadedCvResult:', error.message)
+  await require('../services/cvStorageIntegrity').removeCvIfUnreferenced(supabase, objectPath)
 }
 
 function isTempResumePath(value) {
@@ -877,21 +874,6 @@ async function applyCvInput(req, candidatePayload) {
           : tempResumePath.toLowerCase().endsWith('.docx')
             ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             : 'application/msword')
-      }
-      const duplicateCv = await checkUploadedCvDuplicate(tempFile)
-      if (duplicateCv?.duplicate && require('../services/cvBranding').isBrandedCvPath(duplicateCv.cv_storage_path)) {
-        if (!duplicateCv.cv_storage_path) {
-          const duplicateError = new Error('Resume already exists, but its stored CV file could not be reused. Please re-upload the CV from the saved candidate if needed.')
-          duplicateError.statusCode = 409
-          throw duplicateError
-        }
-        candidatePayload.cv_link = duplicateCv.cv_link || duplicateCv.resume_url || candidatePayload.cv_link
-        candidatePayload.resume_url = duplicateCv.resume_url || duplicateCv.cv_link || candidatePayload.resume_url
-        candidatePayload.cv_file_hash = duplicateCv.cv_file_hash
-        candidatePayload.cv_storage_path = duplicateCv.cv_storage_path
-        candidatePayload.cv_original_name = require('../services/cvBranding').pdfName(req.body.cv_original_name)
-        candidatePayload.cv_mimetype = 'application/pdf'
-        return { ...duplicateCv, duplicate: true }
       }
       const cv = await prepareUploadedCv(tempFile)
       if (cv) {
@@ -1394,12 +1376,13 @@ async function createCandidate(req, res) {
       await assertCanUpdateColumns('candidates', { cv_files: true }, await isAdmin(req.user))
       if (candidate) await assertRowEditable('candidates', candidate.id, await isAdmin(req.user))
       if (req.assignedReviewOnly) return res.json({ valid: true })
-      const { data, error } = await supabase.rpc('transfer_assigned_candidate', {
-        p_id: req.assignedCandidateId, p_actor: req.user.id, p_candidate: candidatePayload,
-        p_association: associationPayload, p_existing: candidate?.id || null
-      })
-      if (error) throw Object.assign(error, { statusCode: error.code === '42501' ? 403 : 409 })
-      return res.status(201).json(flattenAssociation(data.association))
+      const transfer = require('../services/assignedCvTransfer').assignedCvTransfer()
+      const request = await transfer.enqueue({ id: req.assignedCandidateId, actorId: req.user.id,
+        candidate: candidatePayload, association: associationPayload, existingId: candidate?.id || null,
+        upload: req.assignedCandidateUpload })
+      res.status(202).json({ processing: true, transfer_id: request.assignment_id, status: request.status })
+      require('../services/cvBranding').cvBranding().schedule()
+      return
     }
 
     const previousAttachments = candidateCvAttachments(candidate)
@@ -1423,7 +1406,7 @@ async function createCandidate(req, res) {
         newAttachments.push(incomingAttachment)
       }
     }
-    const nextAttachments = normalizeAttachments([...previousAttachments, ...newAttachments], { bucket: RESUME_BUCKET })
+    const nextAttachments = await require('../services/cvUploadedAttachments').mergeUploadedCvAttachments(supabase, previousAttachments, newAttachments)
     setPrimaryCvFields(candidatePayload, nextAttachments, candidate || {}, cvResult)
 
     if (!candidate) {
@@ -1459,7 +1442,7 @@ async function createCandidate(req, res) {
         updatePayload.updated_by = req.user.id
       }
 
-      const { error: candidateUpdateError } = await updateCandidateRow(candidate.id, updatePayload)
+      const { error: candidateUpdateError } = await updateCandidateRow(candidate.id, updatePayload, candidate)
 
       if (candidateUpdateError) {
         throw candidateUpdateError
@@ -1528,7 +1511,6 @@ async function updateCandidate(req, res) {
   const files = requestCandidateFiles(req)
   let cvResult = null
   let newAttachments = []
-  let previousAttachments = []
   let removedAttachments = []
   let attachmentRowUpdated = false
   try {
@@ -1644,7 +1626,7 @@ async function updateCandidate(req, res) {
 
     const hasAttachmentMutation = files.length > 0 || Object.prototype.hasOwnProperty.call(req.body, 'removed_cv_paths')
     if (hasAttachmentMutation) {
-      previousAttachments = candidateCvAttachments(existingCandidate)
+      const previousAttachments = candidateCvAttachments(existingCandidate)
       const plan = removalPlan(previousAttachments, req.body.removed_cv_paths, RESUME_BUCKET, 'removed_cv_paths')
       removedAttachments = plan.removed
       const primaryFile = plan.retained.length ? null : files[0] || null
@@ -1666,7 +1648,7 @@ async function updateCandidate(req, res) {
           newAttachments.push(incomingAttachment)
         }
       }
-      const nextAttachments = normalizeAttachments([...plan.retained, ...newAttachments], { bucket: RESUME_BUCKET })
+      const nextAttachments = await require('../services/cvUploadedAttachments').mergeUploadedCvAttachments(supabase, plan.retained, newAttachments)
       setPrimaryCvFields(candidatePayload, nextAttachments, existingCandidate, cvResult)
     }
 
@@ -1680,7 +1662,7 @@ async function updateCandidate(req, res) {
         updatePayload.updated_by = req.user.id
       }
 
-      const { error } = await updateCandidateRow(existingCandidateId, updatePayload)
+      const { error } = await updateCandidateRow(existingCandidateId, updatePayload, existingCandidate)
 
       if (error) {
         throw error
@@ -1690,15 +1672,9 @@ async function updateCandidate(req, res) {
         try {
           await removeCandidateCvFiles(removedAttachments)
         } catch (storageError) {
-          const rollbackPayload = {}
-          setPrimaryCvFields(rollbackPayload, previousAttachments, existingCandidate)
-          const rollback = await updateCandidateRow(existingCandidateId, rollbackPayload)
-          if (rollback.error) console.error('updateCandidate attachment rollback:', rollback.error.message)
-          if (newAttachments.length) {
-            try { await removeCandidateCvFiles(newAttachments) } catch (cleanupError) { console.error('updateCandidate new CV cleanup:', cleanupError.message) }
-            newAttachments = []
-          }
-          throw Object.assign(new Error('The candidate was saved, but CV deletion could not be completed. Existing attachments were restored.'), { statusCode: 502 })
+          // References were committed; a storage failure must not restore paths
+          // already claimed/deleted earlier in this batch. Durable claims retry.
+          console.error('Deferred CV storage cleanup:', { code: storageError.code || 'STORAGE_CLEANUP_PENDING' })
         }
       }
     }
@@ -1888,21 +1864,7 @@ async function deleteResumeFromStorage(resumeUrl) {
     return
   }
 
-  const { data: sharedRows, error: sharedError } = await supabase
-    .from('candidates')
-    .select('id, resume_url, cv_link')
-    .limit(10000)
-  if (sharedError) throw sharedError
-  if ((sharedRows || []).some(row => row.resume_url === resumeUrl || row.cv_link === resumeUrl)) return
-
-  if (!objectPath) {
-    return
-  }
-
-  const { error } = await supabase.storage.from(RESUME_BUCKET).remove([objectPath])
-  if (error) {
-    console.error('deleteResumeFromStorage:', error.message)
-  }
+  await require('../services/cvStorageIntegrity').removeCvIfUnreferenced(supabase, objectPath)
 }
 
 async function deleteCandidate(req, res) {

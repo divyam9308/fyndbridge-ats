@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, X, Users, ChevronDown, AlertCircle, Search, Loader2, Eye, Pencil, Lock } from 'lucide-react'
-import { assignedRequest } from '../services/assignedCandidatesApi'
+import { assignedRequest, transferAssignedCandidate } from '../services/assignedCandidatesApi'
 import { lockBodyScroll } from '../utils/lockBodyScroll'
 import { useAuth } from '../context/useAuth'
 import { useAdminAccess, isColumnHidden, isColumnDisabled } from '../hooks/useAdminAccess'
@@ -322,6 +322,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
   const [apiError, setApiError] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [transferProgress, setTransferProgress] = useState('')
   const [candidateDuplicate, setCandidateDuplicate] = useState(() => assignedBatch?.error?.duplicate ? {
     source: 'manual', candidate: assignedBatch.draft?.form, existing: assignedBatch.error.duplicate.existing,
     exactAssociation: assignedBatch.error.exactAssociation, allowAddDuplicate: assignedBatch.error.duplicate.allowAddDuplicate !== false,
@@ -647,7 +648,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
         await assignedBatch.onReview({ form: candidate, body, duplicateAction })
         return null
       }
-      const payload = await assignedRequest(`/${assignedCandidate.id}/transfer`, { method: 'POST', body: JSON.stringify(body) })
+      const payload = await transferAssignedCandidate(assignedCandidate.id, body, { onProgress: setTransferProgress })
       return apiCandidateToUi(payload)
     }
     const formBody = new FormData()
@@ -2595,6 +2596,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
             </div>
             <div className="modal-body" ref={candidateModalBodyRef}>
               {assignedBatch && <div className="review-banner" role="status" style={{ marginBottom:12 }}>Candidate {assignedBatch.index + 1} of {assignedBatch.total}{assignedBatch.savedCount ? ` · ${assignedBatch.savedCount} already added` : ''}{assignedBatch.progress ? ` · ${assignedBatch.progress}` : ''}</div>}
+              {transferProgress && <div className="review-banner" role="status" style={{ marginBottom:12 }}>{transferProgress}</div>}
               {optionError && <div className="form-error" role="alert">{optionError}<button className="btn-secondary" type="button" onClick={() => refreshOptionData()}>Retry</button></div>}
               {errors.form && <div className="form-error" style={{ display:'block', marginBottom:12 }}>{errors.form}</div>}
               {assignedCandidate && <button className="btn-secondary" type="button" onClick={parseAssignedCv} disabled={parsingAssigned || saving}>{parsingAssigned ? 'Parsing…' : 'Parse CV'}</button>}
@@ -2626,7 +2628,7 @@ export default function CandidatesPage({ assignedCandidate = null, onAssignedClo
                 <button className="btn-secondary" onClick={openAssignAnother} disabled={saving}>Assign Another Mandate/Client</button>
               )}
               <button className="btn-primary" onClick={handleSave} id="save-candidate-btn" disabled={saving || parsingAssigned}>
-                {saving ? 'Saving...' : assignedBatch ? (assignedBatch.index === assignedBatch.total - 1 ? 'Save' : 'Next') : (assigningAnother ? 'Save New Assignment' : 'Save Candidate')}
+                {saving ? (transferProgress ? 'Processing CV…' : 'Saving...') : assignedBatch ? (assignedBatch.index === assignedBatch.total - 1 ? 'Save' : 'Next') : (assigningAnother ? 'Save New Assignment' : 'Save Candidate')}
               </button>
             </div>
           </div>

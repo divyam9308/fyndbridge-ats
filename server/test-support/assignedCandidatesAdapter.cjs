@@ -13,6 +13,10 @@ function databaseAdapter(db) {
     createSignedUrl:async path=>({data:{signedUrl:`https://example.test/protected/${encodeURIComponent(path)}`}})
   }}}
   return {storage,objects,removedPaths,buckets,
+    auth:{admin:{getUserById:async id=>{
+      const user=(await db.query('select * from auth.users where id=$1',[id])).rows[0]
+      return {data:{user:user||null},error:null}
+    }}},
     async rpc(name,args={}) {try {const entries=Object.entries(args);if(name==='assigned_candidates_consultant_counts')return {data:(await db.query('select * from assigned_candidates_consultant_counts()')).rows};const q=await db.query(`select public.${name}(${entries.map(([k],i)=>`${k} => $${i+1}`).join(',')}) as result`,entries.map(([,value])=>value&&typeof value==='object'&&!Array.isArray(value)?JSON.stringify(value):value));return {data:q.rows[0]?.result}}catch(error){return {error}}},
     from(table) {
       const filters=[],params=[],orders=[];let kind='select',values,conflict,selection='*',head=false,count=false,take,offset=0,returnRows=true
@@ -50,7 +54,7 @@ function databaseAdapter(db) {
               if(table==='candidate_associations'&&selection.includes('candidates')) extra=`,(select to_jsonb(c) from candidates c where c.id=t.candidate_id) as candidates`
               rows=(await db.query(`select t.*${extra} from public.${table} t${where}${orders.length?' order by '+orders.join(','):''}${take!==undefined?' limit '+Number(take):''} offset ${offset}`,params)).rows
             } else if(kind==='insert') {
-              const columns=Object.keys(values);const args=columns.map(k=>['allowed_user_ids','skills','consultants'].includes(k)?values[k]:typeof values[k]==='object'?JSON.stringify(values[k]):values[k])
+              const columns=Object.keys(values);const args=columns.map(k=>['allowed_user_ids','skills','consultants'].includes(k)?values[k]:values[k]!==null&&typeof values[k]==='object'?JSON.stringify(values[k]):values[k])
               const conflictSql=conflict?` on conflict (${conflict.split(',').map(k=>`"${k}"`).join(',')}) do update set ${columns.filter(k=>!conflict.split(',').includes(k)).map(k=>`"${k}"=excluded."${k}"`).join(',')}`:''
               rows=(await db.query(`insert into public.${table}(${columns.map(k=>`"${k}"`).join(',')}) values(${columns.map((_,i)=>`$${i+1}`).join(',')})${conflictSql} returning *`,args)).rows
             } else if(kind==='update') {

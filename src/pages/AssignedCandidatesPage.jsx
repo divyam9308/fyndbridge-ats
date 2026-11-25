@@ -34,7 +34,7 @@ const ASSIGNMENT_KPIS = [
   ['Rejected by Recruiter', 'rejected_by_recruiter', 'red'],
   ['Not Relevant', 'not_relevant', 'orange']
 ]
-const canTransfer = row => !row.added_at && row.status !== 'Not Contacted' && row.status !== 'Didn’t Pick Up' && row.status !== 'Not Relevant'
+const canTransfer = row => !row.added_at && !['pending', 'processing'].includes(row.cv_transfer?.status) && row.status !== 'Not Contacted' && row.status !== 'Didn’t Pick Up' && row.status !== 'Not Relevant'
 // Row tone describes contact state; it no longer decides database order.
 const rowTone = row => row.added_at ? 4 : row.status === 'Not Contacted' ? 0 : row.status === 'Didn’t Pick Up' ? 1 : row.status === 'Not Relevant' ? 2 : 3
 function AssignmentDialog({ title, children, pending, onCancel, onConfirm, confirm = 'Yes, Delete', className = '' }) {
@@ -103,6 +103,12 @@ export default function AssignedCandidatesPage() {
     return () => { window.removeEventListener('fb:page-view-permissions-changed', refresh); window.removeEventListener('focus', refresh); window.removeEventListener('ats:assigned-candidates-updated', refresh); window.removeEventListener('storage', onStorage) }
   }, [refresh])
   useRealtimeRefresh({ channelName: 'realtime:assigned-candidates', tables: ['assigned_candidates', 'employee_statuses'], onChange: refresh })
+  const hasPendingTransfers = data?.data?.some(row => ['pending', 'processing'].includes(row.cv_transfer?.status))
+  useEffect(() => {
+    if (!hasPendingTransfers) return
+    const timer = window.setInterval(refresh, 5000)
+    return () => window.clearInterval(timer)
+  }, [hasPendingTransfers, refresh])
   const changed = () => assignmentsChanged()
   const admin = Boolean(data?.can_manage)
   const canCreate = Boolean(data?.can_create)
@@ -134,6 +140,16 @@ export default function AssignedCandidatesPage() {
     setError(''); setSelection(next)
   }
   const transferDetails = row => ({ ...row, consultant_name: row.assigned_consultant_name || consultants.find(c => c.id === row.assigned_consultant_id)?.name || user?.profile_name || user?.user_metadata?.full_name || user?.name || '' })
+  const retryTransfer = async row => {
+    if (operationLock.current) return
+    operationLock.current = true
+    setError('')
+    try {
+      await assignedRequest(`/${row.id}/transfer/retry`, { method: 'POST', body: JSON.stringify({}) })
+      await refresh()
+    } catch (err) { setError(err.message) }
+    finally { operationLock.current = false }
+  }
   const finishBulkTransfer = (ids, complete = false) => {
     setBulkTransfer(null)
     setSelection(current => new Map([...current].filter(([id]) => !ids.includes(id))))
@@ -228,7 +244,10 @@ export default function AssignedCandidatesPage() {
         <td>{formatDateDDMMYYYY(row.assigned_at)}</td><td>{formatDateDDMMYYYY(row.contacted_at)}</td>
         <td style={{ textAlign: 'center' }}><DocumentIconGroup attachments={[{ path: row.assigned_candidate_uploads?.cv_storage_path || row.id, name: row.assigned_candidate_uploads?.cv_original_name || `${row.full_name} CV` }]} brandingContext={{ type: 'assigned', recordId: row.id }} keyPrefix="assigned-cv" openingKey={openingDocument} onOpen={key => viewCv(row, key)} /></td>
         <td><div className="assigned-row-actions">
-          {row.added_at ? <span className="badge badge-status-unset">Added</span> : <button className="assigned-add" disabled={pendingStatuses.has(row.id) || !canAct(row) || !canTransfer(row)} title={row.status === 'Not Relevant' ? 'Not Relevant assignments cannot be added to Candidates' : ['Not Contacted', 'Didn’t Pick Up'].includes(row.status) ? 'Contact the candidate and update their status first' : 'Add to Candidates'} onClick={() => setTransfer(transferDetails(row))}>Add to Candidates</button>}
+          {row.added_at ? <span className="badge badge-status-unset">Added</span>
+            : ['pending', 'processing'].includes(row.cv_transfer?.status) ? <span className="badge badge-status-unset" role="status">Processing CV…</span>
+            : row.cv_transfer?.status === 'failed' ? <><button className="assigned-add" disabled={pendingStatuses.has(row.id) || !canAct(row) || !canTransfer(row)} title="Review details and resolve conflicts before trying again" onClick={() => setTransfer(transferDetails(row))}>Review transfer</button><button className="assigned-add" disabled={pendingStatuses.has(row.id) || !canAct(row) || !canTransfer(row)} title={row.cv_transfer.last_error || 'CV processing failed. Retry this transfer.'} onClick={() => retryTransfer(row)}>Retry transfer</button></>
+            : <button className="assigned-add" disabled={pendingStatuses.has(row.id) || !canAct(row) || !canTransfer(row)} title={row.status === 'Not Relevant' ? 'Not Relevant assignments cannot be added to Candidates' : ['Not Contacted', 'Didn’t Pick Up'].includes(row.status) ? 'Contact the candidate and update their status first' : 'Add to Candidates'} onClick={() => setTransfer(transferDetails(row))}>Add to Candidates</button>}
           {canEditRow(row) && <button className="row-action-btn" disabled={pendingStatuses.has(row.id)} aria-label={`Actions for ${row.full_name}`} onClick={event => setMenu({ row, element: event.currentTarget, anchor: event.currentTarget.getBoundingClientRect() })}><MoreHorizontal size={17} /></button>}</div></td>
       </tr>) : <tr><td colSpan={columnCount} className="table-empty-cell">No assigned candidates{admin ? '. Select a consultant and click New to assign CVs.' : '.'}</td></tr>}</tbody>
     </table></div><PaginationBar page={page} totalPages={data?.totalPages || 1} total={data?.total || 0} pageSize={limit} onPageChange={setPage} onPageSizeChange={value => { setLimit(value); setPage(1); setSelection(new Map()) }} loading={loading} /></div>

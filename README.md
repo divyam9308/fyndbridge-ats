@@ -66,3 +66,15 @@ are rejected with an explicit PDF-upload instruction; an unbranded Word file is
 never presented as a completed branded CV.
 
 Focused checks: `node --test server/src/services/cvBranding.test.js`.
+
+### CV transfer integrity and duplicate cleanup
+
+The CV management follow-up adds durable, retryable Assigned Candidates transfers,
+verified source-content deduplication and atomic storage deletion claims. Only an
+explicit new transfer can stage an existing legacy Assigned CV; historical Main
+Candidates reads and duplicate cleanup never trigger branding.
+
+Apply the new `20261125210111_cv_transfer_identity_and_storage_integrity.sql`
+migration during the coordinated application rollout. See
+[the implementation and deployment report](docs/CV_MANAGEMENT_FIX.md) for the safe
+order, verification results, artwork discrepancy and bounded cleanup commands.

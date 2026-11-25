@@ -570,7 +570,7 @@ test('consultant bulk review supports Next, Back and Cancel without writes until
   await form.locator('input[name=email]').fill('second@example.test')
   if(info.project.name==='chromium')await page.screenshot({animations:'disabled',path:'outputs/assigned-candidates-verification/bulk-transfer-review.png'})
   await form.getByRole('button',{name:'Save',exact:true}).click()
-  await expect(page.getByText('2 Candidates Added Successfully',{exact:true})).toBeVisible()
+  await expect(page.getByText('2 Candidates Added Successfully',{exact:true})).toBeVisible({timeout:15000})
   const saved=await (await fetch(assigned.url+'/test/state')).json()
   expect(saved.candidates).toHaveLength(2);expect(saved.associations).toHaveLength(2)
   expect(saved.assignments.filter(row=>row.added_at)).toHaveLength(2)
@@ -595,17 +595,18 @@ test('bulk final Save handles duplicates between reviewed drafts using the exist
   await expect(form.locator('input[name=name]')).toHaveValue('Reviewed Second Candidate')
   await expect(form.getByText('Candidate 1 of 1 · 1 already added',{exact:true})).toBeVisible()
   await form.getByRole('button',{name:'Save',exact:true}).click()
-  await expect(page.getByText('2 Candidates Added Successfully',{exact:true})).toBeVisible()
+  await expect(page.getByText('2 Candidates Added Successfully',{exact:true})).toBeVisible({timeout:15000})
   const saved=await (await fetch(assigned.url+'/test/state')).json()
   expect(saved.candidates).toHaveLength(1);expect(saved.associations).toHaveLength(1)
   expect(saved.candidates[0].full_name).toBe('Reviewed Second Candidate')
-  expect(saved.candidates[0].cv_attachments).toHaveLength(2);expect(app.consoleErrors).toEqual([])
+  expect(saved.candidates[0].cv_attachments).toHaveLength(1);expect(app.consoleErrors).toEqual([])
   expect(saved.assignments.filter(row=>row.added_at)).toHaveLength(2)
 })
 
 test('bulk Save retains failed drafts and retries remaining assignments without re-saving completed rows',async({page,assigned,app})=>{
   const requests=[];let fail=true
   await page.route('**/api/assigned-candidates/*/transfer',async route=>{
+    if(route.request().method() !== 'POST') return route.fallback()
     requests.push(route.request().url())
     if(requests.length===2&&fail){fail=false;return route.fulfill({status:503,json:{error:'Synthetic retryable transfer failure'}})}
     return route.fallback()
@@ -621,7 +622,7 @@ test('bulk Save retains failed drafts and retries remaining assignments without 
   await expect(form.locator('input[name=email]')).toHaveValue('retry-second@example.test')
   expect((await (await fetch(assigned.url+'/test/state')).json()).candidates).toHaveLength(1)
   await form.getByRole('button',{name:'Save',exact:true}).click()
-  await expect(page.getByText('2 Candidates Added Successfully',{exact:true})).toBeVisible()
+  await expect(page.getByText('2 Candidates Added Successfully',{exact:true})).toBeVisible({timeout:15000})
   expect(app.consoleErrors).toEqual([])
   expect(requests).toHaveLength(3);expect(requests[0]).not.toBe(requests[1]);expect(requests[1]).toBe(requests[2])
   const saved=await (await fetch(assigned.url+'/test/state')).json()

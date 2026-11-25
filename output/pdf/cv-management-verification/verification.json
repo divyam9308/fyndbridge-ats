@@ -1,0 +1,141 @@
+{
+  "synthetic": true,
+  "sourceSha256": "53a5df2b095ca47304a591d52d57be22f18f663dbe7c233dd28a96704f846d04",
+  "resultSha256": "b22a64e533a25aff84cfdafa06e308bbc896a6729577397e1003109bdbde36f1",
+  "inspection": {
+    "branded": true,
+    "pageCount": 8,
+    "version": "fb1"
+  },
+  "repeatBytesIdentical": true,
+  "pages": [
+    {
+      "page": 1,
+      "media": {
+        "x": 0,
+        "y": 0,
+        "width": 595,
+        "height": 842
+      },
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 595,
+        "height": 842
+      },
+      "rotation": 0
+    },
+    {
+      "page": 2,
+      "media": {
+        "x": 0,
+        "y": 0,
+        "width": 595,
+        "height": 842
+      },
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 595,
+        "height": 842
+      },
+      "rotation": 90
+    },
+    {
+      "page": 3,
+      "media": {
+        "x": 0,
+        "y": 0,
+        "width": 595,
+        "height": 842
+      },
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 595,
+        "height": 842
+      },
+      "rotation": 180
+    },
+    {
+      "page": 4,
+      "media": {
+        "x": 0,
+        "y": 0,
+        "width": 595,
+        "height": 842
+      },
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 595,
+        "height": 842
+      },
+      "rotation": 270
+    },
+    {
+      "page": 5,
+      "media": {
+        "x": 0,
+        "y": 0,
+        "width": 650,
+        "height": 850
+      },
+      "crop": {
+        "x": 25,
+        "y": 35,
+        "width": 590,
+        "height": 790
+      },
+      "rotation": 0
+    },
+    {
+      "page": 6,
+      "media": {
+        "x": 0,
+        "y": 0,
+        "width": 612,
+        "height": 792
+      },
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 612,
+        "height": 792
+      },
+      "rotation": 0
+    },
+    {
+      "page": 7,
+      "media": {
+        "x": 0,
+        "y": 0,
+        "width": 842,
+        "height": 595
+      },
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 842,
+        "height": 595
+      },
+      "rotation": 0
+    },
+    {
+      "page": 8,
+      "media": {
+        "x": 0,
+        "y": 0,
+        "width": 90,
+        "height": 120
+      },
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 90,
+        "height": 120
+      },
+      "rotation": 0
+    }
+  ]
+}

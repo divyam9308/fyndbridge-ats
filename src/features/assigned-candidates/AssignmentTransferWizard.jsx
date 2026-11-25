@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useState } from 'react'
-import { assignedRequest } from '../../services/assignedCandidatesApi'
+import { transferAssignedCandidate } from '../../services/assignedCandidatesApi'
 
 const CandidateForm = lazy(() => import('../../pages/CandidatesPage'))
 
@@ -28,7 +28,7 @@ export default function AssignmentTransferWizard({ assignments, onClose, onSaved
         try {
           const reviewed = reviewedDrafts.get(row.id)
           if (!reviewed?.body) throw new Error('Review this candidate before saving.')
-          await assignedRequest(`/${row.id}/transfer`, { method: 'POST', body: JSON.stringify(reviewed.body) })
+          await transferAssignedCandidate(row.id, reviewed.body, { onProgress: message => setProgress(message ? `${message} (${position + 1} of ${remaining.length})` : '') })
           completed.current.add(row.id)
           setSavedCount(completed.current.size)
         } catch (error) {

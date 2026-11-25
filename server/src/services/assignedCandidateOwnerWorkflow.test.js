@@ -40,7 +40,8 @@ test('Overall editing is enforced in PostgreSQL, revokes immediately and retains
   for (const fn of definitions) {
     assert.equal(fn.prosecdef, false)
     assert.match(fn.definition, /assigned_candidates_overall/)
-    assert.doesNotMatch(fn.definition, /errcode='40001'/)
+    if (fn.signature.startsWith('transfer_assigned_candidate')) assert.match(fn.definition, /Candidate CVs changed during verification/)
+    else assert.doesNotMatch(fn.definition, /errcode='40001'/)
     assert.doesNotMatch(fn.grants, /authenticated|anon/)
   }
   const updated = (await db.query('select update_assigned_candidate($1,$2,$3,$4) as result', [CONSULTANT, row.id, { full_name: 'Overall edited record' }, 1])).rows[0].result

@@ -4,7 +4,8 @@ const supabase = require('./supabaseAdmin')
 const { normalizeStoragePath } = require('./storageBuckets')
 const { getDocumentFileMeta } = require('./documentFile')
 const { normalizeAttachments, storagePaths, uploadedAttachment } = require('./documentAttachments')
-const { cvBranding, isBrandedCvPath } = require('./cvBranding')
+const { cvBranding } = require('./cvBranding')
+const { removeCvIfUnreferenced } = require('./cvStorageIntegrity')
 
 function safeFileName(value) {
   return String(value || 'document').replace(/[^\w.-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'document'
@@ -37,7 +38,10 @@ async function uploadDocument(file, bucket, folder = '') {
 async function removeDocuments(bucket, attachments) {
   const paths = storagePaths(attachments)
   if (!paths.length) return
-  if (bucket === 'resumes') await cvBranding().cancel(paths.filter(isBrandedCvPath))
+  if (bucket === 'resumes') {
+    for (const path of paths) await cvBranding().cancel([path])
+    return
+  }
   const { error } = await supabase.storage.from(bucket).remove(paths)
   if (error) throw error
 }
@@ -45,22 +49,9 @@ async function removeDocuments(bucket, attachments) {
 async function removeUnreferencedDocuments(bucket, attachments, { table, attachmentField, legacyFields = [] }) {
   const targetPaths = new Set(storagePaths(attachments))
   if (!targetPaths.size) return
-  // New CVs can be shared through duplicate/transfer flows. Check each path
-  // directly so Supabase's default row limit cannot hide a later reference.
   if (bucket === 'resumes') {
-    for (const path of [...targetPaths].filter(isBrandedCvPath)) {
-      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path)
-      const values = [...new Set([path, urlData?.publicUrl].filter(Boolean))]
-      const checks = await Promise.all([
-        supabase.from(table).select('id', { head: true, count: 'exact' }).or(legacyFields.flatMap(field => values.map(value => `${field}.eq.${value}`)).join(',')),
-        ...values.map(value => supabase.from(table).select('id', { head: true, count: 'exact' }).contains(attachmentField, JSON.stringify([{ path: value }]))),
-        supabase.from('assigned_candidate_uploads').select('id', { head: true, count: 'exact' }).eq('cv_storage_path', path)
-      ])
-      if (checks.some(result => result.error)) throw checks.find(result => result.error).error
-      if (!checks.some(result => result.count)) await removeDocuments(bucket, [{ path }])
-      targetPaths.delete(path)
-    }
-    if (!targetPaths.size) return
+    for (const path of targetPaths) await removeCvIfUnreferenced(supabase, path)
+    return
   }
   const fields = ['id', attachmentField, ...legacyFields].filter(Boolean)
   const { data, error } = await supabase.from(table).select([...new Set(fields)].join(', '))
@@ -71,14 +62,6 @@ async function removeUnreferencedDocuments(bucket, attachments, { table, attachm
     for (const attachment of normalizeAttachments(row[attachmentField], { bucket, legacy: { path: legacyPath } })) {
       referenced.add(attachment.path)
     }
-  }
-  const assignedPaths = bucket === 'resumes' ? [...targetPaths].filter(path => path.startsWith('assigned/')) : []
-  if (assignedPaths.length) {
-    // The assignment owns this object even after it becomes a main candidate CV.
-    // Its cleanup queue checks both modules before releasing the document.
-    const assigned = await supabase.from('assigned_candidate_uploads').select('cv_storage_path').in('cv_storage_path', assignedPaths)
-    if (assigned.error) throw assigned.error
-    for (const upload of assigned.data || []) referenced.add(upload.cv_storage_path)
   }
   await removeDocuments(bucket, [...targetPaths]
     .filter(path => !referenced.has(path))

@@ -3,7 +3,6 @@ const { createHash } = require('crypto')
 const { createBulkResumeParser } = require('./bulkResumeParser')
 const { extractName, extractPhone } = require('./extractorUtils')
 const { withAssignedCvParsing } = require('./assignedCvParsing')
-const { STORAGE_BUCKETS } = require('./storageBuckets')
 const { cvBranding, isBrandedCvPath, pdfName } = require('./cvBranding')
 
 // Reuses PDF text-first/OCR extraction without full AI parsing or enrichment.
@@ -39,24 +38,16 @@ async function cleanupAssignedCvs(supabase) {
       const claim = await supabase.rpc('claim_assigned_cv_cleanup', { p_id: row.id })
       if (claim.error) throw claim.error
       if (!claim.data) continue
-      // All reference queries are targeted; no candidate table download.
       const path = row.cv_storage_path
-      const legacy = await supabase.from('candidates').select('id', { head: true, count: 'exact' })
-        .or(`cv_storage_path.eq.${path},cv_link.eq.${path},resume_url.eq.${path}`)
-      const attachments = await supabase.from('candidates').select('id', { head: true, count: 'exact' })
-        // A JS array uses PostgreSQL array syntax; this column contains JSONB.
-        .contains('cv_attachments', JSON.stringify([{ path }]))
-      if (legacy.error || attachments.error) throw legacy.error || attachments.error
-      if (legacy.count || attachments.count) {
+      const removed = await require('./cvStorageIntegrity').removeCvIfUnreferenced(supabase, path, { ignoreUploadId: row.id })
+      if (!removed) {
         const kept = await supabase.from('assigned_candidate_uploads').update({ cleanup_claimed_at: null, retired_at: null, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() }).eq('id', row.id)
         if (kept.error) throw kept.error
         continue
       }
-      if (isBrandedCvPath(path)) await cvBranding().cancel([path])
-      const removed = await supabase.storage.from(STORAGE_BUCKETS.CV).remove([path])
-      if (removed.error) throw removed.error
       const deleted = await supabase.from('assigned_candidate_uploads').delete().eq('id', row.id)
       if (deleted.error) throw deleted.error
+      if (isBrandedCvPath(path)) await cvBranding().cancel([path])
     } catch {
       pending += 1 // Durable upload row retains the cleanup job for a retry.
       await supabase.from('assigned_candidate_uploads').update({ cleanup_claimed_at: null }).eq('id', row.id)
