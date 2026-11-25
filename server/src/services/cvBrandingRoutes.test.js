@@ -34,6 +34,10 @@ test('real upload/status/open/delete routes enforce branding completion and remo
   const open = () => fetch(base + '/api/resumes/open?' + new URLSearchParams({ path, record_id: recordId }))
   const status = items => fetch(base + '/api/resumes/branding-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
   await t.test('the original cannot be opened while queued, including a direct API request', async () => {
+    const listing = await fetch(base + '/api/candidates?limit=100')
+    assert.equal(listing.status, 200)
+    const row = (await listing.json()).data.find(item => item.candidate_id === recordId)
+    assert.equal(row.cv_attachments[0].branding_status, 'queued')
     assert.equal((await open()).status, 423)
     const result = await status([{ type: 'cv', recordId, path }]); assert.equal(result.status, 200)
     assert.equal((await result.json()).data[0].status, 'queued'); assert.deepEqual(scheduled, [[path]])
@@ -47,6 +51,14 @@ test('real upload/status/open/delete routes enforce branding completion and remo
     const opened = await open(); assert.equal(opened.status, 200)
     assert.match((await opened.json()).url, /protected/)
     const branded = await PDFDocument.load(adapter.objects.get(path)); assert.equal(branded.getPageCount(), 1)
+    const download = adapter.storage.from
+    adapter.storage.from = bucket => ({ ...download(bucket), download: async () => { throw new Error('Listing must not download a PDF') } })
+    try {
+      const listing = await fetch(base + '/api/candidates?limit=100')
+      assert.equal(listing.status, 200)
+      const row = (await listing.json()).data.find(item => item.candidate_id === recordId)
+      assert.equal(row.cv_attachments[0].branding_status, 'ready')
+    } finally { adapter.storage.from = download }
   })
   await t.test('deleting the created record removes its branded file and cancels the job', async () => {
     const removed = await fetch(base + '/api/candidates/' + saved.association_id, { method: 'DELETE' })

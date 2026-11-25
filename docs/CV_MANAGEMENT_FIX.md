@@ -308,3 +308,37 @@ RLS, trigger enablement, URL normalization and role privileges were checked on t
 hosted database. No production cleanup plan was applied and no historical CV was
 queued or rewritten. Git push triggers the existing Vercel Git deployment; its
 final status is reported separately in chat.
+
+## Ready-CV loading follow-up
+
+The Candidates response now includes persisted `branding_status` inside each
+managed CV attachment. A bounded metadata-only lookup deduplicates target paths
+and queries up to 100 paths at once; it never downloads or queues CV documents.
+Keeping this inside `cv_attachments` preserves existing CV column hiding. If the
+metadata lookup fails, the existing authorized status-check fallback remains.
+
+Frontend attachment normalization retains that status and initializes the shared
+CV status store before the first render. Saved ready CVs are immediately clickable
+and do not issue branding-status polling requests; pending CVs remain blocked and
+poll normally. File-open authorization and actual stored-output verification are
+unchanged. No Supabase migration or data operation is required for this follow-up.
+
+Verification: 953 backend tests, 28 frontend tests and production build passed.
+The eight existing Chromium/WebKit CV browser executions passed. The added real-API
+Candidates refresh test then passed in both browsers after correcting its synthetic
+fixture setup: DOM observation recorded only `ready` for the completed CV on initial
+load and full refresh, and all observed polling paths belonged to the queued CV.
+Focused lint and `git diff --check` passed.
+
+Follow-up files:
+
+- `server/src/services/candidateCvStatus.js`: batched response metadata enrichment.
+- `server/src/services/candidateCvStatus.test.js`: bounded queries, state mapping and outage fallback.
+- `server/src/controllers/candidateController.js`: shared response enrichment hook.
+- `server/src/services/cvBrandingRoutes.test.js`: real queued/ready response checks with PDF downloads prohibited during listing.
+- `server/browser-tests/cv-branding.spec.cjs`: completed/pending CV behavior on initial load and refresh.
+- `src/utils/documentAttachments.js`: retain attachment status during UI conversion.
+- `src/components/DocumentAttachments.jsx`: pass the saved status to the CV hook.
+- `src/hooks/useCvBranding.js`: supply the initial saved status.
+- `src/services/cvBrandingStatus.js`: initialize supported statuses without a checking/loading flash.
+- `docs/CV_MANAGEMENT_FIX.md`: this follow-up record.

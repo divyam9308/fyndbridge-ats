@@ -1,6 +1,7 @@
 const { test: base, expect } = require('./fixtures.cjs')
 const { fork } = require('node:child_process')
 const path = require('node:path')
+const { CLIENT, JOB } = require('../test-support/assignedCandidatesSchema.cjs')
 const test = base.extend({ branding: [async ({ page, context, app }, use) => {
   const child = fork(path.resolve(__dirname, '../test-support/assignedCandidatesServer.cjs'), { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] })
   const ready = await new Promise((resolve, reject) => { child.once('message', resolve); child.once('error', reject); child.once('exit', code => reject(new Error(`Fixture exited ${code}`))) })
@@ -22,6 +23,58 @@ const test = base.extend({ branding: [async ({ page, context, app }, use) => {
   try { await use({ url, ...ready }) }
   finally { child.send('close'); await new Promise(resolve => child.once('exit', resolve)) }
 }, { auto: true }] })
+
+test('Candidates renders saved ready CVs without a loading flash after refresh and polls only pending CVs', async ({ page, branding }) => {
+  const bytes = Buffer.from(await (await fetch(branding.url + '/test/pdf')).arrayBuffer())
+  const create = async (name, phone, fileName, buffer) => {
+    const form = new FormData()
+    for (const [field, value] of Object.entries({ full_name: name, mobile_number: phone, status: 'Interested', client_id: CLIENT, job_id: JOB })) form.append(field, value)
+    form.append('cv_files', new Blob([buffer], { type: 'application/pdf' }), fileName)
+    const response = await fetch(branding.url + '/api/candidates', { method: 'POST', headers: { 'x-test-user': branding.ADMIN }, body: form })
+    const result = await response.json(); expect(response.status, JSON.stringify(result)).toBe(201)
+    const state = await (await fetch(branding.url + '/test/state')).json()
+    return { ...state.candidates.find(item => item.id === result.candidate_id), candidate_id: result.candidate_id }
+  }
+  const ready = await create('Ready status candidate', '9912345670', 'Already-ready.pdf', bytes)
+  const statusResponse = await fetch(branding.url + '/api/resumes/branding-status', { method: 'POST', headers: { 'x-test-user': branding.ADMIN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: [{ type: 'cv', recordId: ready.candidate_id, path: ready.cv_storage_path }] }) })
+  expect(statusResponse.status, await statusResponse.text()).toBe(200)
+  await expect.poll(async () => (await (await fetch(branding.url + '/test/branding-state')).json()).jobs[0]?.status).toBe('ready')
+  const pending = await create('Pending status candidate', '9912345671', 'Still-processing.pdf', Buffer.concat([bytes, Buffer.from('\n% distinct pending fixture\n')]))
+  const checkedPaths = []
+  await page.route('**/api/resumes/branding-status', route => {
+    const items = route.request().postDataJSON().items
+    checkedPaths.push(...items.map(item => item.path))
+    return route.fulfill({ json: { data: items.map(item => ({ path: item.path, status: 'queued' })) } })
+  })
+  await page.route('**/api/candidates?*', route => {
+    const url = new URL(route.request().url())
+    if (url.pathname !== '/api/candidates') return route.fallback()
+    return route.continue({ url: branding.url + url.pathname + url.search, headers: { ...route.request().headers(), 'x-test-user': branding.ADMIN } })
+  })
+  await page.addInitScript(() => {
+    window.__readyCvStates = []
+    new MutationObserver(() => {
+      for (const icon of document.querySelectorAll('[data-cv-branding-status][aria-label*="Already-ready.pdf"]')) window.__readyCvStates.push(icon.dataset.cvBrandingStatus)
+    }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-cv-branding-status'] })
+  })
+  for (let visit = 0; visit < 2; visit++) {
+    if (!visit) await page.goto('/dashboard/candidates')
+    else await page.reload()
+    const readyIcon = page.locator('[data-cv-branding-status][aria-label*="Already-ready.pdf"]')
+    const pendingIcon = page.locator('[data-cv-branding-status][aria-label*="Still-processing.pdf"]')
+    await expect(readyIcon).toHaveAttribute('data-cv-branding-status', 'ready')
+    await expect(readyIcon.locator('.cv-branding-spinner')).toHaveCount(0)
+    await expect(readyIcon).not.toHaveAttribute('aria-disabled', 'true')
+    await expect(pendingIcon).toHaveAttribute('data-cv-branding-status', 'queued')
+    await expect(pendingIcon).toHaveAttribute('aria-disabled', 'true')
+    await expect(pendingIcon.locator('.cv-branding-spinner')).toBeVisible()
+    await expect.poll(async () => page.evaluate(() => window.__readyCvStates.length)).toBeGreaterThan(0)
+    expect(await page.evaluate(() => window.__readyCvStates.every(status => status === 'ready'))).toBe(true)
+  }
+  await expect.poll(() => checkedPaths.length).toBeGreaterThan(0)
+  expect(checkedPaths.every(path => path === pending.cv_storage_path)).toBe(true)
+})
 
 test('uploaded CV stays locked with an overlaid spinner, opens branded after completion, and is deleted with its record', async ({ page, context, branding }, info) => {
   await page.goto('/dashboard/assigned-candidates')

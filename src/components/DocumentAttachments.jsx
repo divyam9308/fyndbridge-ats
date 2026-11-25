@@ -76,7 +76,7 @@ export function AttachmentList({
 function DocumentIcon({ attachment, index, onOpen, openingKey, keyPrefix, showExternalLinkIcon, brandingContext }) {
   const itemKey = `${keyPrefix}-${attachment.path}`
   const isExternal = showExternalLinkIcon && isExternalAttachment(attachment)
-  const branding = useCvBranding(brandingContext, attachment.path)
+  const branding = useCvBranding(brandingContext, attachment.path, attachment.branding_status)
   const name = attachment.name || `document ${index + 1}`
   const label = branding.failed ? `Retry CV branding for ${name}` : branding.blocked ? `Branding ${name}` : `Open ${name}`
   return <a

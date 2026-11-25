@@ -716,7 +716,7 @@ async function enrichCandidateRows(rows) {
     nextRows = nextRows.map(row => ({ ...row, client_display_id: row.client_display_id || clientDisplayIds.get(row.client_id) || '' }))
   }
 
-  return nextRows
+  return require('../services/candidateCvStatus').addCandidateCvStatus(nextRows)
 }
 
 async function findExactAssociationDuplicate({ email, mobileNumber, clientId, jobId }) {

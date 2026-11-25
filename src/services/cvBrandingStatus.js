@@ -2,12 +2,13 @@ import { apiFetch } from './apiClient'
 import branding from '../../shared/cvBranding.json'
 const patterns = branding.pathPatterns.map(pattern => new RegExp(pattern, 'i'))
 const entries = new Map()
+const savedStatuses = new Set(['staging', 'queued', 'processing', 'finalizing', 'retrying', 'ready', 'failed', 'cancelled'])
 let timer
 const active = entry => entry.listeners.size && !['ready', 'failed', 'cancelled'].includes(entry.status)
 const notify = entry => entry.listeners.forEach(listener => listener())
 function entryFor(item) {
   const key = `${item.type}:${item.recordId}:${item.path}`
-  if (!entries.has(key)) entries.set(key, { item, status: 'checking', listeners: new Set(), due: 0, busy: false })
+  if (!entries.has(key)) entries.set(key, { item, status: item.initialStatus || 'checking', listeners: new Set(), due: 0, busy: false })
   return entries.get(key)
 }
 function plan() {
@@ -33,9 +34,9 @@ async function flush() {
     plan()
   }
 }
-export function brandedCvItem(context, path) {
+export function brandedCvItem(context, path, initialStatus) {
   return context?.recordId && ['cv', 'assigned'].includes(context.type) && patterns.some(pattern => pattern.test(String(path || '')))
-    ? { type: context.type, recordId: context.recordId, path } : null
+    ? { type: context.type, recordId: context.recordId, path, ...(savedStatuses.has(initialStatus) ? { initialStatus } : {}) } : null
 }
 export function getBrandingStatus(item) { return item ? entryFor(item).status : 'ready' }
 export function subscribeToBranding(item, listener) {
